@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reseau d'Assainissement</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        .app { display: flex; height: 100vh; }
+
+        /* --- Sidebar --- */
+        .sidebar {
+            width: 340px;
+            flex-shrink: 0;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 20px;
+            overflow-y: auto;
+            box-shadow: 2px 0 10px rgba(0,0,0,.1);
+        }
+
+        .sidebar h1 { font-size: 22px; color: #1a73e8; margin-bottom: 16px; }
+
+        .sidebar h2 {
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #333;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            padding-bottom: 6px;
+            border-bottom: 2px solid #1a73e8;
+        }
+
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+        .stat-card {
+            background: #fff;
+            padding: 10px;
+            border-radius: 6px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,.08);
+            border-left: 3px solid #1a73e8;
+        }
+
+        .stat-card .value { font-size: 18px; font-weight: 700; color: #1a73e8; }
+        .stat-card .label { font-size: 11px; color: #666; margin-top: 2px; }
+
+        .panel {
+            background: #fff;
+            padding: 14px;
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,.08);
+            margin-bottom: 12px;
+        }
+
+        .checkbox-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .checkbox-row input { accent-color: #1a73e8; }
+
+        .color-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+            font-size: 12px;
+            color: #555;
+        }
+
+        .color-row label { width: 90px; }
+        .color-row input[type="color"] {
+            width: 36px; height: 28px;
+            border: none; border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 10px;
+            margin-top: 12px;
+            background: #1a73e8;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background .2s;
+        }
+        .btn:hover { background: #1557b0; }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+            font-size: 12px;
+        }
+
+        .legend-dot {
+            width: 14px; height: 14px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .info-box {
+            background: #e8f0fe;
+            border-left: 3px solid #1a73e8;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #1a73e8;
+            margin-top: 12px;
+        }
+
+        .loading { text-align: center; padding: 24px; color: #1a73e8; font-size: 12px; }
+
+        .spinner {
+            display: inline-block;
+            width: 22px; height: 22px;
+            border: 3px solid rgba(26,115,232,.3);
+            border-top-color: #1a73e8;
+            border-radius: 50%;
+            animation: spin .8s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* --- Map --- */
+        .map-wrap { flex: 1; position: relative; }
+        #map { width: 100%; height: 100%; }
+    </style>
+</head>
+
+<body>
+<div class="app">
+
+    <aside class="sidebar">
+        <h1>Reseau d'Assainissement</h1>
+
+        <div class="stats-grid" id="stats">
+            <div class="loading"><div class="spinner"></div><div style="margin-top:6px">Chargement...</div></div>
+        </div>
+
+        <h2>Affichage</h2>
+        <div class="panel" id="layer-toggles"></div>
+
+        <h2>Couleurs</h2>
+        <div class="panel" id="color-pickers"></div>
+
+        <button class="btn" onclick="reload()">Recharger</button>
+
+        <div class="info-box">
+            <strong>Localisation</strong> Algerie &mdash; UTM Zone 31N<br>
+            <strong>Projection</strong> WGS 84 pour affichage
+        </div>
+
+        <h2>Legende</h2>
+        <div id="legend"></div>
+    </aside>
+
+    <div class="map-wrap">
+        <div id="map"></div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+<script>
+const CENTER = [36.7, 3.0];
+
+const COLORS = {
+    regards:   "#0066cc",
+    rejets:    "#ff0000",
+    conduites: "#666666",
+    ouvrages:  "#00cc66",
+    stations:  "#ffa500",
+    step:      "#9933ff"
+};
+
+const LABELS = {
+    regards:   "Regards",
+    rejets:    "Rejets",
+    conduites: "Canalisations",
+    ouvrages:  "Ouvrages",
+    stations:  "Stations",
+    step:      "STEP"
+};
+
+const DEFAULT_VISIBLE = {
+    regards:   true,
+    rejets:    true,
+    conduites: false,
+    ouvrages:  true,
+    stations:  true,
+    step:      true
+};
+
+let map;
+let data      = {};
+let mapLayers = {};
+
+window.addEventListener("load", () => {
+    initMap();
+    buildSidebar();
+    fetchData();
+});
+
+function initMap() {
+    map = L.map("map", { center: CENTER, zoom: 12, preferCanvas: true });
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "&copy; OpenStreetMap",
+        maxZoom: 19,
+        maxNativeZoom: 18
+    }).addTo(map);
+}
+
+function fetchData() {
+    fetch("/get-data")
+        .then(r => r.json())
+        .then(json => { data = json; updateStats(); renderMap(); })
+        .catch(err => {
+            document.getElementById("stats").innerHTML =
+                '<div style="color:red;padding:16px;text-align:center">Erreur : ' +
+                err.message + "<br>Ouvrez la console (F12)</div>";
+        });
+}
+
+function buildSidebar() {
+    const toggles = document.getElementById("layer-toggles");
+    toggles.innerHTML = "";
+    for (const key of Object.keys(LABELS)) {
+        const checked = DEFAULT_VISIBLE[key] ? "checked" : "";
+        toggles.innerHTML +=
+            '<label class="checkbox-row">' +
+            `<input type="checkbox" id="cb-${key}" ${checked} onchange="renderMap()">` +
+            `${LABELS[key]}</label>`;
+    }
+
+    const pickers = document.getElementById("color-pickers");
+    pickers.innerHTML = "";
+    for (const key of Object.keys(COLORS)) {
+        pickers.innerHTML +=
+            '<div class="color-row">' +
+            `<label>${LABELS[key]}</label>` +
+            `<input type="color" value="${COLORS[key]}" ` +
+            `onchange="COLORS['${key}']=this.value; renderMap()">` +
+            "</div>";
+    }
+
+    const legend = document.getElementById("legend");
+    legend.innerHTML = "";
+    for (const [key, color] of Object.entries(COLORS)) {
+        legend.innerHTML +=
+            '<div class="legend-item">' +
+            `<div class="legend-dot" style="background:${color}"></div>` +
+            `<span>${LABELS[key]}</span></div>`;
+    }
+}
+
+function updateStats() {
+    const grid = document.getElementById("stats");
+    grid.innerHTML = "";
+    for (const key of Object.keys(LABELS)) {
+        const count = data[key]?.features?.length ?? 0;
+        grid.innerHTML +=
+            '<div class="stat-card">' +
+            `<div class="value">${count.toLocaleString()}</div>` +
+            `<div class="label">${LABELS[key]}</div></div>`;
+    }
+}
+
+function renderMap() {
+    for (const layer of Object.values(mapLayers)) {
+        map.removeLayer(layer);
+    }
+    mapLayers = {};
+
+    const show = {};
+    for (const key of Object.keys(LABELS)) {
+        show[key] = document.getElementById("cb-" + key)?.checked ?? false;
+    }
+
+    if (show.conduites && data.conduites) {
+        const geo = L.geoJSON(data.conduites, {
+            style: () => ({ color: COLORS.conduites, weight: 2, opacity: 0.6 }),
+            onEachFeature: (feat, layer) => bindPopup(feat, layer, "Canalisation")
+        }).addTo(map);
+        mapLayers.conduites = geo;
+    }
+
+    const pointKeys = ["regards", "rejets", "ouvrages", "stations", "step"];
+    for (const key of pointKeys) {
+        if (show[key] && data[key]) {
+            addCluster(key, data[key], COLORS[key], LABELS[key]);
+        }
+    }
+
+    fitBounds();
+}
+
+function addCluster(key, geojson, color, name) {
+    const cluster = L.markerClusterGroup({
+        maxClusterRadius: 50,
+        disableClusteringAtZoom: 16,
+        chunkedLoading: true,
+        chunkSize: 100
+    });
+
+    const geo = L.geoJSON(geojson, {
+        pointToLayer: (feat, latlng) =>
+            L.circleMarker(latlng, {
+                radius: 5, fillColor: color, color,
+                weight: 1, opacity: .7, fillOpacity: .7
+            }),
+        onEachFeature: (feat, layer) => bindPopup(feat, layer, name)
+    });
+
+    cluster.addLayer(geo);
+    map.addLayer(cluster);
+    mapLayers[key] = cluster;
+}
+
+function bindPopup(feature, layer, title) {
+    const props = feature.properties || {};
+    const lines = Object.entries(props)
+        .filter(([, v]) => v != null && v !== "")
+        .map(([k, v]) => `<b>${k}:</b> ${v}`)
+        .join("<br>");
+    layer.bindPopup(`<strong>${title}</strong><br>${lines || "Aucune propriete"}`);
+}
+
+function fitBounds() {
+    let bounds = null;
+    for (const layer of Object.values(mapLayers)) {
+        try {
+            const b = layer.getBounds();
+            if (b.isValid()) bounds = bounds ? bounds.extend(b) : b;
+        } catch (_) {}
+    }
+    if (bounds?.isValid()) {
+        map.fitBounds(bounds, { padding: [50, 50] });
+    }
+}
+
+function reload() { data = {}; fetchData(); }
+</script>
+</body>
+</html>
