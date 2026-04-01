@@ -131,6 +131,20 @@
             margin-top: 12px;
         }
 
+        .cluster-bar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 4px;
+            font-size: 11px;
+        }
+
+        .cluster-color {
+            width: 12px; height: 12px;
+            border-radius: 2px;
+            flex-shrink: 0;
+        }
+
         .loading { text-align: center; padding: 24px; color: #1a73e8; font-size: 12px; }
 
         .spinner {
@@ -163,6 +177,18 @@
         <h2>Affichage</h2>
         <div class="panel" id="layer-toggles"></div>
 
+        <h2>Options canalisations</h2>
+        <div class="panel">
+            <label class="checkbox-row">
+                <input type="checkbox" id="cb-arrows" checked onchange="renderMap()">
+                Sens d'ecoulement
+            </label>
+            <label class="checkbox-row">
+                <input type="checkbox" id="cb-clusters" onchange="renderMap()">
+                Couleur par cluster
+            </label>
+        </div>
+
         <h2>Couleurs</h2>
         <div class="panel" id="color-pickers"></div>
 
@@ -171,6 +197,11 @@
         <div class="info-box">
             <strong>Localisation</strong> Algerie &mdash; UTM Zone 31N<br>
             <strong>Projection</strong> WGS 84 pour affichage
+        </div>
+
+        <div id="cluster-stats-section" style="display:none">
+            <h2>Clusters hydrauliques</h2>
+            <div class="panel" id="cluster-stats"></div>
         </div>
 
         <h2>Legende</h2>
@@ -185,6 +216,10 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
 <script>
+/* ====================================================================
+   CONFIGURATION
+   ==================================================================== */
+
 const CENTER = [36.7, 3.0];
 
 const COLORS = {
@@ -214,9 +249,18 @@ const DEFAULT_VISIBLE = {
     step:      true
 };
 
+/* ====================================================================
+   ETAT
+   ==================================================================== */
+
 let map;
 let data      = {};
 let mapLayers = {};
+let clusterInfo = null;
+
+/* ====================================================================
+   INITIALISATION
+   ==================================================================== */
 
 window.addEventListener("load", () => {
     initMap();
@@ -233,16 +277,30 @@ function initMap() {
     }).addTo(map);
 }
 
+/* ====================================================================
+   CHARGEMENT DES DONNEES
+   ==================================================================== */
+
 function fetchData() {
     fetch("/get-data")
         .then(r => r.json())
-        .then(json => { data = json; updateStats(); renderMap(); })
+        .then(json => {
+            data = json;
+            clusterInfo = json.clusters || null;
+            updateStats();
+            updateClusterStats();
+            renderMap();
+        })
         .catch(err => {
             document.getElementById("stats").innerHTML =
                 '<div style="color:red;padding:16px;text-align:center">Erreur : ' +
                 err.message + "<br>Ouvrez la console (F12)</div>";
         });
 }
+
+/* ====================================================================
+   SIDEBAR
+   ==================================================================== */
 
 function buildSidebar() {
     const toggles = document.getElementById("layer-toggles");
@@ -288,6 +346,43 @@ function updateStats() {
     }
 }
 
+function updateClusterStats() {
+    if (!clusterInfo || !clusterInfo.stats) return;
+
+    const section = document.getElementById("cluster-stats-section");
+    const container = document.getElementById("cluster-stats");
+    section.style.display = "block";
+
+    const colors = clusterInfo.colors || [];
+    const stats = clusterInfo.stats;
+
+    container.innerHTML =
+        `<div style="font-size:12px;margin-bottom:8px;color:#333">` +
+        `<strong>${clusterInfo.total}</strong> sous-reseaux detectes</div>`;
+
+    const entries = Object.entries(stats)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 15);
+
+    for (const [cid, count] of entries) {
+        const color = colors[parseInt(cid) % colors.length] || "#999";
+        container.innerHTML +=
+            '<div class="cluster-bar">' +
+            `<div class="cluster-color" style="background:${color}"></div>` +
+            `<span>Cluster ${parseInt(cid) + 1} : ${count} conduites</span></div>`;
+    }
+
+    if (Object.keys(stats).length > 15) {
+        container.innerHTML +=
+            '<div style="font-size:11px;color:#888;margin-top:4px">... et ' +
+            (Object.keys(stats).length - 15) + ' autres</div>';
+    }
+}
+
+/* ====================================================================
+   RENDU CARTE
+   ==================================================================== */
+
 function renderMap() {
     for (const layer of Object.values(mapLayers)) {
         map.removeLayer(layer);
@@ -299,14 +394,15 @@ function renderMap() {
         show[key] = document.getElementById("cb-" + key)?.checked ?? false;
     }
 
+    const showArrows = document.getElementById("cb-arrows")?.checked ?? false;
+    const showClusters = document.getElementById("cb-clusters")?.checked ?? false;
+
+    // Canalisations
     if (show.conduites && data.conduites) {
-        const geo = L.geoJSON(data.conduites, {
-            style: () => ({ color: COLORS.conduites, weight: 2, opacity: 0.6 }),
-            onEachFeature: (feat, layer) => bindPopup(feat, layer, "Canalisation")
-        }).addTo(map);
-        mapLayers.conduites = geo;
+        renderConduites(data.conduites, showArrows, showClusters);
     }
 
+    // Points avec clustering
     const pointKeys = ["regards", "rejets", "ouvrages", "stations", "step"];
     for (const key of pointKeys) {
         if (show[key] && data[key]) {
@@ -315,6 +411,72 @@ function renderMap() {
     }
 
     fitBounds();
+}
+
+function renderConduites(geojson, showArrows, showClusters) {
+    const features = geojson.features || [];
+    const layers = [];
+
+    for (const feat of features) {
+        const coords = feat.geometry?.coordinates;
+        if (!coords || coords.length < 2) continue;
+
+        const latlngs = coords.map(c => [c[1], c[0]]);
+        const props = feat.properties || {};
+
+        let color = COLORS.conduites;
+        if (showClusters && props._color) {
+            color = props._color;
+        }
+
+        const polyline = L.polyline(latlngs, {
+            color: color,
+            weight: 2,
+            opacity: 0.6
+        });
+
+        // Popup
+        const popupLines = Object.entries(props)
+            .filter(([k]) => !k.startsWith("_"))
+            .filter(([, v]) => v != null && v !== "")
+            .map(([k, v]) => `<b>${k}:</b> ${v}`)
+            .join("<br>");
+        polyline.bindPopup(`<strong>Canalisation</strong><br>${popupLines || "Aucune propriete"}`);
+
+        layers.push(polyline);
+
+        // Fleche de sens d'ecoulement
+        if (showArrows && latlngs.length >= 2) {
+            const mid = Math.floor(latlngs.length / 2);
+            const p1 = latlngs[mid];
+            const p2 = latlngs[Math.min(mid + 1, latlngs.length - 1)];
+
+            const angle = Math.atan2(
+                p2[0] - p1[0],
+                p2[1] - p1[1]
+            ) * 180 / Math.PI;
+
+            const arrowIcon = L.divIcon({
+                className: "",
+                html: `<div style="
+                    color:${color};
+                    font-size:14px;
+                    font-weight:bold;
+                    transform:rotate(${-angle}deg);
+                    text-shadow:0 0 2px #fff,0 0 2px #fff;
+                    line-height:1;
+                ">▶</div>`,
+                iconSize: [14, 14],
+                iconAnchor: [7, 7]
+            });
+
+            const marker = L.marker(p1, { icon: arrowIcon, interactive: false });
+            layers.push(marker);
+        }
+    }
+
+    const group = L.layerGroup(layers).addTo(map);
+    mapLayers.conduites = group;
 }
 
 function addCluster(key, geojson, color, name) {
@@ -331,21 +493,19 @@ function addCluster(key, geojson, color, name) {
                 radius: 5, fillColor: color, color,
                 weight: 1, opacity: .7, fillOpacity: .7
             }),
-        onEachFeature: (feat, layer) => bindPopup(feat, layer, name)
+        onEachFeature: (feat, layer) => {
+            const props = feat.properties || {};
+            const lines = Object.entries(props)
+                .filter(([, v]) => v != null && v !== "")
+                .map(([k, v]) => `<b>${k}:</b> ${v}`)
+                .join("<br>");
+            layer.bindPopup(`<strong>${name}</strong><br>${lines || "Aucune propriete"}`);
+        }
     });
 
     cluster.addLayer(geo);
     map.addLayer(cluster);
     mapLayers[key] = cluster;
-}
-
-function bindPopup(feature, layer, title) {
-    const props = feature.properties || {};
-    const lines = Object.entries(props)
-        .filter(([, v]) => v != null && v !== "")
-        .map(([k, v]) => `<b>${k}:</b> ${v}`)
-        .join("<br>");
-    layer.bindPopup(`<strong>${title}</strong><br>${lines || "Aucune propriete"}`);
 }
 
 function fitBounds() {
@@ -360,6 +520,10 @@ function fitBounds() {
         map.fitBounds(bounds, { padding: [50, 50] });
     }
 }
+
+/* ====================================================================
+   ACTIONS
+   ==================================================================== */
 
 function reload() { data = {}; fetchData(); }
 </script>
