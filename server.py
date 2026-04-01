@@ -1,18 +1,26 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-Serveur Flask pour la visualisation interactive du reseau d'assainissement.
+Serveur Flask pour la visualisation interactive du réseau d'assainissement.
 
-Charge les donnees depuis un GeoPackage, les reprojette en WGS84,
-analyse la topologie du reseau et sert les donnees via API JSON.
+Charge les données depuis un GeoPackage, les reprojette en WGS84
+et les sert via API JSON pour affichage sur carte Leaflet.
 """
+
+import sys
+import io
+if sys.platform == "win32":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
 
 import json
 import logging
 import sqlite3
-from collections import defaultdict
 
 import geopandas as gpd
-from flask import Flask, jsonify
+import numpy as np
+import pandas as pd
+from flask import Flask, jsonify, make_response
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -22,8 +30,7 @@ from pathlib import Path
 GPKG_PATH = Path(r"c:\Users\Hakim\Downloads\Assainissement_Ville.gpkg")
 HTML_PATH = Path(__file__).parent / "index.html"
 
-SOURCE_CRS = "EPSG:32631"  # UTM Zone 31N
-TARGET_CRS = "EPSG:4326"   # WGS84
+TARGET_CRS = "EPSG:4326"  # WGS84
 
 LAYER_PATTERNS = {
     "regards":   "Regards",
@@ -34,13 +41,18 @@ LAYER_PATTERNS = {
     "step":      "STEP",
 }
 
-# Couleurs pour les clusters hydrauliques
-CLUSTER_COLORS = [
-    "#e6194b", "#3cb44b", "#4363d8", "#f58231", "#911eb4",
-    "#42d4f4", "#f032e6", "#bfef45", "#fabed4", "#469990",
-    "#dcbeff", "#9A6324", "#fffac8", "#800000", "#aaffc3",
-    "#808000", "#ffd8b1", "#000075", "#a9a9a9", "#ffffff",
-]
+# Colonnes utiles à conserver pour l'affichage (réduit le poids du GeoJSON)
+KEEP_COLS = {
+    "regards": ["Code", "NOMVOIE", "COMMUNE", "Profondeur", "DIAMETRES", "TYPERES",
+                "PROFRADI", "HFERMSOL", "geometry"],
+    "rejets": ["NOM", "COMMUNE", "NOMVOIE", "geometry"],
+    "conduites": ["fid", "NOM-VOIE", "DIAMETRE", "MATERIAU", "LINEAIRE",
+                  "PROF_FE_AM", "PROF_FE_AV", "FONCTIONMT", "ID_AMONT", "ID_AVAL",
+                  "FORMESECT", "HAUTEUR", "GDEBASE", "geometry"],
+    "ouvrages": ["geometry"],
+    "stations": ["geometry"],
+    "step": ["NOM", "COMMUNE", "geometry"],
+}
 
 # ---------------------------------------------------------------------------
 # Application Flask
@@ -53,11 +65,11 @@ _cache: dict = {}
 
 
 # ---------------------------------------------------------------------------
-# Chargement des donnees GeoPackage
+# Chargement des données GeoPackage
 # ---------------------------------------------------------------------------
 
-def _get_geo_tables(gpkg: Path) -> list[str]:
-    """Retourne la liste des tables geospatiales (hors tables systeme)."""
+def _get_geo_tables(gpkg):
+    """Retourne la liste des tables géospatiales (hors tables système)."""
     conn = sqlite3.connect(gpkg)
     try:
         rows = conn.execute(
@@ -69,8 +81,7 @@ def _get_geo_tables(gpkg: Path) -> list[str]:
     return [r[0] for r in rows if not r[0].startswith(system_prefixes)]
 
 
-def _match_layers(tables: list[str]) -> dict[str, str]:
-    """Associe chaque cle logique au nom de couche GeoPackage."""
+def _match_layers(tables):
     mapping = {}
     for key, pattern in LAYER_PATTERNS.items():
         for table in tables:
@@ -80,19 +91,163 @@ def _match_layers(tables: list[str]) -> dict[str, str]:
     return mapping
 
 
-def load_layers() -> dict:
-    """Charge et met en cache toutes les couches du GeoPackage."""
+def _safe_float(value):
+    """Convertit une valeur en float (gère les virgules décimales)."""
+    if value is None:
+        return None
+    try:
+        s = str(value).replace(",", ".").strip()
+        if not s or s == "None" or s == "nan":
+            return None
+        return float(s)
+    except (ValueError, TypeError):
+        return None
+
+
+def _orient_conduits_by_hydraulics(conduites_geojson, regards_gdf_wgs84):
+    """
+    Oriente chaque canalisation dans le sens amont → aval hydraulique.
+    Vectorisé avec numpy pour la performance.
+    """
+    if regards_gdf_wgs84 is None or regards_gdf_wgs84.empty:
+        return
+
+    if conduites_geojson is None:
+        return
+
+    features = conduites_geojson.get("features")
+    if not features:
+        return
+
+    # Construire les arrays numpy directement depuis le GeoDataFrame
+    geoms = regards_gdf_wgs84.geometry
+    valid = ~geoms.is_empty & geoms.notna()
+    gdf_valid = regards_gdf_wgs84[valid]
+
+    coords_arr = np.column_stack([gdf_valid.geometry.x.values, gdf_valid.geometry.y.values])
+
+    prof_arr = gdf_valid["PROFRADI"].apply(_safe_float).values
+    surf_arr = gdf_valid["HFERMSOL"].apply(_safe_float).values
+
+    cotes_arr = np.full(len(gdf_valid), np.nan)
+    has_prof = ~np.array([x is None for x in prof_arr])
+    has_surf = ~np.array([x is None for x in surf_arr])
+
+    prof_float = np.where(has_prof, [float(x) if x is not None else np.nan for x in prof_arr], np.nan)
+    surf_float = np.where(has_surf, [float(x) if x is not None else np.nan for x in surf_arr], np.nan)
+
+    # prof + surf → cote = surf - prof
+    both = has_prof & has_surf
+    cotes_arr[both] = surf_float[both] - prof_float[both]
+
+    # prof seul → cote = -prof
+    prof_only = has_prof & ~has_surf
+    cotes_arr[prof_only] = -prof_float[prof_only]
+
+    # surf seul → cote = surf
+    surf_only = has_surf & ~has_prof
+    cotes_arr[surf_only] = surf_float[surf_only]
+
+    n_with_cote = int(np.sum(~np.isnan(cotes_arr)))
+    print(f"[data]   Index spatial : {len(coords_arr)} regards ({n_with_cote} avec cote)")
+
+    # Vérifier et inverser les canalisations
+    inversions = 0
+    no_cote = 0
+
+    for feat in features:
+        geom = feat.get("geometry", {})
+        geom_type = geom.get("type", "")
+        raw_coords = geom.get("coordinates", [])
+        if not raw_coords:
+            continue
+
+        # Gérer LineString et MultiLineString
+        if geom_type == "MultiLineString":
+            if not raw_coords[0] or len(raw_coords[0]) < 2:
+                continue
+            start_lon, start_lat = raw_coords[0][0][0], raw_coords[0][0][1]
+            end_lon, end_lat = raw_coords[-1][-1][0], raw_coords[-1][-1][1]
+        elif geom_type == "LineString":
+            if len(raw_coords) < 2:
+                continue
+            start_lon, start_lat = raw_coords[0][0], raw_coords[0][1]
+            end_lon, end_lat = raw_coords[-1][0], raw_coords[-1][1]
+        else:
+            continue
+
+        # Trouver le regard le plus proche (distance vectorisée)
+        dists_s = np.sqrt((coords_arr[:, 0] - start_lon) ** 2 + (coords_arr[:, 1] - start_lat) ** 2)
+        idx_s = int(np.argmin(dists_s))
+        cote_start = cotes_arr[idx_s] if dists_s[idx_s] < 0.0005 else None
+
+        dists_e = np.sqrt((coords_arr[:, 0] - end_lon) ** 2 + (coords_arr[:, 1] - end_lat) ** 2)
+        idx_e = int(np.argmin(dists_e))
+        cote_end = cotes_arr[idx_e] if dists_e[idx_e] < 0.0005 else None
+
+        if cote_start is None or np.isnan(cote_start) or cote_end is None or np.isnan(cote_end):
+            no_cote += 1
+            continue
+
+        if cote_start < cote_end:
+            if geom_type == "MultiLineString":
+                geom["coordinates"] = [seg[::-1] for seg in raw_coords[::-1]]
+            else:
+                geom["coordinates"] = raw_coords[::-1]
+            inversions += 1
+
+    print(f"[data]   Canalisations inversées (sens hydraulique) : {inversions}/{len(features)}")
+    print(f"[data]   Canalisations sans cote (sens inchangé) : {no_cote}/{len(features)}")
+
+
+def _build_street_labels(regards_gdf):
+    """Crée un GeoJSON de points avec les noms de rues, un par rue, au centroïde de ses regards."""
+    if regards_gdf is None or regards_gdf.empty:
+        return {"type": "FeatureCollection", "features": []}
+
+    # Filtrer les regards avec un nom de rue
+    with_street = regards_gdf[regards_gdf["NOMVOIE"].notna() & (regards_gdf["NOMVOIE"] != "")]
+    if with_street.empty:
+        return {"type": "FeatureCollection", "features": []}
+
+    features = []
+    for nom_rue, group in with_street.groupby("NOMVOIE"):
+        # Centroïde des regards de cette rue
+        centroid = group.geometry.unary_union.centroid
+        commune = group["COMMUNE"].dropna()
+        commune_val = commune.iloc[0] if not commune.empty else ""
+
+        features.append({
+            "type": "Feature",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [centroid.x, centroid.y]
+            },
+            "properties": {
+                "nom": str(nom_rue).strip(),
+                "commune": str(commune_val).strip() if commune_val else "",
+                "nb_regards": len(group)
+            }
+        })
+
+    print(f"[data]   Labels rues : {len(features)} noms de rues")
+    return {"type": "FeatureCollection", "features": features}
+
+
+def load_layers():
     if _cache:
         return _cache
 
-    print("[data] Chargement du GeoPackage ...")
+    print("[data] Chargement du GeoPackage …")
 
     try:
         tables = _get_geo_tables(GPKG_PATH)
         mapping = _match_layers(tables)
 
-        print(f"[data] Tables detectees : {tables}")
+        print(f"[data] Tables détectées : {tables}")
         print(f"[data] Mapping couches  : {mapping}")
+
+        regards_gdf = None
 
         for key, layer_name in mapping.items():
             try:
@@ -100,13 +255,49 @@ def load_layers() -> dict:
                 if gdf.crs and gdf.crs != TARGET_CRS:
                     gdf = gdf.to_crs(TARGET_CRS)
 
+                # Garder une copie complète des regards pour l'orientation hydraulique
+                if key == "regards":
+                    regards_gdf = gdf.copy()
+
+                # Filtrer les colonnes pour alléger le GeoJSON
+                keep = KEEP_COLS.get(key)
+                if keep:
+                    cols = [c for c in keep if c in gdf.columns]
+                    gdf = gdf[cols]
+
                 geojson = json.loads(gdf.to_json())
                 _cache[key] = geojson
 
-                print(f"[data]   {key:12s} -> {len(gdf)} features")
+                print(f"[data]   {key:12s} → {len(gdf)} features")
             except Exception as exc:
-                print(f"[data]   {key:12s} -> ERREUR : {exc}")
+                print(f"[data]   {key:12s} → ERREUR : {exc}")
                 _cache[key] = {"type": "FeatureCollection", "features": []}
+
+        # Orienter les canalisations dans le sens hydraulique amont → aval
+        if "conduites" in _cache and regards_gdf is not None:
+            _orient_conduits_by_hydraulics(_cache["conduites"], regards_gdf)
+
+        # Générer les labels de rues à partir des regards
+        if regards_gdf is not None:
+            _cache["rues_labels"] = _build_street_labels(regards_gdf)
+
+        # Calculer le centre de la zone d'étude
+        all_bounds = []
+        for geojson in _cache.values():
+            fc = geojson.get("features", [])
+            if not fc:
+                continue
+            gdf_tmp = gpd.GeoDataFrame.from_features(fc, crs=TARGET_CRS)
+            b = gdf_tmp.total_bounds  # minx, miny, maxx, maxy
+            if not any(np.isnan(b)):
+                all_bounds.append(b)
+
+        if all_bounds:
+            arr = np.array(all_bounds)
+            minx, miny = arr[:, 0].min(), arr[:, 1].min()
+            maxx, maxy = arr[:, 2].max(), arr[:, 3].max()
+            _cache["_center"] = [(miny + maxy) / 2, (minx + maxx) / 2]
+            print(f"[data]   Centre zone : {_cache['_center']}")
 
     except Exception as exc:
         print(f"[data] ERREUR chargement GeoPackage : {exc}")
@@ -115,201 +306,55 @@ def load_layers() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Analyse hydraulique
-# ---------------------------------------------------------------------------
-
-def _extract_conduit_lines(conduites_geojson: dict) -> list[dict]:
-    """
-    Extrait les LineString individuelles depuis les MultiLineString
-    et ajoute les coordonnees de debut/fin pour le sens d'ecoulement.
-    """
-    lines = []
-
-    for feat in conduites_geojson.get("features", []):
-        geom = feat.get("geometry", {})
-        props = feat.get("properties", {})
-        geom_type = geom.get("type", "")
-        coords = geom.get("coordinates", [])
-
-        if geom_type == "MultiLineString":
-            for segment in coords:
-                if len(segment) >= 2:
-                    lines.append({
-                        "type": "Feature",
-                        "geometry": {
-                            "type": "LineString",
-                            "coordinates": segment
-                        },
-                        "properties": {
-                            **props,
-                            "_start": list(segment[0]),
-                            "_end": list(segment[-1]),
-                        }
-                    })
-        elif geom_type == "LineString":
-            if len(coords) >= 2:
-                lines.append({
-                    "type": "Feature",
-                    "geometry": geom,
-                    "properties": {
-                        **props,
-                        "_start": list(coords[0]),
-                        "_end": list(coords[-1]),
-                    }
-                })
-
-    return lines
-
-
-def _round_coord(coord: list, decimals: int = 6) -> tuple:
-    """Arrondit une coordonnee pour le matching topologique."""
-    return tuple(round(c, decimals) for c in coord[:2])
-
-
-def _compute_hydraulic_clusters(conduit_features: list[dict]) -> dict:
-    """
-    Construit le graphe topologique du reseau a partir des extremites
-    des conduites et trouve les composantes connexes (clusters hydrauliques).
-
-    Returns:
-        dict avec 'cluster_map' (id_conduit -> cluster_id) et 'cluster_stats'
-    """
-    # Construire le graphe : chaque noeud = coordonnee arrondie
-    # Arete = conduite reliant deux noeuds
-    graph = defaultdict(set)
-    conduit_nodes = {}  # conduit_idx -> (node_a, node_b)
-
-    for idx, feat in enumerate(conduit_features):
-        props = feat["properties"]
-        node_a = _round_coord(props["_start"])
-        node_b = _round_coord(props["_end"])
-
-        if node_a != node_b:
-            graph[node_a].add(node_b)
-            graph[node_b].add(node_a)
-            conduit_nodes[idx] = (node_a, node_b)
-
-    # BFS pour trouver les composantes connexes
-    visited = set()
-    cluster_map = {}
-    cluster_id = 0
-    cluster_stats = {}
-
-    for idx, (node_a, node_b) in conduit_nodes.items():
-        if idx in visited:
-            continue
-
-        # Nouveau cluster
-        queue = [node_a, node_b]
-        cluster_nodes = set()
-        cluster_conduits = []
-
-        while queue:
-            node = queue.pop(0)
-            if node in cluster_nodes:
-                continue
-            cluster_nodes.add(node)
-
-            for neighbor in graph[node]:
-                if neighbor not in cluster_nodes:
-                    queue.append(neighbor)
-
-        # Marquer toutes les conduites de ce cluster
-        for c_idx, (na, nb) in conduit_nodes.items():
-            if na in cluster_nodes or nb in cluster_nodes:
-                cluster_map[c_idx] = cluster_id
-                visited.add(c_idx)
-                cluster_conduits.append(c_idx)
-
-        cluster_stats[cluster_id] = len(cluster_conduits)
-        cluster_id += 1
-
-    return {
-        "cluster_map": cluster_map,
-        "cluster_stats": cluster_stats,
-        "total_clusters": cluster_id,
-    }
-
-
-def build_network_data() -> dict:
-    """
-    Construit les donnees enrichies du reseau :
-    - Canalisations avec sens d'ecoulement et cluster hydraulique
-    - Statistiques des clusters
-    """
-    layers = load_layers()
-
-    conduites_raw = layers.get("conduites", {"type": "FeatureCollection", "features": []})
-
-    # Extraire les LineString individuelles avec sens d'ecoulement
-    conduit_features = _extract_conduit_lines(conduites_raw)
-
-    # Calculer les clusters hydrauliques
-    cluster_info = _compute_hydraulic_clusters(conduit_features)
-
-    # Enrichir chaque conduite avec son cluster et sa couleur
-    for idx, feat in enumerate(conduit_features):
-        cid = cluster_info["cluster_map"].get(idx, 0)
-        feat["properties"]["_cluster"] = cid
-        feat["properties"]["_color"] = CLUSTER_COLORS[cid % len(CLUSTER_COLORS)]
-
-    conduites_enriched = {
-        "type": "FeatureCollection",
-        "features": conduit_features,
-    }
-
-    empty = {"type": "FeatureCollection", "features": []}
-
-    return {
-        "regards": layers.get("regards", empty),
-        "rejets": layers.get("rejets", empty),
-        "conduites": conduites_enriched,
-        "ouvrages": layers.get("ouvrages", empty),
-        "stations": layers.get("stations", empty),
-        "step": layers.get("step", empty),
-        "clusters": {
-            "total": cluster_info["total_clusters"],
-            "stats": cluster_info["cluster_stats"],
-            "colors": CLUSTER_COLORS,
-        },
-    }
-
-
-# ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
 @app.route("/")
 def index():
-    """Sert la page HTML principale."""
-    return HTML_PATH.read_text(encoding="utf-8")
+    resp = make_response(HTML_PATH.read_text(encoding="utf-8"))
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return resp
 
 
 @app.route("/get-data")
 def get_data():
-    """API : retourne toutes les couches enrichies en GeoJSON."""
-    data = build_network_data()
-    return jsonify(data)
+    from flask import request
+    if request.args.get("reload"):
+        _cache.clear()
+    layers = load_layers()
+    empty = {"type": "FeatureCollection", "features": []}
+    resp = jsonify({
+        "regards": layers.get("regards", empty),
+        "rejets": layers.get("rejets", empty),
+        "conduites": layers.get("conduites", empty),
+        "ouvrages": layers.get("ouvrages", empty),
+        "stations": layers.get("stations", empty),
+        "step": layers.get("step", empty),
+        "center": layers.get("_center"),
+        "rues_labels": layers.get("rues_labels", empty),
+    })
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return resp
 
 
 # ---------------------------------------------------------------------------
-# Point d'entree
+# Point d'entrée
 # ---------------------------------------------------------------------------
 
 def main():
-    print("[server] Pre-chargement des donnees ...")
+    print("[data] Pré-chargement …")
     load_layers()
 
     print("""
 
     ╔════════════════════════════════════════════════════╗
-    ║   SERVEUR RESEAU D'ASSAINISSEMENT DEMARRE         ║
+    ║   SERVEUR RÉSEAU D'ASSAINISSEMENT DÉMARRÉ         ║
     ╚════════════════════════════════════════════════════╝
 
     Ouvrez votre navigateur :
        http://localhost:5000
 
-    Appuyez sur Ctrl+C pour arreter.
+    Appuyez sur Ctrl+C pour arrêter.
     """)
 
     app.run(debug=False, port=5000, threaded=True)

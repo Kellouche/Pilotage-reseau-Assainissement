@@ -3,11 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reseau d'Assainissement</title>
+    <title>Réseau d'Assainissement</title>
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
 
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -20,7 +18,6 @@
 
         .app { display: flex; height: 100vh; }
 
-        /* --- Sidebar --- */
         .sidebar {
             width: 340px;
             flex-shrink: 0;
@@ -76,22 +73,6 @@
 
         .checkbox-row input { accent-color: #1a73e8; }
 
-        .color-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 6px;
-            font-size: 12px;
-            color: #555;
-        }
-
-        .color-row label { width: 90px; }
-        .color-row input[type="color"] {
-            width: 36px; height: 28px;
-            border: none; border-radius: 4px;
-            cursor: pointer;
-        }
-
         .btn {
             width: 100%;
             padding: 10px;
@@ -131,20 +112,6 @@
             margin-top: 12px;
         }
 
-        .cluster-bar {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            margin-bottom: 4px;
-            font-size: 11px;
-        }
-
-        .cluster-color {
-            width: 12px; height: 12px;
-            border-radius: 2px;
-            flex-shrink: 0;
-        }
-
         .loading { text-align: center; padding: 24px; color: #1a73e8; font-size: 12px; }
 
         .spinner {
@@ -158,7 +125,6 @@
 
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        /* --- Map --- */
         .map-wrap { flex: 1; position: relative; }
         #map { width: 100%; height: 100%; }
     </style>
@@ -168,10 +134,10 @@
 <div class="app">
 
     <aside class="sidebar">
-        <h1>Reseau d'Assainissement</h1>
+        <h1>Réseau d'Assainissement</h1>
 
         <div class="stats-grid" id="stats">
-            <div class="loading"><div class="spinner"></div><div style="margin-top:6px">Chargement...</div></div>
+            <div class="loading"><div class="spinner"></div><div style="margin-top:6px">Chargement…</div></div>
         </div>
 
         <h2>Affichage</h2>
@@ -180,31 +146,33 @@
         <h2>Options canalisations</h2>
         <div class="panel">
             <label class="checkbox-row">
-                <input type="checkbox" id="cb-arrows" checked onchange="renderMap()">
-                Sens d'ecoulement
-            </label>
-            <label class="checkbox-row">
-                <input type="checkbox" id="cb-clusters" onchange="renderMap()">
-                Couleur par cluster
+                <input type="checkbox" id="cb-arrows" onchange="updateOverlays()">
+                Sens d'écoulement (zoom ≥ 14)
             </label>
         </div>
 
-        <h2>Couleurs</h2>
-        <div class="panel" id="color-pickers"></div>
+        <h2>Noms de rues</h2>
+        <div class="panel">
+            <label class="checkbox-row">
+                <input type="checkbox" id="cb-rues" onchange="updateOverlays()">
+                Afficher les noms de rues (zoom ≥ 13)
+            </label>
+        </div>
+
+        <h2>Bassins versants</h2>
+        <div class="panel">
+            <div style="font-size:12px;color:#888;margin-bottom:8px">Délimitation automatique à venir</div>
+            <button class="btn" disabled style="opacity:.5;cursor:default">Créer les bassins versants</button>
+        </div>
 
         <button class="btn" onclick="reload()">Recharger</button>
 
         <div class="info-box">
-            <strong>Localisation</strong> Algerie &mdash; UTM Zone 31N<br>
+            <strong>Localisation</strong> Algérie — UTM Zone 31N<br>
             <strong>Projection</strong> WGS 84 pour affichage
         </div>
 
-        <div id="cluster-stats-section" style="display:none">
-            <h2>Clusters hydrauliques</h2>
-            <div class="panel" id="cluster-stats"></div>
-        </div>
-
-        <h2>Legende</h2>
+        <h2>Légende</h2>
         <div id="legend"></div>
     </aside>
 
@@ -214,12 +182,7 @@
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
 <script>
-/* ====================================================================
-   CONFIGURATION
-   ==================================================================== */
-
 const CENTER = [36.7, 3.0];
 
 const COLORS = {
@@ -243,24 +206,22 @@ const LABELS = {
 const DEFAULT_VISIBLE = {
     regards:   true,
     rejets:    true,
-    conduites: false,
+    conduites: true,
     ouvrages:  true,
     stations:  true,
     step:      true
 };
 
-/* ====================================================================
-   ETAT
-   ==================================================================== */
+const MIN_ZOOM_ARROWS = 14;
+const MIN_ZOOM_RUES = 13;
 
 let map;
-let data      = {};
-let mapLayers = {};
-let clusterInfo = null;
+let data       = {};
+let mapLayers  = {};
+let arrowsLayer  = null;
+let ruesLayer    = null;
 
-/* ====================================================================
-   INITIALISATION
-   ==================================================================== */
+/* --- Initialisation --- */
 
 window.addEventListener("load", () => {
     initMap();
@@ -275,32 +236,31 @@ function initMap() {
         maxZoom: 19,
         maxNativeZoom: 18
     }).addTo(map);
+    map.on("zoomend", updateOverlays);
 }
 
-/* ====================================================================
-   CHARGEMENT DES DONNEES
-   ==================================================================== */
+/* --- Chargement --- */
 
 function fetchData() {
     fetch("/get-data")
         .then(r => r.json())
         .then(json => {
             data = json;
-            clusterInfo = json.clusters || null;
+            if (data.center) {
+                map.setView(data.center, 13);
+            }
             updateStats();
-            updateClusterStats();
             renderMap();
+            fitBounds();
         })
         .catch(err => {
             document.getElementById("stats").innerHTML =
                 '<div style="color:red;padding:16px;text-align:center">Erreur : ' +
-                err.message + "<br>Ouvrez la console (F12)</div>";
+                err.message + "</div>";
         });
 }
 
-/* ====================================================================
-   SIDEBAR
-   ==================================================================== */
+/* --- Sidebar --- */
 
 function buildSidebar() {
     const toggles = document.getElementById("layer-toggles");
@@ -311,17 +271,6 @@ function buildSidebar() {
             '<label class="checkbox-row">' +
             `<input type="checkbox" id="cb-${key}" ${checked} onchange="renderMap()">` +
             `${LABELS[key]}</label>`;
-    }
-
-    const pickers = document.getElementById("color-pickers");
-    pickers.innerHTML = "";
-    for (const key of Object.keys(COLORS)) {
-        pickers.innerHTML +=
-            '<div class="color-row">' +
-            `<label>${LABELS[key]}</label>` +
-            `<input type="color" value="${COLORS[key]}" ` +
-            `onchange="COLORS['${key}']=this.value; renderMap()">` +
-            "</div>";
     }
 
     const legend = document.getElementById("legend");
@@ -346,166 +295,271 @@ function updateStats() {
     }
 }
 
-function updateClusterStats() {
-    if (!clusterInfo || !clusterInfo.stats) return;
+/* --- Helpers popup --- */
 
-    const section = document.getElementById("cluster-stats-section");
-    const container = document.getElementById("cluster-stats");
-    section.style.display = "block";
-
-    const colors = clusterInfo.colors || [];
-    const stats = clusterInfo.stats;
-
-    container.innerHTML =
-        `<div style="font-size:12px;margin-bottom:8px;color:#333">` +
-        `<strong>${clusterInfo.total}</strong> sous-reseaux detectes</div>`;
-
-    const entries = Object.entries(stats)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 15);
-
-    for (const [cid, count] of entries) {
-        const color = colors[parseInt(cid) % colors.length] || "#999";
-        container.innerHTML +=
-            '<div class="cluster-bar">' +
-            `<div class="cluster-color" style="background:${color}"></div>` +
-            `<span>Cluster ${parseInt(cid) + 1} : ${count} conduites</span></div>`;
-    }
-
-    if (Object.keys(stats).length > 15) {
-        container.innerHTML +=
-            '<div style="font-size:11px;color:#888;margin-top:4px">... et ' +
-            (Object.keys(stats).length - 15) + ' autres</div>';
-    }
+function popupHtml(title, fields) {
+    const lines = fields
+        .filter(([, v]) => v != null && v !== "")
+        .map(([k, v]) => "<b>" + k + " :</b> " + v)
+        .join("<br>");
+    return "<strong>" + title + "</strong><br>" + (lines || "Aucune donnée");
 }
 
-/* ====================================================================
-   RENDU CARTE
-   ==================================================================== */
+function regardPopup(props) {
+    return popupHtml("Regards", [
+        ["Code", props.Code],
+        ["Rue", props.NOMVOIE],
+        ["Commune", props.COMMUNE],
+        ["Profondeur", props.Profondeur],
+        ["Diamètre", props.DIAMETRES],
+        ["Type", props.TYPERES],
+    ]);
+}
+
+function conduitPopup(props) {
+    return popupHtml("Canalisation", [
+        ["Rue", props["NOM-VOIE"]],
+        ["Diamètre", props.DIAMETRE],
+        ["Matériau", props.MATERIAU],
+        ["Longueur", props.LINEAIRE],
+        ["Prof. amont", props.PROF_FE_AM],
+        ["Prof. aval", props.PROF_FE_AV],
+        ["Fonction", props.FONCTIONMT],
+    ]);
+}
+
+function rejetPopup(props) {
+    return popupHtml("Rejet", [
+        ["Nom", props.NOM],
+        ["Commune", props.COMMUNE],
+        ["Rue", props.NOMVOIE],
+    ]);
+}
+
+/* --- Rendu carte --- */
 
 function renderMap() {
     for (const layer of Object.values(mapLayers)) {
         map.removeLayer(layer);
     }
     mapLayers = {};
+    if (arrowsLayer) { map.removeLayer(arrowsLayer); arrowsLayer = null; }
+    if (ruesLayer) { map.removeLayer(ruesLayer); ruesLayer = null; }
 
     const show = {};
     for (const key of Object.keys(LABELS)) {
         show[key] = document.getElementById("cb-" + key)?.checked ?? false;
     }
 
-    const showArrows = document.getElementById("cb-arrows")?.checked ?? false;
-    const showClusters = document.getElementById("cb-clusters")?.checked ?? false;
-
-    // Canalisations
+    // Canalisations — rendu Canvas rapide, pas de popup par défaut
     if (show.conduites && data.conduites) {
-        renderConduites(data.conduites, showArrows, showClusters);
-    }
+        const features = data.conduites.features || [];
+        const layers = [];
+        for (let i = 0; i < features.length; i++) {
+            const feat = features[i];
+            const geom = feat.geometry;
+            if (!geom) continue;
 
-    // Points avec clustering
-    const pointKeys = ["regards", "rejets", "ouvrages", "stations", "step"];
-    for (const key of pointKeys) {
-        if (show[key] && data[key]) {
-            addCluster(key, data[key], COLORS[key], LABELS[key]);
+            // Convertir GeoJSON coords → LatLng
+            let latlngs;
+            if (geom.type === "MultiLineString") {
+                latlngs = geom.coordinates[0].map(c => [c[1], c[0]]);
+            } else if (geom.type === "LineString") {
+                latlngs = geom.coordinates.map(c => [c[1], c[0]]);
+            } else {
+                continue;
+            }
+
+            const line = L.polyline(latlngs, {
+                color: COLORS.conduites, weight: 2, opacity: 0.6
+            });
+            line._featProps = feat.properties;
+            line.on("click", function () {
+                this.bindPopup(conduitPopup(this._featProps)).openPopup();
+            });
+            layers.push(line);
         }
+        const group = L.layerGroup(layers).addTo(map);
+        mapLayers.conduites = group;
     }
 
-    fitBounds();
+    // Points — rendu Canvas rapide
+    const pointConfigs = [
+        { key: "regards",  popupFn: regardPopup },
+        { key: "rejets",   popupFn: rejetPopup },
+        { key: "ouvrages", popupFn: null },
+        { key: "stations", popupFn: null },
+        { key: "step",     popupFn: null },
+    ];
+
+    for (const { key, popupFn } of pointConfigs) {
+        if (!show[key] || !data[key]) continue;
+
+        const geojson = data[key];
+        const features = geojson.features || [];
+        const color = COLORS[key];
+        const label = LABELS[key];
+        const layers = [];
+
+        for (let i = 0; i < features.length; i++) {
+            const feat = features[i];
+            const coords = feat.geometry?.coordinates;
+            if (!coords || coords.length < 2) continue;
+
+            const marker = L.circleMarker([coords[1], coords[0]], {
+                radius: pointRadius(),
+                fillColor: color, color: color,
+                weight: 1, opacity: 0.7, fillOpacity: 0.7
+            });
+
+            if (popupFn) {
+                const props = feat.properties;
+                marker._featProps = props;
+                marker.on("click", function () {
+                    this.bindPopup(popupFn(this._featProps)).openPopup();
+                });
+            } else {
+                const props = feat.properties || {};
+                const lines = Object.entries(props)
+                    .filter(([, v]) => v != null && v !== "")
+                    .map(([k, v]) => "<b>" + k + " :</b> " + v)
+                    .join("<br>");
+                marker.bindPopup("<strong>" + label + "</strong><br>" + (lines || "Aucune donnée"));
+            }
+
+            layers.push(marker);
+        }
+
+        const group = L.layerGroup(layers).addTo(map);
+        mapLayers[key] = group;
+    }
+
+    updateOverlays();
 }
 
-function renderConduites(geojson, showArrows, showClusters) {
-    const features = geojson.features || [];
-    const layers = [];
+function pointRadius() {
+    const z = map ? map.getZoom() : 12;
+    if (z <= 12) return 2;
+    if (z <= 14) return 3;
+    if (z <= 16) return 5;
+    return 7;
+}
 
-    for (const feat of features) {
+function updatePointSizes() {
+    const r = pointRadius();
+    for (const key of ["regards", "rejets", "ouvrages", "stations", "step"]) {
+        const group = mapLayers[key];
+        if (!group) continue;
+        group.eachLayer(marker => {
+            if (marker.setRadius) marker.setRadius(r);
+        });
+    }
+}
+
+/* --- Flèches de sens d'écoulement --- */
+
+function buildArrows() {
+    const geojson = data.conduites;
+    if (!geojson) return null;
+
+    const arrows = [];
+    const features = geojson.features || [];
+    const step = Math.max(1, Math.floor(features.length / 2000));
+
+    for (let i = 0; i < features.length; i += step) {
+        const g = features[i].geometry;
+        if (!g) continue;
+
+        let coords;
+        if (g.type === "MultiLineString") {
+            coords = g.coordinates[0];
+        } else if (g.type === "LineString") {
+            coords = g.coordinates;
+        }
+        if (!coords || coords.length < 2) continue;
+
+        const mid = Math.floor(coords.length / 2);
+        const p1 = [coords[mid][1], coords[mid][0]];
+        const p2 = [coords[Math.min(mid + 1, coords.length - 1)][1],
+                     coords[Math.min(mid + 1, coords.length - 1)][0]];
+        const angle = Math.atan2(p2[0] - p1[0], p2[1] - p1[1]) * 180 / Math.PI;
+
+        const icon = L.divIcon({
+            className: "",
+            html: '<div style="color:' + COLORS.conduites + ';font-size:14px;font-weight:bold;transform:rotate(' + (-angle) + 'deg);text-shadow:0 0 2px #fff,0 0 2px #fff;line-height:1">&#9654;</div>',
+            iconSize: [14, 14],
+            iconAnchor: [7, 7]
+        });
+
+        arrows.push(L.marker(p1, { icon: icon, interactive: false }));
+    }
+
+    return arrows.length > 0 ? L.layerGroup(arrows) : null;
+}
+
+/* --- Labels noms de rues --- */
+
+function buildRues() {
+    const geojson = data.rues_labels;
+    if (!geojson) return null;
+
+    const features = geojson.features || [];
+    const markers = [];
+
+    for (let i = 0; i < features.length; i++) {
+        const feat = features[i];
         const coords = feat.geometry?.coordinates;
         if (!coords || coords.length < 2) continue;
 
-        const latlngs = coords.map(c => [c[1], c[0]]);
         const props = feat.properties || {};
+        const text = props.nom;
+        if (!text) continue;
 
-        let color = COLORS.conduites;
-        if (showClusters && props._color) {
-            color = props._color;
-        }
-
-        const polyline = L.polyline(latlngs, {
-            color: color,
-            weight: 2,
-            opacity: 0.6
+        const icon = L.divIcon({
+            className: "",
+            html: '<div style="color:#555;font-size:11px;font-weight:700;text-shadow:1px 1px 2px #fff,-1px -1px 2px #fff,1px -1px 2px #fff,-1px 1px 2px #fff;white-space:nowrap;line-height:1">' + text + '</div>',
+            iconSize: [0, 0],
+            iconAnchor: [-4, -4]
         });
 
-        // Popup
-        const popupLines = Object.entries(props)
-            .filter(([k]) => !k.startsWith("_"))
-            .filter(([, v]) => v != null && v !== "")
-            .map(([k, v]) => `<b>${k}:</b> ${v}`)
-            .join("<br>");
-        polyline.bindPopup(`<strong>Canalisation</strong><br>${popupLines || "Aucune propriete"}`);
-
-        layers.push(polyline);
-
-        // Fleche de sens d'ecoulement
-        if (showArrows && latlngs.length >= 2) {
-            const mid = Math.floor(latlngs.length / 2);
-            const p1 = latlngs[mid];
-            const p2 = latlngs[Math.min(mid + 1, latlngs.length - 1)];
-
-            const angle = Math.atan2(
-                p2[0] - p1[0],
-                p2[1] - p1[1]
-            ) * 180 / Math.PI;
-
-            const arrowIcon = L.divIcon({
-                className: "",
-                html: `<div style="
-                    color:${color};
-                    font-size:14px;
-                    font-weight:bold;
-                    transform:rotate(${-angle}deg);
-                    text-shadow:0 0 2px #fff,0 0 2px #fff;
-                    line-height:1;
-                ">▶</div>`,
-                iconSize: [14, 14],
-                iconAnchor: [7, 7]
-            });
-
-            const marker = L.marker(p1, { icon: arrowIcon, interactive: false });
-            layers.push(marker);
-        }
+        markers.push(L.marker([coords[1], coords[0]], { icon: icon, interactive: false }));
     }
 
-    const group = L.layerGroup(layers).addTo(map);
-    mapLayers.conduites = group;
+    return markers.length > 0 ? L.layerGroup(markers) : null;
 }
 
-function addCluster(key, geojson, color, name) {
-    const cluster = L.markerClusterGroup({
-        maxClusterRadius: 50,
-        disableClusteringAtZoom: 16,
-        chunkedLoading: true,
-        chunkSize: 100
-    });
+function updateOverlays() {
+    if (!map) return;
+    const zoom = map.getZoom();
 
-    const geo = L.geoJSON(geojson, {
-        pointToLayer: (feat, latlng) =>
-            L.circleMarker(latlng, {
-                radius: 5, fillColor: color, color,
-                weight: 1, opacity: .7, fillOpacity: .7
-            }),
-        onEachFeature: (feat, layer) => {
-            const props = feat.properties || {};
-            const lines = Object.entries(props)
-                .filter(([, v]) => v != null && v !== "")
-                .map(([k, v]) => `<b>${k}:</b> ${v}`)
-                .join("<br>");
-            layer.bindPopup(`<strong>${name}</strong><br>${lines || "Aucune propriete"}`);
+    updatePointSizes();
+
+    const showArrows = document.getElementById("cb-arrows")?.checked ?? false;
+    const showRues = document.getElementById("cb-rues")?.checked ?? false;
+
+    // Flèches
+    if (showArrows && zoom >= MIN_ZOOM_ARROWS) {
+        if (!arrowsLayer) {
+            arrowsLayer = buildArrows();
+            if (arrowsLayer) arrowsLayer.addTo(map);
+        } else if (!map.hasLayer(arrowsLayer)) {
+            arrowsLayer.addTo(map);
         }
-    });
+    } else if (arrowsLayer && map.hasLayer(arrowsLayer)) {
+        map.removeLayer(arrowsLayer);
+    }
 
-    cluster.addLayer(geo);
-    map.addLayer(cluster);
-    mapLayers[key] = cluster;
+    // Noms de rues
+    if (showRues && zoom >= MIN_ZOOM_RUES) {
+        if (!ruesLayer) {
+            ruesLayer = buildRues();
+            if (ruesLayer) ruesLayer.addTo(map);
+        } else if (!map.hasLayer(ruesLayer)) {
+            ruesLayer.addTo(map);
+        }
+    } else if (ruesLayer && map.hasLayer(ruesLayer)) {
+        map.removeLayer(ruesLayer);
+    }
 }
 
 function fitBounds() {
@@ -521,11 +575,12 @@ function fitBounds() {
     }
 }
 
-/* ====================================================================
-   ACTIONS
-   ==================================================================== */
-
-function reload() { data = {}; fetchData(); }
+function reload() {
+    data = {};
+    fetch("/get-data?reload=1")
+        .then(r => r.json())
+        .then(json => { data = json; updateStats(); renderMap(); fitBounds(); });
+}
 </script>
 </body>
 </html>
