@@ -1,188 +1,3 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Réseau d'Assainissement</title>
-
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            overflow: hidden;
-            height: 100vh;
-        }
-
-        .app { display: flex; height: 100vh; }
-
-        .sidebar {
-            width: 340px;
-            flex-shrink: 0;
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-            padding: 20px;
-            overflow-y: auto;
-            box-shadow: 2px 0 10px rgba(0,0,0,.1);
-        }
-
-        .sidebar h1 { font-size: 22px; color: #1a73e8; margin-bottom: 16px; }
-
-        .sidebar h2 {
-            font-size: 13px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: #333;
-            margin-top: 20px;
-            margin-bottom: 10px;
-            padding-bottom: 6px;
-            border-bottom: 2px solid #1a73e8;
-        }
-
-        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-
-        .stat-card {
-            background: #fff;
-            padding: 10px;
-            border-radius: 6px;
-            text-align: center;
-            box-shadow: 0 2px 4px rgba(0,0,0,.08);
-            border-left: 3px solid #1a73e8;
-        }
-
-        .stat-card .value { font-size: 18px; font-weight: 700; color: #1a73e8; }
-        .stat-card .label { font-size: 11px; color: #666; margin-top: 2px; }
-
-        .panel {
-            background: #fff;
-            padding: 14px;
-            border-radius: 6px;
-            box-shadow: 0 2px 4px rgba(0,0,0,.08);
-            margin-bottom: 12px;
-        }
-
-        .checkbox-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 8px;
-            font-size: 13px;
-            cursor: pointer;
-        }
-
-        .checkbox-row input { accent-color: #1a73e8; }
-
-        .btn {
-            width: 100%;
-            padding: 10px;
-            margin-top: 12px;
-            background: #1a73e8;
-            color: #fff;
-            border: none;
-            border-radius: 6px;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background .2s;
-        }
-        .btn:hover { background: #1557b0; }
-
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 6px;
-            font-size: 12px;
-        }
-
-        .legend-dot {
-            width: 14px; height: 14px;
-            border-radius: 50%;
-            flex-shrink: 0;
-        }
-
-        .info-box {
-            background: #e8f0fe;
-            border-left: 3px solid #1a73e8;
-            padding: 10px;
-            border-radius: 4px;
-            font-size: 12px;
-            color: #1a73e8;
-            margin-top: 12px;
-        }
-
-        .loading { text-align: center; padding: 24px; color: #1a73e8; font-size: 12px; }
-
-        .spinner {
-            display: inline-block;
-            width: 22px; height: 22px;
-            border: 3px solid rgba(26,115,232,.3);
-            border-top-color: #1a73e8;
-            border-radius: 50%;
-            animation: spin .8s linear infinite;
-        }
-
-        @keyframes spin { to { transform: rotate(360deg); } }
-
-        .map-wrap { flex: 1; position: relative; }
-        #map { width: 100%; height: 100%; }
-    </style>
-</head>
-
-<body>
-<div class="app">
-
-    <aside class="sidebar">
-        <h1>Réseau d'Assainissement</h1>
-
-        <div class="stats-grid" id="stats">
-            <div class="loading"><div class="spinner"></div><div style="margin-top:6px">Chargement…</div></div>
-        </div>
-
-        <h2>Affichage</h2>
-        <div class="panel" id="layer-toggles"></div>
-
-        <h2>Options canalisations</h2>
-        <div class="panel">
-            <label class="checkbox-row">
-                <input type="checkbox" id="cb-arrows" onchange="updateOverlays()">
-                Sens d'écoulement (zoom ≥ 14)
-            </label>
-        </div>
-
-        <h2>Noms de rues</h2>
-        <div class="panel">
-            <label class="checkbox-row">
-                <input type="checkbox" id="cb-rues" onchange="updateOverlays()">
-                Afficher les noms de rues (zoom ≥ 13)
-            </label>
-        </div>
-
-        <h2>Bassins versants</h2>
-        <div class="panel">
-            <div style="font-size:12px;color:#888;margin-bottom:8px">Délimitation automatique à venir</div>
-            <button class="btn" disabled style="opacity:.5;cursor:default">Créer les bassins versants</button>
-        </div>
-
-        <button class="btn" onclick="reload()">Recharger</button>
-
-        <div class="info-box">
-            <strong>Localisation</strong> Algérie — UTM Zone 31N<br>
-            <strong>Projection</strong> WGS 84 pour affichage
-        </div>
-
-        <h2>Légende</h2>
-        <div id="legend"></div>
-    </aside>
-
-    <div class="map-wrap">
-        <div id="map"></div>
-    </div>
-</div>
-
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script>
 const CENTER = [36.7, 3.0];
 
 const COLORS = {
@@ -221,8 +36,6 @@ let mapLayers  = {};
 let arrowsLayer  = null;
 let ruesLayer    = null;
 
-/* --- Initialisation --- */
-
 window.addEventListener("load", () => {
     initMap();
     buildSidebar();
@@ -238,8 +51,6 @@ function initMap() {
     }).addTo(map);
     map.on("zoomend", updateOverlays);
 }
-
-/* --- Chargement --- */
 
 function fetchData() {
     fetch("/get-data")
@@ -259,8 +70,6 @@ function fetchData() {
                 err.message + "</div>";
         });
 }
-
-/* --- Sidebar --- */
 
 function buildSidebar() {
     const toggles = document.getElementById("layer-toggles");
@@ -295,8 +104,6 @@ function updateStats() {
     }
 }
 
-/* --- Helpers popup --- */
-
 function popupHtml(title, fields) {
     const lines = fields
         .filter(([, v]) => v != null && v !== "")
@@ -311,7 +118,7 @@ function regardPopup(props) {
         ["Rue", props.NOMVOIE],
         ["Commune", props.COMMUNE],
         ["Profondeur", props.Profondeur],
-        ["Diamètre", props.DIAMETRES],
+        ["Diametre", props.DIAMETRES],
         ["Type", props.TYPERES],
     ]);
 }
@@ -319,8 +126,8 @@ function regardPopup(props) {
 function conduitPopup(props) {
     return popupHtml("Canalisation", [
         ["Rue", props["NOM-VOIE"]],
-        ["Diamètre", props.DIAMETRE],
-        ["Matériau", props.MATERIAU],
+        ["Diametre", props.DIAMETRE],
+        ["Materiau", props.MATERIAU],
         ["Longueur", props.LINEAIRE],
         ["Prof. amont", props.PROF_FE_AM],
         ["Prof. aval", props.PROF_FE_AV],
@@ -336,8 +143,6 @@ function rejetPopup(props) {
     ]);
 }
 
-/* --- Rendu carte --- */
-
 function renderMap() {
     for (const layer of Object.values(mapLayers)) {
         map.removeLayer(layer);
@@ -351,7 +156,6 @@ function renderMap() {
         show[key] = document.getElementById("cb-" + key)?.checked ?? false;
     }
 
-    // Canalisations — rendu Canvas rapide, pas de popup par défaut
     if (show.conduites && data.conduites) {
         const features = data.conduites.features || [];
         const layers = [];
@@ -360,7 +164,6 @@ function renderMap() {
             const geom = feat.geometry;
             if (!geom) continue;
 
-            // Convertir GeoJSON coords → LatLng
             let latlngs;
             if (geom.type === "MultiLineString") {
                 latlngs = geom.coordinates[0].map(c => [c[1], c[0]]);
@@ -383,7 +186,6 @@ function renderMap() {
         mapLayers.conduites = group;
     }
 
-    // Points — rendu Canvas rapide
     const pointConfigs = [
         { key: "regards",  popupFn: regardPopup },
         { key: "rejets",   popupFn: rejetPopup },
@@ -424,7 +226,7 @@ function renderMap() {
                     .filter(([, v]) => v != null && v !== "")
                     .map(([k, v]) => "<b>" + k + " :</b> " + v)
                     .join("<br>");
-                marker.bindPopup("<strong>" + label + "</strong><br>" + (lines || "Aucune donnée"));
+                marker.bindPopup("<strong>" + label + "</strong><br>" + (lines || "Aucune donnee"));
             }
 
             layers.push(marker);
@@ -455,8 +257,6 @@ function updatePointSizes() {
         });
     }
 }
-
-/* --- Flèches de sens d'écoulement --- */
 
 function buildArrows() {
     const geojson = data.conduites;
@@ -497,8 +297,6 @@ function buildArrows() {
     return arrows.length > 0 ? L.layerGroup(arrows) : null;
 }
 
-/* --- Labels noms de rues --- */
-
 function buildRues() {
     const geojson = data.rues_labels;
     if (!geojson) return null;
@@ -537,7 +335,6 @@ function updateOverlays() {
     const showArrows = document.getElementById("cb-arrows")?.checked ?? false;
     const showRues = document.getElementById("cb-rues")?.checked ?? false;
 
-    // Flèches
     if (showArrows && zoom >= MIN_ZOOM_ARROWS) {
         if (!arrowsLayer) {
             arrowsLayer = buildArrows();
@@ -549,7 +346,6 @@ function updateOverlays() {
         map.removeLayer(arrowsLayer);
     }
 
-    // Noms de rues
     if (showRues && zoom >= MIN_ZOOM_RUES) {
         if (!ruesLayer) {
             ruesLayer = buildRues();
@@ -581,6 +377,3 @@ function reload() {
         .then(r => r.json())
         .then(json => { data = json; updateStats(); renderMap(); fitBounds(); });
 }
-</script>
-</body>
-</html>

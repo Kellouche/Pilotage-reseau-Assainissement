@@ -1,4 +1,17 @@
-"""Configuration pour le générateur SWMM."""
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Nom Auteur : Dr Abdelhakim Kellouche
+Nom de l'application : Pilotage Réseau d'Assainissement
+Numéro version : 1.0.0
+Date de création : 2026-04-02
+Date de modification : 2026-04-02
+Objectif : Configuration centralisée du projet.
+Contient les constantes, paramètres SWMM et mappages
+nécessaires au traitement des données géospatiales
+et à la génération des fichiers SWMM.
+"""
+
 
 # Système de coordonnées
 TARGET_CRS = 'EPSG:32631'  # UTM Zone 31N - Algérie

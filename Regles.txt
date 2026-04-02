@@ -1,0 +1,58 @@
+1. Écrivez-exclusivement en français et en UTF-8.
+Toutes les sorties, y compris le code, les commentaires et les documents,
+doivent être en français et encoder en UTF-8.
+Respectez les conventions linguistiques françaises et évitez les anglicismes non nécessaires.
+
+2. Approche modulaire:
+Tout module de code ne doit pas dépasser 250 lignes par fichier.
+Lorsqu'un fichier pourrait dépasser ce seuil, fragmenter le contenu en sous-modules logiques
+et fichiers complémentaires tout en garantissant la cohérence et l'intégrité des dépendances.
+Utilisez une architecture orientée composants et veillez à ce que chaque module
+expose une interface publique claire et stable.
+Appliquez des principes de conception tels que faible couplage, haute cohérence
+et injection de dépendances lorsque approprié.
+
+3. Hiérarchisation et architecture:
+Structurez le projet dans des dossiers logiques et respectez une architecture MVC
+pour clarifier les responsabilités: par exemple des répertoires pour les contrôleurs,
+les modèles et les vues, ainsi que des répertoires dédiés à la logique métier (domaine)
+et à l'infrastructure si nécessaire.
+Définissez des conventions claires de nommage des répertoires et des fichiers
+(par exemple src/controllers, src/models, src/views, src/domain, src/infrastructure, tests/).
+Décrivez les flux de données et les interactions entre les couches
+(contrats d'API, interfaces, adapters), et spécifiez les outils de build, de test et de déploiement.
+
+4. Conventions, dépendances, tests, documentation et qualité:
+Décrivez les conventions de nommage (CamelCase, snake_case ou autres adoptées, avec justification),
+les règles de gestion des dépendances (versionnage, gestion des versions majeures/minimes,
+isolation des modules, utilisation des interfaces publiques),
+les pratiques de tests (unitaires et d'intégration) et la stratégie de test
+(couvrements cibles, mocks/stubs, pipelines CI).
+Détaillez les exigences de documentation et de commentaires
+(docstrings, READMEs, guides d'utilisation),
+les exigences de sécurité (validation des entrées, gestion des erreurs, chiffrement, gestion des secrets),
+les exigences de performance (objectifs de temps de réponse, profiling et optimisation),
+les critères d'accessibilité (conformité WCAG) et d'internationalisation
+(locales, formats, traduction et déploiement multilingue).
+Indiquez les outils recommandés pour chaque aspect
+(frameworks de test, linters, outils d'analyse statique, documentation auto-générée, etc.)
+et les critères d'acceptation.
+
+5. En-têtes de module:
+Chaque module doit inclure un en-tête décrivant les métadonnées suivantes:
+Nom Auteur : Dr Abdelhakim Kellouche, nom de l'application, numéro version,
+date de création, date de modification,
+un paragraphe décrivant l'objectif du module.
+Proposez un modèle d'en-tête standard et fournissez un ou deux exemples concrets.
+Spécifiez le format exact des dates (DD-MM-YYYY), l'usage du numéro de version (par exemple SemVer),
+et les règles concernant la localisation des commentaires.
+Précisez que chaque fichier expose une API publique clairement documentée
+et que les fichiers de test vérifient les comportements publics exposés.
+Enfin, demandez une livraison sous forme de squelette de dépôt:
+arbre de répertoires avec des modules d'exemple pour chaque couche,
+des fichiers d'énoncé d'en-tête pour les modules,
+et des tests unitaires d'exemple couvrant les éléments clés.
+
+6. Quand je te dis "Fin de la discussion" tu dois mettre à jour le fichier TODO
+et faire un pousser vers le github à l'adresse suivante :
+https://github.com/Kellouche/Pilotage-reseau-Assainissement

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reseau d'Assainissement</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+<div class="app">
+
+    <aside class="sidebar">
+        <h1>Reseau d'Assainissement</h1>
+
+        <div class="stats-grid" id="stats">
+            <div class="loading">
+                <div class="spinner"></div>
+                <div style="margin-top:6px">Chargement...</div>
+            </div>
+        </div>
+
+        <h2>Affichage</h2>
+        <div class="panel" id="layer-toggles"></div>
+
+        <h2>Options canalisations</h2>
+        <div class="panel">
+            <label class="checkbox-row">
+                <input type="checkbox" id="cb-arrows"
+                       onchange="updateOverlays()">
+                Sens d'ecoulement (zoom &gt;= 14)
+            </label>
+        </div>
+
+        <h2>Noms de rues</h2>
+        <div class="panel">
+            <label class="checkbox-row">
+                <input type="checkbox" id="cb-rues"
+                       onchange="updateOverlays()">
+                Afficher les noms de rues (zoom &gt;= 13)
+            </label>
+        </div>
+
+        <h2>Bassins versants</h2>
+        <div class="panel">
+            <div style="font-size:12px;color:#888;margin-bottom:8px">
+                Delimitation automatique a venir
+            </div>
+            <button class="btn" disabled
+                    style="opacity:.5;cursor:default">
+                Creer les bassins versants
+            </button>
+        </div>
+
+        <button class="btn" onclick="reload()">Recharger</button>
+
+        <div class="info-box">
+            <strong>Localisation</strong>
+            Algerie - UTM Zone 31N<br>
+            <strong>Projection</strong>
+            WGS 84 pour affichage
+        </div>
+
+        <h2>Legende</h2>
+        <div id="legend"></div>
+    </aside>
+
+    <div class="map-wrap">
+        <div id="map"></div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="carte.js"></script>
+</body>
+</html>

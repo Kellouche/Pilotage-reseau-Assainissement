@@ -1,12 +1,13 @@
-# Pilotage Reseau d'Assainissement
+# Pilotage Réseau d'Assainissement
 
-Outils de visualisation interactive et de generation de fichiers SWMM 5.2 a partir de donnees GeoPackage.
+Outils de visualisation interactive et de génération de fichiers SWMM 5.2 à partir de données GeoPackage.
 
-## Fonctionnalites
+## Fonctionnalités
 
-- **Visualisation cartographique** interactive avec clustering dynamique (Leaflet.js)
-- **Generation de fichiers SWMM** .inp a partir de donnees geospatiales
+- **Visualisation cartographique** interactive (Leaflet.js)
+- **Génération de fichiers SWMM** .inp à partir de données géospatiales
 - **Reprojection automatique** UTM Zone 31N (EPSG:32631) → WGS84 (EPSG:4326)
+- **Architecture MVC** modulaire avec en-têtes de module standardisés
 
 ## Installation
 
@@ -23,43 +24,41 @@ python server.py
 # ouvrir http://localhost:5000
 ```
 
-### Generation SWMM
-
-```bash
-python main.py
-# genere Assainissement_Ville.inp
-```
-
 ### Tests
 
 ```bash
-pytest test_*.py -v
+python -m pytest tests/ -v
 ```
 
-## Structure
+## Structure du projet
 
 ```
-server.py            Serveur Flask (visualisation)
-index.html           Interface web (Leaflet.js)
-main.py              Point d'entree SWMM
-data_processor.py    Traitement des donnees geospatiales
-swmm_generator.py    Generation du fichier .inp
-config.py            Configuration (CRS, parametres SWMM)
-launch_server.bat    Lanceur Windows
+src/
+  controllers/     Contrôleurs Flask et générateur SWMM
+  domain/          Logique métier (traitement nœuds, conduites, pompes)
+  infrastructure/  Chargement GeoPackage, configuration
+  views/           Interface web (HTML, CSS, JS)
+tests/             Tests unitaires et d'intégration
 ```
 
-## Donnees
+Voir TODO.md pour l'arborescence détaillée.
 
-| Element              | Nombre  |
+## Données
+
+| Élément              | Nombre  |
 |----------------------|---------|
 | Regards              | 10 538  |
 | Rejets               | 79      |
 | Canalisations        | 10 295  |
-| Ouvrages speciaux    | 38      |
+| Ouvrages spéciaux    | 38      |
 | Stations de relevage | 5       |
 | STEP                 | 1       |
 
-## Dependances
+## Dépendances
 
-- geopandas, pandas, shapely, numpy — traitement geospatial
+- geopandas, pandas, shapely, numpy — traitement géospatial
 - flask — serveur web
+
+## Auteur
+
+Dr Abdelhakim Kellouche
