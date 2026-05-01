@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Test SWMM</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            height: 100vh;
+            margin: 0;
+            display: flex;
+        }
+
+        #sidebar {
+            width: 280px;
+            background: #16213e;
+            padding: 16px;
+        }
+
+        #map {
+            flex: 1;
+        }
+    </style>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+</head>
+
+<body>
+    <div id="sidebar">
+        <h2>SWMM Platform</h2>
+        <div id="stat-total">--</div>
+        <div id="mini-stats">Chargement...</div>
+        <div>
+            <input type="checkbox" id="f-conduites" checked><label for="f-conduites">Conduites</label><br>
+            <input type="checkbox" id="f-regards" checked><label for="f-regards">Regards</label><br>
+            <input type="checkbox" id="f-stations" checked><label for="f-stations">Stations</label><br>
+            <input type="checkbox" id="f-step" checked><label for="f-step">STEP</label><br>
+            <input type="checkbox" id="f-ouvrages" checked><label for="f-ouvrages">Ouvrages</label>
+        </div>
+    </div>
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        let carte = L.map('map').setView([36.15, 1.33], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        }).addTo(carte);
+
+        let couches = {
+            conduites: L.layerGroup().addTo(carte),
+            regards: L.layerGroup().addTo(carte),
+            stations: L.layerGroup().addTo(carte),
+            step: L.layerGroup().addTo(carte),
+            ouvrages: L.layerGroup().addTo(carte)
+        };
+
+        ['conduites', 'regards', 'stations', 'step', 'ouvrages'].forEach(type => {
+            document.getElementById('f-' + type).onchange = (e) => {
+                if (e.target.checked) couches[type].addTo(carte);
+                else carte.removeLayer(couches[type]);
+            };
+        });
+
+        fetch('/api/v1/layers')
+            .then(r => r.json())
+            .then(d => {
+                console.log('Données:', d.compteurs);
+                document.getElementById('stat-total').textContent = d.compteurs.conduites || 0;
+                document.getElementById('mini-stats').innerHTML =
+                    'Conduites: ' + (d.compteurs.conduites || 0) +
+                    ' | Regards: ' + (d.compteurs.regards || 0) +
+                    ' | Stations: ' + (d.compteurs.stations || 0) +
+                    ' | STEP: ' + (d.compteurs.step || 0) +
+                    ' | Ouvrages: ' + (d.compteurs.ouvrages || 0);
+
+                // Conduites (lignes)
+                L.geoJSON(d.couches.conduites, {
+                    style: { color: '#3498db', weight: 3 }
+                }).addTo(couches.conduites);
+
+                // Points (regards, stations, step, ouvrages)
+                const styles = {
+                    regards: { radius: 4, color: '#f1c40f', fillColor: '#f1c40f' },
+                    stations: { radius: 6, color: '#e67e22', fillColor: '#e67e22' },
+                    step: { radius: 7, color: '#27ae60', fillColor: '#27ae60' },
+                    ouvrages: { radius: 6, color: '#9b59b6', fillColor: '#9b59b6' }
+                };
+                ['regards', 'stations', 'step', 'ouvrages'].forEach(type => {
+                    L.geoJSON(d.couches[type], {
+                        pointToLayer: (feature, latlng) => L.circleMarker(latlng, styles[type])
+                    }).addTo(couches[type]);
+                });
+
+                const bounds = L.latLngBounds([]);
+                Object.values(couches).forEach(l => l.getLayers().forEach(layer => {
+                    bounds.extend(layer.getBounds ? layer.getBounds() : layer.getLatLng());
+                }));
+                if (bounds.isValid()) carte.fitBounds(bounds, { padding: [50, 50] });
+            })
+            .catch(e => {
+                console.error('Erreur:', e);
+                document.getElementById('mini-stats').textContent = 'Erreur chargement';
+            });
+    </script>
+</body>
+
+</html>

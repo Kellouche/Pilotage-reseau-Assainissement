@@ -4,8 +4,8 @@
 Nom Auteur : Dr Abdelhakim Kellouche
 Nom de l'application : Pilotage Réseau d'Assainissement
 Numéro version : 1.0.0
-Date de création : 2026-04-02
-Date de modification : 2026-04-02
+Date de création : 02-04-2026
+Date de modification : 02-04-2026
 Objectif : Chargement et prétraitement des données GeoPackage.
 Gère la lecture des couches géospatiales, la reprojection
 et le calcul du centre de la zone d'étude.
@@ -22,7 +22,8 @@ from src.infrastructure.config import TARGET_CRS
 from src.infrastructure.orientation_conduites import orienter_conduites
 from src.infrastructure.labels_rues import construire_labels_rues
 
-GPKG_PATH = Path(r"c:\Users\Hakim\Downloads\Assainissement_Ville.gpkg")
+GPKG_PATH = Path(r"D:\IA Water Data Analysis\Assainissement\Assainissement_Ville.gpkg")
+WGS84 = "EPSG:4326"
 
 LAYER_PATTERNS = {
     "regards":   "Regards",
@@ -80,15 +81,16 @@ def charger_donnees():
     if _cache:
         return _cache
 
-    print("[data] Chargement du GeoPackage …")
+    print("[data]   Lecture des tables …", flush=True)
+    tables = _get_geo_tables(GPKG_PATH)
+    mapping = _match_layers(tables)
+
+    print(f"[data]   Tables détectées : {len(tables)}",
+          flush=True)
+    print(f"[data]   Couches identifiées : {len(mapping)}",
+          flush=True)
 
     try:
-        tables = _get_geo_tables(GPKG_PATH)
-        mapping = _match_layers(tables)
-
-        print(f"[data] Tables détectées : {tables}")
-        print(f"[data] Mapping couches  : {mapping}")
-
         regards_gdf = None
 
         for cle, nom_couche in mapping.items():
@@ -105,23 +107,35 @@ def charger_donnees():
                     cols = [c for c in colonnes if c in gdf.columns]
                     gdf = gdf[cols]
 
-                geojson = json.loads(gdf.to_json())
+                gdf_wgs84 = gdf.to_crs(WGS84)
+                geojson = json.loads(gdf_wgs84.to_json())
                 _cache[cle] = geojson
 
-                print(f"[data]   {cle:12s} → {len(gdf)} features")
+                print(
+                    f"[data]   {cle:12s} → {len(gdf)} features",
+                    flush=True
+                )
             except Exception as exc:
-                print(f"[data]   {cle:12s} → ERREUR : {exc}")
+                print(
+                    f"[data]   {cle:12s} → ERREUR : {exc}",
+                    flush=True
+                )
                 _cache[cle] = {
                     "type": "FeatureCollection",
                     "features": []
                 }
 
         if "conduites" in _cache and regards_gdf is not None:
-            orienter_conduites(_cache["conduites"], regards_gdf)
+            print("[data]   Orientation hydraulique …",
+                  flush=True)
+            regards_wgs84 = regards_gdf.to_crs(WGS84)
+            orienter_conduites(_cache["conduites"], regards_wgs84)
 
         if regards_gdf is not None:
+            print("[data]   Labels de rues …", flush=True)
+            regards_wgs84 = regards_gdf.to_crs(WGS84)
             _cache["rues_labels"] = construire_labels_rues(
-                regards_gdf
+                regards_wgs84
             )
 
         bornes = []
@@ -130,7 +144,7 @@ def charger_donnees():
             if not fc:
                 continue
             gdf_tmp = gpd.GeoDataFrame.from_features(
-                fc, crs=TARGET_CRS
+                fc, crs=WGS84
             )
             b = gdf_tmp.total_bounds
             if not any(np.isnan(b)):
@@ -138,15 +152,27 @@ def charger_donnees():
 
         if bornes:
             arr = np.array(bornes)
-            minx, miny = arr[:, 0].min(), arr[:, 1].min()
-            maxx, maxy = arr[:, 2].max(), arr[:, 3].max()
+            minlon = arr[:, 0].min()
+            minlat = arr[:, 1].min()
+            maxlon = arr[:, 2].max()
+            maxlat = arr[:, 3].max()
             _cache["_center"] = [
-                (miny + maxy) / 2, (minx + maxx) / 2
+                (minlat + maxlat) / 2,
+                (minlon + maxlon) / 2
             ]
-            print(f"[data]   Centre zone : {_cache['_center']}")
+            print(
+                f"[data]   Centre zone : {_cache['_center']}",
+                flush=True
+            )
+
+        print("[data]   Données chargées avec succès ✓",
+              flush=True)
 
     except Exception as exc:
-        print(f"[data] ERREUR chargement GeoPackage : {exc}")
+        print(
+            f"[data] ERREUR chargement GeoPackage : {exc}",
+            flush=True
+        )
 
     return _cache
 
