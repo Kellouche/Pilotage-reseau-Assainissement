@@ -166,9 +166,7 @@
         <!-- Liste déroulante des bassins (visible après détection) -->
         <div id="bassin-section">
             <label for="bassin-select">🗺 Sélectionner un bassin</label>
-            <select id="bassin-select">
-                <option value="">-- Tous les bassins --</option>
-            </select>
+            <select id="bassin-select"></select>
             <div id="bassin-info"></div>
         </div>
     </div>
@@ -382,7 +380,7 @@
 
         function peuplerDropdownBassins(geojsonData, clusterLayer) {
             const sel = document.getElementById('bassin-select');
-            sel.innerHTML = '<option value="">-- Tous les bassins --</option>';
+            sel.innerHTML = '';
             _bassinBounds = {};
 
             // Extraire les bassins (polygones) et construire leurs bounds
@@ -411,27 +409,23 @@
 
             // Écouteur du dropdown
             sel.addEventListener('change', function() {
-                const cid = this.value ? parseInt(this.value) : null;
+                const cid = parseInt(this.value);
                 highlightCluster(cid, clusterLayer);
-                if (cid !== null && _bassinBounds[cid]) {
+                if (_bassinBounds[cid]) {
                     carte.fitBounds(_bassinBounds[cid], { padding: [60, 60] });
-                } else if (cid === null) {
-                    // Réinitialiser les styles et zoomer sur tout
-                    clusterLayer.eachLayer(layer => {
-                        const f = layer.feature;
-                        if (!f) return;
-                        if (f.properties.type === 'bassin_urbain') {
-                            layer.setStyle({ fillOpacity: 0.3, weight: 2, color: '#27ae60', dashArray: '5,5' });
-                        } else if (f.geometry.type === 'LineString') {
-                            layer.setStyle({ color: f.properties.couleur || '#e74c3c', weight: 3, opacity: 0.6 });
-                        }
-                    });
-                    if (clusterLayer.getBounds().isValid()) {
-                        carte.fitBounds(clusterLayer.getBounds(), { padding: [50, 50] });
-                    }
-                    document.getElementById('bassin-info').innerHTML = '';
                 }
             });
+
+            // Sélectionner et afficher automatiquement le premier bassin
+            if (bassins.length > 0) {
+                const premierCid = bassins[0].properties.cluster_id;
+                sel.value = premierCid;
+                highlightCluster(premierCid, clusterLayer);
+                if (_bassinBounds[premierCid]) {
+                    carte.fitBounds(_bassinBounds[premierCid], { padding: [60, 60] });
+                }
+                afficherInfoBassin(premierCid);
+            }
         }
 
         function afficherInfoBassin(clusterId) {
