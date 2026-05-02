@@ -96,11 +96,13 @@ def trouver_exutoires_physiques(G):
                 dist_min = dists.loc[pos_min]
                 if dist_min < seuil:
                     noeud = noeuds[pos_min]
-                    exutoires[noeud] = {
-                        "type": "rejet",
-                        "nom": str(rejet.get("nom", f"Rejet_{idx}")),
-                        "distance": float(dist_min)
-                    }
+                    if noeud not in exutoires or dist_min < exutoires[noeud]["distance"]:
+                        nom_brut = str(rejet.get("NOM", rejet.get("nom", f"Rejet_{idx}")))
+                        exutoires[noeud] = {
+                            "type": "rejet",
+                            "nom": nom_brut,
+                            "distance": float(dist_min)
+                        }
     except Exception as e:
         logger.warning(f"Erreur traitement rejets: {e}")
     
@@ -117,9 +119,11 @@ def trouver_exutoires_physiques(G):
                 if dist_min < seuil:
                     noeud = noeuds[pos_min]
                     if noeud not in exutoires or dist_min < exutoires[noeud]["distance"]:
+                        # Pour les stations, le nom est dans 'NOMPRR'
+                        nom_brut = str(station.get("NOMPRR", station.get("NOM", station.get("type", f"Station_{idx}"))))
                         exutoires[noeud] = {
                             "type": "station",
-                            "nom": str(station.get("type", f"Station_{idx}")),
+                            "nom": nom_brut,
                             "distance": float(dist_min)
                         }
     except Exception as e:
@@ -138,9 +142,11 @@ def trouver_exutoires_physiques(G):
                 if dist_min < seuil:
                     noeud = noeuds[pos_min]
                     if noeud not in exutoires or dist_min < exutoires[noeud]["distance"]:
+                        # Pour les ouvrages, le nom est dans 'NOMOUVR'
+                        nom_brut = str(ouvrage.get("NOMOUVR", ouvrage.get("NOM", ouvrage.get("type", f"Ouvrage_{idx}"))))
                         exutoires[noeud] = {
                             "type": "ouvrage",
-                            "nom": str(ouvrage.get("nom", f"Ouvrage_{idx}")),
+                            "nom": nom_brut,
                             "distance": float(dist_min)
                         }
     except Exception as e:
