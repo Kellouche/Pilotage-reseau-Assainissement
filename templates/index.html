@@ -285,27 +285,28 @@
                     if (clusterData.features && clusterData.features.length > 0) {
                         const clusterLayer = L.geoJSON(clusterData, {
                             style: (feature) => {
-                                if (feature.properties.type === 'bassin_urbain') {
-                                    return {
-                                        color: '#27ae60',
-                                        fillColor: '#2ecc71',
-                                        fillOpacity: 0.3,
-                                        weight: 2,
-                                        dashArray: '5, 5'
-                                    };
-                                }
-                                // Couleur du polygone selon le type d'exutoire
                                 const typeColors = {
                                     step:    { color: '#c0392b', fill: '#e74c3c' },
                                     station: { color: '#1a6fa0', fill: '#3498db' },
                                     ouvrage: { color: '#7d3c98', fill: '#9b59b6' },
                                     rejet:   { color: '#d35400', fill: '#e67e22' }
                                 };
-                                const tc = typeColors[feature.properties.exutoire_type] || { color: '#27ae60', fill: '#2ecc71' };
+                                if (feature.properties.type === 'bassin_urbain') {
+                                    const tc = typeColors[feature.properties.exutoire_type]
+                                            || { color: '#27ae60', fill: '#2ecc71' };
+                                    return {
+                                        color:       tc.color,
+                                        fillColor:   tc.fill,
+                                        fillOpacity: 0.25,
+                                        weight:      2,
+                                        dashArray:   '6, 4'
+                                    };
+                                }
+                                // Tronçons (LineString) : couleur issue de la classification
                                 return {
-                                    color: feature.properties.couleur || '#e74c3c',
-                                    weight: 3,
-                                    opacity: 0.7
+                                    color:   feature.properties.couleur || '#3498db',
+                                    weight:  2.5,
+                                    opacity: 0.75
                                 };
                             },
                             onEachFeature: (feature, layer) => {
@@ -350,8 +351,9 @@
                         
                         const nbBassins = clusterData.features.filter(f => f.properties.type === 'bassin_urbain').length;
                         const nbTroncons = clusterData.features.filter(f => f.geometry.type === 'LineString').length;
+                        const nbOrphelins = clusterData.nb_orphelines || 0;
                         
-                        statusDiv.innerHTML = `Détection terminée !<br><b>${nbBassins}</b> bassins identifiés<br><b>${nbTroncons}</b> tronçons connectés`;
+                        statusDiv.innerHTML = `Détection terminée !<br><b>${nbBassins}</b> bassins identifiés<br><b>${nbTroncons}</b> tronçons connectés<br><span style="color: #e74c3c;"><b>${nbOrphelins}</b> tronçons orphelins</span>`;
                         
                         // Construire le menu déroulant des bassins
                         peuplerDropdownBassins(clusterData, clusterLayer);
@@ -434,6 +436,7 @@
             sel.addEventListener('change', function() {
                 const cid = parseInt(this.value);
                 highlightCluster(cid, clusterLayer);
+                afficherInfoBassin(cid);
                 if (_bassinBounds[cid]) {
                     carte.fitBounds(_bassinBounds[cid], { padding: [60, 60] });
                 }

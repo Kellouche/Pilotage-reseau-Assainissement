@@ -268,7 +268,7 @@ def partitionner_bassins_exclusifs(G, exutoires):
         f"[partition] {len(bassins)} bassins exclusifs | "
         f"{total} conduites attribuées | {nb_orphelines} conduites orphelines"
     )
-    return bassins
+    return bassins, nb_orphelines
 
 
 def tracer_cluster_depuis_exutoire(G, exutoire_noeud, max_profondeur=2000):

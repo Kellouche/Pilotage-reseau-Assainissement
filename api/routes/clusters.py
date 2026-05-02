@@ -101,7 +101,7 @@ def recalculate_all_clusters(background_tasks: BackgroundTasks, db: Session = De
 
         # 3. ── Partition BFS multi-sources : bassins exclusifs ────────────
         print("[cluster] Partition BFS multi-sources…", flush=True)
-        bassins = partitionner_bassins_exclusifs(G, exutoires_physiques)
+        bassins, nb_orphelines = partitionner_bassins_exclusifs(G, exutoires_physiques)
         # ──────────────────────────────────────────────────────────────────
 
         color_map = {

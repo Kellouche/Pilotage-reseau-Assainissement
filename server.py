@@ -92,7 +92,7 @@ def api_cluster():
 
         # ── Partition BFS multi-sources : bassins exclusifs ──────────────
         # Chaque conduite est attribuée à UN SEUL bassin (pas de doublon)
-        bassins = partitionner_bassins_exclusifs(G, exutoires)
+        bassins, nb_orphelines = partitionner_bassins_exclusifs(G, exutoires)
         # ─────────────────────────────────────────────────────────────────
 
         all_features = []
@@ -121,7 +121,11 @@ def api_cluster():
                 all_features.extend(cluster_geojson["features"])
 
         logger.info(f"[cluster] {len(bassins)} bassins exclusifs générés")
-        return jsonify({"type": "FeatureCollection", "features": all_features})
+        return jsonify({
+            "type": "FeatureCollection", 
+            "features": all_features,
+            "nb_orphelines": nb_orphelines
+        })
 
     except Exception as e:
         logger.error(f"[ERROR] Cluster detection: {e}", exc_info=True)
