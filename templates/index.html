@@ -294,32 +294,55 @@
                                         dashArray: '5, 5'
                                     };
                                 }
-                                return { 
-                                    color: feature.properties.couleur || '#e74c3c', 
-                                    weight: 3, 
-                                    opacity: 0.6 
+                                // Couleur du polygone selon le type d'exutoire
+                                const typeColors = {
+                                    step:    { color: '#c0392b', fill: '#e74c3c' },
+                                    station: { color: '#1a6fa0', fill: '#3498db' },
+                                    ouvrage: { color: '#7d3c98', fill: '#9b59b6' },
+                                    rejet:   { color: '#d35400', fill: '#e67e22' }
+                                };
+                                const tc = typeColors[feature.properties.exutoire_type] || { color: '#27ae60', fill: '#2ecc71' };
+                                return {
+                                    color: feature.properties.couleur || '#e74c3c',
+                                    weight: 3,
+                                    opacity: 0.7
                                 };
                             },
                             onEachFeature: (feature, layer) => {
                                 if (feature.properties.type === 'bassin_urbain') {
-                                    layer.bindTooltip(feature.properties.nom || "Bassin Urbain");
-                                    
+                                    const typLabels = { step: '🔴 STEP', station: '🔵 Station', ouvrage: '🟣 Ouvrage', rejet: '🟠 Rejet' };
+                                    const typLabel = typLabels[feature.properties.exutoire_type] || '⚪ Exutoire';
+                                    layer.bindTooltip(
+                                        `<b>${feature.properties.nom || 'Bassin Urbain'}</b><br>${typLabel}`,
+                                        { sticky: true }
+                                    );
+
                                     layer.on('click', function(e) {
                                         L.DomEvent.stopPropagation(e);
                                         const cid = feature.properties.cluster_id;
                                         highlightCluster(cid, clusterLayer);
+                                        // Sync dropdown
+                                        const sel = document.getElementById('bassin-select');
+                                        sel.value = String(cid);
+                                        afficherInfoBassin(cid);
                                     });
-                                    
+
                                     layer.on('mouseover', function() {
                                         this.setStyle({ fillOpacity: 0.5, weight: 3 });
                                     });
                                     layer.on('mouseout', function() {
                                         this.setStyle({ fillOpacity: 0.3, weight: 2 });
                                     });
-                                } else {
-                                    if (feature.properties.longueur) {
-                                        layer.bindTooltip(`ID: ${feature.properties.conduit_id}<br>L: ${feature.properties.longueur.toFixed(1)}m<br>D: ${feature.properties.diametre}mm`);
-                                    }
+                                } else if (feature.geometry.type === 'LineString') {
+                                    const p = feature.properties;
+                                    layer.bindTooltip(
+                                        `<b>Conduite ${p.conduit_id || ''}</b><br>` +
+                                        `📏 ${p.longueur ? p.longueur.toFixed(1) + ' m' : 'N/A'} &nbsp;|&nbsp; ` +
+                                        `⌀ ${p.diametre || 'N/A'} mm<br>` +
+                                        `Matériau: ${p.materiau || 'N/A'}<br>` +
+                                        `Bassin n° ${p.cluster_id || '?'}`,
+                                        { sticky: true }
+                                    );
                                 }
                             }
                         }).addTo(clusterCouche);

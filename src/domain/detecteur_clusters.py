@@ -381,12 +381,13 @@ def construire_geojson_cluster(G, edges_cluster, classification=None, bassin_hul
                 "coordinates": [[amont[0], amont[1]], [aval[0], aval[1]]]
             },
             "properties": {
-                "conduit_id": attrs.get("conduit_id", ""),
-                "longueur": longueur,
-                "diametre": diametre,
-                "materiau": str(attrs.get("materiau", "")),
+                "cluster_id":      cluster_id,
+                "conduit_id":      attrs.get("conduit_id", ""),
+                "longueur":        longueur,
+                "diametre":        diametre,
+                "materiau":        str(attrs.get("materiau", "")),
                 "type_hydraulique": type_troncon,
-                "couleur": couleur
+                "couleur":         couleur
             }
         })
     
