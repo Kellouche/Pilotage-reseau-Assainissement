@@ -64,68 +64,65 @@ def api_layers():
 
 @app.route('/api/v1/cluster')
 def api_cluster():
-    """Endpoint pour détecter et retourner les clusters hydrauliques."""
+    """Détecte les bassins urbains exclusifs (sans chevauchement)."""
     global _GLOBAL_GRAPH
     try:
         from src.domain.detecteur_clusters import (
-            construire_graphe_depuis_geopackage, 
-            trouver_exutoires_physiques, 
-            tracer_cluster_depuis_exutoire, 
+            construire_graphe_depuis_geopackage,
+            trouver_exutoires_physiques,
+            partitionner_bassins_exclusifs,
             construire_geojson_cluster,
             calculer_bassin_polygon
         )
-        
-        # Construire le graphe une seule fois (cache)
+
+        # Graphe en cache
         if _GLOBAL_GRAPH is None:
             print("[SERVER] Construction initiale du graphe...")
             _GLOBAL_GRAPH = construire_graphe_depuis_geopackage()
         G = _GLOBAL_GRAPH
-        
+
         if G is None or len(G.nodes()) == 0:
-            logger.warning("[cluster] Graphe vide")
             return jsonify({"type": "FeatureCollection", "features": []})
-        
-        # Trouver les exutoires physiques
+
+        # Identifier les exutoires physiques
         exutoires = trouver_exutoires_physiques(G)
-        
-        # Si aucun exutoire physique trouvé, chercher les nœuds de sortie
         if not exutoires:
-            logger.warning("[cluster] Aucun exutoire physique, recherche des sorties de graphe")
-            noeuds_sortie = [n for n in G.nodes() if G.out_degree(n) == 0 and G.in_degree(n) > 0]
-            exutoires = {noeud: {"type": "sortie_graphe", "nom": f"Sortie_{i}", "distance": 0} 
-                        for i, noeud in enumerate(noeuds_sortie[:20])} # Limité à 20 pour la démo
-        
+            logger.warning("[cluster] Aucun exutoire physique trouvé")
+            return jsonify({"type": "FeatureCollection", "features": []})
+
+        # ── Partition BFS multi-sources : bassins exclusifs ──────────────
+        # Chaque conduite est attribuée à UN SEUL bassin (pas de doublon)
+        bassins = partitionner_bassins_exclusifs(G, exutoires)
+        # ─────────────────────────────────────────────────────────────────
+
         all_features = []
-        processed_exutoires = 0
-        
-        # On traite chaque exutoire séparément pour avoir des bassins distincts
-        for i, (noeud_exutoire, info) in enumerate(exutoires.items()):
-            if noeud_exutoire not in G: continue
-            
-            edges = tracer_cluster_depuis_exutoire(G, noeud_exutoire)
-            if not edges: continue
-            
-            # Calculer le polygone du bassin pour ce cluster
+        for i, (noeud_exutoire, edges) in enumerate(bassins.items()):
+            if not edges:
+                continue
+
+            info = exutoires[noeud_exutoire]
             bassin_hull = calculer_bassin_polygon(edges)
-            
-            # Générer le GeoJSON pour CE cluster spécifique
+
             cluster_geojson = construire_geojson_cluster(
-                G, edges, 
-                bassin_hull=bassin_hull, 
-                cluster_id=i+1
+                G, edges,
+                bassin_hull=bassin_hull,
+                cluster_id=i + 1
             )
-            
+
             if cluster_geojson and "features" in cluster_geojson:
+                # Enrichir le nom du bassin avec le type d'exutoire
+                for feat in cluster_geojson["features"]:
+                    if feat["properties"].get("type") == "bassin_urbain":
+                        feat["properties"]["nom"] = (
+                            f"{info.get('nom', f'Bassin {i+1}')} "
+                            f"[{info.get('type','?').upper()}]"
+                        )
+                        feat["properties"]["exutoire_type"] = info.get("type", "")
                 all_features.extend(cluster_geojson["features"])
-                processed_exutoires += 1
-        
-        logger.info(f"[cluster] {processed_exutoires} bassins urbains générés")
-        
-        return jsonify({
-            "type": "FeatureCollection",
-            "features": all_features
-        })
-        
+
+        logger.info(f"[cluster] {len(bassins)} bassins exclusifs générés")
+        return jsonify({"type": "FeatureCollection", "features": all_features})
+
     except Exception as e:
         logger.error(f"[ERROR] Cluster detection: {e}", exc_info=True)
         return jsonify({"type": "FeatureCollection", "features": []})

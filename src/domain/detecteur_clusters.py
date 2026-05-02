@@ -203,32 +203,90 @@ def detecter_composantes_orphelines(G):
     return orphelines
 
 
-def tracer_cluster_depuis_exutoire(G, exutoire_noeud, max_profondeur=2000):
-    """Trace le cluster en amont d'un exutoire de manière optimisée.
-    
+def partitionner_bassins_exclusifs(G, exutoires):
+    """Partitionne le réseau en bassins exclusifs (sans chevauchement).
+
+    Algorithme BFS multi-sources inversé :
+    - On part simultanément de TOUS les exutoires
+    - On remonte le réseau (graphe inversé) en BFS par vagues
+    - Chaque nœud est attribué à l'exutoire qui l'atteint le PREMIER
+      (= l'exutoire le plus proche en aval, en nombre de sauts)
+    - Chaque arête (u→v) est attribuée au bassin du nœud aval v
+
+    Résultat : bassins disjoints, chaque conduite appartient à UN SEUL bassin.
+
     Args:
-        G: graphe NetworkX DiGraph (amont → aval)
-        exutoire_noeud: tuple (x, y) du nœud exutoire
-        max_profondeur: Conservé pour compatibilité, mais plus nécessaire avec nx.ancestors
-    
-    Retourne:
-        set de (amont, aval) pour chaque arête du cluster
+        G: DiGraph NetworkX (amont → aval)
+        exutoires: dict {noeud: {'type': str, 'nom': str, ...}}
+
+    Returns:
+        dict {noeud_exutoire: set of (amont, aval) edges}
+    """
+    from collections import deque
+
+    # Priorité d'attribution en cas d'égalité de distance
+    # (exutoire de plus haute priorité gagne)
+    PRIORITE = {'step': 0, 'station': 1, 'ouvrage': 2, 'rejet': 3, 'sortie_graphe': 9}
+
+    # Trier les exutoires par priorité pour initialiser la file dans le bon ordre
+    exutoires_tries = sorted(
+        [(n, info) for n, info in exutoires.items() if n in G],
+        key=lambda x: PRIORITE.get(x[1].get('type', ''), 9)
+    )
+
+    bassins = {n: set() for n, _ in exutoires_tries}
+    attribution = {}   # nœud → exutoire propriétaire
+    file = deque()
+
+    # Chaque exutoire se réclame lui-même en premier
+    for noeud, _ in exutoires_tries:
+        attribution[noeud] = noeud
+        file.append(noeud)
+
+    # BFS multi-sources : remontée simultanée depuis tous les exutoires
+    while file:
+        noeud_courant = file.popleft()
+        exutoire_courant = attribution[noeud_courant]
+
+        for predecesseur in G.predecessors(noeud_courant):
+            if predecesseur not in attribution:
+                attribution[predecesseur] = exutoire_courant
+                file.append(predecesseur)
+            # Si déjà attribué → appartient déjà au bassin le plus proche, on ne touche pas
+
+    # Assigner chaque arête au bassin de son nœud AVAL (v)
+    nb_orphelines = 0
+    for u, v in G.edges():
+        exutoire_v = attribution.get(v)
+        if exutoire_v and exutoire_v in bassins:
+            bassins[exutoire_v].add((u, v))
+        else:
+            nb_orphelines += 1
+
+    total = sum(len(e) for e in bassins.values())
+    logger.info(
+        f"[partition] {len(bassins)} bassins exclusifs | "
+        f"{total} conduites attribuées | {nb_orphelines} conduites orphelines"
+    )
+    return bassins
+
+
+def tracer_cluster_depuis_exutoire(G, exutoire_noeud, max_profondeur=2000):
+    """Compatibilité : trace le bassin cumulatif d'un seul exutoire (nx.ancestors).
+
+    NOTE : Pour des bassins non-chevauchants, utiliser partitionner_bassins_exclusifs().
+    Cette fonction conserve le comportement original (bassin cumulatif incluant
+    les sous-bassins intermédiaires) et est gardée pour les appels API individuels.
     """
     if exutoire_noeud not in G:
         logger.warning(f"[cluster] Exutoire {exutoire_noeud} absent du graphe")
         return set()
-    
-    # nx.ancestors retourne tous les nœuds 'u' tels qu'il existe un chemin de 'u' vers 'exutoire_noeud'
-    # Dans notre graphe (amont -> aval), cela correspond exactement au bassin versant amont.
+
     noeuds_amont = nx.ancestors(G, exutoire_noeud)
     noeuds_amont.add(exutoire_noeud)
-    
-    # On extrait le sous-graphe induit par ces nœuds pour obtenir les conduites
     G_bassin = G.subgraph(noeuds_amont)
-    edges_cluster = set(G_bassin.edges())
-    
-    logger.info(f"[cluster] {len(edges_cluster)} conduites, {len(noeuds_amont)} nœuds (version optimisée)")
-    return edges_cluster
+    return set(G_bassin.edges())
+
 
 def calculer_bassin_polygon(edges_cluster):
     """Calcule le polygone (convex hull buffered) représentant le bassin urbain.
