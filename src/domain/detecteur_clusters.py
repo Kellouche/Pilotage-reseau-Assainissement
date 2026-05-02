@@ -23,8 +23,13 @@ import networkx as nx
 from src.infrastructure.chargeur_geopackage import (
     GPKG_PATH, WGS84, TARGET_CRS
 )
+from src.domain.graphe_reseau import construire_graphe
 
 logger = logging.getLogger(__name__)
+
+def construire_graphe_depuis_geopackage():
+    """Proxy pour construire_graphe() afin de maintenir la compatibilité avec server.py."""
+    return construire_graphe()
 
 # Cache pour les couches GeoPackage afin d'éviter des lectures redondantes (O(N^2) -> O(N))
 _LAYER_CACHE = {}
@@ -225,19 +230,67 @@ def tracer_cluster_depuis_exutoire(G, exutoire_noeud, max_profondeur=2000):
     logger.info(f"[cluster] {len(edges_cluster)} conduites, {len(noeuds_amont)} nœuds (version optimisée)")
     return edges_cluster
 
+def calculer_bassin_polygon(edges_cluster):
+    """Calcule le polygone (convex hull buffered) représentant le bassin urbain.
+    
+    Args:
+        edges_cluster: set des arêtes (amont, aval)
+        
+    Returns:
+        shapely.geometry.Polygon: Le polygone du bassin ou None
+    """
+    from shapely.geometry import MultiPoint, Point
+    
+    noeuds = set()
+    for amont, aval in edges_cluster:
+        noeuds.add(amont)
+        noeuds.add(aval)
+    
+    if len(noeuds) < 2:
+        return None
+        
+    points = [Point(n) for n in noeuds]
+    hull = MultiPoint(points).convex_hull
+    
+    # Appliquer un buffer pour donner du volume au bassin
+    if hull.geom_type == 'Point':
+        return hull.buffer(0.003)
+    elif hull.geom_type == 'LineString':
+        return hull.buffer(0.002)
+    else:
+        return hull.buffer(0.001)
 
-def construire_geojson_cluster(G, edges_cluster, classification=None):
+
+def construire_geojson_cluster(G, edges_cluster, classification=None, bassin_hull=None, cluster_id=None):
     """Convertit les arêtes du cluster en GeoJSON avec couleur par type hydraulique.
     
     Args:
         G: graphe NetworkX
         edges_cluster: set des arêtes du cluster
         classification: dict optionnel {(amont,aval): {'type': str, 'couleur': str}}
+        bassin_hull: shapely.geometry.Polygon optionnel représentant le bassin
+        cluster_id: identifiant unique du cluster
     
     Returns:
         dict GeoJSON FeatureCollection
     """
     features = []
+    
+    # Ajouter le polygone du bassin en premier (pour qu'il soit en dessous des conduites)
+    if bassin_hull and not bassin_hull.is_empty:
+        import json
+        from shapely.geometry import mapping
+        features.append({
+            "type": "Feature",
+            "geometry": mapping(bassin_hull),
+            "properties": {
+                "type": "bassin_urbain",
+                "cluster_id": cluster_id,
+                "couleur": "#2ecc71",
+                "nom": f"Bassin Urban {cluster_id}" if cluster_id else "Bassin Urbain",
+                "opacite": 0.3
+            }
+        })
     
     for amont, aval in edges_cluster:
         attrs = G[amont][aval]
@@ -320,30 +373,33 @@ def calculer_statistiques(G, edges_cluster):
     }
 
 
-def compter_infrastructures(edges_cluster):
-    """Compte les regards, stations, STEP et ouvrages dans un cluster."""
-    from shapely.geometry import Point, MultiPoint
+def compter_infrastructures(edges_cluster, hull=None):
+    """Compte les regards, stations, STEP et ouvrages dans un cluster.
     
-    noeuds = set()
-    for amont, aval in edges_cluster:
-        noeuds.add(amont)
-        noeuds.add(aval)
-    
-    if len(noeuds) < 3:
-        return {"nb_regards": 0, "nb_stations": 0, "nb_step": 0, "nb_ouvrages": 0}
+    Args:
+        edges_cluster: set des arêtes
+        hull: polygone shapely optionnel (si déjà calculé)
+    """
+    if hull is None:
+        from shapely.geometry import Point, MultiPoint
+        
+        noeuds = set()
+        for amont, aval in edges_cluster:
+            noeuds.add(amont)
+            noeuds.add(aval)
+        
+        if len(noeuds) < 3:
+            return {"nb_regards": 0, "nb_stations": 0, "nb_step": 0, "nb_ouvrages": 0}
+        
+        points = [Point(n) for n in noeuds]
+        hull = MultiPoint(points).convex_hull
+        
+        if hull.geom_type in ('LineString', 'Point'):
+            hull = hull.buffer(0.003)
+        else:
+            hull = hull.buffer(0.001)
     
     import geopandas as gpd
-    
-    points = [Point(n) for n in noeuds]
-    hull = MultiPoint(points).convex_hull
-    
-    # Élargir le hull pour inclure les infrastructures proches (200m ≈ 0.002°)
-    # Les types LineString/Point (clusters linéaires/ponctuels) ont besoin d'un buffer plus grand
-    if hull.geom_type in ('LineString', 'Point'):
-        hull = hull.buffer(0.003)   # ~300m
-    else:
-        hull = hull.buffer(0.001)   # ~100m
-    
     nb_regards = nb_stations = nb_step = nb_ouvrages = 0
     
     try:
