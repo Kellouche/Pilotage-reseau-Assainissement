@@ -4,8 +4,8 @@
 Nom Auteur : Dr Abdelhakim Kellouche
 Nom de l'application : Pilotage Réseau d'Assainissement
 Numéro version : 1.0.0
-Date de création : 2026-04-02
-Date de modification : 2026-04-02
+Date de création : 02-04-2026
+Date de modification : 02-04-2026
 Objectif : Génération des sections de liens d'un fichier SWMM.
 Gère les sections CONDUITS, PUMPS, XSECTIONS, ORIFICES,
 WEIRS et LOSSES.

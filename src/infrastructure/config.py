@@ -4,8 +4,8 @@
 Nom Auteur : Dr Abdelhakim Kellouche
 Nom de l'application : Pilotage Réseau d'Assainissement
 Numéro version : 1.0.0
-Date de création : 2026-04-02
-Date de modification : 2026-04-02
+Date de création : 02-04-2026
+Date de modification : 02-04-2026
 Objectif : Configuration centralisée du projet.
 Contient les constantes, paramètres SWMM et mappages
 nécessaires au traitement des données géospatiales

@@ -4,8 +4,8 @@
 Nom Auteur : Dr Abdelhakim Kellouche
 Nom de l'application : Pilotage Réseau d'Assainissement
 Numéro version : 1.0.0
-Date de création : 2026-04-02
-Date de modification : 2026-04-02
+Date de création : 02-04-2026
+Date de modification : 02-04-2026
 Objectif : Fonctions utilitaires pour le traitement des données
 géospatiales. Contient le mappage des types de nœuds,
 la recherche du nœud le plus proche et les conversions

@@ -27,6 +27,14 @@ from src.domain.graphe_reseau import construire_graphe
 
 logger = logging.getLogger(__name__)
 
+import pandas as pd
+
+def _nettoyer_nom(val, par_defaut):
+    """Nettoie les valeurs nan, None ou vides pour un affichage propre."""
+    if val is None or pd.isna(val) or str(val).strip().lower() in ['nan', 'none', '']:
+        return par_defaut
+    return str(val).strip()
+
 def construire_graphe_depuis_geopackage():
     """Proxy pour construire_graphe() afin de maintenir la compatibilité avec server.py."""
     return construire_graphe()
@@ -97,10 +105,12 @@ def trouver_exutoires_physiques(G):
                 if dist_min < seuil:
                     noeud = noeuds[pos_min]
                     if noeud not in exutoires or dist_min < exutoires[noeud]["distance"]:
-                        nom_brut = str(rejet.get("NOM", rejet.get("nom", f"Rejet_{idx}")))
+                        # Nettoyage des noms pour éviter les 'nan' ou 'None'
+                        nom_val = rejet.get("NOM", rejet.get("nom"))
+                        nom_nettoye = _nettoyer_nom(nom_val, f"Rejet_{idx} (S.N.)")
                         exutoires[noeud] = {
                             "type": "rejet",
-                            "nom": nom_brut,
+                            "nom": nom_nettoye,
                             "distance": float(dist_min)
                         }
     except Exception as e:
@@ -120,10 +130,11 @@ def trouver_exutoires_physiques(G):
                     noeud = noeuds[pos_min]
                     if noeud not in exutoires or dist_min < exutoires[noeud]["distance"]:
                         # Pour les stations, le nom est dans 'NOMPRR'
-                        nom_brut = str(station.get("NOMPRR", station.get("NOM", station.get("type", f"Station_{idx}"))))
+                        nom_val = station.get("NOMPRR", station.get("NOM", station.get("type")))
+                        nom_nettoye = _nettoyer_nom(nom_val, f"Station_{idx} (S.N.)")
                         exutoires[noeud] = {
                             "type": "station",
-                            "nom": nom_brut,
+                            "nom": nom_nettoye,
                             "distance": float(dist_min)
                         }
     except Exception as e:
@@ -143,10 +154,11 @@ def trouver_exutoires_physiques(G):
                     noeud = noeuds[pos_min]
                     if noeud not in exutoires or dist_min < exutoires[noeud]["distance"]:
                         # Pour les ouvrages, le nom est dans 'NOMOUVR'
-                        nom_brut = str(ouvrage.get("NOMOUVR", ouvrage.get("NOM", ouvrage.get("type", f"Ouvrage_{idx}"))))
+                        nom_val = ouvrage.get("NOMOUVR", ouvrage.get("NOM", ouvrage.get("type")))
+                        nom_nettoye = _nettoyer_nom(nom_val, f"Ouvrage_{idx} (S.N.)")
                         exutoires[noeud] = {
                             "type": "ouvrage",
-                            "nom": nom_brut,
+                            "nom": nom_nettoye,
                             "distance": float(dist_min)
                         }
     except Exception as e:
@@ -165,9 +177,11 @@ def trouver_exutoires_physiques(G):
                 if dist_min < seuil:
                     noeud = noeuds[pos_min]
                     if noeud not in exutoires or dist_min < exutoires[noeud]["distance"]:
+                        nom_val = step.get("NOM", step.get("nom"))
+                        nom_nettoye = _nettoyer_nom(nom_val, f"STEP_{idx} (S.N.)")
                         exutoires[noeud] = {
                             "type": "step",
-                            "nom": str(step.get("NOM", f"STEP_{idx}")),
+                            "nom": nom_nettoye,
                             "distance": float(dist_min)
                         }
     except Exception as e:
@@ -325,7 +339,7 @@ def calculer_bassin_polygon(edges_cluster):
         return hull.buffer(0.001)
 
 
-def construire_geojson_cluster(G, edges_cluster, classification=None, bassin_hull=None, cluster_id=None):
+def construire_geojson_cluster(G, edges_cluster, classification=None, bassin_hull=None, cluster_id=None, exutoire_node=None, exutoire_info=None):
     """Convertit les arêtes du cluster en GeoJSON avec couleur par type hydraulique.
     
     Args:
@@ -334,11 +348,29 @@ def construire_geojson_cluster(G, edges_cluster, classification=None, bassin_hul
         classification: dict optionnel {(amont,aval): {'type': str, 'couleur': str}}
         bassin_hull: shapely.geometry.Polygon optionnel représentant le bassin
         cluster_id: identifiant unique du cluster
+        exutoire_node: tuple (lon, lat) du point de sortie
+        exutoire_info: dict avec type et nom de l'exutoire
     
     Returns:
         dict GeoJSON FeatureCollection
     """
     features = []
+    
+    # Ajouter le point de l'exutoire
+    if exutoire_node:
+        features.append({
+            "type": "Feature",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [exutoire_node[0], exutoire_node[1]]
+            },
+            "properties": {
+                "type": "exutoire",
+                "cluster_id": cluster_id,
+                "nom": exutoire_info.get("nom", "Exutoire") if exutoire_info else "Exutoire",
+                "exutoire_type": exutoire_info.get("type", "inconnu") if exutoire_info else "inconnu"
+            }
+        })
     
     # Ajouter le polygone du bassin en premier (pour qu'il soit en dessous des conduites)
     if bassin_hull and not bassin_hull.is_empty:

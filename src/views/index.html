@@ -3,75 +3,255 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reseau d'Assainissement</title>
+    <title>SWMM Platform</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="styles.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: sans-serif; background:#1a1a2e; color:#eee; height:100vh; overflow:hidden; }
+        #app { display:flex; height:100vh; }
+        .sidebar {
+            width: 300px; background:#16213e; padding:16px; overflow-y:auto;
+            border-right:1px solid #0f3460; display:flex; flex-direction:column; gap:12px;
+        }
+        .sidebar h2 { color:#e94560; font-size:18px; }
+        .stat-card { background:#0f3460; border-radius:8px; padding:12px; text-align:center; }
+        .stat-card .val { font-size:28px; font-weight:bold; color:#e94560; }
+        .stat-card .lbl { font-size:11px; color:#888; margin-top:4px; }
+        .filtres { background:#0f3460; border-radius:8px; padding:12px; }
+        .filtres label { display:flex; align-items:center; gap:8px; padding:4px 0; cursor:pointer; font-size:13px; color:#ccc; }
+        .filtres input { accent-color:#e94560; }
+        .btn {
+            background:#e94560; color:white; border:none; padding:10px 16px; border-radius:6px;
+            cursor:pointer; font-size:13px; font-weight:600; transition:all 0.2s; width:100%;
+        }
+        .btn:hover { background:#ff6b81; }
+        .btn:disabled { opacity:0.5; cursor:wait; }
+        #map { flex:1; z-index:1; }
+        .cluster-panel {
+            position:absolute; top:10px; right:10px; background:#16213e; border-radius:10px;
+            padding:16px; width:300px; max-height:80vh; overflow-y:auto; z-index:1000;
+            box-shadow:0 4px 20px rgba(0,0,0,0.5); display:none;
+        }
+        .cluster-panel h3 { color:#e94560; margin-bottom:12px; }
+        .stat-row { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #0f3460; font-size:13px; }
+        .stat-row span:first-child { color:#888; }
+        .toast {
+            position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+            background:#e94560; color:white; padding:12px 24px; border-radius:8px;
+            font-size:14px; z-index:2000; display:none;
+        }
+        .legend-dot { width:12px; height:12px; border-radius:50%; display:inline-block; }
+    </style>
 </head>
-
 <body>
-<div class="app">
-
-    <aside class="sidebar">
-        <h1>Reseau d'Assainissement</h1>
-
-        <div class="stats-grid" id="stats">
-            <div class="loading">
-                <div class="spinner"></div>
-                <div style="margin-top:6px">Chargement...</div>
-            </div>
+<div id="app">
+    <div class="sidebar">
+        <h2>🚰 SWMM Platform</h2>
+        
+        <div class="stat-card">
+            <div class="val" id="stat-total">--</div>
+            <div class="lbl">tronçons</div>
         </div>
-
-        <h2>Affichage</h2>
-        <div class="panel" id="layer-toggles"></div>
-
-        <h2>Options canalisations</h2>
-        <div class="panel">
-            <label class="checkbox-row">
-                <input type="checkbox" id="cb-arrows"
-                       onchange="updateOverlays()">
-                Sens d'ecoulement (zoom &gt;= 14)
-            </label>
+        
+        <div class="filtres">
+            <label><input type="checkbox" id="f-rejets" checked><span class="legend-dot" style="background:#e74c3c"></span> Réseaux rejet</label>
+            <label><input type="checkbox" id="f-stations" checked><span class="legend-dot" style="background:#3498db"></span> Stations</label>
+            <label><input type="checkbox" id="f-ouvrages" checked><span class="legend-dot" style="background:#9b59b6"></span> Ouvrages</label>
+            <label><input type="checkbox" id="f-orphelins" checked><span class="legend-dot" style="background:#e67e22"></span> Orphelins</label>
         </div>
-
-        <h2>Noms de rues</h2>
-        <div class="panel">
-            <label class="checkbox-row">
-                <input type="checkbox" id="cb-rues"
-                       onchange="updateOverlays()">
-                Afficher les noms de rues (zoom &gt;= 13)
-            </label>
+        
+        <button class="btn" id="btn-calc">🔄 Calculer réseaux</button>
+        <button class="btn" id="btn-orphans" style="background:#e67e22">🚨 Voir anomalies</button>
+        <button class="btn" onclick="location.reload()" style="background:#34495e">🔄 Recharger</button>
+        
+        <select id="sel-cluster" style="width:100%;padding:8px;border-radius:6px;border:1px solid #0f3460;background:#0f3460;color:#eee;font-size:12px;margin-top:8px">
+            <option value="">-- Choisir cluster --</option>
+        </select>
+        
+        <div id="mini-stats" style="font-size:11px;color:#888;margin-top:8px;display:none">
+            <div id="m-stats"></div>
         </div>
-
-        <h2>Bassins versants</h2>
-        <div class="panel">
-            <div style="font-size:12px;color:#888;margin-bottom:8px">
-                Delimitation automatique a venir
-            </div>
-            <button class="btn" disabled
-                    style="opacity:.5;cursor:default">
-                Creer les bassins versants
-            </button>
-        </div>
-
-        <button class="btn" onclick="reload()">Recharger</button>
-
-        <div class="info-box">
-            <strong>Localisation</strong>
-            Algerie - UTM Zone 31N<br>
-            <strong>Projection</strong>
-            WGS 84 pour affichage
-        </div>
-
-        <h2>Legende</h2>
-        <div id="legend"></div>
-    </aside>
-
-    <div class="map-wrap">
-        <div id="map"></div>
+    </div>
+    
+    <div id="map"></div>
+    
+    <div class="cluster-panel" id="panel">
+        <button class="close-btn" onclick="closePanel()" style="position:absolute;top:8px;right:8px;background:none;border:none;color:#888;font-size:20px;cursor:pointer">×</button>
+        <h3 id="p-nom">Détails</h3>
+        <div class="stat-row"><span>Conduites</span><span id="p-cond">-</span></div>
+        <div class="stat-row"><span>Nœuds</span><span id="p-noeuds">-</span></div>
+        <div class="stat-row"><span>Longueur (m)</span><span id="p-long">-</span></div>
+        <div class="stat-row"><span>Diam min (mm)</span><span id="p-dmin">-</span></div>
+        <div class="stat-row"><span>Diam max (mm)</span><span id="p-dmax">-</span></div>
+        <div class="stat-row"><span>Regards</span><span id="p-reg">-</span></div>
+        <div class="stat-row"><span>Stations</span><span id="p-sta">-</span></div>
+        <div class="stat-row"><span>Ouvrages</span><span id="p-ouv">-</span></div>
+        <div class="stat-row"><span>Type</span><span id="p-type">-</span></div>
+        <button class="btn" onclick="exportGeoJSON()" style="margin-top:12px">📥 Exporter</button>
     </div>
 </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="carte.js"></script>
+<div class="toast" id="toast"></div>
+
+<script>
+let map, couches={}, clusters=[], selCluster=null;
+
+function init() {
+    map = L.map('map').setView([36.15,1.33],13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    
+    couches = {
+        rejets: L.layerGroup().addTo(map),
+        stations: L.layerGroup().addTo(map),
+        ouvrages: L.layerGroup().addTo(map),
+        orphelins: L.layerGroup().addTo(map)
+    };
+    
+    // Toggle couches
+    ['rejets','stations','ouvrages','orphelins'].forEach(k => {
+        document.getElementById('f-'+k).onchange = e => {
+            if(e.target.checked) couches[k].addTo(map);
+            else map.removeLayer(couches[k]);
+        };
+    });
+    
+    // Calculer
+    document.getElementById('btn-calc').onclick = calc;
+    document.getElementById('btn-orphans').onclick = () => {
+        const orp = clusters.find(c => !c.exutoire.type);
+        if(orp && orp.geojson) {
+            map.fitBounds(L.geoJSON(orp.geojson).getBounds());
+            toast('Anomalies: '+orp.troncons+' tronçons');
+        }
+    };
+    
+    document.getElementById('sel-cluster').onchange = e => {
+        if(e.target.value==="") { closePanel(); return; }
+        showCluster(clusters[e.target.value]);
+    };
+    
+    // Charger
+    fetch('/get-all-clusters').then(r=>r.json()).then(data => {
+        clusters = data.clusters || [];
+        afficher(data);
+        majStats(data);
+        majSelect();
+        toast(data.total_exutoires+' exutoires, '+data.troncons_orphelins+' orphelins');
+    }).catch(e => toast('Erreur: '+e.message));
+}
+
+function calc() {
+    const btn = document.getElementById('btn-calc');
+    btn.disabled=true; btn.textContent='⏳ Calcul...';
+    fetch('/get-all-clusters', {method:'POST'})
+        .then(r=>r.json()).then(data => {
+            clusters = data.clusters || [];
+            afficher(data);
+            majStats(data);
+            majSelect();
+            btn.disabled=false; btn.textContent='🔄 Calculer';
+            toast('Fait: '+data.clusters.length+' clusters');
+        }).catch(e => { btn.disabled=false; btn.textContent='Erreur'; toast(e.message); });
+}
+
+function afficher(data) {
+    Object.values(couches).forEach(c => c.clearLayers());
+    const cols = {rejet:'#e74c3c', station:'#3498db', ouvrage:'#9b59b6'};
+    
+    (data.clusters||[]).forEach(c => {
+        if(!c.geojson) return;
+        const type = (c.exutoire||{}).type || 'autre';
+        const col = cols[type] || '#95a5a6';
+        const couche = type==='rejet'?couches.rejets:type==='station'?couches.stations:couches.ouvrages;
+        
+        c.geojson.features?.forEach(f => {
+            if(f.geometry.type==='LineString') {
+                const lc = L.polyline(f.geometry.coordinates.map(p=>[p[1],p[0]]), {color:col, weight:4, opacity:0.8});
+                lc.bindPopup('<b>'+(c.exutoire?.nom||'Inconnu')+'</b><br>'+(c.troncons||0)+' conduites');
+                couche.addLayer(lc);
+            }
+        });
+    });
+    
+    // Orphelins (orange)
+    const orp = (data.clusters||[]).find(c => !c.exutoire?.type);
+    if(orp && orp.geojson) {
+        orp.geojson.features?.forEach(f => {
+            if(f.geometry.type==='LineString') {
+                const lc = L.polyline(f.geometry.coordinates.map(p=>[p[1],p[0]]), {color:'#e67e22', weight:3, opacity:0.7, dashArray:'5 3'});
+                lc.bindPopup('<b>Orphelins</b><br>'+(orp.troncons||0)+' conduites isolées');
+                couches.orphelins.addLayer(lc);
+            }
+        });
+    }
+    
+    // Zoom global
+    const bds = Object.values(couches).map(c => c.getBounds()).filter(b => b.isValid());
+    if(bds.length) map.fitBounds(bds.reduce((a,b)=>a.extend(b), bds[0]), {padding:[50,50]});
+}
+
+function majStats(d) {
+    document.getElementById('stat-total').textContent = d.total_conduites || 0;
+    const s = document.getElementById('mini-stats');
+    s.style.display='block';
+    document.getElementById('m-stats').innerHTML = (d.total_conduites||0)+' tronçons, '+(d.clusters?.length||0)+' clusters';
+}
+
+function majSelect() {
+    const sel = document.getElementById('sel-cluster');
+    sel.innerHTML = '<option value="">-- Choisir --</option>';
+    clusters.forEach((c,i) => {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = (c.exutoire?.nom||'Cluster')+' ('+(c.troncons||0)+')';
+        sel.appendChild(opt);
+    });
+}
+
+function showCluster(c) {
+    if(!c) return;
+    selCluster = c;
+    document.getElementById('panel').style.display='block';
+    document.getElementById('p-nom').textContent = c.exutoire?.nom || 'Inconnu';
+    document.getElementById('p-cond').textContent = c.stats?.nb_conduites || c.troncons || 0;
+    document.getElementById('p-noeuds').textContent = c.stats?.nb_noeuds || 0;
+    document.getElementById('p-long').textContent = (c.stats?.longueur_totale_m||0).toLocaleString();
+    document.getElementById('p-dmin').textContent = c.stats?.diametre_min_m || '-';
+    document.getElementById('p-dmax').textContent = c.stats?.diametre_max_m || '-';
+    document.getElementById('p-reg').textContent = c.infrastructures?.nb_regards || 0;
+    document.getElementById('p-sta').textContent = c.infrastructures?.nb_stations || 0;
+    document.getElementById('p-ouv').textContent = c.infrastructures?.nb_ouvrages || 0;
+    document.getElementById('p-type').textContent = c.exutoire?.type || '-';
+    
+    if(c.geojson) map.fitBounds(L.geoJSON(c.geojson).getBounds(), {padding:[50,50]});
+}
+
+function closePanel() {
+    document.getElementById('panel').style.display='none';
+    selCluster = null;
+}
+
+function exportGeoJSON() {
+    if(!selCluster) return;
+    const blob = new Blob([JSON.stringify(selCluster.geojson, null, 2)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'cluster.geojson';
+    a.click();
+    toast('Exporté !');
+}
+
+function toast(m) {
+    const t = document.getElementById('toast');
+    t.textContent = m;
+    t.style.display = 'block';
+    t.style.opacity = 1;
+    setTimeout(() => { t.style.opacity = 0; setTimeout(() => t.style.display='none', 300); }, 3000);
+}
+
+if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+else init();
+</script>
 </body>
 </html>

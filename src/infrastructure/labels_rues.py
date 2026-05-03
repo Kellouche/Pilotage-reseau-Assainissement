@@ -4,8 +4,8 @@
 Nom Auteur : Dr Abdelhakim Kellouche
 Nom de l'application : Pilotage Réseau d'Assainissement
 Numéro version : 1.0.0
-Date de création : 2026-04-02
-Date de modification : 2026-04-02
+Date de création : 02-04-2026
+Date de modification : 02-04-2026
 Objectif : Génération des labels de rues pour la carte.
 Crée un GeoJSON de points avec les noms de rues,
 un par rue, positionnés au centroïde de ses regards.
@@ -44,5 +44,6 @@ def construire_labels_rues(regards_gdf):
             }
         })
 
-    print(f"[data]   Labels rues : {len(features)} noms de rues")
+    print(f"[data]   Labels rues : {len(features)} noms de rues",
+          flush=True)
     return {"type": "FeatureCollection", "features": features}

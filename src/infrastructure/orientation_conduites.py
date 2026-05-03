@@ -4,8 +4,8 @@
 Nom Auteur : Dr Abdelhakim Kellouche
 Nom de l'application : Pilotage Réseau d'Assainissement
 Numéro version : 1.0.0
-Date de création : 2026-04-02
-Date de modification : 2026-04-02
+Date de création : 02-04-2026
+Date de modification : 02-04-2026
 Objectif : Orientation hydraulique des canalisations.
 Calcule les cotes de radier à partir des regards et inverse
 les coordonnées des canalisations dans le sens amont → aval.
@@ -74,7 +74,7 @@ def orienter_conduites(conduites_geojson, regards_gdf_wgs84):
 
     n_avec_cote = int(np.sum(~np.isnan(cotes_arr)))
     print(f"[data]   Index spatial : {len(coords_arr)} regards "
-          f"({n_avec_cote} avec cote)")
+          f"({n_avec_cote} avec cote)", flush=True)
 
     inversions = 0
     sans_cote = 0
@@ -132,6 +132,6 @@ def orienter_conduites(conduites_geojson, regards_gdf_wgs84):
             inversions += 1
 
     print(f"[data]   Canalisations inversées : "
-          f"{inversions}/{len(features)}")
+          f"{inversions}/{len(features)}", flush=True)
     print(f"[data]   Canalisations sans cote : "
-          f"{sans_cote}/{len(features)}")
+          f"{sans_cote}/{len(features)}", flush=True)

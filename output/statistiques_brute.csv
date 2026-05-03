@@ -1,0 +1,13 @@
+﻿Paramètre,Type,📊 Statistiques de base,Valeurs totales,Valeurs non nulles,Valeurs manquantes,Valeurs uniques,Moyenne,Médiane,Écart-type,📈 Distribution,Minimum,25e centile,75e centile,Maximum,IQR,CV (%),🔍 Analyse
+debit_entree,float64,,1680,0,100.0%,0,N/A,N/A,N/A,,N/A,N/A,N/A,N/A,N/A,nan%,✅ Données cohérentes
+ph_eb,float64,,1680,1552,7.6%,112,7.345,7.340,0.197,,5.950,7.220,7.460,8.030,0.240,2.7%,⚠️ 10 valeurs suspectes (z-score > 3)
+temperature_eb,float64,,1680,1280,23.8%,178,20.914,21.400,4.464,,0.400,17.175,24.900,29.600,7.725,21.3%,⚠️ 4 valeurs suspectes (z-score > 3)
+conductivite_eb,float64,,1680,1258,25.1%,266,15.359,2.440,125.052,,0.440,1.730,2.718,1.547e+03,0.988,814.2%,⚠️ 15 valeurs suspectes (z-score > 3)
+turbidite_eb,float64,,1680,1256,25.2%,744,1.115e+03,1.224e+03,349.105,,0.600,836.500,1.372e+03,1.966e+03,535.500,31.3%,⚠️ 24 valeurs suspectes (z-score > 3)
+salinite_eb,float64,,1680,1254,25.4%,50,10.170,1.300,79.575,,0.100,0.900,1.400,1.529e+03,0.500,782.4%,⚠️ 20 valeurs suspectes (z-score > 3)
+mes_eb,float64,,1680,1529,9.0%,647,452.431,334.000,520.272,,0.800,221.000,490.000,7.857e+03,269.000,115.0%,⚠️ 29 valeurs suspectes (z-score > 3)
+dbo5_eb,float64,,1680,556,66.9%,246,342.876,330.000,141.086,,1.000,249.500,422.500,1.361e+03,173.000,41.1%,⚠️ 5 valeurs suspectes (z-score > 3)
+dco_eb,float64,,1680,570,66.1%,414,585.944,513.000,383.312,,35.000,374.000,692.000,4.057e+03,318.000,65.4%,⚠️ 10 valeurs suspectes (z-score > 3)
+azote_eb,float64,,1680,176,89.5%,70,69.926,53.000,81.447,,18.000,43.750,65.000,750.000,21.250,116.5%,⚠️ 4 valeurs suspectes (z-score > 3)
+nitrate_eb,float64,,1680,23,98.6%,23,92.961,35.000,183.501,,0.300,14.150,58.950,857.000,44.800,197.4%,⚠️ 1 valeurs suspectes (z-score > 3)
+ammoniaque_eb,float64,,1680,575,65.8%,361,43.548,41.100,18.748,,7.000,32.050,52.700,246.000,20.650,43.1%,⚠️ 6 valeurs suspectes (z-score > 3)
