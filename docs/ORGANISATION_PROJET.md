@@ -151,6 +151,7 @@ Documents cibles :
 
 - `ROADMAP.md` : vision et phases ;
 - `ORGANISATION_PROJET.md` : structure et décisions ;
+- `INVENTAIRE_PROJET.md` : classification des composants actifs, historiques et expérimentaux ;
 - `INSTALLATION.md` : installation propre ;
 - `LANCEMENT.md` : commandes de lancement ;
 - `API.md` : endpoints et exemples ;
@@ -187,6 +188,7 @@ Priorité haute :
 - Créer la documentation centrale dans `docs/`.
 - Mettre à jour `.gitignore`.
 - Ajouter des liens depuis le README principal.
+- Maintenir un inventaire des composants actifs, historiques et expérimentaux.
 - Harmoniser les ports documentés.
 - Identifier les scripts batch utiles et les scripts obsolètes.
 - Créer `.env.example`.

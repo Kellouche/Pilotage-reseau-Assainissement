@@ -4,6 +4,7 @@
 
 - [Feuille de route](docs/ROADMAP.md)
 - [Organisation du projet](docs/ORGANISATION_PROJET.md)
+- [Inventaire du projet](docs/INVENTAIRE_PROJET.md)
 - [Lancement du projet](docs/LANCEMENT.md)
 - [Données du projet](docs/DONNEES.md)
 - [Vision plateforme](README_PLATFORM.md)
