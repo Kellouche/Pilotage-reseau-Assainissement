@@ -30,6 +30,7 @@ network_map.html
 
 node_modules/
 mobile/node_modules/
+mobile/.expo/
 swmm_mobile_flutter/build/
 
 output/

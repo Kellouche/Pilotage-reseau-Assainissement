@@ -79,6 +79,9 @@ URL web attendue :
 http://localhost:19006
 ```
 
+La configuration de l'URL API se fait avec `EXPO_PUBLIC_API_BASE_URL`.
+Voir [Application mobile](MOBILE.md).
+
 ## Point d'attention actuel
 
 Décision de phase 1 :

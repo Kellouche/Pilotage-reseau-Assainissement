@@ -7,6 +7,7 @@
 - [Inventaire du projet](docs/INVENTAIRE_PROJET.md)
 - [Lancement du projet](docs/LANCEMENT.md)
 - [Données du projet](docs/DONNEES.md)
+- [Application mobile](docs/MOBILE.md)
 - [Vision plateforme](README_PLATFORM.md)
 
 Outils de visualisation interactive et de génération de fichiers SWMM 5.2 à partir de données GeoPackage.

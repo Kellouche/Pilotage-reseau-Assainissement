@@ -47,7 +47,7 @@ Ils ne doivent pas être poussés sans revue.
 
 | Élément | Statut proposé | Décision recommandée |
 |---|---|---|
-| `mobile/` | Expérimental actif | Probable piste mobile officielle React Native/Expo, à auditer avant ajout Git. |
+| `mobile/` | Actif | Application mobile officielle React Native/Expo de la phase 1. |
 | `swmm_mobile_flutter/` | Expérimental | Prototype alternatif, à archiver ou confirmer. |
 | `mobile_app.html` | Expérimental | Prototype mobile web autonome, à archiver si React Native est retenu. |
 | `static/` | À vérifier | Ressources web ajoutées localement, à relier à une interface officielle. |
@@ -73,12 +73,12 @@ Ils ne doivent pas être poussés sans revue.
 - Le serveur Flask historique reste disponible sur `5000`.
 - La documentation structurante doit vivre dans `docs/`.
 - Les fichiers de données lourdes et bases locales restent hors Git.
-- La piste mobile officielle doit être décidée avant d'ajouter `mobile/` ou `swmm_mobile_flutter/` au dépôt.
+- La piste mobile officielle de phase 1 est `mobile/` en React Native/Expo.
 
 ## Prochaines actions
 
-1. Créer `docs/MOBILE.md` après revue de `mobile/`, `swmm_mobile_flutter/` et `mobile_app.html`.
-2. Consolider les documents mobiles ponctuels dans `docs/MOBILE.md`.
+1. Consolider les documents mobiles ponctuels dans `docs/MOBILE.md`.
+2. Auditer `swmm_mobile_flutter/` et `mobile_app.html` avant archivage ou suppression.
 3. Auditer les scripts `.bat` et `.ps1` non suivis avant ajout ou archivage.
 4. Déplacer les tests manuels utiles dans `tests/` ou les documenter comme outils de diagnostic.
 5. Supprimer ou ignorer explicitement les fichiers locaux parasites après validation utilisateur.
