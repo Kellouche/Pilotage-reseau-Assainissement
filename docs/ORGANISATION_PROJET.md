@@ -1,37 +1,48 @@
-# Organisation du Projet
+# Organisation du projet
 
-## Objectif du Document
+## Objectif du document
 
-Ce document sert de reference pour comprendre rapidement les composants du projet,
-leur role, et les prochaines actions d'organisation avant les grands chantiers
+Ce document sert de référence pour comprendre rapidement les composants du projet,
+leur rôle, et les prochaines actions d'organisation avant les grands chantiers
 fonctionnels.
 
-## Composants Actuels
+## Encodage et langue
+
+Tous les documents Markdown, commentaires de code et textes d'interface doivent être
+écrits en français lisible, encodés en UTF-8, avec les accents correctement saisis.
+
+À éviter :
+
+- écrire volontairement sans accents ;
+- mélanger des textes français lisibles avec des fragments mal encodés ;
+- créer des fichiers dans un encodage Windows historique non UTF-8.
+
+## Composants actuels
 
 ### Backend FastAPI
 
 Chemin principal : `api/`
 
-Role :
+Rôle :
 
 - exposer l'API moderne du POC ;
-- gerer les objets reseau : regards, conduites, rejets ;
-- gerer les clusters hydrauliques ;
-- preparer les simulations SWMM ;
-- gerer la synchronisation avec le mobile ;
+- gérer les objets réseau : regards, conduites, rejets ;
+- gérer les clusters hydrauliques ;
+- préparer les simulations SWMM ;
+- gérer la synchronisation avec le mobile ;
 - exposer une page cartographique via `/map`.
 
 Fichiers importants :
 
-- `api/main.py` : point d'entree API ;
-- `api/routes/network.py` : CRUD reseau ;
+- `api/main.py` : point d'entrée API ;
+- `api/routes/network.py` : CRUD réseau ;
 - `api/routes/sync.py` : synchronisation mobile ;
 - `api/routes/clusters.py` : bassins et graphe hydraulique ;
 - `api/routes/simulations.py` : jobs de simulation ;
-- `api/models.py` : modeles SQLAlchemy ;
+- `api/models.py` : modèles SQLAlchemy ;
 - `api/database.py` : connexion base.
 
-### Backend Historique Flask
+### Backend historique Flask
 
 Chemins principaux :
 
@@ -39,84 +50,84 @@ Chemins principaux :
 - `src/controllers/routeur_flask.py`
 - `src/views/`
 
-Role :
+Rôle :
 
 - visualisation cartographique historique ;
 - chargement GeoPackage ;
-- generation SWMM initiale ;
-- logique metier geospatiale existante.
+- génération SWMM initiale ;
+- logique métier géospatiale existante.
 
-Decision recommandee :
+Décision recommandée :
 
 - conserver temporairement comme module historique stable ;
-- documenter clairement la difference avec FastAPI ;
+- documenter clairement la différence avec FastAPI ;
 - migrer progressivement les fonctions utiles vers l'API moderne.
 
-### Domaine Metier
+### Domaine métier
 
 Chemin principal : `src/domain/`
 
-Role :
+Rôle :
 
-- traitement des noeuds, conduites, pompes ;
-- construction du graphe reseau ;
-- detection des clusters ;
+- traitement des nœuds, conduites, pompes ;
+- construction du graphe réseau ;
+- détection des clusters ;
 - extraction de contours et workflows hydrauliques.
 
-Decision recommandee :
+Décision recommandée :
 
-- garder ce dossier comme coeur metier partage ;
-- eviter que les routes API contiennent trop de logique hydraulique ;
+- garder ce dossier comme cœur métier partagé ;
+- éviter que les routes API contiennent trop de logique hydraulique ;
 - ajouter des tests avant toute refonte lourde.
 
-### Infrastructure Donnees
+### Infrastructure données
 
 Chemin principal : `src/infrastructure/`
 
-Role :
+Rôle :
 
 - chargement GeoPackage ;
 - reprojection ;
 - orientation hydraulique ;
-- configuration geospatiale ;
+- configuration géospatiale ;
 - persistance manuelle.
 
-Decision recommandee :
+Décision recommandée :
 
-- documenter les chemins de donnees requis ;
+- documenter les chemins de données requis ;
 - remplacer progressivement les chemins absolus par configuration `.env`.
 
-### Application Mobile
+### Application mobile
 
 Chemin principal : `mobile/`
 
-Role :
+Rôle :
 
 - application React Native/Expo ;
 - consultation de carte ;
 - synchronisation ;
 - saisie terrain de base.
 
-Decision recommandee :
+Décision recommandée :
 
 - ignorer `mobile/node_modules/` dans Git ;
-- stabiliser les endpoints et ports utilises ;
-- ajouter une documentation mobile dediee apres harmonisation.
+- stabiliser les endpoints et ports utilisés ;
+- ajouter une documentation mobile dédiée après harmonisation.
 
-### Application Flutter Experimentale
+### Application Flutter expérimentale
 
 Chemin principal : `swmm_mobile_flutter/`
 
-Role probable :
+Rôle probable :
 
 - prototype alternatif mobile.
 
-Decision recommandee :
+Décision recommandée :
 
-- clarifier si cette piste est active ou archivee ;
-- eviter de maintenir deux applications mobiles en parallele sans besoin produit.
+- clarifier si cette piste est active ou archivée ;
+- éviter de maintenir deux applications mobiles en parallèle sans besoin produit.
 
-### Donnees et Sorties Locales
+### Données et sorties locales
 
 Exemples :
 
@@ -124,13 +135,13 @@ Exemples :
 - `output/`
 - fichiers GeoPackage, raster, shapefile, Excel, CSV.
 
-Decision recommandee :
+Décision recommandée :
 
-- ne pas versionner les donnees lourdes ou generees ;
-- fournir plutot des instructions de placement des donnees ;
-- creer plus tard un petit jeu de demonstration versionnable.
+- ne pas versionner les données lourdes ou générées ;
+- fournir plutôt des instructions de placement des données ;
+- créer plus tard un petit jeu de démonstration versionnable.
 
-## Conventions Recommandees
+## Conventions recommandées
 
 ### Documentation
 
@@ -139,7 +150,7 @@ Tous les documents structurants doivent aller dans `docs/`.
 Documents cibles :
 
 - `ROADMAP.md` : vision et phases ;
-- `ORGANISATION_PROJET.md` : structure et decisions ;
+- `ORGANISATION_PROJET.md` : structure et décisions ;
 - `INSTALLATION.md` : installation propre ;
 - `LANCEMENT.md` : commandes de lancement ;
 - `API.md` : endpoints et exemples ;
@@ -151,42 +162,42 @@ Documents cibles :
 Recommandation :
 
 - garder les noms de modules Python en minuscules ;
-- privilegier des noms francais coherents dans `src/` ;
-- privilegier des noms anglais courts pour les routes API si elles exposent un contrat public ;
-- eviter les doublons de documents au meme niveau racine.
+- privilégier des noms français cohérents dans `src/` ;
+- privilégier des noms anglais courts pour les routes API si elles exposent un contrat public ;
+- éviter les doublons de documents au même niveau racine.
 
 ### Git
 
-Regles recommandees :
+Règles recommandées :
 
 - ne pas commiter `node_modules/`, bases locales, rasters, shapefiles, exports et caches ;
 - commiter les documents, scripts utiles, tests et code source ;
 - faire des commits petits et explicites ;
-- verifier `git status` avant chaque push ;
-- pousser sur GitHub apres une etape stable.
+- vérifier `git status` avant chaque push ;
+- pousser sur GitHub après une étape stable.
 
-## Backlog Organisationnel
+## Backlog organisationnel
 
-Priorite haute :
+Priorité haute :
 
-- Creer la documentation centrale dans `docs/`.
-- Mettre a jour `.gitignore`.
+- Créer la documentation centrale dans `docs/`.
+- Mettre à jour `.gitignore`.
 - Ajouter des liens depuis le README principal.
-- Harmoniser les ports documentes.
-- Identifier les scripts batch utiles et les scripts obsoletes.
-- Creer `.env.example`.
+- Harmoniser les ports documentés.
+- Identifier les scripts batch utiles et les scripts obsolètes.
+- Créer `.env.example`.
 
-Priorite moyenne :
+Priorité moyenne :
 
-- Creer `docs/LANCEMENT.md`.
-- Creer `docs/DONNEES.md`.
-- Creer `docs/API.md`.
+- Créer `docs/LANCEMENT.md`.
+- Créer `docs/DONNEES.md`.
+- Créer `docs/API.md`.
 - Distinguer officiellement FastAPI et Flask historique.
-- Clarifier la strategie mobile : React Native seul ou Flutter aussi.
+- Clarifier la stratégie mobile : React Native seul ou Flutter aussi.
 
-Priorite basse :
+Priorité basse :
 
-- Archiver les anciens documents experimentaux.
+- Archiver les anciens documents expérimentaux.
 - Renommer les fichiers de test manuels.
 - Ajouter une charte de contribution.
 - Ajouter un changelog.
