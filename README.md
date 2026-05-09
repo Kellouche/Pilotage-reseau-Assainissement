@@ -5,6 +5,7 @@
 - [Feuille de route](docs/ROADMAP.md)
 - [Organisation du projet](docs/ORGANISATION_PROJET.md)
 - [Lancement du projet](docs/LANCEMENT.md)
+- [Données du projet](docs/DONNEES.md)
 - [Vision plateforme](README_PLATFORM.md)
 
 Outils de visualisation interactive et de génération de fichiers SWMM 5.2 à partir de données GeoPackage.

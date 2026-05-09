@@ -5,13 +5,24 @@ Paramètres d'environnement, chemins, connexions DB.
 
 import os
 from pathlib import Path
-from typing import Optional
 
 # Répertoire racine du projet
 ROOT_DIR = Path(__file__).parent.parent
 
+# Application
+API_HOST = os.getenv("API_HOST", "127.0.0.1")
+API_PORT = int(os.getenv("API_PORT", "5001"))
+API_RELOAD = os.getenv("API_RELOAD", "true").lower() == "true"
+LEGACY_FLASK_PORT = int(os.getenv("LEGACY_FLASK_PORT", "5000"))
+EXPO_WEB_PORT = int(os.getenv("EXPO_WEB_PORT", "19006"))
+
 # GeoPackage source (données initiales)
-GPKG_PATH = Path(r"D:\IA Water Data Analysis\Assainissement\Assainissement_Ville.gpkg")
+GPKG_PATH = Path(
+    os.getenv(
+        "GPKG_PATH",
+        r"D:\IA Water Data Analysis\Assainissement\Assainissement_Ville.gpkg",
+    )
+)
 
 # Base de données PostgreSQL
 DB_HOST = os.getenv("DB_HOST", "localhost")

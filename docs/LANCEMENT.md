@@ -26,6 +26,7 @@ Remarque :
 
 - `run_api.py` lance `api.main:app` sur le port `5001`.
 - C'est l'API principale de la plateforme collaborative.
+- Le port peut être modifié avec la variable `API_PORT`.
 
 ### Serveur Flask historique
 
@@ -70,17 +71,15 @@ http://localhost:19006
 
 ## Point d'attention actuel
 
-Il existe une incohérence de port à corriger :
+Décision de phase 1 :
 
-- `run_api.py` utilise le port `5001`.
-- `run_server.py` affiche `5002`, mais lance actuellement `8000`.
-- `mobile/services/api.js` pointe actuellement vers `http://127.0.0.1:8000`.
+- le port API FastAPI de référence est `5001` ;
+- `run_api.py` et `run_server.py` lisent maintenant `API_HOST` et `API_PORT` depuis `config/settings.py` ;
+- le serveur Flask historique reste documenté sur `5000`.
 
-Décision recommandée :
+Point restant :
 
-- choisir `5001` comme port API FastAPI de référence ;
-- aligner ensuite `run_server.py`, les scripts `.bat` et le client mobile ;
-- documenter clairement le serveur Flask historique sur `5000`.
+- aligner les scripts `.bat` et les clients mobiles non versionnés qui pointent encore vers un ancien port.
 
 ## Base de données
 
@@ -118,4 +117,3 @@ Mobile web :
 cd mobile
 npx expo start --web --port 19006
 ```
-
