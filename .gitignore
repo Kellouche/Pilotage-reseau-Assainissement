@@ -35,3 +35,6 @@ swmm_mobile_flutter/build/
 
 output/
 .playwright-mcp/
+
+# Windows system files
+nul
