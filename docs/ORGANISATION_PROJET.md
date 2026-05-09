@@ -173,6 +173,10 @@ Règles recommandées :
 - ne pas commiter `node_modules/`, bases locales, rasters, shapefiles, exports et caches ;
 - commiter les documents, scripts utiles, tests et code source ;
 - faire des commits petits et explicites ;
+- tester impérativement tout ajout ou changement de code avant commit/push ;
+- pousser vers GitHub seulement si les tests adaptés au changement aboutissent ;
+- indiquer clairement dans le message final quels tests ont été exécutés ;
+- pour un changement purement documentaire, vérifier au minimum la cohérence Markdown et le statut Git ;
 - vérifier `git status` avant chaque push ;
 - pousser sur GitHub après une étape stable.
 
@@ -201,4 +205,3 @@ Priorité basse :
 - Renommer les fichiers de test manuels.
 - Ajouter une charte de contribution.
 - Ajouter un changelog.
-

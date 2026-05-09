@@ -34,6 +34,7 @@ Actions prioritaires :
 - Créer un inventaire clair des composants : backend, web, mobile, données, scripts.
 - Ajouter un fichier `.env.example` pour les variables importantes.
 - Documenter le mode actuel SQLite et la cible PostgreSQL/PostGIS.
+- Formaliser la règle qualité : tout code ajouté ou modifié doit être testé avant push GitHub.
 
 Livrables :
 
@@ -201,4 +202,3 @@ Livrable :
 5. Simulations SWMM réelles.
 6. Dashboard décisionnel.
 7. Sécurité, utilisateurs et déploiement.
-
