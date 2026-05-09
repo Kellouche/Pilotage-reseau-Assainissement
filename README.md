@@ -1,5 +1,12 @@
 # Pilotage Réseau d'Assainissement
 
+## Documentation projet
+
+- [Feuille de route](docs/ROADMAP.md)
+- [Organisation du projet](docs/ORGANISATION_PROJET.md)
+- [Lancement du projet](docs/LANCEMENT.md)
+- [Vision plateforme](README_PLATFORM.md)
+
 Outils de visualisation interactive et de génération de fichiers SWMM 5.2 à partir de données GeoPackage.
 
 ## Fonctionnalités

@@ -8,12 +8,28 @@ __pycache__/
 network_map.html
 
 *.gpkg
+*.sqlite
+*.sqlite3
+*.db
+*.tif
+*.tiff
 *.shp
 *.shx
 *.dbf
 *.prj
 *.cpg
+*.qix
+*.sbn
+*.sbx
 
 .env
+.env.local
 .vscode/
 .idea/
+
+node_modules/
+mobile/node_modules/
+swmm_mobile_flutter/build/
+
+output/
+.playwright-mcp/
