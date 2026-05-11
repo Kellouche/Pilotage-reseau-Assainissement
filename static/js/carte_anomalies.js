@@ -1,8 +1,9 @@
-
-function buildAnomalousRegards(anomaliesData) {
-    anomalousRegards = new Set();
-    if (!anomaliesData) return;
-    for (const [type, anomalies] of Object.entries(anomaliesData)) {
+// Variables globales pour les anomalies
+let conduiteAnomaliesMap = {}; // fid -> { severite, types: [] }
+let anomalousRegards = new Set();
+let anomaliesData = {};
+let anomaliesLayers = {};
+let currentTab = 'connexions';
         anomalies.forEach(anomalie => {
             let regardIds = [];
             switch (anomalie.type) {
@@ -27,34 +28,67 @@ function buildAnomalousRegards(anomaliesData) {
     console.log(`Total anomalous regards: ${anomalousRegards.size}`);
 }
 
+function buildAnomaliesMaps(data) {
+    anomaliesData = data;
+    anomalousRegards = new Set();
+    conduiteAnomaliesMap = {};
+    
+    if (!data) return;
+
+    for (const [category, anomalies] of Object.entries(data)) {
+        anomalies.forEach(anom => {
+            // Mapping des regards
+            const regardId = anom.id_regard || anom.code || anom.point_connexion || anom.id_amont_manquant || anom.id_aval_manquant;
+            if (regardId) anomalousRegards.add(regardId.toString());
+
+            // Mapping des conduites
+            const conduiteId = anom.id_conduite || anom.fid;
+            if (conduiteId) {
+                const fid = conduiteId.toString();
+                if (!conduiteAnomaliesMap[fid]) {
+                    conduiteAnomaliesMap[fid] = { severite: anom.severite, types: [anom.type] };
+                } else {
+                    conduiteAnomaliesMap[fid].types.push(anom.type);
+                    // Priorité à la sévérité la plus haute
+                    const severities = { 'critique': 3, 'majeure': 2, 'mineure': 1 };
+                    if (severities[anom.severite] > severities[conduiteAnomaliesMap[fid].severite]) {
+                        conduiteAnomaliesMap[fid].severite = anom.severite;
+                    }
+                }
+            }
+        });
+    }
+    console.log("Anomalies maps built:", { regards: anomalousRegards.size, conduites: Object.keys(conduiteAnomaliesMap).length });
+}
+
 function updateAnomaliesLayers() {
-    if (!anomaliesData || typeof anomaliesData !== 'object' || Array.isArray(anomaliesData)) {
-        return;
+    if (!anomaliesData) return;
+
+    // 1. Mettre à jour le style des conduites
+    if (conduitesLayer) {
+        conduitesLayer.setStyle(feature => getConduiteStyle(feature));
     }
 
+    // 2. Mettre à jour les marqueurs ponctuels pour les anomalies non-conduites
+    // (On garde les cercles pour les regards ou points spécifiques)
     try {
         for (const [typeAnomalie, anomalies] of Object.entries(anomaliesData)) {
             const markers = [];
             anomalies.forEach(anomalie => {
                 if (!shouldShowAnomalie(anomalie)) return;
 
-                let coords = null;
-                if (anomalie.latitude !== undefined && anomalie.longitude !== undefined && 
-                    anomalie.latitude !== null && anomalie.longitude !== null) {
-                    coords = [anomalie.latitude, anomalie.longitude];
-                } else {
-                    coords = findAnomalieCoords(anomalie);
-                }
+                // Si c'est une anomalie de conduite, on la montre déjà via le style de la ligne
+                // sauf si c'est une connexion manquante (où on veut voir le point)
+                const isConduiteAnom = ['pente_negative', 'pente_trop_forte', 'champs_manquants_conduite'].includes(anomalie.type);
+                if (isConduiteAnom) return;
 
-                if (coords && Array.isArray(coords) && coords.length === 2) {
-                    const [lat, lng] = coords;
+                let coords = findAnomalieCoords(anomalie);
+                if (coords) {
                     const color = getAnomalieColor(anomalie.severite);
-                    const marker = L.circleMarker([lat, lng], {
+                    const marker = L.circleMarker(coords, {
                         color: color, fillColor: color, fillOpacity: 0.8, radius: 8, weight: 2
                     });
-
                     marker.bindPopup(createAnomaliePopup(anomalie));
-                    marker.on('click', () => selectAnomalie(anomalie));
                     markers.push(marker);
                 }
             });
@@ -67,9 +101,7 @@ function updateAnomaliesLayers() {
                 map.addLayer(anomaliesLayers[typeAnomalie]);
             }
         }
-    } catch (e) {
-        console.error('Error in updateAnomaliesLayers:', e);
-    }
+    } catch (e) { console.error('Error updating layers:', e); }
 }
 
 function findRegardCoords(regardId) {
@@ -190,12 +222,10 @@ function calculateTabStats(tabName) {
     activeTypes.forEach(type => {
         const anomalies = anomaliesData[type] || [];
         anomalies.forEach(anomalie => {
-            if (shouldShowAnomalie(anomalie)) {
-                total++;
-                if (anomalie.severite === 'critique') critiques++;
-                else if (anomalie.severite === 'majeure') majeures++;
-                else if (anomalie.severite === 'mineure') mineures++;
-            }
+            total++;
+            if (anomalie.severite === 'critique') critiques++;
+            else if (anomalie.severite === 'majeure') majeures++;
+            else if (anomalie.severite === 'mineure') mineures++;
         });
     });
 
