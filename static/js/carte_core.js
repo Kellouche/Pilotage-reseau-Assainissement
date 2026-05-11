@@ -1,6 +1,6 @@
 
 // Configuration
-const API_BASE_URL = 'http://127.0.0.1:5004';
+const API_BASE_URL = 'http://127.0.0.1:5001';
 let map = null;
 let dataGlobal = null;
 let layers = {};
