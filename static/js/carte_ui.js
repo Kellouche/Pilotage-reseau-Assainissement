@@ -26,14 +26,22 @@ function centerOnData() {
 
 function updateLegendForZoom() {
     const zoom = map.getZoom();
-    const shouldShowRegards = zoom >= 14;
-    const shouldShowConduites = zoom >= 12;
+    const shouldShowRegards = zoom >= 16;
+    const shouldShowConduites = zoom >= 15;
+    const shouldShowOuvrages = zoom >= 13;
     
     if (regardsLayer) {
         if (shouldShowRegards) { if (!map.hasLayer(regardsLayer)) map.addLayer(regardsLayer); }
         else { if (map.hasLayer(regardsLayer)) map.removeLayer(regardsLayer); }
     }
-    // ... logic for other layers if needed ...
+    if (conduitesLayer) {
+        if (shouldShowConduites) { if (!map.hasLayer(conduitesLayer)) map.addLayer(conduitesLayer); }
+        else { if (map.hasLayer(conduitesLayer)) map.removeLayer(conduitesLayer); }
+    }
+    if (stationsLayer) {
+        if (zoom >= 12) { if (!map.hasLayer(stationsLayer)) map.addLayer(stationsLayer); }
+        else { if (map.hasLayer(stationsLayer)) map.removeLayer(stationsLayer); }
+    }
 }
 
 function updateSymbolSizes() {
@@ -43,11 +51,18 @@ function updateSymbolSizes() {
 }
 
 function switchTab(tabId) {
+    console.log('Switching to tab:', tabId);
     currentTab = tabId;
-    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tabId));
-    document.querySelectorAll('.tab-content').forEach(content => content.classList.toggle('active', content.id === `tab-${tabId}`));
+    // Update buttons
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.id === `tab-${tabId}`);
+    });
+    // Update content blocks
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.toggle('active', content.id === `content-${tabId}`);
+    });
     updateTabDisplay();
-    calculateTabStats(tabId);
+    if (typeof calculateTabStats === 'function') calculateTabStats(tabId);
 }
 
 function createPopupContent(props, type) {

@@ -41,7 +41,10 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function initMap() {
-    map = L.map('map').setView([36.13, 1.32], 13);
+    map = L.map('map', {
+        preferCanvas: true
+    }).setView([36.13, 1.32], 13);
+    
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors',
         maxZoom: 19
@@ -96,20 +99,6 @@ async function chargerCouchesGeoJSON(couches) {
 
     // Conduites
     if (couches.conduites && couches.conduites.features) {
-        conduitesCoordsMap = {};
-        couches.conduites.features.forEach(feature => {
-            const props = feature.properties || {};
-            const geom = feature.geometry || null;
-            const fid = props.fid || props.id;
-            if (!fid || !geom) return;
-
-            let coords = null;
-            if (geom.type === 'LineString') coords = geom.coordinates;
-            else if (geom.type === 'MultiLineString') coords = geom.coordinates[0];
-
-            if (coords) conduitesCoordsMap[fid.toString()] = coords;
-        });
-
         conduitesLayer = L.geoJSON(couches.conduites, {
             style: function(feature) {
                 const materiau = feature.properties.materiau;
@@ -129,6 +118,9 @@ async function chargerCouchesGeoJSON(couches) {
                 layer.on('click', () => selectFeature(feature.properties, 'conduite'));
             }
         });
+        
+        // Optimized cache building: only if really necessary, or do it lazily
+        // For now, let's just use the layers directly when needed.
     }
 
     // Regards
