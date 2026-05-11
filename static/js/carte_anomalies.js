@@ -1,41 +1,21 @@
+
 // Variables globales pour les anomalies
 let conduiteAnomaliesMap = {}; // fid -> { severite, types: [] }
 let anomalousRegards = new Set();
 let anomaliesData = {};
 let anomaliesLayers = {};
-let currentTab = 'connexions';
-        anomalies.forEach(anomalie => {
-            let regardIds = [];
-            switch (anomalie.type) {
-                case 'incoherence_profondeur':
-                    if (anomalie.point_connexion) regardIds.push(anomalie.point_connexion);
-                    break;
-                case 'conduite_sans_regard':
-                    if (anomalie.id_amont_manquant) regardIds.push(anomalie.id_amont_manquant);
-                    if (anomalie.id_aval_manquant) regardIds.push(anomalie.id_aval_manquant);
-                    break;
-                case 'champs_manquants_regard':
-                    if (anomalie.code) regardIds.push(anomalie.code);
-                    break;
-                default:
-                    break;
-            }
-            regardIds.forEach(id => {
-                if (id) anomalousRegards.add(id.toString());
-            });
-        });
-    }
-    console.log(`Total anomalous regards: ${anomalousRegards.size}`);
-}
 
 function buildAnomaliesMaps(data) {
-    anomaliesData = data;
+    if (!data) return;
+    const anomsByType = data.anomalies || data; // Handle both full response and sub-object
+    
+    anomaliesData = anomsByType;
     anomalousRegards = new Set();
     conduiteAnomaliesMap = {};
     
-    if (!data) return;
-
-    for (const [category, anomalies] of Object.entries(data)) {
+    for (const [category, anomalies] of Object.entries(anomsByType)) {
+        if (!Array.isArray(anomalies)) continue; // Skip non-array fields like date_analyse
+        
         anomalies.forEach(anom => {
             // Mapping des regards
             const regardId = anom.id_regard || anom.code || anom.point_connexion || anom.id_amont_manquant || anom.id_aval_manquant;
@@ -51,7 +31,9 @@ function buildAnomaliesMaps(data) {
                     conduiteAnomaliesMap[fid].types.push(anom.type);
                     // Priorité à la sévérité la plus haute
                     const severities = { 'critique': 3, 'majeure': 2, 'mineure': 1 };
-                    if (severities[anom.severite] > severities[conduiteAnomaliesMap[fid].severite]) {
+                    const currentSev = severities[anom.severite] || 0;
+                    const storedSev = severities[conduiteAnomaliesMap[fid].severite] || 0;
+                    if (currentSev > storedSev) {
                         conduiteAnomaliesMap[fid].severite = anom.severite;
                     }
                 }
@@ -65,20 +47,18 @@ function updateAnomaliesLayers() {
     if (!anomaliesData) return;
 
     // 1. Mettre à jour le style des conduites
-    if (conduitesLayer) {
+    if (typeof conduitesLayer !== 'undefined' && conduitesLayer) {
         conduitesLayer.setStyle(feature => getConduiteStyle(feature));
     }
 
-    // 2. Mettre à jour les marqueurs ponctuels pour les anomalies non-conduites
-    // (On garde les cercles pour les regards ou points spécifiques)
+    // 2. Mettre à jour les marqueurs ponctuels
     try {
         for (const [typeAnomalie, anomalies] of Object.entries(anomaliesData)) {
             const markers = [];
             anomalies.forEach(anomalie => {
                 if (!shouldShowAnomalie(anomalie)) return;
 
-                // Si c'est une anomalie de conduite, on la montre déjà via le style de la ligne
-                // sauf si c'est une connexion manquante (où on veut voir le point)
+                // Ne pas mettre de marqueur si c'est déjà colorié sur la conduite
                 const isConduiteAnom = ['pente_negative', 'pente_trop_forte', 'champs_manquants_conduite'].includes(anomalie.type);
                 if (isConduiteAnom) return;
 
@@ -97,7 +77,10 @@ function updateAnomaliesLayers() {
                 map.removeLayer(anomaliesLayers[typeAnomalie]);
             }
             anomaliesLayers[typeAnomalie] = L.layerGroup(markers);
-            if (markers.length > 0 && tabMappings[currentTab].includes(typeAnomalie)) {
+            
+            // Afficher si c'est l'onglet courant
+            if (typeof tabMappings !== 'undefined' && typeof currentTab !== 'undefined' && 
+                tabMappings[currentTab] && tabMappings[currentTab].includes(typeAnomalie)) {
                 map.addLayer(anomaliesLayers[typeAnomalie]);
             }
         }
@@ -105,72 +88,49 @@ function updateAnomaliesLayers() {
 }
 
 function findRegardCoords(regardId) {
-    let result = null;
     if (!regardsLayer) return null;
+    let coords = null;
     regardsLayer.eachLayer(layer => {
-        if (layer.feature && layer.feature.properties) {
-            const props = layer.feature.properties;
-            const strId = regardId.toString();
-            if ((props.id && props.id.toString() === strId) ||
-                (props.fid && props.fid.toString() === strId) ||
-                (props.code && props.code.toString() === strId)) {
-                const ll = layer.getLatLng();
-                result = [ll.lat, ll.lng];
-            }
+        const p = layer.feature.properties;
+        if (p.code == regardId || p.id == regardId || p.fid == regardId) {
+            const ll = layer.getLatLng();
+            coords = [ll.lat, ll.lng];
         }
     });
-    return result;
+    return coords;
 }
 
 function findConduiteCoords(conduiteId) {
-    let result = null;
     if (!conduitesLayer) return null;
+    let coords = null;
     conduitesLayer.eachLayer(layer => {
-        if (layer.feature && layer.feature.properties) {
-            const props = layer.feature.properties;
-            const strId = conduiteId.toString();
-            if ((props.id && props.id.toString() === strId) ||
-                (props.fid && props.fid.toString() === strId)) {
-                if (layer.getBounds) {
-                    const center = layer.getBounds().getCenter();
-                    result = [center.lat, center.lng];
-                }
+        const p = layer.feature.properties;
+        if (p.fid == conduiteId || p.id == conduiteId) {
+            if (layer.getBounds) {
+                const c = layer.getBounds().getCenter();
+                coords = [c.lat, c.lng];
             }
         }
     });
-    return result;
+    return coords;
 }
 
 function findAnomalieCoords(anomalie) {
-    if (anomalie.latitude !== undefined && anomalie.latitude !== null &&
-        anomalie.longitude !== undefined && anomalie.longitude !== null) {
-        return [anomalie.latitude, anomalie.longitude];
-    }
-    if (anomalie.type === 'incoherence_profondeur') {
-        if (anomalie.point_connexion) {
-            var coords = findRegardCoords(anomalie.point_connexion);
-            if (coords) return coords;
-        }
-    }
-    if (anomalie.id_conduite) return findConduiteCoords(anomalie.id_conduite);
-    if (anomalie.id_regard) return findRegardCoords(anomalie.id_regard);
-    if (anomalie.point_connexion) return findRegardCoords(anomalie.point_connexion);
-    if (anomalie.fid) return findConduiteCoords(anomalie.fid);
-    if (anomalie.code) return findRegardCoords(anomalie.code);
+    if (anomalie.latitude && anomalie.longitude) return [anomalie.latitude, anomalie.longitude];
+    const id = anomalie.id_regard || anomalie.code || anomalie.point_connexion || anomalie.id_amont_manquant || anomalie.id_aval_manquant;
+    if (id) return findRegardCoords(id);
+    const cid = anomalie.id_conduite || anomalie.fid;
+    if (cid) return findConduiteCoords(cid);
     return null;
 }
 
 function shouldShowAnomalie(anomalie) {
-    const anyTypeChecked = ['type-conduites_sans_regards', 'type-troncons_orphelins', 'type-champs_manquants', 'type-pentes_suspectes', 'type-geometries_invalides', 'type-incoherences_amont_aval'].some(id => document.getElementById(id)?.checked);
-    if (anyTypeChecked) {
-        const group = getAnomalieGroup(anomalie.type);
-        if (!document.getElementById(`type-${group}`)?.checked) return false;
-    }
+    // Vérification des types
+    const group = getAnomalieGroup(anomalie.type);
+    const typeEl = document.getElementById(`type-${group}`);
+    if (typeEl && !typeEl.checked) return false;
 
-    const anySeveriteChecked = ['anomalies-critiques', 'anomalies-majeures', 'anomalies-mineures'].some(id => document.getElementById(id)?.checked);
-    if (anySeveriteChecked) {
-        if (!document.getElementById(`anomalies-${anomalie.severite}s`)?.checked) return false;
-    }
+    // Sévérités : On affiche tout automatiquement comme demandé
     return true;
 }
 
@@ -186,6 +146,11 @@ function getAnomalieGroup(type) {
         case 'incoherence_profondeur': return 'incoherences_amont_aval';
         default: return type;
     }
+}
+
+function getAnomalieColor(severite) {
+    const colors = { 'critique': '#f44336', 'majeure': '#ff9800', 'mineure': '#4caf50' };
+    return colors[severite] || '#666';
 }
 
 function getAnomalieTitre(anomalie) {
@@ -209,11 +174,6 @@ function getAnomalieDescription(anomalie) {
     return 'Anomalie détectée';
 }
 
-function getAnomalieColor(severite) {
-    const colors = { 'critique': '#f44336', 'majeure': '#ff9800', 'mineure': '#4caf50' };
-    return colors[severite] || '#666';
-}
-
 function calculateTabStats(tabName) {
     if (!anomaliesData) return;
     const activeTypes = tabMappings[tabName] || [];
@@ -221,11 +181,11 @@ function calculateTabStats(tabName) {
 
     activeTypes.forEach(type => {
         const anomalies = anomaliesData[type] || [];
-        anomalies.forEach(anomalie => {
+        anomalies.forEach(anom => {
             total++;
-            if (anomalie.severite === 'critique') critiques++;
-            else if (anomalie.severite === 'majeure') majeures++;
-            else if (anomalie.severite === 'mineure') mineures++;
+            if (anom.severite === 'critique') critiques++;
+            else if (anom.severite === 'majeure') majeures++;
+            else if (anom.severite === 'mineure') mineures++;
         });
     });
 
@@ -255,7 +215,12 @@ function updateStats() {
 }
 
 function updateTabDisplay() {
-    Object.values(anomaliesLayers).forEach(layer => { if (map.hasLayer(layer)) map.removeLayer(layer); });
+    // Retirer toutes les couches d'anomalies actuelles
+    Object.values(anomaliesLayers).forEach(layer => {
+        if (map.hasLayer(layer)) map.removeLayer(layer);
+    });
+    
+    // Ajouter celles de l'onglet courant
     const activeTypes = tabMappings[currentTab] || [];
     activeTypes.forEach(type => {
         if (anomaliesLayers[type]) map.addLayer(anomaliesLayers[type]);
