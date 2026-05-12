@@ -18,6 +18,8 @@ Outils de visualisation interactive et de génération de fichiers SWMM 5.2 à p
 - **Génération de fichiers SWMM** .inp à partir de données géospatiales
 - **Reprojection automatique** UTM Zone 31N (EPSG:32631) → WGS84 (EPSG:4326)
 - **Architecture MVC** modulaire avec en-têtes de module standardisés
+- **Analyse de qualité réseau** : détection d'anomalies, scores de qualité, rapports détaillés
+- **Synchronisation mobile** avec gestion des conflits et traçabilité
 
 ## Installation
 
@@ -39,6 +41,31 @@ python server.py
 ```bash
 python -m pytest tests/ -v
 ```
+
+### Analyse qualité réseau
+
+```bash
+# Démarrer l'API
+python run_server.py
+
+# Ouvrir les interfaces
+# http://localhost:5001/qualite - Tableau de bord qualité
+# http://localhost:5001/carte - Carte opérationnelle interactive
+
+# API qualité réseau
+# GET /api/v1/qualite/analyse - Analyse complète
+# GET /api/v1/qualite/anomalies/{type} - Anomalies par type
+# GET /api/v1/qualite/scores - Scores de qualité
+# POST /api/v1/qualite/export-csv - Export CSV
+```
+
+### Carte opérationnelle
+
+Interface cartographique interactive pour :
+- **Visualiser** le réseau d'assainissement
+- **Localiser** les anomalies détectées
+- **Filtrer** par type et sévérité
+- **Corriger** les anomalies directement sur la carte
 
 ## Structure du projet
 

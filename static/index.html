@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SWMM Mobile</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        .app {
+            max-width: 480px;
+            margin: 0 auto;
+            background: white;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: #16213e;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            opacity: 0.8;
+        }
+
+        .status-card {
+            margin: 16px;
+            padding: 16px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-online { background: #27ae60; }
+        .status-offline { background: #e74c3c; }
+        .status-checking { background: #f39c12; }
+
+        .menu {
+            padding: 16px;
+        }
+
+        .menu-item {
+            background: white;
+            padding: 16px;
+            margin-bottom: 12px;
+            border-radius: 8px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+
+        .menu-item.disabled {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+
+        .menu-item-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #16213e;
+            margin-bottom: 4px;
+        }
+
+        .menu-item-description {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .button {
+            background: #16213e;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 8px;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .button:hover {
+            background: #2c3e50;
+        }
+
+        .button.secondary {
+            background: white;
+            color: #16213e;
+            border: 1px solid #16213e;
+        }
+
+        .info {
+            padding: 16px;
+            background: white;
+            margin: 16px;
+            border-radius: 8px;
+        }
+
+        .info h3 {
+            margin-bottom: 12px;
+            color: #16213e;
+        }
+
+        .info p {
+            margin-bottom: 8px;
+            color: #666;
+        }
+
+        .screen {
+            display: none;
+        }
+
+        .screen.active {
+            display: block;
+        }
+
+        .map-container {
+            height: 400px;
+            background: #e8f4f8;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 16px;
+            border-radius: 8px;
+        }
+
+        .sync-status {
+            text-align: center;
+            padding: 40px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #16213e;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .back-button {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.5);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <!-- Écran d'accueil -->
+        <div id="home" class="screen active">
+            <div class="header">
+                <h1>SWMM Platform Mobile</h1>
+                <p>Application mobile pour la gestion du réseau d'assainissement</p>
+            </div>
+
+            <div class="status-card">
+                <h3>État du serveur</h3>
+                <p><span id="status-indicator" class="status-indicator status-checking"></span>
+                   <span id="status-text">Vérification...</span></p>
+                <button id="refresh-status" class="button">Actualiser</button>
+            </div>
+
+            <div class="menu">
+                <a href="#" class="menu-item" onclick="showScreen('map')">
+                    <div class="menu-item-title">🗺 Carte du Réseau</div>
+                    <div class="menu-item-description">Visualiser les conduites, regards et bassins versants</div>
+                </a>
+
+                <a href="#" class="menu-item" onclick="showScreen('sync')">
+                    <div class="menu-item-title">🔄 Synchronisation</div>
+                    <div class="menu-item-description">Synchroniser les données avec le serveur</div>
+                </a>
+            </div>
+
+            <div class="info">
+                <h3>Fonctionnalités</h3>
+                <p>• Visualisation du réseau d'assainissement</p>
+                <p>• Détection automatique des bassins versants</p>
+                <p>• Synchronisation hors ligne</p>
+                <p>• Collecte de données sur le terrain</p>
+            </div>
+        </div>
+
+        <!-- Écran carte -->
+        <div id="map" class="screen">
+            <div class="header">
+                <h1>Carte du Réseau</h1>
+                <button class="back-button" onclick="showScreen('home')">← Retour</button>
+            </div>
+
+            <div style="padding: 16px;">
+                <button class="button" onclick="refreshMap()">🔄 Actualiser</button>
+                <button class="button secondary" onclick="detectClusters()">🏔 Détecter Bassins</button>
+            </div>
+
+            <div class="map-container">
+                <p>Carte du réseau d'assainissement</p>
+                <p id="map-status">Chargement...</p>
+            </div>
+        </div>
+
+        <!-- Écran synchronisation -->
+        <div id="sync" class="screen">
+            <div class="header">
+                <h1>Synchronisation</h1>
+                <button class="back-button" onclick="showScreen('home')">← Retour</button>
+            </div>
+
+            <div class="sync-status">
+                <div id="sync-spinner" class="spinner" style="display: none;"></div>
+                <h3 id="sync-title">Prêt à synchroniser</h3>
+                <p id="sync-message">Cliquez sur un bouton pour commencer</p>
+
+                <button class="button" onclick="syncDown()">⬇ Télécharger</button>
+                <button class="button secondary" onclick="syncUp()">⬆ Envoyer</button>
+                <button class="button" style="background: #9b59b6;" onclick="fullSync()">🔄 Sync Complète</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let serverStatus = 'checking';
+
+        // Navigation entre écrans
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(screen => {
+                screen.classList.remove('active');
+            });
+            document.getElementById(screenId).classList.add('active');
+        }
+
+        // Vérification du statut du serveur
+        async function checkServerStatus() {
+            const indicator = document.getElementById('status-indicator');
+            const text = document.getElementById('status-text');
+
+            try {
+                indicator.className = 'status-indicator status-checking';
+                text.textContent = 'Vérification...';
+
+                const response = await fetch('http://127.0.0.1:8000/health');
+                if (response.ok) {
+                    indicator.className = 'status-indicator status-online';
+                    text.textContent = 'Serveur en ligne';
+                    serverStatus = 'online';
+                } else {
+                    throw new Error('Serveur répond mal');
+                }
+            } catch (error) {
+                indicator.className = 'status-indicator status-offline';
+                text.textContent = 'Serveur hors ligne';
+                serverStatus = 'offline';
+                console.error('Erreur serveur:', error);
+            }
+        }
+
+        // Actualisation de la carte
+        async function refreshMap() {
+            const status = document.getElementById('map-status');
+            status.textContent = 'Actualisation en cours...';
+
+            try {
+                const response = await fetch('http://127.0.0.1:8000/network');
+                if (response.ok) {
+                    const data = await response.json();
+                    status.textContent = `${data.length} éléments chargés`;
+                } else {
+                    throw new Error('Erreur réseau');
+                }
+            } catch (error) {
+                status.textContent = 'Erreur de chargement';
+                console.error('Erreur carte:', error);
+            }
+        }
+
+        // Détection des bassins
+        async function detectClusters() {
+            const status = document.getElementById('map-status');
+            status.textContent = 'Détection des bassins...';
+
+            try {
+                const response = await fetch('http://127.0.0.1:8000/clusters/detect', {
+                    method: 'POST'
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    status.textContent = `${data.clusters_crees} bassins détectés`;
+                } else {
+                    throw new Error('Erreur détection');
+                }
+            } catch (error) {
+                status.textContent = 'Erreur de détection';
+                console.error('Erreur clusters:', error);
+            }
+        }
+
+        // Synchronisation descendante
+        async function syncDown() {
+            showSyncStatus('Téléchargement en cours...', true);
+
+            try {
+                const response = await fetch('http://127.0.0.1:8000/sync/delta?last_sync=0');
+                if (response.ok) {
+                    const data = await response.json();
+                    showSyncStatus(`Téléchargement terminé (${data.changes.length} changements)`, false);
+                } else {
+                    throw new Error('Erreur téléchargement');
+                }
+            } catch (error) {
+                showSyncStatus('Erreur de téléchargement', false);
+                console.error('Erreur sync down:', error);
+            }
+        }
+
+        // Synchronisation montante
+        async function syncUp() {
+            showSyncStatus('Envoi en cours...', true);
+
+            try {
+                const changes = [
+                    { type: 'update', layer: 'regard', feature_id: '1', changes: { description: 'Test update' } }
+                ];
+
+                const response = await fetch('http://127.0.0.1:8000/sync/push', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(changes)
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    showSyncStatus(`Envoi terminé (${data.accepted} acceptés)`, false);
+                } else {
+                    throw new Error('Erreur envoi');
+                }
+            } catch (error) {
+                showSyncStatus('Erreur d\'envoi', false);
+                console.error('Erreur sync up:', error);
+            }
+        }
+
+        // Synchronisation complète
+        async function fullSync() {
+            await syncDown();
+            setTimeout(() => syncUp(), 1000);
+        }
+
+        // Affichage du statut de synchronisation
+        function showSyncStatus(message, showSpinner) {
+            document.getElementById('sync-title').textContent = message;
+            document.getElementById('sync-spinner').style.display = showSpinner ? 'block' : 'none';
+        }
+
+        // Initialisation
+        document.addEventListener('DOMContentLoaded', function() {
+            checkServerStatus();
+
+            // Actualisation automatique du statut toutes les 30 secondes
+            setInterval(checkServerStatus, 30000);
+        });
+
+        // Gestionnaire pour le bouton d'actualisation
+        document.getElementById('refresh-status').addEventListener('click', checkServerStatus);
+    </script>
+</html>

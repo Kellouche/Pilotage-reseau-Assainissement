@@ -1,9 +1,33 @@
 {
-  "worktrees": {},
-  "sessions": {},
+  "worktrees": {
+    "wt-1778106444796-1": {
+      "branch": "momentous-supply",
+      "path": "d:\\IA Water Data Analysis\\Assainissement\\swmm-platform-poc\\.kilo\\worktrees\\momentous-supply",
+      "parentBranch": "master",
+      "createdAt": "2026-05-06T22:27:24.796Z",
+      "remote": "origin"
+    },
+    "wt-1778447641876-1": {
+      "branch": "east-carnation",
+      "path": "d:\\IA Water Data Analysis\\Assainissement\\swmm-platform-poc\\.kilo\\worktrees\\east-carnation",
+      "parentBranch": "master",
+      "createdAt": "2026-05-10T21:14:01.876Z",
+      "remote": "origin"
+    }
+  },
+  "sessions": {
+    "ses_1ec4218b4ffeRf9uEodRXbZXOi": {
+      "worktreeId": "wt-1778447641876-1",
+      "createdAt": "2026-05-10T21:14:47.671Z"
+    }
+  },
   "tabOrder": {
     "local": [
       "pending:1"
     ]
-  }
+  },
+  "worktreeOrder": [
+    "wt-1778106444796-1",
+    "wt-1778447641876-1"
+  ]
 }

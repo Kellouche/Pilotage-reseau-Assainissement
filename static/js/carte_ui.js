@@ -50,6 +50,27 @@ function updateSymbolSizes() {
     if (regardsLayer) regardsLayer.eachLayer(m => m.setRadius ? m.setRadius(radius) : null);
 }
 
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const toggleBtn = document.querySelector('.sidebar-toggle');
+    if (!sidebar) return;
+
+    sidebar.classList.toggle('collapsed');
+    
+    if (sidebar.classList.contains('collapsed')) {
+        if (toggleBtn) toggleBtn.textContent = '▶';
+    } else {
+        if (toggleBtn) toggleBtn.textContent = '◀';
+    }
+
+    // Indispensable pour que Leaflet recalcule la taille du conteneur après l'animation/changement
+    setTimeout(() => {
+        if (typeof map !== 'undefined' && map) {
+            map.invalidateSize();
+        }
+    }, 300);
+}
+
 function switchTab(tabId) {
     console.log('Switching to tab:', tabId);
     currentTab = tabId;
@@ -63,6 +84,13 @@ function switchTab(tabId) {
     });
     updateTabDisplay();
     if (typeof calculateTabStats === 'function') calculateTabStats(tabId);
+    if (typeof updateAnomaliesLayers === 'function') updateAnomaliesLayers();
+}
+
+function zoomOnTabAnomalies(tabId) {
+    if (typeof zoomToVisibleAnomalies === 'function') {
+        zoomToVisibleAnomalies();
+    }
 }
 
 function createPopupContent(props, type) {
@@ -103,6 +131,9 @@ function deselectAnomalie() {
 
 function updateLayersVisibility() {
     updateLegendForZoom();
+    if (typeof updateAnomaliesLayers === 'function') {
+        updateAnomaliesLayers();
+    }
 }
 
 function toggleAnalysisMode() {

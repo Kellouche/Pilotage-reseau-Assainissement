@@ -77,6 +77,12 @@ async function chargerDonnees() {
             
             if (typeof buildAnomaliesMaps === 'function') buildAnomaliesMaps(anomData);
             if (typeof updateAnomaliesLayers === 'function') updateAnomaliesLayers();
+            
+            // Mettre à jour les compteurs (parenthèses) pour tous les onglets
+            Object.keys(tabMappings).forEach(tab => {
+                if (typeof calculateTabStats === 'function') calculateTabStats(tab);
+            });
+            
             if (typeof updateStats === 'function') updateStats();
             
         } catch (error) {
@@ -96,34 +102,62 @@ async function chargerDonnees() {
 
 function getConduiteStyle(feature) {
     const props = feature.properties || {};
-    const fid = (props.fid || props.id || '').toString();
+    const activeTypesInTab = tabMappings[currentTab] || [];
     
-    // Check for anomalies first
-    if (typeof conduiteAnomaliesMap !== 'undefined' && conduiteAnomaliesMap[fid]) {
-        const anom = conduiteAnomaliesMap[fid];
-        const isVisible = anom.types.some(t => {
-            const group = typeof getAnomalieGroup === 'function' ? getAnomalieGroup(t) : t;
-            return document.getElementById(`type-${group}`)?.checked;
-        });
+    // Recherche agressive d'un identifiant correspondant
+    const idCandidates = [
+        feature.id,
+        props.fid, props.FID, props.id, props.ID, 
+        props.OBJECTID, props.code, props.CODE,
+        props.ID_CANALIS, props.ID_CONDUIT
+    ];
+    
+    let matchedFid = null;
+    for (let cand of idCandidates) {
+        if (cand !== undefined && cand !== null && cand !== '') {
+            let sCand = cand.toString();
+            if (typeof conduiteAnomaliesMap !== 'undefined' && conduiteAnomaliesMap[sCand]) {
+                matchedFid = sCand;
+                break;
+            }
+        }
+    }
+    
+    if (matchedFid) {
+        console.log(`Debug: Analyse anomalie pour ${matchedFid}`);
+        const anomInfo = conduiteAnomaliesMap[matchedFid];
         
-        if (isVisible) {
-            const color = typeof getAnomalieColor === 'function' ? getAnomalieColor(anom.severite) : '#f44336';
+        // On ne regarde QUE les anomalies qui appartiennent à l'onglet courant ET sont cochées
+        const visibleAnoms = [];
+        if (anomaliesData) {
+            activeTypesInTab.forEach(group => {
+                const cb = document.getElementById(`type-${group}`);
+                if (cb && cb.checked) {
+                    const groupAnoms = anomaliesData[group] || [];
+                    // Chercher les anomalies de ce groupe pour cette conduite
+                    groupAnoms.forEach(a => {
+                        const aid = (a.id_conduite || a.fid || a.id_conduite1 || a.id_conduite2 || a.fid1 || a.fid2 || '').toString();
+                        if (aid === matchedFid) visibleAnoms.push(a);
+                    });
+                }
+            });
+        }
+        
+        if (visibleAnoms.length > 0) {
+            // Calculer la sévérité max parmi les anomalies VISIBLES uniquement
+            let maxSev = 'mineure';
+            const severities = { 'critique': 3, 'majeure': 2, 'mineure': 1 };
+            visibleAnoms.forEach(a => {
+                if (severities[a.severite] > severities[maxSev]) maxSev = a.severite;
+            });
+            
+            const color = typeof getAnomalieColor === 'function' ? getAnomalieColor(maxSev) : '#f44336';
             return { color: color, weight: 6, opacity: 1 };
         }
     }
     
-    // Default material style
-    const materiau = props.materiau;
-    let color = '#4caf50';
-    switch(materiau) {
-        case 'Béton': color = '#795548'; break;
-        case 'PVC': color = '#2196f3'; break;
-        case 'Fonte': color = '#9e9e9e'; break;
-        case 'Acier': color = '#607d8b'; break;
-        case 'PE': color = '#4caf50'; break;
-        case 'Grès': color = '#ff9800'; break;
-    }
-    return { color: color, weight: 3, opacity: 0.8 };
+    // Style par défaut (Neutre pour ne pas confondre avec les anomalies)
+    return { color: '#bdc3c7', weight: 2, opacity: 0.6 };
 }
 
 async function chargerCouchesGeoJSON(couches) {
@@ -144,12 +178,12 @@ async function chargerCouchesGeoJSON(couches) {
     if (couches.regards && couches.regards.features) {
         regardsLayer = L.geoJSON(couches.regards, {
             pointToLayer: function(feature, latlng) {
-                const props = feature.properties || {};
-                const regardId = (props.code || props.id || '').toString();
-                const isAnomalous = typeof anomalousRegards !== 'undefined' && anomalousRegards.has(regardId);
-                const color = isAnomalous ? '#f44336' : '#2196f3';
                 return L.circleMarker(latlng, {
-                    color: color, fillColor: color, fillOpacity: 0.8, radius: 3, weight: 1
+                    color: '#bdc3c7', 
+                    fillColor: '#bdc3c7', 
+                    fillOpacity: 0.6, 
+                    radius: 2, // Réduit encore la taille
+                    weight: 1
                 });
             },
             onEachFeature: function(feature, layer) {
@@ -159,13 +193,95 @@ async function chargerCouchesGeoJSON(couches) {
         });
     }
     
-    ['stations', 'rejets', 'ouvrages'].forEach(type => {
+    // Autres couches ponctuelles
+    ['stations', 'rejets', 'ouvrages', 'step'].forEach(type => {
         if (couches[type] && couches[type].features) {
+            let color = '#666';
+            if (type === 'stations') color = '#ff5722'; // Orange pour relevage
+            if (type === 'step') color = '#9c27b0';     // Violet pour STEP
+            if (type === 'rejets') color = '#00bcd4';   // Cyan pour rejets
+
+            console.log(`Couche ${type}Layer créée avec ${couches[type].features.length} entités.`);
             layers[type + 'Layer'] = L.geoJSON(couches[type], {
-                pointToLayer: (feature, latlng) => L.circleMarker(latlng, { radius: 5, color: '#666' })
+                pointToLayer: (feature, latlng) => L.circleMarker(latlng, { 
+                    radius: 6, 
+                    color: '#fff', 
+                    fillColor: color, 
+                    fillOpacity: 1, 
+                    weight: 2 
+                }),
+                onEachFeature: function(feature, layer) {
+                    layer.bindPopup(createPopupContent(feature.properties, type));
+                }
             });
+        } else {
+            console.warn(`Couche ${type} absente ou vide dans les données reçues.`);
         }
     });
+
+    // Enregistrer les couches principales dans l'objet global pour la visibilité
+    layers['conduitesLayer'] = conduitesLayer;
+    layers['regardsLayer'] = regardsLayer;
+}
+
+function updateLegendForZoom() {
+    if (!map) return;
+    const zoom = map.getZoom();
+    const analysisMode = document.getElementById('analysis-mode')?.checked;
+
+    const layerMappings = {
+        'conduitesLayer': { id: 'layer-conduites', minZoom: 15 },
+        'regardsLayer': { id: 'layer-regards', minZoom: 16 }, 
+        'stationsLayer': { id: 'layer-stations', minZoom: 13 },
+        'stepLayer': { id: 'layer-step', minZoom: 13 },
+        'ouvragesLayer': { id: 'layer-ouvrages', minZoom: 14 }
+    };
+
+    Object.entries(layerMappings).forEach(([layerKey, config]) => {
+        const layer = layers[layerKey];
+        const checkbox = document.getElementById(config.id);
+        
+        if (!layer) {
+            console.warn(`Layer ${layerKey} non trouvé dans l'objet layers.`);
+            return;
+        }
+
+        const isChecked = checkbox?.checked;
+        const shouldShow = isChecked && (zoom >= config.minZoom || analysisMode);
+
+        console.log(`Layer ${layerKey}: isChecked=${isChecked}, shouldShow=${shouldShow}`);
+
+        if (shouldShow) {
+            if (!map.hasLayer(layer)) {
+                map.addLayer(layer);
+                console.log(`Layer ${layerKey} ajouté à la carte`);
+            }
+        } else {
+            if (map.hasLayer(layer)) {
+                map.removeLayer(layer);
+                console.log(`Layer ${layerKey} retiré de la carte`);
+            }
+        }
+    });
+}
+
+function centerOnData() {
+    console.log('Centrage sur les données...');
+    if (conduitesLayer && map.hasLayer(conduitesLayer)) {
+        try {
+            const bounds = conduitesLayer.getBounds();
+            if (bounds.isValid()) {
+                map.fitBounds(bounds, { padding: [30, 30] });
+            }
+        } catch (e) { console.warn('Erreur centrage conduites:', e); }
+    } else if (regardsLayer && map.hasLayer(regardsLayer)) {
+        try {
+            const bounds = regardsLayer.getBounds();
+            if (bounds.isValid()) {
+                map.fitBounds(bounds, { padding: [30, 30] });
+            }
+        } catch (e) { console.warn('Erreur centrage regards:', e); }
+    }
 }
 
 function showLoading(show) {

@@ -1,0 +1,1533 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <title>SWMM Platform - Hydraulic Expert</title>
+    <!-- FontAwesome pour les icones de l'éditeur -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            height: 100vh;
+            margin: 0;
+            display: flex;
+            overflow: hidden;
+            position: relative;
+        }
+
+        #sidebar {
+            width: 280px;
+            background: #16213e;
+            padding: 16px;
+        }
+
+        #map {
+            flex: 1;
+        }
+
+        .cluster-button {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            margin-top: 20px;
+            background: #27ae60;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .cluster-button:hover {
+            background: #219a52;
+        }
+
+        .cluster-button:disabled {
+            background: #7f8c8d;
+            cursor: not-allowed;
+        }
+
+        #cluster-status {
+            margin-top: 10px;
+            font-size: 0.9em;
+            background: #0f3460;
+            padding: 8px;
+            border-radius: 4px;
+        }
+
+        /* Barre d'outils d'édition hydraulique */
+        .edit-toolbar {
+            position: fixed; /* Changé de absolute à fixed car en dehors du map */
+            top: 20px;
+            right: 20px;
+            z-index: 2000;
+            background: rgba(22, 33, 62, 0.95);
+            backdrop-filter: blur(5px);
+            padding: 8px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .tool-btn {
+            width: 40px;
+            height: 40px;
+            background: #0f3460;
+            border: none;
+            border-radius: 6px;
+            color: #eee;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            font-size: 1.2em;
+        }
+
+        .tool-btn:hover {
+            background: #e94560;
+            transform: scale(1.05);
+        }
+
+        .tool-btn.active {
+            background: #e94560;
+            box-shadow: 0 0 10px #e94560;
+        }
+
+        .tool-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        .tool-tip {
+            position: relative;
+        }
+
+        .tool-tip:hover::after {
+            content: attr(data-tip);
+            position: absolute;
+            left: 50px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: #1a1a2e;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            white-space: nowrap;
+            z-index: 1001;
+            border: 1px solid #e94560;
+        }
+    #bassin-section {
+        display: none;
+        margin-top: 16px;
+    }
+
+    #bassin-section label {
+        font-size: 13px;
+        font-weight: 600;
+        color: #aab;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        display: block;
+        margin-bottom: 6px;
+    }
+
+    #bassin-select {
+        width: 100%;
+        padding: 8px 10px;
+        background: #0f3460;
+        color: #eee;
+        border: 1px solid #2980b9;
+        border-radius: 6px;
+        font-size: 14px;
+        cursor: pointer;
+        outline: none;
+        transition: border-color 0.2s;
+    }
+
+    #bassin-select:hover, #bassin-select:focus {
+        border-color: #3498db;
+    }
+
+    #bassin-select option {
+        background: #16213e;
+    }
+
+    #bassin-info {
+        margin-top: 8px;
+        font-size: 12px;
+        color: #95a5a6;
+        line-height: 1.5;
+    }
+
+    /* Overlay de chargement */
+    #loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        font-size: 24px;
+        color: #fff;
+    }
+
+    .loading-content {
+        text-align: center;
+        background: rgba(30, 33, 62, 0.9);
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+
+
+    .loading-content {
+        text-align: center;
+        background: rgba(30, 33, 62, 0.95);
+        padding: 30px;
+        border-radius: 15px;
+        box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        min-width: 300px;
+    }
+
+    .loading-title {
+        font-size: 18px;
+        margin-bottom: 15px;
+        color: #3498db;
+    }
+
+    .loading-step {
+        font-size: 14px;
+        margin: 8px 0;
+        opacity: 0.8;
+    }
+
+    .spinner {
+        border: 4px solid rgba(255, 255, 255, 0.3);
+        border-top: 4px solid #3498db;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 20px;
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    </style>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+</head>
+
+<body>
+    <!-- Overlay de chargement -->
+    <div id="loading-overlay">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <div>Chargement des données...</div>
+        </div>
+    </div>
+
+    <div id="sidebar">
+        <h2>SWMM Platform</h2>
+        <div id="stat-total" style="display:none;">--</div>
+        <div id="mini-stats">Chargement...</div>
+
+
+        <div>
+            <input type="checkbox" id="f-conduites" checked><label for="f-conduites">Conduites</label><br>
+            <input type="checkbox" id="f-regards"><label for="f-regards">Regard</label><br>
+            <input type="checkbox" id="f-stations" checked><label for="f-stations">Stations</label><br>
+            <input type="checkbox" id="f-step" checked><label for="f-step">STEP</label><br>
+            <input type="checkbox" id="f-ouvrages" checked><label for="f-ouvrages">Ouvrages</label><br>
+            <hr style="border: 0.5px solid #eee; margin: 10px 0;">
+            <input type="checkbox" id="f-bassins" disabled><label id="label-bassins" for="f-bassins" style="color: #999;"><b>Bassins Versants</b></label>
+        </div>
+
+
+        <hr style="border: 0.5px solid #eee; margin: 10px 0;">
+        <div id="recent-changes" style="background: rgba(255,255,255,0.9); padding: 10px; border-radius: 6px; margin: 10px 0;">
+            <h3 style="margin: 0 0 8px 0; font-size: 14px; color: #16213e; display: flex; align-items: center;">
+                📡 Modifications récentes
+                <span id="modif-count" style="margin-left: 8px; background: #3498db; color: white; padding: 2px 6px; border-radius: 10px; font-size: 11px; font-weight: bold;">0</span>
+                <span id="sync-indicator" style="margin-left: auto; width: 8px; height: 8px; background: #ccc; border-radius: 50%; display: inline-block;"></span>
+            </h3>
+            <div id="changes-list" style="font-size: 11px; max-height: 120px; overflow-y: auto; background: rgba(0,0,0,0.05); padding: 5px; border-radius: 4px; color: #000;">
+                <div style="color: #666; font-style: italic;">En attente de modifications...</div>
+            </div>
+        </div>
+        <button class="cluster-button" id="detect-cluster-btn">Détecter les bassins urbains</button>
+        <div id="cluster-status"></div>
+
+        <!-- Liste déroulante des bassins (visible après détection) -->
+        <div id="bassin-section">
+            <label for="bassin-select">🗺 Sélectionner un bassin</label>
+            <select id="bassin-select"></select>
+            <div id="bassin-info"></div>
+        </div>
+    </div>
+    <!-- Barre d'outils d'édition (déplacée hors de map) -->
+    <div class="edit-toolbar" id="main-edit-toolbar">
+        <button class="tool-btn tool-tip" id="btn-create-bassin" data-tip="Nouveau Bassin (Polygone)">
+            <i class="fas fa-draw-polygon"></i>
+        </button>
+        <button class="tool-btn tool-tip" id="btn-merge-bassin" data-tip="Fusionner Bassins" disabled>
+            <i class="fas fa-link"></i>
+        </button>
+        <button class="tool-btn tool-tip" id="btn-delete-bassin" data-tip="Supprimer" disabled>
+            <i class="fas fa-trash-alt"></i>
+        </button>
+        <hr style="border: 0.5px solid rgba(255,255,255,0.1); margin: 4px 0;">
+        <button class="tool-btn tool-tip" id="btn-save-edit" data-tip="Enregistrer les modifications" disabled>
+            <i class="fas fa-save"></i>
+        </button>
+    </div>
+
+
+
+    <!-- Modal d'édition -->
+    <div id="edit-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 3000; justify-content: center; align-items: center;">
+        <div style="background: white; padding: 20px; border-radius: 8px; max-width: 400px; width: 90%; max-height: 80%; overflow-y: auto;">
+            <h3 id="modal-title">Modifier</h3>
+            <form id="edit-form">
+                <!-- Champs dynamiques -->
+            </form>
+            <div style="margin-top: 20px; text-align: right;">
+                <button type="button" id="save-btn" style="background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">Enregistrer</button>
+                <button type="button" id="cancel-btn" style="background: #e74c3c; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin-left: 10px;">Annuler</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="map" style="position: relative;"></div>
+
+    <!-- Indicateur de zoom -->
+    <div id="zoom-indicator" style="position: absolute; top: 10px; left: 10px; z-index: 1000; background: rgba(0,0,0,0.7); color: white; padding: 5px 10px; border-radius: 4px; font-size: 12px;">
+        Zoom: 13
+    </div>
+
+    <!-- Légende dynamique sur la carte -->
+    <div id="map-legend" style="position: absolute; bottom: 20px; right: 20px; z-index: 1000; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); font-family: Arial, sans-serif;">
+        <div style="font-size: 16px; font-weight: bold; margin-bottom: 8px; color: #16213e;">Légende</div>
+        <div style="display: flex; flex-direction: column;">
+            <div id="legend-conduite" style="flex-direction: row; align-items: center; margin-bottom: 6px; display: flex; cursor: pointer;">
+                <div style="width: 16px; height: 2px; background: #3498db; margin-right: 8px;"></div>
+                <span style="font-size: 14px; color: #000;">Conduite</span>
+            </div>
+            <div id="legend-regards" style="flex-direction: row; align-items: center; margin-bottom: 6px; display: flex; cursor: pointer;">
+                <div style="width: 16px; height: 16px; background: #f1c40f; border-radius: 50%; margin-right: 8px;"></div>
+                <span style="font-size: 14px; color: #000;">Regard</span>
+            </div>
+            <div id="legend-stations" style="flex-direction: row; align-items: center; margin-bottom: 6px; display: flex; cursor: pointer;">
+                <div style="width: 16px; height: 16px; background: #e67e22; border-radius: 50%; margin-right: 8px;"></div>
+                <span style="font-size: 14px; color: #000;">Station de relevage</span>
+            </div>
+            <div id="legend-step" style="flex-direction: row; align-items: center; margin-bottom: 6px; display: flex; cursor: pointer;">
+                <div style="width: 16px; height: 16px; background: #27ae60; border-radius: 50%; margin-right: 8px;"></div>
+                <span style="font-size: 14px; color: #000;">STEP</span>
+            </div>
+            <div id="legend-ouvrages" style="flex-direction: row; align-items: center; margin-bottom: 6px; display: flex; cursor: pointer;">
+                <div style="width: 16px; height: 16px; background: #9b59b6; border-radius: 50%; margin-right: 8px;"></div>
+                <span style="font-size: 14px; color: #000;">Ouvrage</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        let carte = L.map('map').setView([36.15, 1.33], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        }).addTo(carte);
+
+        let couches = {
+            conduites: L.layerGroup().addTo(carte),
+            regards: L.layerGroup(), // Pas de .addTo(carte) par défaut
+            stations: L.layerGroup().addTo(carte),
+            step: L.layerGroup().addTo(carte),
+            ouvrages: L.layerGroup().addTo(carte),
+            bassins: L.layerGroup() // Pas de .addTo(carte) par défaut
+        };
+
+        // Couche pour les clusters détectés
+        let clusterCouche = L.layerGroup().addTo(carte);
+
+        // Référence globale vers le layer Leaflet des clusters (pour synchro dropdown)
+        let _activeClusterLayer = null;
+        // Map clusterId -> bounds du bassin
+        let _bassinBounds = {};
+        // Version de synchronisation pour les modifications
+        let lastSyncVersion = 0;
+
+        // WebSocket pour notifications temps réel
+        const ws = new WebSocket('ws://localhost:8000/ws/sync');
+        const syncIndicator = document.getElementById('sync-indicator');
+
+        ws.onmessage = (event) => {
+            console.log('=== NOUVELLE NOTIFICATION ===');
+            console.log('Notification reçue:', event.data);
+            console.log('Type de message:', typeof event.data);
+            console.log('Commence par "Objet : Regard"?', event.data.startsWith('Objet : Regard'));
+            const changesList = document.getElementById('changes-list');
+
+            // Créer un élément pour le message
+            const messageDiv = document.createElement('div');
+            messageDiv.style.cssText = 'padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.1); font-family: monospace;';
+
+            // Si c'est un message détaillé "Objet : Regard ..."
+            if (event.data.startsWith('Objet : Regard')) {
+                console.log('✅ MESSAGE REGARD DÉTECTÉ');
+                messageDiv.style.cssText += 'background: rgba(39, 174, 96, 0.1); border-left: 3px solid #27ae60; padding-left: 8px; color: #000; cursor: pointer;';
+                messageDiv.innerHTML = `<span style="color: #27ae60;">📍</span> ${event.data} <small style="color: #666; float: right;">clic pour zoomer</small>`;
+
+                // Extraire les coordonnées du message
+                const coordMatch = event.data.match(/\[([0-9.-]+),([0-9.-]+)\]/);
+                console.log('Coordonnées regard extraites:', coordMatch);
+
+                if (coordMatch) {
+                    const lng = parseFloat(coordMatch[1]);
+                    const lat = parseFloat(coordMatch[2]);
+                    console.log('Coordonnées regard parsées - Lat:', lat, 'Lng:', lng);
+
+                    messageDiv.title = 'Cliquer pour zoomer sur ce regard';
+                    messageDiv.onclick = () => zoomToCoordinates(lat, lng);
+                    messageDiv.style.cssText += 'transition: background-color 0.2s;';
+                    messageDiv.onmouseover = () => messageDiv.style.backgroundColor = 'rgba(39, 174, 96, 0.3)';
+                    messageDiv.onmouseout = () => messageDiv.style.backgroundColor = 'rgba(39, 174, 96, 0.1)';
+                }
+            }
+            // Si c'est un message détaillé "Objet : Conduite ..."
+            else if (event.data.startsWith('Objet : Conduite')) {
+                console.log('✅ MESSAGE CONDUITE DÉTECTÉ');
+                messageDiv.style.cssText += 'background: rgba(52, 152, 219, 0.1); border-left: 3px solid #3498db; padding-left: 8px; color: #000; cursor: pointer;';
+                messageDiv.innerHTML = `<span style="color: #3498db;">🛣️</span> ${event.data} <small style="color: #666; float: right;">clic pour zoomer</small>`;
+
+                // Extraire les coordonnées du message
+                const coordMatch = event.data.match(/\[([0-9.-]+),([0-9.-]+)\]/);
+                console.log('Coordonnées conduite extraites:', coordMatch);
+
+                if (coordMatch) {
+                    const lng = parseFloat(coordMatch[1]);
+                    const lat = parseFloat(coordMatch[2]);
+                    console.log('Coordonnées conduite parsées - Lat:', lat, 'Lng:', lng);
+
+                    messageDiv.title = 'Cliquer pour zoomer sur cette conduite';
+                    messageDiv.onclick = () => zoomToCoordinates(lat, lng);
+                    messageDiv.style.cssText += 'transition: background-color 0.2s;';
+                    messageDiv.onmouseover = () => messageDiv.style.backgroundColor = 'rgba(52, 152, 219, 0.3)';
+                    messageDiv.onmouseout = () => messageDiv.style.backgroundColor = 'rgba(52, 152, 219, 0.1)';
+                }
+            }
+            // Si c'est un message de synthèse
+            else if (event.data.includes('Modifications synchronisées')) {
+                console.log('🔄 MESSAGE SYNCHRONISATION DÉTECTÉ');
+                messageDiv.style.cssText += 'background: rgba(52, 152, 219, 0.1); border-left: 3px solid #3498db; padding-left: 8px; font-weight: bold; color: #000;';
+                messageDiv.innerHTML = `<span style="color: #3498db;">🔄</span> ${event.data}`;
+
+                // Extraire le nombre de modifications
+                const match = event.data.match(/(\d+) acceptées/);
+                if (match) {
+                    totalModifications += parseInt(match[1]);
+                    document.getElementById('modif-count').textContent = totalModifications;
+                }
+            }
+            // Autres messages
+            else {
+                console.log('❓ MESSAGE INCONNU:', event.data);
+                messageDiv.textContent = `${new Date().toLocaleTimeString()}: ${event.data}`;
+                messageDiv.style.color = '#000';
+            }
+
+            changesList.appendChild(messageDiv);
+
+            // Garder seulement les 8 dernières modifications
+            while (changesList.children.length > 8) {
+                changesList.removeChild(changesList.firstChild);
+            }
+
+            // Animer l'indicateur de synchronisation
+            syncIndicator.style.background = '#27ae60';
+            setTimeout(() => {
+                syncIndicator.style.background = '#ccc';
+            }, 2000);
+
+            // Faire défiler vers le bas
+            changesList.scrollTop = changesList.scrollHeight;
+        };
+
+        ws.onopen = () => {
+            console.log('WebSocket connecté');
+            syncIndicator.style.background = '#3498db';
+        };
+
+        ws.onclose = () => {
+            console.log('WebSocket déconnecté');
+            syncIndicator.style.background = '#ccc';
+        };
+
+        ws.onerror = (error) => {
+            console.error('Erreur WebSocket:', error);
+            syncIndicator.style.background = '#e74c3c';
+        };
+
+        // Variables globales
+        let lastZoomMarker = null;
+        let totalModifications = 0;
+
+        // Fonction pour zoomer sur une conduite par ID
+        function zoomToConduit(conduitId) {
+            console.log('🔍 ZOOM CONDUITE - ID:', conduitId);
+
+            if (!carte || !couches.conduites) {
+                console.error('❌ Carte ou couche conduites non disponible');
+                return;
+            }
+
+            let foundLayer = null;
+            couches.conduites.eachLayer(layer => {
+                if (layer.feature && layer.feature.properties && layer.feature.properties.conduit_id == conduitId) {
+                    foundLayer = layer;
+                }
+            });
+
+            if (!foundLayer) {
+                console.error('❌ Conduite non trouvée avec ID:', conduitId);
+                return;
+            }
+
+            try {
+                // Supprimer le marqueur précédent
+                if (lastZoomMarker && carte.hasLayer && carte.hasLayer(lastZoomMarker)) {
+                    carte.removeLayer(lastZoomMarker);
+                }
+
+                // Zoom sur les bounds de la conduite
+                const bounds = foundLayer.getBounds();
+                if (bounds.isValid()) {
+                    carte.fitBounds(bounds, { padding: [50, 50], maxZoom: 18 });
+                    console.log('✅ Zoom sur conduite effectué');
+                } else {
+                    console.warn('⚠️ Bounds invalides pour la conduite');
+                    return;
+                }
+
+                // Marqueur au centre
+                const center = bounds.getCenter();
+                const marker = L.circleMarker([center.lat, center.lng], {
+                    radius: 8,
+                    fillColor: '#3498db',
+                    color: '#3498db',
+                    weight: 2,
+                    opacity: 0.8,
+                    fillOpacity: 0.6
+                });
+
+                marker.addTo(carte);
+                const popupContent = `
+                    <div style="font-family: Arial, sans-serif; font-size: 12px;">
+                        <b>🛣️ Conduite modifiée</b><br>
+                        <span style="color: #666;">ID:</span> ${conduitId}<br>
+                        <small style="color: #999;">Marqueur temporaire (5s)</small>
+                    </div>
+                `;
+                marker.bindPopup(popupContent).openPopup();
+
+                lastZoomMarker = marker;
+                console.log('✅ Marqueur ajouté');
+
+                // Nettoyer après 5 secondes
+                setTimeout(() => {
+                    if (carte.hasLayer && carte.hasLayer(marker)) {
+                        carte.removeLayer(marker);
+                        console.log('🗑️ Marqueur nettoyé');
+                    }
+                }, 5000);
+
+            } catch (error) {
+                console.error('❌ Erreur zoom conduite:', error);
+            }
+        }
+
+        // Fonction simple pour zoomer sur les coordonnées d'un regard
+        function zoomToCoordinates(lat, lng) {
+            console.log('🎯 ZOOM FONCTION - lat:', lat, 'lng:', lng);
+
+            // Vérifications de base
+            if (!carte) {
+                console.error('❌ Carte non disponible');
+                return;
+            }
+            if (isNaN(lat) || isNaN(lng)) {
+                console.error('❌ Coordonnées invalides');
+                return;
+            }
+
+            try {
+                // Supprimer le marqueur précédent
+                if (lastZoomMarker && carte.hasLayer && carte.hasLayer(lastZoomMarker)) {
+                    carte.removeLayer(lastZoomMarker);
+                }
+
+                // Zoom direct
+                carte.setView([lat, lng], 18);
+                console.log('✅ Zoom effectué');
+
+                // Marqueur rouge
+                const marker = L.circleMarker([lat, lng], {
+                    radius: 8,
+                    fillColor: '#ff0000',
+                    color: '#ff0000',
+                    weight: 2,
+                    opacity: 0.8,
+                    fillOpacity: 0.6
+                });
+
+                marker.addTo(carte);
+                const popupContent = `
+                    <div style="font-family: Arial, sans-serif; font-size: 12px;">
+                        <b>📍 Regard modifié</b><br>
+                        <span style="color: #666;">Coordonnées:</span> ${lat.toFixed(6)}, ${lng.toFixed(6)}<br>
+                        <small style="color: #999;">Marqueur temporaire (5s)</small>
+                    </div>
+                `;
+                marker.bindPopup(popupContent).openPopup();
+
+                lastZoomMarker = marker;
+                console.log('✅ Marqueur ajouté');
+
+                // Nettoyer après 5 secondes
+                setTimeout(() => {
+                    if (carte.hasLayer && carte.hasLayer(marker)) {
+                        carte.removeLayer(marker);
+                        console.log('🗑️ Marqueur nettoyé');
+                    }
+                }, 5000);
+
+            } catch (error) {
+                console.error('❌ Erreur zoom:', error);
+            }
+        }
+
+        ['conduites', 'regards', 'stations', 'step', 'ouvrages', 'bassins'].forEach(type => {
+            document.getElementById('f-' + type).onchange = (e) => {
+                if (e.target.checked) couches[type].addTo(carte);
+                else carte.removeLayer(couches[type]);
+            };
+        });
+
+        // Fonction pour afficher/masquer l'overlay de chargement
+        function montrerChargement(afficher) {
+            const overlay = document.getElementById('loading-overlay');
+            if (afficher) {
+                overlay.style.display = 'flex';
+            } else {
+                overlay.style.display = 'none';
+            }
+        }
+
+
+
+        // Variables pour l'éditeur manuel
+        let editorState = {
+            active: false,
+            mode: null,
+            points: [],
+            markers: [],
+            tempPolyline: null,
+            tempPolygon: null,
+            selectedConduits: new Set(),
+            foundOutfall: null
+        };
+
+        // Activer/Désactiver le mode édition
+        document.getElementById('btn-create-bassin').onclick = function() {
+            if (editorState.active && editorState.mode === 'create') {
+                desactiverModeEdition();
+            } else {
+                activerModeEdition('create');
+            }
+        };
+
+        // Plus besoin de disableClickPropagation car toolbar est hors de map
+
+        function activerModeEdition(mode) {
+            editorState.active = true;
+            editorState.mode = mode;
+            editorState.selectedConduits.clear();
+            editorState.points = [];
+
+            const btn = document.getElementById('btn-create-bassin');
+            btn.classList.add('active');
+            btn.innerHTML = '<i class="fas fa-times"></i>'; // Changer en "Annuler"
+            btn.setAttribute('data-tip', 'Annuler la création');
+
+            carte.dragging.disable();
+            carte.getContainer().style.cursor = 'crosshair';
+            document.getElementById('cluster-status').innerHTML = "<b>Mode Édition</b><br>Tracez votre polygone point par point...";
+        }
+
+        function desactiverModeEdition() {
+            editorState.active = false;
+            editorState.mode = null;
+
+            const btn = document.getElementById('btn-create-bassin');
+            btn.classList.remove('active');
+            btn.innerHTML = '<i class="fas fa-draw-polygon"></i>';
+            btn.setAttribute('data-tip', 'Nouveau Bassin (Polygone)');
+
+            if (editorState.tempPolyline) carte.removeLayer(editorState.tempPolyline);
+            if (editorState.tempPolygon) carte.removeLayer(editorState.tempPolygon);
+            editorState.markers.forEach(m => carte.removeLayer(m));
+
+            editorState.points = [];
+            editorState.markers = [];
+            editorState.tempPolyline = null;
+            editorState.tempPolygon = null;
+
+            carte.dragging.enable();
+            carte.getContainer().style.cursor = '';
+            document.getElementById('btn-save-edit').disabled = true;
+            nettoyerSurlignageSelection();
+        }
+
+        function nettoyerSurlignageSelection() {
+            // Rétablir le style original des tronçons
+            if (_activeClusterLayer) {
+                highlightCluster(document.getElementById('bassin-select').value || null, _activeClusterLayer);
+            } else if (couches.conduites) {
+                couches.conduites.setStyle({ color: '#3498db', weight: 3, opacity: 1 });
+            }
+        }
+
+        // Événements souris pour le tracé du polygone
+        carte.on('click', (e) => {
+            if (!editorState.active || editorState.mode !== 'create') return;
+
+            const latlng = e.latlng;
+            console.log("[Editor] Clic à:", latlng);
+
+            // Si on clique sur le premier point (ou proche), on ferme le polygone
+            if (editorState.points.length >= 2) {
+                const firstPoint = editorState.points[0];
+                const dist = carte.latLngToContainerPoint(latlng).distanceTo(carte.latLngToContainerPoint(firstPoint));
+                console.log("[Editor] Distance au départ:", dist.toFixed(1), "px");
+
+                if (dist < 25) { // Seuil augmenté à 25px pour plus de souplesse
+                    console.log("[Editor] Fermeture par proximité");
+                    finaliserPolygone();
+                    return;
+                }
+            }
+
+            ajouterPointPolygone(latlng);
+        });
+
+        // Fermeture par CLIC DROIT (Standard SIG)
+        carte.on('contextmenu', (e) => {
+            if (editorState.active && editorState.mode === 'create') {
+                L.DomEvent.preventDefault(e); // Empêcher le menu du navigateur
+                if (editorState.points.length > 2) {
+                    console.log("[Editor] Fermeture par clic droit");
+                    finaliserPolygone();
+                } else {
+                    alert("Tracez au moins 3 points avant de terminer.");
+                }
+            }
+        });
+
+        function ajouterPointPolygone(latlng) {
+            editorState.points.push(latlng);
+
+            // Ajouter un marqueur visuel
+            const marker = L.circleMarker(latlng, {
+                radius: 6, color: '#e94560', fillColor: '#fff', fillOpacity: 1, weight: 2,
+                pane: 'markerPane', interactive: true
+            }).addTo(carte);
+            editorState.markers.push(marker);
+
+            if (editorState.points.length === 1) {
+                marker.setStyle({ radius: 10, color: '#f1c40f', weight: 4 });
+                marker.bindTooltip("CLIQUEZ ICI pour fermer", { permanent: true, direction: 'top', className: 'close-tooltip' });
+
+                marker.on('click', (ev) => {
+                    console.log("[Editor] Clic direct sur marqueur départ");
+                    L.DomEvent.stopPropagation(ev);
+                    if (editorState.points.length > 2) finaliserPolygone();
+                });
+            }
+
+            if (editorState.tempPolyline) carte.removeLayer(editorState.tempPolyline);
+            editorState.tempPolyline = L.polyline(editorState.points, { color: '#e94560', weight: 3, dashArray: '5, 5' }).addTo(carte);
+        }
+
+        function finaliserPolygone() {
+            console.log("[Editor] Finalisation du polygone avec", editorState.points.length, "points");
+            if (editorState.tempPolyline) carte.removeLayer(editorState.tempPolyline);
+
+            // Créer le polygone final
+            editorState.tempPolygon = L.polygon(editorState.points, {
+                color: "#e94560", weight: 2, fillOpacity: 0.15, dashArray: null
+            }).addTo(carte);
+
+            // Nettoyer les marqueurs de construction
+            editorState.markers.forEach(m => carte.removeLayer(m));
+            editorState.markers = [];
+
+            const pts = [...editorState.points];
+            editorState.points = []; // On vide pour bloquer le tracé
+
+            // Lancer la détection
+            capturerTronconsDansZone(pts);
+        }
+
+        // Algorithme Point-in-Polygon (Ray Casting) optimisé
+        function isPointInPolygon(point, vs) {
+            var x = point.lat, y = point.lng;
+            var inside = false;
+            for (var i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+                var xi = vs[i].lat, yi = vs[i].lng;
+                var xj = vs[j].lat, yj = vs[j].lng;
+                var intersect = ((yi > y) != (yj > y))
+                    && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+                if (intersect) inside = !inside;
+            }
+            return inside;
+        }
+
+        function capturerTronconsDansZone(polyPoints) {
+            console.log("[Editor] Analyse de la zone...");
+            let count = 0;
+            let exutoiresTrouves = [];
+            editorState.selectedConduits.clear();
+
+            // 1. Capturer les tronçons
+            // On cherche dans la couche de clusters active ET dans la couche réseau brute
+            const targets = [];
+            if (_activeClusterLayer) targets.push(_activeClusterLayer);
+            if (couches.conduites) targets.push(couches.conduites);
+
+            targets.forEach(parentLayer => {
+                parentLayer.eachLayer(layer => {
+                    if (layer.feature && layer.feature.geometry.type === 'LineString') {
+                        const coords = layer.getLatLngs();
+                        // Un tronçon est capturé si l'un de ses points est dedans
+                        const isInside = coords.some(pt => isPointInPolygon(pt, polyPoints));
+                        if (isInside) {
+                            const props = layer.feature.properties;
+                            const id = props.conduit_id || props.fid || props.ID;
+                            if (id && !editorState.selectedConduits.has(id)) {
+                                editorState.selectedConduits.add(id);
+                                layer.setStyle({ color: '#f1c40f', weight: 8, opacity: 1 });
+                                count++;
+                            }
+                        }
+                    }
+                });
+            });
+
+            // 2. Chercher les exutoires
+            ['stations', 'step', 'ouvrages'].forEach(type => {
+                if (couches[type]) {
+                    couches[type].eachLayer(layer => {
+                        if (isPointInPolygon(layer.getLatLng(), polyPoints)) {
+                            exutoiresTrouves.push({
+                                id: layer.feature.properties.fid || layer.feature.properties.ID,
+                                nom: layer.feature.properties.nom || layer.feature.properties.NOM || type,
+                                type: type,
+                                latlng: layer.getLatLng()
+                            });
+                        }
+                    });
+                }
+            });
+
+            console.log("[Editor] Résultat capture:", count, "tronçons,", exutoiresTrouves.length, "exutoires");
+            gererResultatCapture(count, exutoiresTrouves);
+        }
+
+        function gererResultatCapture(count, exutoires) {
+            const statusDiv = document.getElementById('cluster-status');
+            if (count === 0) {
+                statusDiv.innerHTML = "⚠️ Aucun tronçon capturé.<br>Cliquez sur le <b>X</b> pour recommencer.";
+                return;
+            }
+
+            let msg = `<b>${count}</b> tronçons sélectionnés.<br>`;
+
+            if (exutoires.length === 1) {
+                msg += `✅ Exutoire : <b>${exutoires[0].nom}</b><br><br>👉 Cliquez sur 💾 pour enregistrer.`;
+                editorState.foundOutfall = exutoires[0];
+                document.getElementById('btn-save-edit').disabled = false;
+            } else if (exutoires.length > 1) {
+                msg += `❓ Plusieurs exutoires trouvés. Cliquez sur le bon :<br>`;
+                exutoires.forEach((ex, idx) => {
+                    msg += `<button class="cluster-button" style="margin-top:5px;" onclick="choisirExutoireManuel(${idx})">${ex.nom}</button>`;
+                });
+                editorState.tempExutoires = exutoires;
+            } else {
+                msg += `⚠️ Aucun exutoire détecté.<br><b>Désignez le point de sortie sur la carte...</b>`;
+                activerPickExutoire(); // Passage automatique en mode cible
+            }
+
+            statusDiv.innerHTML = msg;
+        }
+
+        // Choix parmi une liste (si plusieurs détectés)
+        window.choisirExutoireManuel = function(idx) {
+            const ex = editorState.tempExutoires[idx];
+            editorState.foundOutfall = ex;
+            const statusDiv = document.getElementById('cluster-status');
+            statusDiv.innerHTML = `<b>${editorState.selectedConduits.size}</b> tronçons sélectionnés.<br>✅ Exutoire : <b>${ex.nom}</b><br><br>👉 Cliquez sur 💾 pour enregistrer.`;
+            document.getElementById('btn-save-edit').disabled = false;
+        };
+
+        // Mode "Pick" : l'utilisateur clique sur la carte pour désigner le rejet
+        window.activerPickExutoire = function() {
+            editorState.mode = 'pick_exutoire';
+            carte.getContainer().style.cursor = 'crosshair';
+
+            carte.once('click', (e) => {
+                editorState.foundOutfall = {
+                    id: 'custom_' + Date.now(),
+                    nom: "Point désigné",
+                    type: "manuel",
+                    latlng: e.latlng
+                };
+                document.getElementById('cluster-status').innerHTML = `<b>${editorState.selectedConduits.size}</b> tronçons sélectionnés.<br>🎯 Exutoire fixé.<br><br>👉 Cliquez sur 💾 pour enregistrer.`;
+                editorState.mode = 'create';
+                carte.getContainer().style.cursor = '';
+                document.getElementById('btn-save-edit').disabled = false;
+            });
+        };
+
+        // Sauvegarder le bassin manuel
+        document.getElementById('btn-save-edit').onclick = function() {
+            if (editorState.selectedConduits.size === 0) return;
+
+            const data = {
+                conduits: Array.from(editorState.selectedConduits),
+                exutoire: editorState.foundOutfall || null,
+                nom: prompt("Nom du bassin :", editorState.foundOutfall ? "Bassin " + editorState.foundOutfall.nom : "Bassin Manuel")
+            };
+
+            if (!data.nom) return;
+
+            fetch('/api/v1/manual-basin', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(r => r.json())
+            .then(res => {
+                alert("Bassin manuel enregistré avec succès !");
+                desactiverModeEdition();
+                // Recharger les données pour voir le nouveau bassin
+                document.getElementById('detect-cluster-btn').click();
+            })
+            .catch(err => {
+                console.error(err);
+                alert("Erreur lors de la sauvegarde.");
+            });
+        };
+
+        // Supprimer un bassin manuel
+        document.getElementById('btn-delete-bassin').onclick = function() {
+            const sel = document.getElementById('bassin-select');
+            const cid = sel.value;
+            if (!cid || !cid.startsWith('M_')) {
+                alert("Veuillez sélectionner un bassin manuel (marqué [MANUEL]) pour le supprimer.");
+                return;
+            }
+
+            if (!confirm("Voulez-vous vraiment supprimer ce bassin manuel ?")) return;
+
+            fetch(`/api/v1/manual-basin/${cid}`, { method: 'DELETE' })
+                .then(r => r.json())
+                .then(res => {
+                    alert("Bassin supprimé.");
+                    // Recharger les clusters
+                    document.getElementById('detect-cluster-btn').click();
+                });
+        };
+
+        async function chargerDonneesInitiales() {
+            // Montrer l'overlay de chargement
+            montrerChargement(true);
+
+            try {
+                const response = await fetch('/api/v1/layers');
+                const d = await response.json();
+                    console.log('Données:', d.compteurs);
+                    document.getElementById('stat-total').textContent = d.compteurs.conduites || 0;
+                    document.getElementById('mini-stats').innerHTML =
+                        'Conduites: ' + (d.compteurs.conduites || 0) +
+                        ' | Regards: ' + (d.compteurs.regards || 0) +
+                        ' | Stations: ' + (d.compteurs.stations || 0) +
+                        ' | STEP: ' + (d.compteurs.step || 0) +
+                        ' | Ouvrages: ' + (d.compteurs.ouvrages || 0);
+
+                    // Conduites (lignes)
+                    conduitProperties = [];
+                    L.geoJSON(d.couches.conduites, {
+                        style: { color: '#3498db', weight: 8 },
+                        onEachFeature: (feature, layer) => {
+                            console.log('Adding popup to conduit:', feature.properties);
+                            const index = conduitProperties.length;
+                            conduitProperties.push(feature.properties);
+                            layer.bindPopup(`<div style="font-family: Arial, sans-serif; font-size: 12px;">
+                                <b>Conduite ${feature.properties.conduit_id || feature.properties.fid}</b><br>
+                                Longueur: ${feature.properties.longueur || 'N/A'} m<br>
+                                Diamètre: ${feature.properties.diametre || 'N/A'} mm<br>
+                                <button onclick="alert('Button clicked for conduit ${index}'); editConduit(${index})" style="margin-top: 5px; padding: 5px 10px; background: #3498db; color: white; border: none; border-radius: 3px; cursor: pointer;">Modifier</button>
+                            </div>`);
+                        }
+                    }).addTo(couches.conduites);
+
+                    // Points (regards, stations, step, ouvrages)
+                    const styles = {
+                        regards: { radius: 4, color: '#f1c40f', fillColor: '#f1c40f' },
+                        stations: { radius: 6, color: '#e67e22', fillColor: '#e67e22' },
+                        step: { radius: 7, color: '#27ae60', fillColor: '#27ae60' },
+                        ouvrages: { radius: 6, color: '#9b59b6', fillColor: '#9b59b6' }
+                    };
+                    ['regards', 'stations', 'step', 'ouvrages'].forEach(type => {
+                        L.geoJSON(d.couches[type], {
+                            pointToLayer: (feature, latlng) => L.circleMarker(latlng, styles[type])
+                        }).addTo(couches[type]);
+                    });
+
+                    const bounds = L.latLngBounds([]);
+                    Object.values(couches).forEach(l => l.getLayers().forEach(layer => {
+                        bounds.extend(layer.getBounds ? layer.getBounds() : layer.getLatLng());
+                    }));
+                    if (bounds.isValid()) carte.fitBounds(bounds, { padding: [50, 50] });
+
+                    // Masquer l'overlay de chargement une fois les données chargées
+                    montrerChargement(false);
+
+                    // Maintenant que les données sont chargées, ajouter la gestion du zoom
+                    carte.on('zoomend', function() {
+                        const zoom = carte.getZoom();
+                        console.log('Zoom level:', zoom);
+                        document.getElementById('zoom-indicator').textContent = 'Zoom: ' + zoom;
+
+                        // Conduites visibles à partir du zoom 15
+                        if (zoom >= 15) {
+                            if (!carte.hasLayer(couches.conduites)) {
+                                couches.conduites.addTo(carte);
+                            }
+                        } else {
+                            if (carte.hasLayer(couches.conduites)) {
+                                carte.removeLayer(couches.conduites);
+                            }
+                        }
+
+                        // Regards visibles à partir du zoom 16
+                        if (zoom >= 16) {
+                            if (!carte.hasLayer(couches.regards)) {
+                                couches.regards.addTo(carte);
+                            }
+                        } else {
+                            if (carte.hasLayer(couches.regards)) {
+                                carte.removeLayer(couches.regards);
+                            }
+                        }
+
+                        // Autres couches (Stations, STEP, Ouvrages, Bassins) visibles à partir du zoom 11
+                        const autresCouches = ['stations', 'step', 'ouvrages'];
+                        autresCouches.forEach(type => {
+                            if (zoom >= 11) {
+                                if (!carte.hasLayer(couches[type])) {
+                                    couches[type].addTo(carte);
+                                }
+                            } else {
+                                if (carte.hasLayer(couches[type])) {
+                                    carte.removeLayer(couches[type]);
+                                }
+                            }
+                        });
+
+                        // Bassins à partir de 11 aussi
+                        if (zoom >= 11) {
+                            if (!carte.hasLayer(couches.bassins) && couches.bassins.getLayers().length > 0) {
+                                couches.bassins.addTo(carte);
+                            }
+                        } else {
+                            if (carte.hasLayer(couches.bassins)) {
+                                carte.removeLayer(couches.bassins);
+                            }
+                        }
+
+                        // Mettre à jour la légende dynamique : changer l'opacité des éléments selon la visibilité des couches
+                        document.getElementById('legend-conduite').style.opacity = carte.hasLayer(couches.conduites) ? 1 : 0.4;
+                        document.getElementById('legend-regards').style.opacity = carte.hasLayer(couches.regards) ? 1 : 0.4;
+                        document.getElementById('legend-stations').style.opacity = carte.hasLayer(couches.stations) ? 1 : 0.4;
+                        document.getElementById('legend-step').style.opacity = carte.hasLayer(couches.step) ? 1 : 0.4;
+                        document.getElementById('legend-ouvrages').style.opacity = carte.hasLayer(couches.ouvrages) ? 1 : 0.4;
+                    });
+
+                    // Appliquer la visibilité initiale
+                    carte.fire('zoomend');
+                    document.getElementById('zoom-indicator').textContent = 'Zoom: ' + carte.getZoom();
+                } catch (e) {
+                    console.error('Erreur:', e);
+                    document.getElementById('mini-stats').textContent = 'Erreur chargement';
+                    montrerChargement(false); // Masquer l'overlay même en cas d'erreur
+                }
+        }
+
+        // Gestion du bouton de détection des clusters
+        document.getElementById('detect-cluster-btn').addEventListener('click', function() {
+            const btn = this;
+            const statusDiv = document.getElementById('cluster-status');
+
+            // Désactiver le bouton pendant le traitement
+            btn.disabled = true;
+            btn.textContent = 'Détection en cours...';
+            statusDiv.textContent = 'Recherche des bassins hydrauliques...';
+
+            // Effacer les anciens clusters
+            clusterCouche.clearLayers();
+            couches.bassins.clearLayers();
+
+            // Appeler l'API de détection des clusters
+            fetch('/api/v1/clusters/recalculate-all')
+                .then(response => {
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    return response.json();
+                })
+                .then(clusterData => {
+                    if (clusterData.resultats && clusterData.resultats.length > 0) {
+                        // Créer une FeatureCollection combinée de tous les résultats
+                        const allFeatures = [];
+                        clusterData.resultats.forEach(result => {
+                            if (result.geojson && result.geojson.features) {
+                                allFeatures.push(...result.geojson.features);
+                            }
+                        });
+
+                        const clusterLayer = L.geoJSON({type: "FeatureCollection", features: allFeatures}, {
+                            style: (feature) => {
+                                const typeColors = {
+                                    step:    { color: '#c0392b', fill: '#e74c3c' },
+                                    station: { color: '#1a6fa0', fill: '#3498db' },
+                                    ouvrage: { color: '#7d3c98', fill: '#9b59b6' },
+                                    rejet:   { color: '#d35400', fill: '#e67e22' }
+                                };
+                                if (feature.properties.type === 'bassin_urbain') {
+                                    const tc = typeColors[feature.properties.exutoire_type]
+                                             || { color: '#27ae60', fill: '#2ecc71' };
+                                    return {
+                                        color:       tc.color,
+                                        fillColor:   tc.fill,
+                                        fillOpacity: 0.25,
+                                        weight:      2,
+                                        dashArray:   '6, 4'
+                                    };
+                                }
+                                // Tronçons (LineString) : couleur issue de la classification
+                                return {
+                                    color:   feature.properties.couleur || '#3498db',
+                                    weight:  2.5,
+                                    opacity: 0.75
+                                };
+                            },
+                            pointToLayer: (feature, latlng) => {
+                                if (feature.properties.type === 'exutoire') {
+                                    const typeColors = {
+                                        step: '#e74c3c',
+                                        station: '#3498db',
+                                        ouvrage: '#9b59b6',
+                                        rejet: '#e67e22'
+                                    };
+                                    const color = typeColors[feature.properties.exutoire_type] || '#27ae60';
+                                    return L.circleMarker(latlng, {
+                                        radius: 10,
+                                        fillColor: color,
+                                        color: '#fff',
+                                        weight: 3,
+                                        opacity: 1,
+                                        fillOpacity: 1
+                                    });
+                                }
+                                return L.marker(latlng);
+                            },
+                            onEachFeature: (feature, layer) => {
+                                if (feature.properties.type === 'bassin_urbain') {
+                                    const typLabels = { step: '🔴 STEP', station: '🔵 Station', ouvrage: '🟣 Ouvrage', rejet: '🟠 Rejet' };
+                                    const typLabel = typLabels[feature.properties.exutoire_type] || '⚪ Exutoire';
+                                    layer.bindTooltip(
+                                        `<b>${feature.properties.nom || 'Bassin Urbain'}</b><br>${typLabel}`,
+                                        { sticky: true }
+                                    );
+
+                                    layer.on('click', function(e) {
+                                        L.DomEvent.stopPropagation(e);
+                                        const cid = feature.properties.cluster_id;
+                                        highlightCluster(cid, clusterLayer);
+                                        // Sync dropdown
+                                        const sel = document.getElementById('bassin-select');
+                                        sel.value = String(cid);
+                                        afficherInfoBassin(cid);
+                                    });
+
+                                    layer.on('mouseover', function() {
+                                        this.setStyle({ fillOpacity: 0.5, weight: 3 });
+                                    });
+                                    layer.on('mouseout', function() {
+                                        this.setStyle({ fillOpacity: 0.3, weight: 2 });
+                                    });
+                                } else if (feature.properties.type === 'exutoire') {
+                                    const typLabels = { step: '🔴 STEP', station: '🔵 Station', ouvrage: '🟣 Ouvrage', rejet: '🟠 Rejet' };
+                                    const typLabel = typLabels[feature.properties.exutoire_type] || '⚪ Exutoire';
+                                    layer.bindTooltip(
+                                        `<b>Exutoire: ${feature.properties.nom}</b><br>${typLabel}`,
+                                        { sticky: true }
+                                    );
+                                } else if (feature.geometry.type === 'LineString') {
+                                    const p = feature.properties;
+                                    layer.bindTooltip(
+                                        `<b>Conduite ${p.conduit_id || ''}</b><br>` +
+                                        `📏 ${p.longueur ? p.longueur.toFixed(1) + ' m' : 'N/A'} &nbsp;|&nbsp; ` +
+                                        `⌀ ${p.diametre || 'N/A'} mm<br>` +
+                                        `Matériau: ${p.materiau || 'N/A'}<br>` +
+                                        `Bassin n° ${p.cluster_id || '?'}`,
+                                        { sticky: true }
+                                    );
+                                }
+                            }
+                        });
+
+                        // Séparer les bassins des tronçons pour la gestion des couches
+                        clusterLayer.eachLayer(layer => {
+                            if (layer.feature.properties.type === 'bassin_urbain') {
+                                layer.addTo(couches.bassins);
+                            } else {
+                                // Tronçons ET exutoires (points) restent sur la couche réseau
+                                layer.addTo(clusterCouche);
+                            }
+                        });
+
+                        _activeClusterLayer = clusterLayer;
+
+                        const nbBassins = clusterData.resultats.filter(r => r.cluster).length;
+                        const nbTroncons = allFeatures.filter(f => f.geometry.type === 'LineString').length;
+                        const nbOrphelins = clusterData.troncons_orphelins || 0;
+
+                        statusDiv.innerHTML = `Détection terminée !<br><b>${nbBassins}</b> bassins identifiés<br><b>${nbTroncons}</b> tronçons connectés<br><span style="color: #e74c3c;"><b>${nbOrphelins}</b> tronçons orphelins</span>`;
+
+                        // Construire le menu déroulant des bassins
+                        peuplerDropdownBassins(clusterData, clusterLayer);
+
+                        // S'assurer que rien n'est surligné au départ
+                        highlightCluster(null, clusterLayer);
+
+                        // Activer la case à cocher des bassins (désactivée par défaut)
+                        const chkBassins = document.getElementById('f-bassins');
+                        const lblBassins = document.getElementById('label-bassins');
+                        chkBassins.disabled = false;
+                        lblBassins.style.color = 'inherit';
+                        lblBassins.style.fontWeight = 'bold';
+
+                        if (clusterLayer.getBounds().isValid()) {
+                            carte.fitBounds(clusterLayer.getBounds(), { padding: [50, 50] });
+                        }
+                    } else {
+                        statusDiv.textContent = 'Aucun cluster détecté';
+                    }
+                })
+                .catch(error => {
+                    console.error('Erreur:', error);
+                    statusDiv.textContent = 'Erreur lors de la détection';
+                })
+                .finally(() => {
+                    btn.disabled = false;
+                    btn.textContent = 'Détecter les bassins urbains';
+                });
+        });
+
+        function highlightCluster(clusterId, geojsonLayer) {
+            // Synchroniser le dropdown si l'appel vient du clic carte
+            const sel = document.getElementById('bassin-select');
+            if (clusterId !== null && sel.value !== String(clusterId)) {
+                sel.value = String(clusterId);
+                afficherInfoBassin(clusterId);
+            }
+
+            geojsonLayer.eachLayer(layer => {
+                const feature = layer.feature;
+                if (!feature) return;
+                if (feature.geometry.type === 'LineString') {
+                    if (clusterId === null || feature.properties.cluster_id === clusterId) {
+                        layer.setStyle({ color: '#f1c40f', weight: 8, opacity: 1 });
+                        layer.bringToFront();
+                    } else {
+                        layer.setStyle({ color: feature.properties.couleur || '#e74c3c', weight: 3, opacity: 0.4 });
+                    }
+                } else if (feature.properties && feature.properties.type === 'bassin_urbain') {
+                    if (clusterId === null || feature.properties.cluster_id === clusterId) {
+                        layer.setStyle({ fillOpacity: 0.45, weight: 3, color: '#f39c12' });
+                    } else {
+                        layer.setStyle({ fillOpacity: 0.15, weight: 1, color: '#27ae60' });
+                    }
+                }
+            });
+        }
+
+        function peuplerDropdownBassins(geojsonData, clusterLayer) {
+            const sel = document.getElementById('bassin-select');
+            sel.innerHTML = '<option value="">-- Choisir un bassin --</option>';
+            _bassinBounds = {};
+
+            // Extraire les bassins (polygones) et construire leurs bounds
+            const bassins = [];
+            geojsonData.resultats.forEach(result => {
+                if (result.geojson && result.geojson.features) {
+                    result.geojson.features.forEach(feature => {
+                        if (feature.properties.type === 'bassin_urbain') {
+                            bassins.push(feature);
+                        }
+                    });
+                }
+            });
+
+            bassins.sort((a, b) => (a.properties.cluster_id || 0) - (b.properties.cluster_id || 0));
+
+            bassins.forEach(f => {
+                const cid = f.properties.cluster_id;
+                const nom = f.properties.nom || `Bassin ${cid}`;
+                const opt = document.createElement('option');
+                opt.value = cid;
+                opt.textContent = nom;
+                sel.appendChild(opt);
+            });
+
+            // Calculer les bounds de chaque bassin depuis le layer Leaflet
+            clusterLayer.eachLayer(layer => {
+                const feature = layer.feature;
+                if (!feature || feature.properties.type !== 'bassin_urbain') return;
+                const cid = feature.properties.cluster_id;
+                try { _bassinBounds[cid] = layer.getBounds(); } catch(e) {}
+            });
+
+            // Afficher la section
+            document.getElementById('bassin-section').style.display = 'block';
+
+            // Écouteur du dropdown
+            sel.addEventListener('change', function() {
+                const cid = this.value;
+
+                // Activer le bouton supprimer SI c'est un bassin manuel
+                const btnDelete = document.getElementById('btn-delete-bassin');
+                if (cid && String(cid).startsWith('M_')) {
+                    btnDelete.disabled = false;
+                    btnDelete.style.color = '#e74c3c';
+                } else {
+                    btnDelete.disabled = true;
+                    btnDelete.style.color = '';
+                }
+
+                if (!cid) {
+                    highlightCluster(null, clusterLayer);
+                    afficherInfoBassin(null);
+                    return;
+                }
+
+                // Si c'est manuel, c'est une chaîne, sinon un int
+                const finalCid = cid.startsWith('M_') ? cid : parseInt(cid);
+                highlightCluster(finalCid, clusterLayer);
+                afficherInfoBassin(finalCid);
+                if (_bassinBounds[cid]) {
+                    carte.fitBounds(_bassinBounds[cid], { padding: [60, 60] });
+                }
+            });
+        }
+
+        function afficherInfoBassin(clusterId) {
+            const infoDiv = document.getElementById('bassin-info');
+            if (!_activeClusterLayer || clusterId === null) {
+                infoDiv.innerHTML = ''; return;
+            }
+            let nb = 0;
+            _activeClusterLayer.eachLayer(layer => {
+                const f = layer.feature;
+                if (f && f.geometry.type === 'LineString' && f.properties.cluster_id === clusterId) nb++;
+            });
+            infoDiv.innerHTML = `📍 ${nb} tronçon(s) dans ce bassin`;
+        }
+
+        // Chargement initial des données
+        chargerDonneesInitiales();
+
+        // Gestion du zoom depuis la légende
+        function zoomToLayer(layerName) {
+            const layer = couches[layerName];
+            if (layer && layer.getBounds && layer.getBounds().isValid()) {
+                carte.fitBounds(layer.getBounds(), { padding: [50, 50] });
+            } else {
+                console.log(`Aucune donnée pour la couche ${layerName}`);
+            }
+        }
+
+        // Modal d'édition
+        let conduitProperties = [];
+        window.editConduit = (index) => {
+            alert('Editing conduit ' + index);
+            openEditModal(conduitProperties[index], 'conduite');
+        };
+        let currentEditProperties = null;
+        let currentEditType = null;
+        let currentEditId = null;
+
+        function openEditModal(properties, type) {
+            console.log('Opening edit modal for:', type, properties);
+            currentEditProperties = properties;
+            currentEditType = type;
+            currentEditId = properties.conduit_id || properties.fid || properties.id;
+
+            const title = type === 'conduite' ? 'Modifier Conduite' : `Modifier ${type.charAt(0).toUpperCase() + type.slice(1)}`;
+            document.getElementById('modal-title').textContent = title;
+
+            const form = document.getElementById('edit-form');
+            form.innerHTML = '';
+
+            // Champs selon le type
+            if (type === 'conduite') {
+                addField(form, 'longueur', 'Longueur (m)', properties.longueur || properties.LONGUEUR || '');
+                addField(form, 'diametre', 'Diamètre (mm)', properties.diametre || properties.DIAMETRE || '');
+                addField(form, 'materiau', 'Matériau', properties.materiau || properties.MATERIAU || '');
+                addField(form, 'f_nom', 'Nom', properties.f_nom || properties.NOM || '');
+            } else if (type === 'regards') {
+                addField(form, 'code', 'Code', properties.code || '');
+                addField(form, 'type_regard', 'Type', properties.type_regard || '');
+                addField(form, 'diametre', 'Diamètre', properties.diametre || '');
+                addField(form, 'profondeur', 'Profondeur', properties.profondeur || '');
+            } else {
+                // Pour stations, step, ouvrages, champs génériques
+                addField(form, 'nom', 'Nom', properties.nom || '');
+                addField(form, 'type', 'Type', properties.type || '');
+            }
+
+            document.getElementById('edit-modal').style.display = 'flex';
+        }
+
+        function addField(form, name, label, value) {
+            const div = document.createElement('div');
+            div.style.marginBottom = '10px';
+            div.innerHTML = `
+                <label style="display: block; margin-bottom: 5px;">${label}:</label>
+                <input type="text" name="${name}" value="${value}" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+            `;
+            form.appendChild(div);
+        }
+
+        document.getElementById('save-btn').addEventListener('click', async () => {
+            const formData = new FormData(document.getElementById('edit-form'));
+            const updateData = {};
+            for (let [key, value] of formData.entries()) {
+                if (value.trim()) {
+                    if (['longueur', 'diametre', 'profondeur'].includes(key)) {
+                        updateData[key] = parseFloat(value);
+                    } else {
+                        updateData[key] = value;
+                    }
+                }
+            }
+
+            const endpoint = currentEditType === 'conduite' ? `/api/v1/network/conduites/${currentEditId}` : `/api/v1/network/regards/${currentEditId}`;
+
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updateData)
+                });
+
+                if (response.ok) {
+                    alert('Modifications enregistrées');
+                    document.getElementById('edit-modal').style.display = 'none';
+                    // Recharger les données pour voir les changements
+                    location.reload();
+                } else {
+                    alert('Erreur lors de la sauvegarde');
+                }
+            } catch (error) {
+                console.error('Erreur:', error);
+                alert('Erreur réseau');
+            }
+        });
+
+        document.getElementById('cancel-btn').addEventListener('click', () => {
+            document.getElementById('edit-modal').style.display = 'none';
+        });
+
+        // Écouteurs pour la légende
+        document.getElementById('legend-conduite').addEventListener('click', () => zoomToLayer('conduites'));
+        document.getElementById('legend-regards').addEventListener('click', () => zoomToLayer('regards'));
+        document.getElementById('legend-stations').addEventListener('click', () => zoomToLayer('stations'));
+        document.getElementById('legend-step').addEventListener('click', () => zoomToLayer('step'));
+        document.getElementById('legend-ouvrages').addEventListener('click', () => zoomToLayer('ouvrages'));
+
+
+
+        // Gestion de la visibilité des couches selon le zoom
+        carte.on('zoomend', function() {
+            const zoom = carte.getZoom();
+            console.log('Zoom level:', zoom);
+
+            // Regards visibles à partir du zoom 10 (ajusté pour grand écran)
+            if (zoom >= 10) {
+                if (!carte.hasLayer(couches.regards)) {
+                    couches.regards.addTo(carte);
+                    document.getElementById('f-regards').checked = true;
+                    console.log('Regards ajoutés');
+                }
+            } else {
+                if (carte.hasLayer(couches.regards)) {
+                    carte.removeLayer(couches.regards);
+                    document.getElementById('f-regards').checked = false;
+                    console.log('Regards retirés');
+                }
+            }
+
+            // Bassins visibles à partir du zoom 12 (si activés)
+            if (zoom >= 12 && document.getElementById('f-bassins').checked) {
+                if (!carte.hasLayer(couches.bassins)) {
+                    couches.bassins.addTo(carte);
+                    console.log('Bassins ajoutés');
+                }
+            } else {
+                if (carte.hasLayer(couches.bassins)) {
+                    carte.removeLayer(couches.bassins);
+                    console.log('Bassins retirés');
+                }
+            }
+        });
+
+        // Appliquer la visibilité initiale au chargement
+        setTimeout(() => {
+            const initialZoom = carte.getZoom();
+            console.log('Zoom initial:', initialZoom);
+            carte.fire('zoomend'); // Déclencher manuellement pour appliquer
+        }, 1000);
+    </script>
+</body>
+
+</html>

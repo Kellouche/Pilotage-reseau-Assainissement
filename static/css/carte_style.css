@@ -91,8 +91,14 @@
             height: calc(100% - 60px); /* Laisser de l'espace pour le header de la sidebar */
         }
 
-        .sidebar.collapsed .sidebar-content {
+        .sidebar.collapsed .sidebar-content,
+        .sidebar.collapsed .sidebar-header-title {
             display: none;
+        }
+
+        .sidebar.collapsed .sidebar-header {
+            justify-content: center !important;
+            padding: 10px 5px !important;
         }
 
         .filters-section {

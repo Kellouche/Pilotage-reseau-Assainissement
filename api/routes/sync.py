@@ -3,13 +3,15 @@ Routes de synchronisation bidirectionnelle.
 Delta sync, poussée de modifications, versioning.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime, timedelta
+import json
 
 from api.database import get_db
 from api import schemas, crud
+from api.websocket import manager
 
 router = APIRouter(prefix="/sync", tags=["Synchronisation"])
 
@@ -64,6 +66,7 @@ def get_delta(
 @router.post("/push", response_model=schemas.SyncAck)
 def push_changes(
     push: schemas.SyncPush,
+    background_tasks: BackgroundTasks,
     user_id: str = "device",
     db: Session = Depends(get_db)
 ):
@@ -88,11 +91,8 @@ def push_changes(
                 continue
 
             if layer == "regards":
-                # Rechercher par code ou id
-                if "id" in changes:
-                    regard = crud.get_regard(db, int(changes["id"]))
-                else:
-                    regard = crud.get_regard_by_code(db, changes["code"])
+                # Utiliser feature_id comme ID du regard
+                regard = crud.get_regard(db, int(change.feature_id))
 
                 if regard:
                     # Update
@@ -144,6 +144,80 @@ def push_changes(
     new_version = crud.get_max_version(db, "regards")
     new_version = max(new_version, crud.get_max_version(db, "conduites"))
 
+    print(f"Push completed: accepted={accepted}, rejected={rejected}")
+
+    # Notifier les clients WebSocket des modifications
+    if accepted > 0:
+        from datetime import datetime
+
+        # Créer un message détaillé pour chaque modification acceptée
+        messages = []
+        change_index = 0
+
+        for change in push.changes:
+            if change_index >= accepted:
+                break
+
+            layer = change.layer
+            feature_id = change.feature_id
+
+            if layer == "regards":
+                try:
+                    regard = crud.get_regard(db, int(feature_id))
+                    if regard:
+                        # Format: Objet : Regard [CODE] [X,Y] -- DateTime
+                        coord_x = regard.longitude if regard.longitude is not None else 0.0
+                        coord_y = regard.latitude if regard.latitude is not None else 0.0
+                        code = regard.code if regard.code else f'ID:{regard.id}'
+                        timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+
+                        message = f"Objet : Regard {code} [{coord_x:.6f},{coord_y:.6f}] -- {timestamp}"
+                        messages.append(message)
+                except Exception as e:
+                    print(f"Erreur récupération regard {feature_id}: {e}")
+
+            elif layer == "conduites":
+                try:
+                    if "id" in change.changes:
+                        conduite = crud.get_canalisation(db, int(change.changes["id"]))
+                    else:
+                        conduite = crud.get_canalisation_by_fid(db, change.changes.get("fid"))
+
+                    if conduite:
+                        # Format avec coordonnées comme pour les regards
+                        from sqlalchemy import func
+                        centroid = db.session.query(func.ST_Centroid(conduite.geom)).scalar()
+                        coord_x = centroid.x if centroid else 0.0
+                        coord_y = centroid.y if centroid else 0.0
+                        fid = conduite.fid if conduite.fid else f'ID:{conduite.id}'
+                        timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+                        message = f"Objet : Conduite {fid} [{coord_x:.6f},{coord_y:.6f}] -- {timestamp}"
+                        messages.append(message)
+                except Exception as e:
+                    print(f"Erreur récupération conduite {feature_id}: {e}")
+
+            change_index += 1
+
+        # Calculer le nombre total de modifications
+    total_modified = len(push.changes)
+
+    # Diffuser le résumé d'abord
+    summary_message = f"Modifications synchronisées: {accepted} acceptées"
+    if total_modified > 1:
+        summary_message += f" ({total_modified} points modifiés)"
+    print(f"Sending broadcast: {summary_message}")
+    background_tasks.add_task(manager.broadcast, summary_message)
+
+    # Puis diffuser chaque message détaillé
+    for message in messages:
+        print(f"Sending broadcast: {message}")
+        background_tasks.add_task(manager.broadcast, message)
+
+        # Message de synthèse
+        summary_message = f"Modifications synchronisées: {accepted} acceptées"
+        print(f"Sending broadcast: {summary_message}")
+        background_tasks.add_task(manager.broadcast, summary_message)
+
     return {
         "accepted": accepted,
         "rejected": rejected,
@@ -155,6 +229,8 @@ def push_changes(
 # ============================================================
 # SESSION SYNC (pour mobile : enregistrer dernier sync)
 # ============================================================
+
+
 
 @router.post("/session")
 def register_sync_session(

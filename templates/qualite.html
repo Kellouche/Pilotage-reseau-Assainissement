@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qualité Réseau - SWMM Platform</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        .app {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            min-height: 100vh;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+
+        .header {
+            background: #16213e;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            opacity: 0.8;
+        }
+
+        .nav {
+            background: #f8f9fa;
+            padding: 16px;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .nav-buttons {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .nav-btn {
+            padding: 8px 16px;
+            background: #16213e;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .nav-btn:hover {
+            background: #0f1419;
+        }
+
+        .nav-btn.active {
+            background: #27ae60;
+        }
+
+        .content {
+            padding: 20px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-left: 4px solid #16213e;
+        }
+
+        .stat-card.score-good { border-left-color: #27ae60; }
+        .stat-card.score-medium { border-left-color: #f39c12; }
+        .stat-card.score-bad { border-left-color: #e74c3c; }
+
+        .stat-title {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            font-weight: bold;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #16213e;
+            margin-bottom: 4px;
+        }
+
+        .stat-subtitle {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .anomalies-section {
+            margin-bottom: 30px;
+        }
+
+        .anomalies-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .anomalies-title {
+            font-size: 20px;
+            color: #16213e;
+            margin: 0;
+        }
+
+        .anomalies-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .anomalie-card {
+            background: white;
+            padding: 16px;
+            border-radius: 8px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .anomalie-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+
+        .anomalie-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #16213e;
+            margin-bottom: 8px;
+        }
+
+        .anomalie-count {
+            font-size: 24px;
+            font-weight: bold;
+            color: #e74c3c;
+            margin-bottom: 4px;
+        }
+
+        .anomalie-description {
+            font-size: 12px;
+            color: #666;
+            line-height: 1.4;
+        }
+
+        .anomalie-severite {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-top: 8px;
+        }
+
+        .severite-mineure { background: #f39c12; color: white; }
+        .severite-majeure { background: #e74c3c; color: white; }
+        .severite-critique { background: #8e44ad; color: white; }
+
+        .details-panel {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: hidden;
+            display: none;
+        }
+
+        .details-header {
+            background: #16213e;
+            color: white;
+            padding: 16px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .details-title {
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .details-toggle {
+            font-size: 12px;
+            opacity: 0.8;
+        }
+
+        .details-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+
+        .details-content.open {
+            max-height: 600px;
+        }
+
+        .anomalies-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .anomalies-table th,
+        .anomalies-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .anomalies-table th {
+            background: #f8f9fa;
+            font-weight: bold;
+            color: #16213e;
+        }
+
+        .anomalies-table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #f5c6cb;
+        }
+
+        .button {
+            padding: 10px 20px;
+            background: #16213e;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 4px;
+        }
+
+        .button:hover {
+            background: #0f1419;
+        }
+
+        .button.secondary {
+            background: #6c757d;
+        }
+
+        .button.secondary:hover {
+            background: #545b62;
+        }
+
+        .chart-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .chart-container canvas {
+            max-width: 100%;
+            height: auto !important;
+            max-height: 300px;
+        }
+
+        .chart-title {
+            font-size: 16px;
+            color: #16213e;
+            margin-bottom: 12px;
+            text-align: center;
+        }
+
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .nav-buttons {
+                flex-direction: column;
+            }
+
+            .anomalies-table {
+                font-size: 12px;
+            }
+
+            .anomalies-table th,
+            .anomalies-table td {
+                padding: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <div class="header">
+            <h1>🔍 Qualité du Réseau d'Assainissement</h1>
+            <p>Analyse des anomalies et scores de qualité</p>
+        </div>
+
+        <div class="nav">
+            <div class="nav-buttons">
+                <button class="nav-btn active" onclick="showSection('overview')">Vue d'ensemble</button>
+                <button class="nav-btn" onclick="showSection('anomalies')">Anomalies détaillées</button>
+                <button class="nav-btn" onclick="showSection('scores')">Scores par commune</button>
+
+                <button class="nav-btn secondary" onclick="exporterCSV()">Exporter CSV</button>
+            </div>
+        </div>
+
+        <div class="content">
+            <div id="loading" class="loading">
+                <div>🔄 Chargement de l'analyse qualité...</div>
+            </div>
+
+            <div id="error" class="error" style="display: none;">
+                <strong>Erreur:</strong> <span id="error-message"></span>
+            </div>
+
+            <div id="overview" class="section">
+                <div class="stats-grid" id="stats-grid">
+                    <!-- Les statistiques seront chargées dynamiquement -->
+                </div>
+
+                <div class="chart-container">
+                    <div class="chart-title">Distribution des anomalies par sévérité</div>
+                    <canvas id="severiteChart" width="300" height="200"></canvas>
+                </div>
+            </div>
+
+            <div id="anomalies" class="section" style="display: none;">
+                <div class="anomalies-section">
+                    <div class="anomalies-header">
+                        <h2 class="anomalies-title">📋 Anomalies détectées</h2>
+                        <div>
+                            <select id="anomalie-filter" onchange="filterAnomalies()">
+                                <option value="all">Toutes les anomalies</option>
+                                <option value="critique">Critiques seulement</option>
+                                <option value="majeure">Majeures et critiques</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="anomalies-summary" id="anomalies-summary">
+                        <!-- Les cartes d'anomalies seront chargées dynamiquement -->
+                    </div>
+
+                    <div id="anomalies-details">
+                        <!-- Les détails des anomalies seront chargés dynamiquement -->
+                    </div>
+                </div>
+            </div>
+
+            <div id="scores" class="section" style="display: none;">
+                <div class="chart-container">
+                    <div class="chart-title">Scores de qualité par commune</div>
+                    <canvas id="communesChart" width="300" height="250"></canvas>
+                </div>
+
+                <div class="details-panel">
+                    <div class="details-header" onclick="toggleDetails('communes-table')">
+                        <div class="details-title">📊 Détail par commune</div>
+                        <div class="details-toggle">▼</div>
+                    </div>
+                    <div class="details-content" id="communes-table">
+                        <table class="anomalies-table">
+                            <thead>
+                                <tr>
+                                    <th>Commune</th>
+                                    <th>Score qualité (%)</th>
+                                    <th>Regards complets</th>
+                                    <th>Total regards</th>
+                                </tr>
+                            </thead>
+                            <tbody id="communes-table-body">
+                                <!-- Les données seront chargées dynamiquement -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_BASE_URL = 'http://127.0.0.1:5001';
+        let currentData = null;
+        let severiteChart = null;
+        let communesChart = null;
+
+        // Initialisation
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Application Qualité Réseau initialisée');
+            chargerAnalyse();
+        });
+
+        // Navigation
+        function showSection(sectionName) {
+            // Masquer toutes les sections
+            document.querySelectorAll('.section').forEach(section => {
+                section.style.display = 'none';
+            });
+
+            // Désactiver tous les boutons
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            // Afficher la section demandée
+            document.getElementById(sectionName).style.display = 'block';
+
+            // Activer le bouton correspondant
+            event.target.classList.add('active');
+        }
+
+        // Chargement des données
+        async function chargerAnalyse() {
+            try {
+                showLoading(true);
+                hideError();
+
+                const response = await fetch(`${API_BASE_URL}/api/v1/qualite/analyse`);
+                if (!response.ok) {
+                    throw new Error(`Erreur HTTP: ${response.status}`);
+                }
+
+                currentData = await response.json();
+                console.log('Données chargées:', currentData);
+
+                afficherStatistiques();
+                afficherAnomalies();
+                afficherScores();
+                creerGraphiques();
+
+                showLoading(false);
+
+            } catch (error) {
+                console.error('Erreur lors du chargement:', error);
+                showError(`Impossible de charger l'analyse: ${error.message}`);
+                showLoading(false);
+            }
+        }
+
+        // Export CSV
+        async function exporterCSV() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/v1/qualite/export-csv`, {
+                    method: 'POST'
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Erreur HTTP: ${response.status}`);
+                }
+
+                const result = await response.json();
+                alert(`✅ Export lancé en arrière-plan!\nFichier: ${result.fichier_destination}`);
+
+            } catch (error) {
+                console.error('Erreur lors de l\'export:', error);
+                showError(`Erreur lors de l'export: ${error.message}`);
+            }
+        }
+
+        // Affichage des statistiques
+        function afficherStatistiques() {
+            if (!currentData || !currentData.statistiques_globales) return;
+
+            const stats = currentData.statistiques_globales;
+            const scores = currentData.scores_qualite;
+
+            const statsGrid = document.getElementById('stats-grid');
+            statsGrid.innerHTML = '';
+
+            // Score global
+            const scoreGlobal = scores.global.score_qualite;
+            let scoreClass = 'score-bad';
+            if (scoreGlobal >= 70) scoreClass = 'score-good';
+            else if (scoreGlobal >= 40) scoreClass = 'score-medium';
+
+            statsGrid.innerHTML += `
+                <div class="stat-card ${scoreClass}">
+                    <div class="stat-title">Score Global Qualité</div>
+                    <div class="stat-value">${scoreGlobal}%</div>
+                    <div class="stat-subtitle">${scores.global.total_elements} éléments analysés</div>
+                </div>
+            `;
+
+            // Nombre d'éléments
+            statsGrid.innerHTML += `
+                <div class="stat-card">
+                    <div class="stat-title">Regards</div>
+                    <div class="stat-value">${stats.nb_regards || 0}</div>
+                    <div class="stat-subtitle">Éléments du réseau</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Conduites</div>
+                    <div class="stat-value">${stats.nb_conduites || 0}</div>
+                    <div class="stat-subtitle">Canalisations</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Communes</div>
+                    <div class="stat-value">${stats.nb_communes || 0}</div>
+                    <div class="stat-subtitle">Territoires couverts</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Anomalies</div>
+                    <div class="stat-value">${scores.global.total_anomalies}</div>
+                    <div class="stat-subtitle">Problèmes détectés</div>
+                </div>
+            `;
+        }
+
+        // Affichage des anomalies
+        function afficherAnomalies() {
+            if (!currentData || !currentData.anomalies) return;
+
+            const anomalies = currentData.anomalies;
+            const summaryDiv = document.getElementById('anomalies-summary');
+
+            summaryDiv.innerHTML = '';
+
+            const typesAnomalies = {
+                'conduites_sans_regards': {
+                    titre: 'Conduites sans regards',
+                    description: 'Conduites dont les extrémités ne sont pas connectées à des regards existants',
+                    severite: 'majeure'
+                },
+                'troncons_orphelins': {
+                    titre: 'Tronçons orphelins',
+                    description: 'Éléments du réseau non connectés au reste du réseau',
+                    severite: 'mineure'
+                },
+                'champs_manquants': {
+                    titre: 'Champs manquants',
+                    description: 'Données obligatoires non saisies (diamètre, longueur, etc.)',
+                    severite: 'majeure'
+                },
+                'geometries_invalides': {
+                    titre: 'Géométries invalides',
+                    description: 'Coordonnées erronées ou hors limites géographiques',
+                    severite: 'majeure'
+                },
+                'pentes_suspectes': {
+                    titre: 'Pentes suspectes',
+                    description: 'Pentes négatives ou excessivement fortes',
+                    severite: 'critique'
+                },
+                'incoherences_amont_aval': {
+                    titre: 'Incohérences de connexion',
+                    description: 'Problèmes de continuité entre conduites connectées',
+                    severite: 'majeure'
+                }
+            };
+
+            for (const [type, liste] of Object.entries(anomalies)) {
+                const config = typesAnomalies[type] || { titre: type, description: 'Anomalie détectée', severite: 'mineure' };
+
+                summaryDiv.innerHTML += `
+                    <div class="anomalie-card" onclick="afficherDetailsAnomalie('${type}')">
+                        <div class="anomalie-title">${config.titre}</div>
+                        <div class="anomalie-count">${liste.length}</div>
+                        <div class="anomalie-description">${config.description}</div>
+                        <span class="anomalie-severite severite-${config.severite}">${config.severite}</span>
+                    </div>
+                `;
+            }
+
+            // Masquer les détails par défaut
+            document.getElementById('anomalies-details').innerHTML = '';
+        }
+
+        // Affichage des détails d'une anomalie
+        async function afficherDetailsAnomalie(typeAnomalie) {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/v1/qualite/anomalies/${typeAnomalie}`);
+                if (!response.ok) {
+                    throw new Error(`Erreur HTTP: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                const detailsDiv = document.getElementById('anomalies-details');
+                detailsDiv.innerHTML = `
+                    <div class="details-panel">
+                        <div class="details-header" onclick="toggleDetails('anomalie-details-content')">
+                            <div class="details-title">📋 Détails: ${data.type_anomalie} (${data.nombre_anomalies} anomalies)</div>
+                            <div class="details-toggle">▼</div>
+                        </div>
+                        <div class="details-content" id="anomalie-details-content">
+                            <div style="padding: 16px;">
+                                <p><strong>Répartition par sévérité:</strong></p>
+                                <ul>
+                                    <li>Critique: ${data.severite_distribution.critique}</li>
+                                    <li>Majeure: ${data.severite_distribution.majeure}</li>
+                                    <li>Mineure: ${data.severite_distribution.mineure}</li>
+                                </ul>
+                            </div>
+                            <table class="anomalies-table">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>FID</th>
+                                        <th>Sévérité</th>
+                                        <th>Détails</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${data.anomalies.slice(0, 50).map(anomalie => `
+                                        <tr>
+                                            <td>${anomalie.id_conduite || anomalie.id_regard || 'N/A'}</td>
+                                            <td>${anomalie.fid || anomalie.code || 'N/A'}</td>
+                                            <td><span class="anomalie-severite severite-${anomalie.severite}">${anomalie.severite}</span></td>
+                                            <td>${genererDetailsAnomalie(anomalie)}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                            ${data.anomalies.length > 50 ? `<p style="padding: 16px; color: #666;">... et ${data.anomalies.length - 50} autres anomalies</p>` : ''}
+                        </div>
+                    </div>
+                `;
+
+                // Ouvrir automatiquement les détails
+                setTimeout(() => toggleDetails('anomalie-details-content'), 100);
+
+            } catch (error) {
+                console.error('Erreur lors du chargement des détails:', error);
+                showError(`Impossible de charger les détails: ${error.message}`);
+            }
+        }
+
+        // Génération des détails d'une anomalie
+        function genererDetailsAnomalie(anomalie) {
+            if (anomalie.champs_manquants) {
+                return `Champs manquants: ${anomalie.champs_manquants.join(', ')}`;
+            }
+            if (anomalie.pente_pourcent) {
+                return `Pente: ${anomalie.pente_pourcent.toFixed(1)}%`;
+            }
+            if (anomalie.difference) {
+                return `Écart: ${anomalie.difference.toFixed(2)}m`;
+            }
+            if (anomalie.probleme) {
+                return anomalie.probleme;
+            }
+            return 'Voir description complète';
+        }
+
+        // Affichage des scores
+        function afficherScores() {
+            if (!currentData || !currentData.scores_qualite) return;
+
+            const scores = currentData.scores_qualite;
+            const tableBody = document.getElementById('communes-table-body');
+
+            tableBody.innerHTML = '';
+
+            if (scores.par_commune) {
+                scores.par_commune
+                    .sort((a, b) => b.score_qualite - a.score_qualite)
+                    .forEach(commune => {
+                        tableBody.innerHTML += `
+                            <tr>
+                                <td>${commune.commune}</td>
+                                <td>${commune.score_qualite}%</td>
+                                <td>${commune.regards_complets}</td>
+                                <td>${commune.total_regards}</td>
+                            </tr>
+                        `;
+                    });
+            }
+        }
+
+        // Création des graphiques
+        function creerGraphiques() {
+            if (!currentData) return;
+
+            // Graphique des sévérités
+            const severiteData = calculerSeveritesGlobales();
+            if (severiteChart) severiteChart.destroy();
+
+            const ctxSeverite = document.getElementById('severiteChart').getContext('2d');
+            severiteChart = new Chart(ctxSeverite, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Mineure', 'Majeure', 'Critique'],
+                    datasets: [{
+                        data: [severiteData.mineure, severiteData.majeure, severiteData.critique],
+                        backgroundColor: ['#f39c12', '#e74c3c', '#8e44ad'],
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                boxWidth: 12,
+                                font: {
+                                    size: 12
+                                }
+                            }
+                        }
+                    },
+                    layout: {
+                        padding: {
+                            top: 10,
+                            bottom: 10
+                        }
+                    }
+                }
+            });
+
+            // Graphique des communes
+            const communesData = currentData.scores_qualite?.par_commune || [];
+            if (communesChart) communesChart.destroy();
+
+            const ctxCommunes = document.getElementById('communesChart').getContext('2d');
+            communesChart = new Chart(ctxCommunes, {
+                type: 'bar',
+                data: {
+                    labels: communesData.map(c => c.commune),
+                    datasets: [{
+                        label: 'Score qualité (%)',
+                        data: communesData.map(c => c.score_qualite),
+                        backgroundColor: communesData.map(c => {
+                            if (c.score_qualite >= 70) return '#27ae60';
+                            if (c.score_qualite >= 40) return '#f39c12';
+                            return '#e74c3c';
+                        }),
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                font: {
+                                    size: 11
+                                }
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                font: {
+                                    size: 10
+                                },
+                                maxRotation: 45
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    layout: {
+                        padding: {
+                            left: 10,
+                            right: 10,
+                            top: 20,
+                            bottom: 10
+                        }
+                    }
+                }
+            });
+        }
+
+        // Calcul des sévérités globales
+        function calculerSeveritesGlobales() {
+            if (!currentData || !currentData.anomalies) return { mineure: 0, majeure: 0, critique: 0 };
+
+            let totalMineure = 0, totalMajeure = 0, totalCritique = 0;
+
+            for (const liste of Object.values(currentData.anomalies)) {
+                for (const anomalie of liste) {
+                    switch (anomalie.severite) {
+                        case 'mineure': totalMineure++; break;
+                        case 'majeure': totalMajeure++; break;
+                        case 'critique': totalCritique++; break;
+                    }
+                }
+            }
+
+            return { mineure: totalMineure, majeure: totalMajeure, critique: totalCritique };
+        }
+
+        // Filtrage des anomalies
+        function filterAnomalies() {
+            const filter = document.getElementById('anomalie-filter').value;
+            const cards = document.querySelectorAll('.anomalie-card');
+
+            cards.forEach(card => {
+                const severite = card.querySelector('.anomalie-severite').textContent.toLowerCase();
+
+                switch (filter) {
+                    case 'critique':
+                        card.style.display = severite === 'critique' ? 'block' : 'none';
+                        break;
+                    case 'majeure':
+                        card.style.display = (severite === 'critique' || severite === 'majeure') ? 'block' : 'none';
+                        break;
+                    default:
+                        card.style.display = 'block';
+                }
+            });
+        }
+
+        // Toggle des détails
+        function toggleDetails(contentId) {
+            const content = document.getElementById(contentId);
+            const toggle = content.previousElementSibling.querySelector('.details-toggle');
+
+            if (content.classList.contains('open')) {
+                content.classList.remove('open');
+                toggle.textContent = '▼';
+            } else {
+                content.classList.add('open');
+                toggle.textContent = '▲';
+            }
+        }
+
+        // Utilitaires d'affichage
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            document.getElementById('error-message').textContent = message;
+            errorDiv.style.display = 'block';
+        }
+
+        function hideError() {
+            document.getElementById('error').style.display = 'none';
+        }
+
+        // Vérification périodique du cache
+        setInterval(async () => {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/v1/qualite/cache/status`);
+                if (response.ok) {
+                    const status = await response.json();
+                    if (!status.analyse_disponible) {
+                        console.log('Cache expiré, rechargement...');
+                        chargerAnalyse();
+                    }
+                }
+            } catch (error) {
+                // Ignorer les erreurs de vérification périodique
+            }
+        }, 30000); // Vérifier chaque 30 secondes
+    </script>
+</body>
+</html>
