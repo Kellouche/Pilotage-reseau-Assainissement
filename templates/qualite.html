@@ -433,7 +433,7 @@
 
     <script>
         // Configuration
-        const API_BASE_URL = 'http://127.0.0.1:5001';
+        const API_BASE_URL = '';
         let currentData = null;
         let severiteChart = null;
         let communesChart = null;
@@ -462,12 +462,16 @@
                         document.getElementById('cache-empty-banner').style.display = 'block';
                     }
                 } else {
-                    // Fallback
-                    await chargerAnalyse(false);
+                    // Si le cache est inaccessible ou non généré, ne pas lancer d'analyse par défaut
+                    showLoading(false);
+                    document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
+                    document.getElementById('cache-empty-banner').style.display = 'block';
                 }
             } catch (e) {
                 console.error('Erreur vérification cache:', e);
-                await chargerAnalyse(false);
+                showLoading(false);
+                document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
+                document.getElementById('cache-empty-banner').style.display = 'block';
             }
         }
 
