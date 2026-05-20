@@ -1,6 +1,6 @@
 
 // Configuration
-const API_BASE_URL = 'http://127.0.0.1:5001';
+const API_BASE_URL = '';
 let map = null;
 let dataGlobal = null;
 let layers = {};
@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('Carte opérationnelle initialisée');
     initMap();
     chargerDonnees().then(() => {
-        if (typeof switchTab === 'function') switchTab('connexions');
+        if (typeof switchTab === 'function') switchTab('connexions', true);
     });
 });
 
@@ -68,26 +68,6 @@ async function chargerDonnees() {
 
         // 1. Charger d'abord les couches de base (rapide)
         await chargerCouchesGeoJSON(data.couches);
-        
-        // 2. Charger les anomalies et scores (en arrière-plan)
-        try {
-            console.log('Fetching anomalies in background...');
-            const anomRes = await fetch(`${API_BASE_URL}/api/v1/qualite/analyse`);
-            const anomData = await anomRes.json();
-            
-            if (typeof buildAnomaliesMaps === 'function') buildAnomaliesMaps(anomData);
-            if (typeof updateAnomaliesLayers === 'function') updateAnomaliesLayers();
-            
-            // Mettre à jour les compteurs (parenthèses) pour tous les onglets
-            Object.keys(tabMappings).forEach(tab => {
-                if (typeof calculateTabStats === 'function') calculateTabStats(tab);
-            });
-            
-            if (typeof updateStats === 'function') updateStats();
-            
-        } catch (error) {
-            console.warn('⚠️ Anomalies non disponibles:', error.message);
-        }
         
         showNotification('Carte prête !', 'success');
         if (typeof updateLegendForZoom === 'function') updateLegendForZoom();
@@ -298,6 +278,183 @@ function showError(msg) {
     }
 }
 
+let diagnosticsLoaded = false;
+let abortController = null;
+let diagnosticInterval = null;
+let diagnosticStartTime = 0;
+
+function lancerDiagnostic(targetTab) {
+    console.log("Démarrage du diagnostic pour :", targetTab);
+    
+    // Afficher la modale bloquante
+    const modal = document.getElementById('diagnostic-modal');
+    if (modal) modal.style.display = 'flex';
+    
+    const progressBar = document.getElementById('diagnostic-progress-bar');
+    const percentText = document.getElementById('diagnostic-percent');
+    const chronoText = document.getElementById('diagnostic-chrono');
+    const statusMsg = document.getElementById('diagnostic-status-msg');
+    
+    if (progressBar) progressBar.style.width = '0%';
+    if (percentText) percentText.textContent = '0%';
+    if (chronoText) chronoText.textContent = 'Temps écoulé : 0.0s';
+    if (statusMsg) statusMsg.textContent = "Initialisation de l'analyse...";
+    
+    // Annuler tout diagnostic précédent
+    if (diagnosticInterval) clearInterval(diagnosticInterval);
+    if (abortController) abortController.abort();
+    
+    abortController = new AbortController();
+    diagnosticStartTime = Date.now();
+    
+    // Lancer le timer pour animer la barre de progression et le chrono
+    diagnosticInterval = setInterval(() => {
+        const elapsedMs = Date.now() - diagnosticStartTime;
+        const elapsedSec = (elapsedMs / 1000).toFixed(1);
+        if (chronoText) chronoText.textContent = `Temps écoulé : ${elapsedSec}s`;
+        
+        // Progression simulée asymptotique (0% -> 95%)
+        let progress = 0;
+        if (elapsedMs < 2000) {
+            progress = (elapsedMs / 2000) * 40; // 0% à 40% en 2s
+        } else if (elapsedMs < 5000) {
+            progress = 40 + ((elapsedMs - 2000) / 3000) * 35; // 40% à 75% en 3s
+        } else {
+            progress = 75 + (1 - Math.exp(-(elapsedMs - 5000) / 10000)) * 20; // asymptotique vers 95%
+        }
+        
+        const progressInt = Math.min(95, Math.floor(progress));
+        if (progressBar) progressBar.style.width = progressInt + '%';
+        if (percentText) percentText.textContent = progressInt + '%';
+        
+        // Messages de statut dynamiques basés sur le temps écoulé
+        let msg = "Initialisation de l'analyse...";
+        if (elapsedMs > 12000) {
+            msg = "Finalisation et calcul des scores...";
+        } else if (elapsedMs > 8000) {
+            msg = "Calcul de la topologie du graphe...";
+        } else if (elapsedMs > 5000) {
+            msg = "Vérification des anomalies de pente...";
+        } else if (elapsedMs > 3000) {
+            msg = "Analyse des connexions amont/aval...";
+        } else if (elapsedMs > 1500) {
+            msg = "Chargement du modèle de réseau...";
+        }
+        if (statusMsg) statusMsg.textContent = msg;
+    }, 100);
+    
+    // Lancer la requête API réelle
+    fetch(`${API_BASE_URL}/api/v1/qualite/analyse`, { signal: abortController.signal })
+        .then(async (response) => {
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return response.json();
+        })
+        .then((anomData) => {
+            console.log("Diagnostic calculé avec succès", anomData);
+            
+            // Stopper le chrono
+            clearInterval(diagnosticInterval);
+            diagnosticInterval = null;
+            
+            // Afficher 100% de progression
+            if (progressBar) progressBar.style.width = '100%';
+            if (percentText) percentText.textContent = '100%';
+            if (statusMsg) statusMsg.textContent = "Calcul terminé !";
+            
+            // Intégrer les anomalies dans la carte
+            if (typeof buildAnomaliesMaps === 'function') buildAnomaliesMaps(anomData);
+            if (typeof updateAnomaliesLayers === 'function') updateAnomaliesLayers();
+            
+            setTimeout(() => {
+                try {
+                    if (typeof populateAnomaliesLists === 'function') populateAnomaliesLists(anomData.anomalies || anomData);
+                } catch (e) {
+                    console.warn('populateAnomaliesLists fallback failed', e);
+                }
+            }, 500);
+            
+            // Mettre à jour les compteurs de tous les onglets
+            Object.keys(tabMappings).forEach(tab => {
+                if (typeof calculateTabStats === 'function') calculateTabStats(tab);
+            });
+            
+            if (typeof updateStats === 'function') updateStats();
+            
+            diagnosticsLoaded = true;
+            
+            // Retirer la classe pending de tous les onglets
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('pending');
+            });
+            
+            // Masquer le modal après un court délai pour effet visuel agréable
+            setTimeout(() => {
+                if (modal) modal.style.display = 'none';
+                showNotification('Diagnostic terminé !', 'success');
+                
+                // Activer l'onglet demandé
+                if (typeof switchTabReal === 'function') {
+                    switchTabReal(targetTab);
+                }
+            }, 400);
+        })
+        .catch((error) => {
+            if (error.name === 'AbortError') {
+                console.log("Opération annulée par l'utilisateur.");
+                return; // Géré par annulerDiagnostic()
+            }
+            console.error("Erreur lors de l'analyse :", error);
+            
+            clearInterval(diagnosticInterval);
+            diagnosticInterval = null;
+            
+            if (modal) modal.style.display = 'none';
+            showNotification(`Erreur d'analyse: ${error.message}`, 'error');
+        });
+}
+
+function annulerDiagnostic() {
+    console.log("Annulation du diagnostic...");
+    
+    if (abortController) {
+        abortController.abort();
+        abortController = null;
+    }
+    
+    if (diagnosticInterval) {
+        clearInterval(diagnosticInterval);
+        diagnosticInterval = null;
+    }
+    
+    const modal = document.getElementById('diagnostic-modal');
+    if (modal) modal.style.display = 'none';
+    
+    showNotification("Opération annulée par l'utilisateur.", 'warning');
+}
+
 function showNotification(msg, type = 'info') {
     console.log(`[${type.toUpperCase()}] ${msg}`);
+    
+    let toast = document.getElementById('toast-notification');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'toast-notification';
+        toast.className = 'notification';
+        document.body.appendChild(toast);
+    }
+    
+    toast.className = `notification notification-${type}`;
+    toast.innerHTML = msg;
+    toast.style.display = 'block';
+    
+    setTimeout(() => {
+        toast.style.opacity = '1';
+    }, 10);
+    
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => {
+            toast.style.display = 'none';
+        }, 300);
+    }, 3000);
 }
