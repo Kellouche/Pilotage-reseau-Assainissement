@@ -37,12 +37,12 @@
                         <div class="filters-section">
                             <div style="margin-bottom: 15px;">
                                 <div style="display: flex; gap: 5px; margin-bottom: 10px;">
-                                    <button class="tab-btn active" onclick="switchTab('connexions')" id="tab-connexions">🔗 Connexions</button>
-                                    <button class="tab-btn" onclick="switchTab('geometrie')" id="tab-geometrie">📐 Géométrie</button>
+                                    <button class="tab-btn pending" onclick="switchTab('connexions')" id="tab-connexions">🔗 Connexions</button>
+                                    <button class="tab-btn pending" onclick="switchTab('geometrie')" id="tab-geometrie">📐 Géométrie</button>
                                 </div>
                                 <div style="display: flex; gap: 5px;">
-                                    <button class="tab-btn" onclick="switchTab('donnees')" id="tab-donnees">📋 Données</button>
-                                    <button class="tab-btn" onclick="switchTab('topologie')" id="tab-topologie">🌐 Topologie</button>
+                                    <button class="tab-btn pending" onclick="switchTab('donnees')" id="tab-donnees">📋 Données</button>
+                                    <button class="tab-btn pending" onclick="switchTab('topologie')" id="tab-topologie">🌐 Topologie</button>
                                 </div>
                             </div>
 
@@ -52,7 +52,7 @@
                                  <div id="content-connexions" class="tab-content active">
                                      <div class="diagnostic-panel">
                                          <h4>🔗 Diagnostic Connexions</h4>
-                                         <div id="stats-connexions">Chargement...</div>
+                                          <div id="stats-connexions">Veuillez cliquer sur un diagnostic pour lancer l'analyse.</div>
                                          
                                          <div class="filter-group" style="margin: 15px 0;">
                                              <label><input type="checkbox" class="filter-checkbox" id="type-conduites_sans_regards" checked> <strong>Connexions manquantes (Amont/Aval)</strong> <span id="count-conduites_sans_regards"></span></label>
@@ -77,7 +77,7 @@
                                  <div id="content-geometrie" class="tab-content">
                                      <div class="diagnostic-panel">
                                          <h4>📐 Diagnostic Géométrie</h4>
-                                         <div id="stats-geometrie">Chargement...</div>
+                                          <div id="stats-geometrie">Veuillez cliquer sur un diagnostic pour lancer l'analyse.</div>
                                          
                                          <div class="filter-group" style="margin: 15px 0;">
                                              <label><input type="checkbox" class="filter-checkbox" id="type-geometries_invalides" checked> <strong>Géométries invalides</strong> <span id="count-geometries_invalides"></span></label>
@@ -102,7 +102,7 @@
                                  <div id="content-donnees" class="tab-content">
                                      <div class="diagnostic-panel">
                                          <h4>📋 Diagnostic Données</h4>
-                                         <div id="stats-donnees">Chargement...</div>
+                                          <div id="stats-donnees">Veuillez cliquer sur un diagnostic pour lancer l'analyse.</div>
                                          
                                          <div class="filter-group" style="margin: 15px 0;">
                                              <label><input type="checkbox" class="filter-checkbox" id="type-champs_manquants" checked> <strong>Champs manquants</strong> <span id="count-champs_manquants"></span></label>
@@ -116,20 +116,27 @@
                                          </div>
 
                                          <div style="display: flex; gap: 5px;">
-                                             <button onclick="applyFilters()" class="action-btn" style="background: #4caf50;">✅ Filtrer</button>
-                                             <button onclick="zoomOnTabAnomalies('donnees')" class="action-btn">🔍 Zoom</button>
-                                         </div>
-                                     </div>
-                                 </div>
+                                              <button onclick="applyFilters()" class="action-btn" style="background: #4caf50;">✅ Filtrer</button>
+                                              <button onclick="zoomOnTabAnomalies('donnees')" class="action-btn">🔍 Zoom</button>
+                                          </div>
+                                      </div>
+                                  </div>
 
-                              <!-- Onglet Topologie -->
+                                  <!-- Onglet Topologie -->
                                   <div id="content-topologie" class="tab-content">
                                       <div class="diagnostic-panel">
                                           <h4>🌐 Diagnostic Topologie</h4>
-                                          <div id="stats-topologie">Chargement...</div>
+                                           <div id="stats-topologie">Veuillez cliquer sur un diagnostic pour lancer l'analyse.</div>
                                           
                                           <div class="filter-group" style="margin: 15px 0;">
                                               <label><input type="checkbox" class="filter-checkbox" id="type-troncons_orphelins" checked> <strong>Tronçons orphelins</strong> <span id="count-troncons_orphelins"></span></label>
+                                          </div>
+                                          
+                                          <div id="list-container-topologie" class="anomalies-list-container" style="margin: 15px 0; display: none;">
+                                              <label style="font-size: 11px; color: #bdc3c7;">Aller à l'anomalie :</label>
+                                              <select id="select-anomalies-topologie" onchange="zoomToAnomalie(this.value)" class="anomalie-select" style="width: 100%; padding: 8px; border-radius: 4px; background: #0f3460; color: white; border: 1px solid #16213e; font-size: 12px; cursor: pointer;">
+                                                  <option value="">-- Sélectionner --</option>
+                                              </select>
                                           </div>
 
                                           <div style="display: flex; gap: 5px;">
@@ -196,5 +203,70 @@
         <script src="/static/js/carte_core.js"></script>
     <script src="/static/js/carte_anomalies.js"></script>
     <script src="/static/js/carte_ui.js"></script>
+
+    <!-- Modal de correction -->
+    <div id="correction-modal" class="modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center;">
+        <div class="modal-content" style="background:#fff;border-radius:8px;padding:24px;max-width:500px;width:90%;box-shadow:0 8px 30px rgba(0,0,0,0.3);color:#333;max-height:80vh;overflow-y:auto;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                <h3 style="margin:0;color:#16213e;">🔧 Correction d'anomalie</h3>
+                <button onclick="closeCorrectionModal()" style="background:none;border:none;font-size:24px;cursor:pointer;color:#999;">&times;</button>
+            </div>
+            <p id="correction-target-id" style="font-weight:bold;margin-bottom:12px;padding:8px;background:#f5f5f5;border-radius:4px;">Cible : --</p>
+
+            <!-- Proposition terrain / Suggestion -->
+            <div id="hybrid-suggestion-box" style="display:none;margin-bottom:8px;padding:12px;background:#e8f5e9;border-radius:4px;border-left:4px solid #4caf50;">
+                <strong style="color:#2e7d32;">💡 Proposition terrain</strong>
+                <div id="hybrid-suggestion-content" style="margin-top:4px;">Chargement...</div>
+                <div style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end;">
+                    <button onclick="applyHybridSuggestion()" id="apply-suggestion-btn" style="background:#4caf50;color:#fff;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;">Appliquer</button>
+                    <button type="button" onclick="drawCurrentProfile()" style="background:#2196f3;color:#fff;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;">Tracer profil</button>
+                </div>
+            </div>
+
+            <!-- Profil graphique -->
+            <div id="profile-container" style="margin-bottom:12px;display:none;">
+                <canvas id="profile-canvas" width="460" height="180" style="width:100%;background:#fff;border:1px solid #eee;border-radius:4px;"></canvas>
+                <div id="profile-legend" style="font-size:12px;color:#555;margin-top:6px;"></div>
+            </div>
+
+            <form id="correction-form" onsubmit="return false;">
+                <div style="margin-bottom:12px;">
+                    <label style="display:block;margin-bottom:4px;font-weight:bold;">Nœud amont :</label>
+                    <input type="text" id="correction-amont" class="correction-input" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box;">
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label style="display:block;margin-bottom:4px;font-weight:bold;">Nœud aval :</label>
+                    <input type="text" id="correction-aval" class="correction-input" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box;">
+                </div>
+                <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+                    <button type="button" onclick="closeCorrectionModal()" style="background:#999;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;">Annuler</button>
+                    <button type="button" onclick="applyManualCorrection()" style="background:#16213e;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;">✅ Corriger</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- Modal de Diagnostic/Analyse en cours (Bloquant avec chrono et barre de progression) -->
+    <div id="diagnostic-modal" class="modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:99999;align-items:center;justify-content:center;">
+        <div class="modal-content" style="background:#16213e;border-radius:12px;padding:30px;max-width:450px;width:90%;box-shadow:0 10px 40px rgba(0,0,0,0.5);color:white;text-align:center;border:1px solid #0f3460;">
+            <h3 style="margin:0 0 15px 0;font-size:18px;color:#4ade80;">⚙️ Diagnostic du réseau en cours</h3>
+            <p id="diagnostic-status-msg" style="font-size:14px;color:#e5e7eb;margin-bottom:20px;">Initialisation de l'analyse...</p>
+            
+            <!-- Barre de progression -->
+            <div style="width:100%;background:#0f3460;height:12px;border-radius:6px;overflow:hidden;margin-bottom:15px;border:1px solid #1f4068;">
+                <div id="diagnostic-progress-bar" style="width:0%;height:100%;background:linear-gradient(90deg, #4ade80, #3498db);transition:width 0.1s linear;border-radius:6px;"></div>
+            </div>
+            
+            <!-- Chronomètre et pourcentage -->
+            <div style="display:flex;justify-content:space-between;font-size:12px;color:#bdc3c7;margin-bottom:25px;padding:0 5px;">
+                <span id="diagnostic-chrono">Temps écoulé : 0.0s</span>
+                <span id="diagnostic-percent">0%</span>
+            </div>
+            
+            <!-- Bouton d'annulation -->
+            <button id="btn-abort-diagnostic" onclick="annulerDiagnostic()" style="background:#e74c3c;color:white;border:none;padding:10px 24px;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;transition:background 0.2s;box-shadow:0 4px 6px rgba(0,0,0,0.15);">
+                ❌ Annuler l'opération
+            </button>
+        </div>
+    </div>
 </body>
 </html>
