@@ -8,44 +8,6 @@ let measureLine = null;
 let measureMarker = null;
 let anomaliesMode = false;
 
-function toggleSidebar() {
-    const sidebar = document.getElementById('sidebar');
-    if (sidebar) sidebar.classList.toggle('collapsed');
-}
-
-function centerOnData() {
-    const layers = [regardsLayer, conduitesLayer, rejetsLayer, stationsLayer, ouvragesLayer].filter(l => l && map.hasLayer(l));
-    if (layers.length === 0) return;
-    
-    const bounds = L.latLngBounds([]);
-    layers.forEach(layer => {
-        if (layer.getBounds) bounds.extend(layer.getBounds());
-        else layer.eachLayer(m => bounds.extend(m.getLatLng ? m.getLatLng() : m.getBounds()));
-    });
-    
-    if (bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20] });
-}
-
-function updateLegendForZoom() {
-    const zoom = map.getZoom();
-    const shouldShowRegards = zoom >= 16;
-    const shouldShowConduites = zoom >= 15;
-    const shouldShowOuvrages = zoom >= 13;
-    
-    if (regardsLayer) {
-        if (shouldShowRegards) { if (!map.hasLayer(regardsLayer)) map.addLayer(regardsLayer); }
-        else { if (map.hasLayer(regardsLayer)) map.removeLayer(regardsLayer); }
-    }
-    if (conduitesLayer) {
-        if (shouldShowConduites) { if (!map.hasLayer(conduitesLayer)) map.addLayer(conduitesLayer); }
-        else { if (map.hasLayer(conduitesLayer)) map.removeLayer(conduitesLayer); }
-    }
-    if (stationsLayer) {
-        if (zoom >= 12) { if (!map.hasLayer(stationsLayer)) map.addLayer(stationsLayer); }
-        else { if (map.hasLayer(stationsLayer)) map.removeLayer(stationsLayer); }
-    }
-}
-
 function updateSymbolSizes() {
     const zoom = map.getZoom();
     const radius = Math.max(2, Math.min(6, zoom - 10));
