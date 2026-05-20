@@ -15,8 +15,7 @@ from config.settings import APP_NAME, APP_VERSION, APP_DESCRIPTION
 from api.database import init_db, get_db
 from api import schemas, crud
 
-# Import des routes
-from api.routes import network, simulations, sync, clusters, qualite
+from api.routes import network, simulations, sync, clusters, qualite, corrections
 
 # ============================================================
 # LIFESPAN (démarrage/arrêt)
@@ -42,7 +41,17 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"[API] ERREUR warmup graphe: {e}")
 
+    # Warm-up asynchrone des couches GeoJSON
+    async def warmup_layers():
+        try:
+            print("[API] Warm-up du cache des couches GeoJSON...")
+            await asyncio.to_thread(get_layers)
+            print("[API] Cache des couches GeoJSON prêt ✓")
+        except Exception as e:
+            print(f"[API] ERREUR warmup couches: {e}")
+
     asyncio.create_task(warmup_graph())
+    asyncio.create_task(warmup_layers())
     yield
     print("[API] Arrêt de l'API...")
 
@@ -59,7 +68,20 @@ app = FastAPI(
 )
 
 # Montage des fichiers statiques (JS, CSS, Images)
+# Middleware pour forcer le rechargement des fichiers JS (pas de mise en cache navigateur)
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
+
+class NoCacheJSMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: StarletteRequest, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/static/js/") and request.url.path.endswith(".js"):
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+        return response
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
+app.add_middleware(NoCacheJSMiddleware)
 
 # CORS
 origins = [
@@ -144,9 +166,15 @@ def get_map():
 # API ENDPOINTS
 # ============================================================
 
+_LAYERS_CACHE = None
+
 @app.get("/api/v1/layers")
 def get_layers():
-    """Retourne les données GeoJSON des couches du réseau."""
+    """Retourne les données GeoJSON des couches du réseau (avec cache mémoire)."""
+    global _LAYERS_CACHE
+    if _LAYERS_CACHE is not None:
+        return _LAYERS_CACHE
+
     from pathlib import Path
     import geopandas as gpd
 
@@ -189,6 +217,7 @@ def get_layers():
             result["couches"][key] = {"type": "FeatureCollection", "features": []}
             result["compteurs"][key] = 0
 
+    _LAYERS_CACHE = result
     return result
 
 
@@ -254,3 +283,4 @@ app.include_router(simulations.router, prefix="/api/v1", tags=["Simulations"])
 app.include_router(sync.router, prefix="/api/v1", tags=["Synchronisation"])
 app.include_router(clusters.router, prefix="/api/v1", tags=["Clusters"])
 app.include_router(qualite.router, prefix="/api/v1", tags=["Qualité réseau"])
+app.include_router(corrections.router, prefix="/api/v1/corrections", tags=["Corrections"])
