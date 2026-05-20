@@ -80,11 +80,60 @@ async function chargerDonnees() {
     }
 }
 
-function getConduiteStyle(feature) {
-    const props = feature.properties || {};
+let precomputedConduiteStyles = {};
+
+function precomputeConduiteStyles() {
+    precomputedConduiteStyles = {};
+    if (!diagnosticsLoaded || !anomaliesData) return;
+
     const activeTypesInTab = tabMappings[currentTab] || [];
     
-    // Recherche agressive d'un identifiant correspondant
+    // Cache checkbox states to avoid DOM queries inside the loop
+    const activeGroupsChecked = {};
+    activeTypesInTab.forEach(group => {
+        const cb = document.getElementById(`type-${group}`);
+        activeGroupsChecked[group] = cb ? cb.checked : false;
+    });
+
+    const severities = { 'critique': 3, 'majeure': 2, 'mineure': 1 };
+    const conduitActiveAnoms = {};
+
+    activeTypesInTab.forEach(group => {
+        if (activeGroupsChecked[group]) {
+            const groupAnoms = anomaliesData[group] || [];
+            groupAnoms.forEach(a => {
+                const aid = (a.id_conduite || a.fid || a.id_conduite1 || a.id_conduite2 || a.fid1 || a.fid2 || '').toString();
+                if (aid) {
+                    if (!conduitActiveAnoms[aid]) {
+                        conduitActiveAnoms[aid] = [];
+                    }
+                    conduitActiveAnoms[aid].push(a);
+                }
+            });
+        }
+    });
+
+    for (const [fid, anoms] of Object.entries(conduitActiveAnoms)) {
+        if (anoms.length > 0) {
+            let maxSev = 'mineure';
+            anoms.forEach(a => {
+                if (severities[a.severite] > severities[maxSev]) {
+                    maxSev = a.severite;
+                }
+            });
+            const color = typeof getAnomalieColor === 'function' ? getAnomalieColor(maxSev) : '#f44336';
+            precomputedConduiteStyles[fid] = { color: color, weight: 6, opacity: 1 };
+        }
+    }
+}
+
+function getConduiteStyle(feature) {
+    if (!diagnosticsLoaded) {
+        return { color: '#bdc3c7', weight: 2, opacity: 0.6 };
+    }
+
+    const props = feature.properties || {};
+    
     const idCandidates = [
         feature.id,
         props.fid, props.FID, props.id, props.ID, 
@@ -92,51 +141,15 @@ function getConduiteStyle(feature) {
         props.ID_CANALIS, props.ID_CONDUIT
     ];
     
-    let matchedFid = null;
     for (let cand of idCandidates) {
         if (cand !== undefined && cand !== null && cand !== '') {
-            let sCand = cand.toString();
-            if (typeof conduiteAnomaliesMap !== 'undefined' && conduiteAnomaliesMap[sCand]) {
-                matchedFid = sCand;
-                break;
+            const sCand = cand.toString();
+            if (precomputedConduiteStyles[sCand]) {
+                return precomputedConduiteStyles[sCand];
             }
         }
     }
     
-    if (matchedFid) {
-        console.log(`Debug: Analyse anomalie pour ${matchedFid}`);
-        const anomInfo = conduiteAnomaliesMap[matchedFid];
-        
-        // On ne regarde QUE les anomalies qui appartiennent à l'onglet courant ET sont cochées
-        const visibleAnoms = [];
-        if (anomaliesData) {
-            activeTypesInTab.forEach(group => {
-                const cb = document.getElementById(`type-${group}`);
-                if (cb && cb.checked) {
-                    const groupAnoms = anomaliesData[group] || [];
-                    // Chercher les anomalies de ce groupe pour cette conduite
-                    groupAnoms.forEach(a => {
-                        const aid = (a.id_conduite || a.fid || a.id_conduite1 || a.id_conduite2 || a.fid1 || a.fid2 || '').toString();
-                        if (aid === matchedFid) visibleAnoms.push(a);
-                    });
-                }
-            });
-        }
-        
-        if (visibleAnoms.length > 0) {
-            // Calculer la sévérité max parmi les anomalies VISIBLES uniquement
-            let maxSev = 'mineure';
-            const severities = { 'critique': 3, 'majeure': 2, 'mineure': 1 };
-            visibleAnoms.forEach(a => {
-                if (severities[a.severite] > severities[maxSev]) maxSev = a.severite;
-            });
-            
-            const color = typeof getAnomalieColor === 'function' ? getAnomalieColor(maxSev) : '#f44336';
-            return { color: color, weight: 6, opacity: 1 };
-        }
-    }
-    
-    // Style par défaut (Neutre pour ne pas confondre avec les anomalies)
     return { color: '#bdc3c7', weight: 2, opacity: 0.6 };
 }
 

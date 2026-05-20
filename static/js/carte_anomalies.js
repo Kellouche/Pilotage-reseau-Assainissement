@@ -5,6 +5,13 @@ let anomalousRegards = new Set();
 let anomaliesData = {};
 let anomaliesLayers = {};
 
+// Highlight used when zooming to a conduite/regard
+let currentGeometryHighlight = null;
+
+// Correction modal state
+let currentCorrectionId = null;
+let currentCorrectionType = null;
+
 function applyFilters() {
     console.log('Applying filters manually...');
     if (typeof updateLayersVisibility === 'function') updateLayersVisibility();
@@ -108,6 +115,10 @@ function buildAnomaliesMaps(data) {
 
 function updateAnomaliesLayers() {
     if (!anomaliesData) return;
+
+    if (typeof precomputeConduiteStyles === 'function') {
+        precomputeConduiteStyles();
+    }
 
     // 1. Mettre à jour le style des conduites (Couleurs de diagnostic)
     // RÈGLE : Si la couche globale "Conduite" est décochée, on ne colorie rien
@@ -391,8 +402,46 @@ function zoomToVisibleAnomalies() {
     }
 }
 
+function findLayerById(layer, id) {
+    if (!layer || id === undefined || id === null) return null;
+    let found = null;
+    layer.eachLayer(l => {
+        try {
+            const props = (l.feature && l.feature.properties) || {};
+            const candidates = [l.feature && l.feature.id, props.fid, props.FID, props.id, props.ID, props.ID_AMONT, props.ID_AVAL, props.code, props.CODE, props.LINEAIRE];
+            for (let c of candidates) {
+                if (c !== undefined && c !== null && c.toString() === id.toString()) {
+                    found = l; break;
+                }
+            }
+        } catch (e) {}
+    });
+    return found;
+}
+
+function getAnomalieConduiteIds(anom) {
+    return [anom.id_conduite, anom.fid, anom.code, anom.id_conduite1, anom.fid1, anom.id_conduite2, anom.fid2, anom.ID_AMONT, anom.ID_AVAL].filter(v => v !== undefined && v !== null && v !== '');
+}
+
+function findConduiteByCoords(lat, lng) {
+    if (!conduitesLayer) return null;
+    let best = null; let bestDist = Infinity;
+    const target = [lat, lng];
+    conduitesLayer.eachLayer(l => {
+        try {
+            const bounds = l.getBounds && l.getBounds();
+            if (bounds) {
+                const c = bounds.getCenter();
+                const dlat = c.lat - lat; const dlng = c.lng - lng; const d = Math.sqrt(dlat*dlat + dlng*dlng);
+                if (d < bestDist) { bestDist = d; best = (l.feature && (l.feature.properties && (l.feature.properties.fid || l.feature.properties.FID || l.feature.properties.id)) ) || best; }
+            }
+        } catch(e) {}
+    });
+    return best;
+}
+
 function populateAnomaliesLists(data) {
-    console.log('Populating anomalies lists with data:', Object.keys(data));
+    console.log('Populating anomalies lists with data:', Object.keys(data || {}));
     const tabMappings = {
         'connexions': ['conduites_sans_regards', 'incoherences_amont_aval', 'troncons_orphelins'],
         'geometrie': ['geometries_invalides', 'pentes_suspectes'],
@@ -413,56 +462,145 @@ function populateAnomaliesLists(data) {
         let count = 0;
         types.forEach(type => {
             const anoms = data[type];
-            if (Array.isArray(anoms)) {
-                console.log(`Tab ${tab}: found ${anoms.length} anomalies of type ${type}`);
-                anoms.forEach(anom => {
-                    const coords = findAnomalieCoords(anom);
-                    if (coords) {
-                        count++;
-                        const id = anom.fid || anom.code || anom.identifiant || anom.id_conduite || 'Inconnu';
-                        const option = document.createElement('option');
-                        option.value = `${coords[0]},${coords[1]}`;
-                        
-                        let label = `[${(anom.severite || 'info').toUpperCase()}] ${getAnomalieTitre(anom)} - ID: ${id}`;
-                        if (anom.type === 'incoherence_profondeur') {
-                            label = `[Saut] FID ${anom.fid1} / ${anom.fid2}`;
+            if (!Array.isArray(anoms)) return;
+
+            console.log(`Tab ${tab}: found ${anoms.length} anomalies of type ${type}`);
+            anoms.forEach(anom => {
+                // Try to find coords from anomaly, otherwise try to locate feature by id in layers
+                let coords = findAnomalieCoords(anom);
+                if (!coords) {
+                    try {
+                        const candidateIds = getAnomalieConduiteIds(anom);
+                        for (const cid of candidateIds) {
+                            const layerFound = (typeof findLayerById === 'function') ? (findLayerById(conduitesLayer, cid) || findLayerById(regardsLayer, cid)) : null;
+                            if (layerFound) {
+                                if (layerFound.getBounds) {
+                                    const c = layerFound.getBounds().getCenter();
+                                    coords = [c.lat, c.lng];
+                                } else if (layerFound.getLatLng) {
+                                    const ll = layerFound.getLatLng();
+                                    coords = [ll.lat, ll.lng];
+                                }
+                                if (coords) break;
+                            }
                         }
-                        
-                        option.textContent = label;
-                        select.appendChild(option);
-                    } else {
-                        // console.warn(`Could not find coords for anomalie ${anom.type} / ${anom.fid || anom.code}`);
-                    }
-                });
-            }
+                    } catch (e) { /* ignore */ }
+                }
+
+                const id = (typeof normalizeId === 'function') ? (normalizeId(anom.fid || anom.code || anom.identifiant || anom.id_conduite || anom.fid1) || 'Inconnu') : (anom.fid || anom.code || anom.identifiant || anom.id_conduite || anom.fid1 || 'Inconnu');
+                const option = document.createElement('option');
+                if (coords) {
+                    option.value = `${id}|${coords[0]},${coords[1]}`;
+                } else {
+                    option.value = `${id}`;
+                }
+
+                let label = `[${(anom.severite || 'info').toUpperCase()}] ${getAnomalieTitre(anom)} - ID: ${id}`;
+                if (anom.type === 'incoherence_profondeur') {
+                    label = `[Saut] FID ${anom.fid1 || '?'} / ${anom.fid2 || '?'} `;
+                }
+
+                option.textContent = label;
+                select.appendChild(option);
+                count++;
+            });
         });
 
         console.log(`Tab ${tab}: total anomalies with coords = ${count}`);
-        // Afficher le conteneur seulement s'il y a des anomalies
         container.style.display = count > 0 ? 'block' : 'none';
     });
 }
 
-function zoomToAnomalie(coordsStr) {
-    if (!coordsStr) return;
-    const [lat, lng] = coordsStr.split(',').map(Number);
-    
-    console.log(`Zooming to anomalie at ${lat}, ${lng}`);
-    map.setView([lat, lng], 18);
-    
-    // Attendre un peu que le zoom se termine pour ouvrir le popup
-    setTimeout(() => {
-        Object.values(anomaliesLayers).forEach(layer => {
-            if (typeof layer.eachLayer === 'function') {
-                layer.eachLayer(marker => {
-                    if (typeof marker.getLatLng === 'function') {
-                        const ll = marker.getLatLng();
-                        if (Math.abs(ll.lat - lat) < 0.0001 && Math.abs(ll.lng - lng) < 0.0001) {
-                            marker.openPopup();
-                        }
+function zoomToAnomalie(valueStr) {
+    if (!valueStr) return;
+
+    // value can be "id|lat,lng" or "lat,lng" or just an id
+    let targetId = null;
+    let lat = null, lng = null;
+
+    if (valueStr.includes('|')) {
+        const parts = valueStr.split('|');
+        targetId = parts[0];
+        const coords = parts[1].split(',').map(Number);
+        if (coords.length === 2) { lat = coords[0]; lng = coords[1]; }
+    } else if (valueStr.includes(',')) {
+        const coords = valueStr.split(',').map(Number);
+        if (coords.length === 2) { lat = coords[0]; lng = coords[1]; }
+    } else {
+        targetId = valueStr;
+    }
+
+    if (lat !== null && lng !== null) {
+        map.setView([lat, lng], 18);
+    }
+
+    // Nettoyer ancien highlight
+    if (currentGeometryHighlight && map.hasLayer(currentGeometryHighlight)) {
+        map.removeLayer(currentGeometryHighlight);
+        currentGeometryHighlight = null;
+    }
+
+    // Si on a un ID, tenter de trouver la géométrie et la surligner
+    let foundLayer = null;
+    if (targetId && typeof findLayerById === 'function') {
+        // try exact find
+        foundLayer = findLayerById(conduitesLayer, targetId) || findLayerById(regardsLayer, targetId);
+        // fallback: try numeric comparisons or property-based match
+        if (!foundLayer && conduitesLayer && conduitesLayer.eachLayer) {
+            conduitesLayer.eachLayer(l => {
+                try {
+                    const p = l.feature && l.feature.properties || {};
+                    const candidates = [p.fid, p.FID, p.id, p.ID, p.ID_AMONT, p.ID_AVAL, p.CODE, p.code, l.feature && l.feature.id];
+                    for (let c of candidates) {
+                        if (c !== undefined && c !== null && c.toString() === targetId.toString()) { foundLayer = l; break; }
                     }
-                });
+                } catch(e) {}
+            });
+        }
+
+        if (foundLayer) {
+            if (foundLayer.getLatLngs) {
+                currentGeometryHighlight = L.polyline(foundLayer.getLatLngs(), { color: '#ff0000', weight: 12, opacity: 0.8, dashArray: '10,15' }).addTo(map);
+            } else if (foundLayer.getLatLng) {
+                currentGeometryHighlight = L.circleMarker(foundLayer.getLatLng(), { radius: 20, color: '#ff0000', weight: 5, opacity: 0.9, fillColor: 'transparent' }).addTo(map);
             }
-        });
+        }
+
+        // Toujours tenter d'ouvrir la modal de correction (fallback si aucune géométrie trouvée)
+        try {
+            setTimeout(() => {
+                if (typeof openCorrectionModal === 'function') {
+                    openCorrectionModal(targetId, 'conduite');
+                }
+            }, 250);
+        } catch(e) { console.warn('openCorrectionModal failed', e); }
+    } else if (targetId) {
+        // if we only have an id and not found, still try open modal
+        try { setTimeout(() => { if (typeof openCorrectionModal === 'function') openCorrectionModal(targetId, 'conduite'); }, 250); } catch(e) {}
+    }
+
+    // Attendre un peu que le zoom se termine pour ouvrir le popup si un marqueur ponctuel existe
+    setTimeout(() => {
+        let popupOpened = false;
+        if (lat !== null && lng !== null) {
+            Object.values(anomaliesLayers).forEach(layer => {
+                if (typeof layer.eachLayer === 'function') {
+                    layer.eachLayer(marker => {
+                        if (typeof marker.getLatLng === 'function') {
+                            const ll = marker.getLatLng();
+                            if (Math.abs(ll.lat - lat) < 0.0001 && Math.abs(ll.lng - lng) < 0.0001) {
+                                marker.openPopup();
+                                popupOpened = true;
+                            }
+                        }
+                    });
+                }
+            });
+        }
+
+        // Si pas de popup mais surlignage existant, ouvrir une bulle temporaire
+        if (!popupOpened && currentGeometryHighlight) {
+            try { currentGeometryHighlight.bindPopup(`<b>Objet ciblé : ${targetId || 'Inconnu'}</b>`).openPopup(); } catch(e) {}
+        }
     }, 500);
 }
