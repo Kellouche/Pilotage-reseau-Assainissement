@@ -30,6 +30,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initMap();
     chargerDonnees().then(() => {
         if (typeof switchTab === 'function') switchTab('connexions', true);
+        chargerDiagnosticDepuisCacheSiDisponible();
     });
 });
 
@@ -77,6 +78,59 @@ async function chargerDonnees() {
         console.error('❌ Erreur lors du chargement:', error);
         showError(`Impossible de charger les données: ${error.message}`);
         showLoading(false);
+    }
+}
+
+async function chargerDiagnosticDepuisCacheSiDisponible() {
+    try {
+        console.log("Vérification de la disponibilité d'un cache de diagnostic...");
+        const response = await fetch(`${API_BASE_URL}/api/v1/qualite/cache/status`);
+        if (!response.ok) return;
+        
+        const status = await response.json();
+        if (status.analyse_disponible) {
+            console.log("Un diagnostic est déjà disponible en cache. Chargement silencieux...");
+            const anomRes = await fetch(`${API_BASE_URL}/api/v1/qualite/analyse`);
+            if (!anomRes.ok) return;
+            
+            const anomData = await anomRes.json();
+            
+            // Stocker les données globalement pour que les autres modules y accèdent
+            anomaliesData = anomData.anomalies || anomData;
+            
+            // Intégrer les anomalies dans la carte et l'UI sans bloquer
+            if (typeof buildAnomaliesMaps === 'function') buildAnomaliesMaps(anomData);
+            if (typeof updateAnomaliesLayers === 'function') updateAnomaliesLayers();
+            
+            setTimeout(() => {
+                try {
+                    if (typeof populateAnomaliesLists === 'function') populateAnomaliesLists(anomData.anomalies || anomData);
+                } catch (e) {
+                    console.warn('populateAnomaliesLists failed', e);
+                }
+            }, 500);
+            
+            // Mettre à jour les compteurs de tous les onglets
+            Object.keys(tabMappings).forEach(tab => {
+                if (typeof calculateTabStats === 'function') calculateTabStats(tab);
+            });
+            
+            if (typeof updateStats === 'function') updateStats();
+            
+            diagnosticsLoaded = true;
+            
+            // Retirer la classe pending de tous les onglets car ils sont chargés !
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('pending');
+            });
+            
+            console.log("Cache de diagnostic chargé avec succès !");
+            showNotification("Diagnostic pré-calculé chargé avec succès !", "success");
+        } else {
+            console.log("Aucun diagnostic disponible en cache. En attente du déclenchement manuel.");
+        }
+    } catch (e) {
+        console.warn("Impossible de vérifier ou charger le cache de diagnostic :", e);
     }
 }
 
