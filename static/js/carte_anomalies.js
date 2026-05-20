@@ -442,13 +442,16 @@ function findConduiteByCoords(lat, lng) {
 
 function populateAnomaliesLists(data) {
     console.log('Populating anomalies lists with data:', Object.keys(data || {}));
-    const tabMappings = {
-        'connexions': ['conduites_sans_regards', 'incoherences_amont_aval', 'troncons_orphelins'],
+    
+    // Utiliser le tabMappings global si disponible, sinon fallback harmonisé
+    const mappings = (typeof tabMappings !== 'undefined' && tabMappings) ? tabMappings : {
+        'connexions': ['conduites_sans_regards', 'incoherences_amont_aval'],
         'geometrie': ['geometries_invalides', 'pentes_suspectes'],
-        'donnees': ['champs_manquants']
+        'donnees': ['champs_manquants'],
+        'topologie': ['troncons_orphelins']
     };
 
-    Object.entries(tabMappings).forEach(([tab, types]) => {
+    Object.entries(mappings).forEach(([tab, types]) => {
         const select = document.getElementById(`select-anomalies-${tab}`);
         const container = document.getElementById(`list-container-${tab}`);
         if (!select || !container) {
