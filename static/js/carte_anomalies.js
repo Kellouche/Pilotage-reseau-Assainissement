@@ -435,9 +435,12 @@ const _suggestionCache = {};
 
 // Pré-charge les suggestions pour un ensemble de fids de conduite (appels parallèles limités)
 async function prefetchSuggestions(fids) {
-    const uniqueFids = [...new Set(fids.filter(f => f && !_suggestionCache[f]))];
+    // LIMITATION IMPORTANTE: Ne précharger que les premières 150 conduites pour ne pas DDOS le serveur
+    const uniqueFids = [...new Set(fids.filter(f => f && !_suggestionCache[f]))].slice(0, 150);
     if (uniqueFids.length === 0) return;
-    const CONCURRENCY = 5;
+    
+    // Concurrency très basse pour laisser le serveur respirer
+    const CONCURRENCY = 2;
     for (let i = 0; i < uniqueFids.length; i += CONCURRENCY) {
         const batch = uniqueFids.slice(i, i + CONCURRENCY);
         await Promise.all(batch.map(async fid => {
@@ -449,6 +452,17 @@ async function prefetchSuggestions(fids) {
                 if (res.ok) {
                     const data = await res.json();
                     _suggestionCache[fid] = (data.suggestion && data.suggestion.available) || false;
+                    
+                    // NOUVEAU: Mettre à jour l'UI dynamiquement (ajouter l'étoile) si trouvé
+                    if (_suggestionCache[fid]) {
+                        document.querySelectorAll('select[id^="select-anomalies-"] option').forEach(opt => {
+                            if (opt.value.startsWith(fid + '|') || opt.value === String(fid)) {
+                                if (!opt.textContent.includes('⭐')) {
+                                    opt.textContent = opt.textContent + ' ⭐';
+                                }
+                            }
+                        });
+                    }
                 } else {
                     _suggestionCache[fid] = false;
                 }
@@ -456,6 +470,8 @@ async function prefetchSuggestions(fids) {
                 _suggestionCache[fid] = false;
             }
         }));
+        // Petite pause entre chaque batch pour ne pas bloquer le thread Node/Python serveur
+        await new Promise(r => setTimeout(r, 100));
     }
 }
 
@@ -486,19 +502,9 @@ async function populateAnomaliesLists(data) {
         'topologie': ['troncons_orphelins']
     };
 
-    // 1. Pré-charger les suggestions de profil pour toutes les conduites concernées
-    //    (appels parallèles, pas d'attente séquentielle)
-    const allFids = [];
-    Object.values(data || {}).forEach(anoms => {
-        if (!Array.isArray(anoms)) return;
-        anoms.forEach(anom => {
-            const fid = anom.fid || anom.id_conduite || anom.fid1 || anom.fid2;
-            if (fid) allFids.push(fid.toString());
-        });
-    });
-    if (allFids.length > 0) {
-        await prefetchSuggestions(allFids);
-    }
+    // Nous ne faisons plus de prefetch bloquant global ici.
+    // Les FIDs prioritaires seront collectés pendant la création des options.
+    const priorityFidsToPrefetch = [];
 
     Object.entries(tabMappings).forEach(([tab, types]) => {
         const select = document.getElementById(`select-anomalies-${tab}`);
@@ -559,6 +565,10 @@ async function populateAnomaliesLists(data) {
                 }
 
                 option.textContent = label;
+                if (count < 50 && id !== 'Inconnu') {
+                    priorityFidsToPrefetch.push(id.toString());
+                }
+                
                 select.appendChild(option);
                 count++;
             });
@@ -567,6 +577,12 @@ async function populateAnomaliesLists(data) {
         console.log(`Tab ${tab}: total anomalies with coords = ${count}`);
         container.style.display = count > 0 ? 'block' : 'none';
     });
+
+    // Lancer le prefetch en arrière-plan sans 'await' pour ne pas bloquer l'UI.
+    // L'UI sera mise à jour dynamiquement quand les suggestions arriveront.
+    if (priorityFidsToPrefetch.length > 0) {
+        prefetchSuggestions(priorityFidsToPrefetch).catch(e => console.error("Prefetch error:", e));
+    }
 }
 
 function zoomToAnomalie(valueStr) {
