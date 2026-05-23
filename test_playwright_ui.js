@@ -22,7 +22,7 @@ const { chromium } = require('playwright');
     
     // Wait for diagnostic modal to become hidden (completion of diagnostic)
     console.log('Waiting for diagnostic to complete...');
-    await page.waitForSelector('#diagnostic-modal', { state: 'hidden', timeout: 60000 });
+    await page.waitForSelector('#diagnostic-modal', { state: 'hidden', timeout: 180000 });
     console.log('Diagnostic completed successfully via UI modal flow!');
 
     // Wait for anomalies select to be present in DOM

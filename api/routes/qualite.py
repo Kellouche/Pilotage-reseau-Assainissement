@@ -3,6 +3,7 @@ Routes pour l'analyse de qualité du réseau d'assainissement.
 Exposition des anomalies et scores de qualité via API REST.
 """
 
+import asyncio
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from typing import Dict, Any
 import json
@@ -43,11 +44,12 @@ async def analyser_qualite_reseau(force_refresh: bool = False):
     try:
         print("🔄 Lancement d'une nouvelle analyse qualité...")
 
-        # Créer l'analyseur et lancer l'analyse
+        # Créer l'analyseur et lancer l'analyse dans un thread séparé
+        # pour ne pas bloquer l'event loop FastAPI (sinon la réponse HTTP
+        # n'est jamais renvoyée et la fenêtre de progression reste bloquée)
         analyseur = QualiteReseau()
 
-        # Analyse complète (sans export CSV pour l'API)
-        rapport = analyseur.analyser_reseau_complet()
+        rapport = await asyncio.to_thread(analyseur.analyser_reseau_complet)
 
         # Fermer proprement la connexion
         analyseur.fermer_connexion()

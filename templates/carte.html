@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="fr">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,6 +11,7 @@
 
     <link rel="stylesheet" href="/static/css/carte_style.css">
 </head>
+
 <body>
     <div class="app">
         <div class="header">
@@ -28,135 +30,200 @@
 
         <div class="main-content">
             <div class="sidebar" id="sidebar">
-                <div class="sidebar-header" style="display: flex; justify-content: space-between; align-items: center; padding: 15px; background: #16213e; color: white;">
-                    <div class="sidebar-header-title" style="font-weight: bold; font-size: 14px;">🗺️ Diagnostic qualité</div>
-                    <button class="sidebar-toggle" onclick="toggleSidebar()" style="background: none; border: none; color: white; font-size: 16px; cursor: pointer;">◀</button>
+                <div class="sidebar-header"
+                    style="display: flex; justify-content: space-between; align-items: center; padding: 15px; background: #16213e; color: white;">
+                    <div class="sidebar-header-title" style="font-weight: bold; font-size: 14px;">🗺️ Diagnostic qualité
+                    </div>
+                    <button class="sidebar-toggle" onclick="toggleSidebar()"
+                        style="background: none; border: none; color: white; font-size: 16px; cursor: pointer;">◀</button>
                 </div>
                 <div class="sidebar-content">
-                        <!-- Onglets thématiques -->
-                        <div class="filters-section">
-                            <div style="margin-bottom: 15px;">
-                                <div style="display: flex; gap: 5px; margin-bottom: 10px;">
-                                    <button class="tab-btn pending" onclick="switchTab('connexions')" id="tab-connexions">🔗 Connexions</button>
-                                    <button class="tab-btn pending" onclick="switchTab('geometrie')" id="tab-geometrie">📐 Géométrie</button>
-                                </div>
-                                <div style="display: flex; gap: 5px;">
-                                    <button class="tab-btn pending" onclick="switchTab('donnees')" id="tab-donnees">📋 Données</button>
-                                    <button class="tab-btn pending" onclick="switchTab('topologie')" id="tab-topologie">🌐 Topologie</button>
+                    <!-- Onglets thématiques -->
+                    <div class="filters-section">
+                        <div style="margin-bottom: 15px;">
+                            <div style="display: flex; gap: 5px; margin-bottom: 10px;">
+                                <button class="tab-btn pending" onclick="switchTab('connexions')" id="tab-connexions">🔗
+                                    Connexions</button>
+                                <button class="tab-btn pending" onclick="switchTab('geometrie')" id="tab-geometrie">📐
+                                    Géométrie</button>
+                            </div>
+                            <div style="display: flex; gap: 5px;">
+                                <button class="tab-btn pending" onclick="switchTab('donnees')" id="tab-donnees">📋
+                                    Données</button>
+                                <button class="tab-btn pending" onclick="switchTab('topologie')" id="tab-topologie">🌐
+                                    Topologie</button>
+                            </div>
+                        </div>
+
+                        <!-- Contenu des onglets -->
+                        <div id="tab-content">
+                            <!-- Onglet Connexions -->
+                            <div id="content-connexions" class="tab-content active">
+                                <div class="diagnostic-panel">
+                                    <h4>🔗 Diagnostic Connexions</h4>
+                                    <div id="stats-connexions">Veuillez cliquer sur un diagnostic pour lancer l'analyse.
+                                    </div>
+
+                                    <div class="filter-group" style="margin: 15px 0;">
+                                        <label><input type="checkbox" class="filter-checkbox"
+                                                id="type-conduites_sans_regards" checked> <strong>Connexions manquantes
+                                                (Amont/Aval)</strong> <span
+                                                id="count-conduites_sans_regards"></span></label>
+                                        <label><input type="checkbox" class="filter-checkbox"
+                                                id="type-incoherences_amont_aval" checked> <strong>Incohérences de
+                                                profondeur (Sauts)</strong> <span
+                                                id="count-incoherences_amont_aval"></span></label>
+                                    </div>
+
+                                    <div id="list-container-connexions" class="anomalies-list-container"
+                                        style="margin: 15px 0; display: none;">
+                                        <label style="font-size: 11px; color: #bdc3c7;">Aller à l'anomalie :</label>
+                                        <select id="select-anomalies-connexions" onchange="zoomToAnomalie(this.value)"
+                                            class="anomalie-select"
+                                            style="width: 100%; padding: 8px; border-radius: 4px; background: #0f3460; color: white; border: 1px solid #16213e; font-size: 12px; cursor: pointer;">
+                                            <option value="">-- Sélectionner --</option>
+                                        </select>
+                                    </div>
+
+                                    <div style="display: flex; gap: 5px;">
+                                        <button onclick="applyFilters()" class="action-btn"
+                                            style="background: #4caf50;">✅ Filtrer</button>
+                                        <button onclick="zoomOnTabAnomalies('connexions')" class="action-btn">🔍
+                                            Zoom</button>
+                                    </div>
                                 </div>
                             </div>
 
-                             <!-- Contenu des onglets -->
-                             <div id="tab-content">
-                                 <!-- Onglet Connexions -->
-                                 <div id="content-connexions" class="tab-content active">
-                                     <div class="diagnostic-panel">
-                                         <h4>🔗 Diagnostic Connexions</h4>
-                                          <div id="stats-connexions">Veuillez cliquer sur un diagnostic pour lancer l'analyse.</div>
-                                         
-                                         <div class="filter-group" style="margin: 15px 0;">
-                                             <label><input type="checkbox" class="filter-checkbox" id="type-conduites_sans_regards" checked> <strong>Connexions manquantes (Amont/Aval)</strong> <span id="count-conduites_sans_regards"></span></label>
-                                             <label><input type="checkbox" class="filter-checkbox" id="type-incoherences_amont_aval" checked> <strong>Incohérences de profondeur (Sauts)</strong> <span id="count-incoherences_amont_aval"></span></label>
-                                         </div>
-                                         
-                                         <div id="list-container-connexions" class="anomalies-list-container" style="margin: 15px 0; display: none;">
-                                             <label style="font-size: 11px; color: #bdc3c7;">Aller à l'anomalie :</label>
-                                             <select id="select-anomalies-connexions" onchange="zoomToAnomalie(this.value)" class="anomalie-select" style="width: 100%; padding: 8px; border-radius: 4px; background: #0f3460; color: white; border: 1px solid #16213e; font-size: 12px; cursor: pointer;">
-                                                 <option value="">-- Sélectionner --</option>
-                                             </select>
-                                         </div>
+                            <!-- Onglet Géométrie -->
+                            <div id="content-geometrie" class="tab-content">
+                                <div class="diagnostic-panel">
+                                    <h4>📐 Diagnostic Géométrie</h4>
+                                    <div id="stats-geometrie">Veuillez cliquer sur un diagnostic pour lancer l'analyse.
+                                    </div>
 
-                                         <div style="display: flex; gap: 5px;">
-                                             <button onclick="applyFilters()" class="action-btn" style="background: #4caf50;">✅ Filtrer</button>
-                                             <button onclick="zoomOnTabAnomalies('connexions')" class="action-btn">🔍 Zoom</button>
-                                         </div>
-                                     </div>
-                                 </div>
+                                    <div class="filter-group" style="margin: 15px 0;">
+                                        <label><input type="checkbox" class="filter-checkbox"
+                                                id="type-geometries_invalides" checked> <strong>Géométries
+                                                invalides</strong> <span id="count-geometries_invalides"></span></label>
+                                        <label><input type="checkbox" class="filter-checkbox" id="type-pentes_suspectes"
+                                                checked> <strong>Pentes suspectes</strong> <span
+                                                id="count-pentes_suspectes"></span></label>
+                                    </div>
 
-                                 <!-- Onglet Géométrie -->
-                                 <div id="content-geometrie" class="tab-content">
-                                     <div class="diagnostic-panel">
-                                         <h4>📐 Diagnostic Géométrie</h4>
-                                          <div id="stats-geometrie">Veuillez cliquer sur un diagnostic pour lancer l'analyse.</div>
-                                         
-                                         <div class="filter-group" style="margin: 15px 0;">
-                                             <label><input type="checkbox" class="filter-checkbox" id="type-geometries_invalides" checked> <strong>Géométries invalides</strong> <span id="count-geometries_invalides"></span></label>
-                                             <label><input type="checkbox" class="filter-checkbox" id="type-pentes_suspectes" checked> <strong>Pentes suspectes</strong> <span id="count-pentes_suspectes"></span></label>
-                                         </div>
+                                    <div id="list-container-geometrie" class="anomalies-list-container"
+                                        style="margin: 15px 0; display: none;">
+                                        <label style="font-size: 11px; color: #bdc3c7;">Aller à l'anomalie :</label>
+                                        <select id="select-anomalies-geometrie" onchange="zoomToAnomalie(this.value)"
+                                            class="anomalie-select"
+                                            style="width: 100%; padding: 8px; border-radius: 4px; background: #0f3460; color: white; border: 1px solid #16213e; font-size: 12px; cursor: pointer;">
+                                            <option value="">-- Sélectionner --</option>
+                                        </select>
+                                    </div>
 
-                                         <div id="list-container-geometrie" class="anomalies-list-container" style="margin: 15px 0; display: none;">
-                                             <label style="font-size: 11px; color: #bdc3c7;">Aller à l'anomalie :</label>
-                                             <select id="select-anomalies-geometrie" onchange="zoomToAnomalie(this.value)" class="anomalie-select" style="width: 100%; padding: 8px; border-radius: 4px; background: #0f3460; color: white; border: 1px solid #16213e; font-size: 12px; cursor: pointer;">
-                                                 <option value="">-- Sélectionner --</option>
-                                             </select>
-                                         </div>
-
-                                         <div style="display: flex; gap: 5px;">
-                                             <button onclick="applyFilters()" class="action-btn" style="background: #4caf50;">✅ Filtrer</button>
-                                             <button onclick="zoomOnTabAnomalies('geometrie')" class="action-btn">🔍 Zoom</button>
-                                         </div>
-                                     </div>
-                                 </div>
-
-                                 <!-- Onglet Données -->
-                                 <div id="content-donnees" class="tab-content">
-                                     <div class="diagnostic-panel">
-                                         <h4>📋 Diagnostic Données</h4>
-                                          <div id="stats-donnees">Veuillez cliquer sur un diagnostic pour lancer l'analyse.</div>
-                                         
-                                         <div class="filter-group" style="margin: 15px 0;">
-                                             <label><input type="checkbox" class="filter-checkbox" id="type-champs_manquants" checked> <strong>Champs manquants</strong> <span id="count-champs_manquants"></span></label>
-                                         </div>
-
-                                         <div id="list-container-donnees" class="anomalies-list-container" style="margin: 15px 0; display: none;">
-                                             <label style="font-size: 11px; color: #bdc3c7;">Aller à l'anomalie :</label>
-                                             <select id="select-anomalies-donnees" onchange="zoomToAnomalie(this.value)" class="anomalie-select" style="width: 100%; padding: 8px; border-radius: 4px; background: #0f3460; color: white; border: 1px solid #16213e; font-size: 12px; cursor: pointer;">
-                                                 <option value="">-- Sélectionner --</option>
-                                             </select>
-                                         </div>
-
-                                         <div style="display: flex; gap: 5px;">
-                                             <button onclick="applyFilters()" class="action-btn" style="background: #4caf50;">✅ Filtrer</button>
-                                             <button onclick="zoomOnTabAnomalies('donnees')" class="action-btn">🔍 Zoom</button>
-                                         </div>
-                                     </div>
-                                 </div>
-
-                              <!-- Onglet Topologie -->
-                                  <div id="content-topologie" class="tab-content">
-                                      <div class="diagnostic-panel">
-                                          <h4>🌐 Diagnostic Topologie</h4>
-                                           <div id="stats-topologie">Veuillez cliquer sur un diagnostic pour lancer l'analyse.</div>
-                                          
-                                          <div class="filter-group" style="margin: 15px 0;">
-                                              <label><input type="checkbox" class="filter-checkbox" id="type-troncons_orphelins" checked> <strong>Tronçons orphelins</strong> <span id="count-troncons_orphelins"></span></label>
-                                          </div>
-
-                                          <div style="display: flex; gap: 5px;">
-                                              <button onclick="applyFilters()" class="action-btn" style="background: #4caf50;">✅ Filtrer</button>
-                                              <button onclick="zoomOnTabAnomalies('topologie')" class="action-btn">🔍 Zoom</button>
-                                          </div>
-                                      </div>
-                                  </div>
-                             </div>
-
-                             <!-- Sévérités filters removed as requested -->
-
-                             <!-- Options avancées -->
-                            <div class="filter-group" style="margin-top: 20px; border-top: 1px solid #dee2e6; padding-top: 15px;">
-                                <button onclick="toggleAdvancedOptions()" style="width: 100%; padding: 8px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 8px;">⚙️ Options avancées</button>
-                                <div id="advanced-options" style="display: none">
-                                    <label><input type="checkbox" class="filter-checkbox" id="layer-conduites" checked onchange="updateLayersVisibility()"> <strong>Conduite</strong></label>
-                                    <label><input type="checkbox" class="filter-checkbox" id="layer-regards" checked onchange="updateLayersVisibility()"> <strong>Regard</strong></label>
-                                    <label><input type="checkbox" class="filter-checkbox" id="layer-stations" onchange="updateLayersVisibility()"> <strong>Stations de relevage</strong></label>
-                                    <label><input type="checkbox" class="filter-checkbox" id="layer-step" onchange="updateLayersVisibility()"> <strong>STEP</strong></label>
-                                    <label><input type="checkbox" class="filter-checkbox" id="layer-ouvrages" onchange="updateLayersVisibility()"> <strong>Ouvrage spécial</strong></label>
-                                    <label><input type="checkbox" class="filter-checkbox" id="layer-rejets" onchange="updateLayersVisibility()" style="display:none"></label>
-                                    <hr style="margin: 10px 0; border: 0; border-top: 1px solid #ddd;">
-                                     <label style="margin-top: 8px;"><input type="checkbox" class="filter-checkbox" id="analysis-mode" onchange="toggleAnalysisMode()"> <strong>Mode analyse</strong></label>
-                                    <small style="color: #666; font-size: 11px; display: block; margin-top: 4px;">Forcer affichage indépendamment du zoom</small>
+                                    <div style="display: flex; gap: 5px;">
+                                        <button onclick="applyFilters()" class="action-btn"
+                                            style="background: #4caf50;">✅ Filtrer</button>
+                                        <button onclick="zoomOnTabAnomalies('geometrie')" class="action-btn">🔍
+                                            Zoom</button>
+                                    </div>
                                 </div>
                             </div>
+
+                            <!-- Onglet Données -->
+                            <div id="content-donnees" class="tab-content">
+                                <div class="diagnostic-panel">
+                                    <h4>📋 Diagnostic Données</h4>
+                                    <div id="stats-donnees">Veuillez cliquer sur un diagnostic pour lancer l'analyse.
+                                    </div>
+
+                                    <div class="filter-group" style="margin: 15px 0;">
+                                        <label><input type="checkbox" class="filter-checkbox" id="type-champs_manquants"
+                                                checked> <strong>Champs manquants</strong> <span
+                                                id="count-champs_manquants"></span></label>
+                                    </div>
+
+                                    <div id="list-container-donnees" class="anomalies-list-container"
+                                        style="margin: 15px 0; display: none;">
+                                        <label style="font-size: 11px; color: #bdc3c7;">Aller à l'anomalie :</label>
+                                        <select id="select-anomalies-donnees" onchange="zoomToAnomalie(this.value)"
+                                            class="anomalie-select"
+                                            style="width: 100%; padding: 8px; border-radius: 4px; background: #0f3460; color: white; border: 1px solid #16213e; font-size: 12px; cursor: pointer;">
+                                            <option value="">-- Sélectionner --</option>
+                                        </select>
+                                    </div>
+
+                                    <div style="display: flex; gap: 5px;">
+                                        <button onclick="applyFilters()" class="action-btn"
+                                            style="background: #4caf50;">✅ Filtrer</button>
+                                        <button onclick="zoomOnTabAnomalies('donnees')" class="action-btn">🔍
+                                            Zoom</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Onglet Topologie -->
+                            <div id="content-topologie" class="tab-content">
+                                <div class="diagnostic-panel">
+                                    <h4>🌐 Diagnostic Topologie</h4>
+                                    <div id="stats-topologie">Veuillez cliquer sur un diagnostic pour lancer l'analyse.
+                                    </div>
+
+                                    <div class="filter-group" style="margin: 15px 0;">
+                                        <label><input type="checkbox" class="filter-checkbox"
+                                                id="type-troncons_orphelins" checked> <strong>Tronçons
+                                                orphelins</strong> <span id="count-troncons_orphelins"></span></label>
+                                    </div>
+
+                                    <div id="list-container-topologie" class="anomalies-list-container"
+                                        style="margin: 15px 0; display: none;">
+                                        <label style="font-size: 11px; color: #bdc3c7;">Aller à l'anomalie :</label>
+                                        <select id="select-anomalies-topologie" onchange="zoomToAnomalie(this.value)"
+                                            class="anomalie-select"
+                                            style="width: 100%; padding: 8px; border-radius: 4px; background: #0f3460; color: white; border: 1px solid #16213e; font-size: 12px; cursor: pointer;">
+                                            <option value="">-- Sélectionner --</option>
+                                        </select>
+                                    </div>
+
+                                    <div style="display: flex; gap: 5px;">
+                                        <button onclick="applyFilters()" class="action-btn"
+                                            style="background: #4caf50;">✅ Filtrer</button>
+                                        <button onclick="zoomOnTabAnomalies('topologie')" class="action-btn">🔍
+                                            Zoom</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Sévérités filters removed as requested -->
+
+                        <!-- Options avancées -->
+                        <div class="filter-group"
+                            style="margin-top: 20px; border-top: 1px solid #dee2e6; padding-top: 15px;">
+                            <button onclick="toggleAdvancedOptions()"
+                                style="width: 100%; padding: 8px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 8px;">⚙️
+                                Options avancées</button>
+                            <div id="advanced-options" style="display: none">
+                                <label><input type="checkbox" class="filter-checkbox" id="layer-conduites" checked
+                                        onchange="updateLayersVisibility()"> <strong>Conduite</strong></label>
+                                <label><input type="checkbox" class="filter-checkbox" id="layer-regards" checked
+                                        onchange="updateLayersVisibility()"> <strong>Regard</strong></label>
+                                <label><input type="checkbox" class="filter-checkbox" id="layer-stations"
+                                        onchange="updateLayersVisibility()"> <strong>Stations de
+                                        relevage</strong></label>
+                                <label><input type="checkbox" class="filter-checkbox" id="layer-step"
+                                        onchange="updateLayersVisibility()"> <strong>STEP</strong></label>
+                                <label><input type="checkbox" class="filter-checkbox" id="layer-ouvrages"
+                                        onchange="updateLayersVisibility()"> <strong>Ouvrage spécial</strong></label>
+                                <label><input type="checkbox" class="filter-checkbox" id="layer-rejets"
+                                        onchange="updateLayersVisibility()" style="display:none"></label>
+                                <hr style="margin: 10px 0; border: 0; border-top: 1px solid #ddd;">
+                                <label style="margin-top: 8px;"><input type="checkbox" class="filter-checkbox"
+                                        id="analysis-mode" onchange="toggleAnalysisMode()"> <strong>Mode
+                                        analyse</strong></label>
+                                <small style="color: #666; font-size: 11px; display: block; margin-top: 4px;">Forcer
+                                    affichage indépendamment du zoom</small>
+                            </div>
+                        </div>
 
 
 
@@ -167,19 +234,22 @@
                 </div>
             </div>
 
-        <div class="map-container">
+            <div class="map-container">
                 <div id="map"></div>
 
 
                 <div class="map-controls">
                     <button class="map-control-btn active" onclick="centerOnAnomalies()">🎯 Centrer anomalies</button>
                     <button class="map-control-btn" onclick="toggleFullscreen()">🔍 Plein écran</button>
-                    <button class="map-control-btn" onclick="startMeasureDistance()" id="measure-btn">📏 Mesurer distance</button>
+                    <button class="map-control-btn" onclick="startMeasureDistance()" id="measure-btn">📏 Mesurer
+                        distance</button>
                     <button class="map-control-btn" onclick="exportVisibleData()">💾 Exporter données</button>
                 </div>
-                
+
                 <!-- Indicateur de zoom -->
-                <div id="zoom-indicator" class="zoom-indicator" style="position: absolute; top: 10px; left: 50px; z-index: 1000; background: rgba(0,0,0,0.6); color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px;">Zoom: 13</div>
+                <div id="zoom-indicator" class="zoom-indicator"
+                    style="position: absolute; top: 10px; left: 50px; z-index: 1000; background: rgba(0,0,0,0.6); color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px;">
+                    Zoom: 13</div>
 
             </div>
         </div>
@@ -193,73 +263,90 @@
         <strong>Erreur:</strong> <span id="error-message"></span>
     </div>
 
-        <script src="/static/js/carte_core.js?v=20260520"></script>
-    <script src="/static/js/carte_anomalies.js?v=20260520"></script>
+    <script src="/static/js/carte_core.js?v=20260520"></script>
+    <script src="/static/js/carte_anomalies.js?v=20260520b"></script>
     <script src="/static/js/carte_ui.js?v=20260520"></script>
 
     <!-- Modal de correction -->
-    <div id="correction-modal" class="modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center;">
-        <div class="modal-content" style="background:#fff;border-radius:8px;padding:24px;max-width:500px;width:90%;box-shadow:0 8px 30px rgba(0,0,0,0.3);color:#333;max-height:80vh;overflow-y:auto;">
+    <div id="correction-modal" class="modal-overlay"
+        style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center;">
+        <div class="modal-content"
+            style="background:#fff;border-radius:8px;padding:24px;max-width:500px;width:90%;box-shadow:0 8px 30px rgba(0,0,0,0.3);color:#333;max-height:80vh;overflow-y:auto;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
                 <h3 style="margin:0;color:#16213e;">🔧 Correction d'anomalie</h3>
-                <button onclick="closeCorrectionModal()" style="background:none;border:none;font-size:24px;cursor:pointer;color:#999;">&times;</button>
+                <button onclick="closeCorrectionModal()"
+                    style="background:none;border:none;font-size:24px;cursor:pointer;color:#999;">&times;</button>
             </div>
-            <p id="correction-target-id" style="font-weight:bold;margin-bottom:12px;padding:8px;background:#f5f5f5;border-radius:4px;">Cible : --</p>
+            <p id="correction-target-id"
+                style="font-weight:bold;margin-bottom:12px;padding:8px;background:#f5f5f5;border-radius:4px;">Cible : --
+            </p>
 
             <!-- Proposition terrain / Suggestion -->
-            <div id="hybrid-suggestion-box" style="display:none;margin-bottom:8px;padding:12px;background:#e8f5e9;border-radius:4px;border-left:4px solid #4caf50;">
+            <div id="hybrid-suggestion-box"
+                style="display:none;margin-bottom:8px;padding:12px;background:#e8f5e9;border-radius:4px;border-left:4px solid #4caf50;">
                 <strong style="color:#2e7d32;">💡 Proposition terrain</strong>
                 <div id="hybrid-suggestion-content" style="margin-top:4px;">Chargement...</div>
-                <div style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end;">
-                    <button onclick="applyHybridSuggestion()" id="apply-suggestion-btn" style="background:#4caf50;color:#fff;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;">Appliquer</button>
-                    <button type="button" onclick="drawCurrentProfile()" style="background:#2196f3;color:#fff;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;">Tracer profil</button>
-                </div>
             </div>
 
             <!-- Profil graphique -->
             <div id="profile-container" style="margin-bottom:12px;display:none;">
-                <canvas id="profile-canvas" width="460" height="180" style="width:100%;background:#fff;border:1px solid #eee;border-radius:4px;"></canvas>
+                <canvas id="profile-canvas" width="460" height="180"
+                    style="width:100%;background:#fff;border:1px solid #eee;border-radius:4px;"></canvas>
                 <div id="profile-legend" style="font-size:12px;color:#555;margin-top:6px;"></div>
             </div>
 
             <form id="correction-form" onsubmit="return false;">
                 <div style="margin-bottom:12px;">
                     <label style="display:block;margin-bottom:4px;font-weight:bold;">Nœud amont :</label>
-                    <input type="text" id="correction-amont" class="correction-input" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box;">
+                    <input type="text" id="correction-amont" class="correction-input"
+                        style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box;">
                 </div>
                 <div style="margin-bottom:12px;">
                     <label style="display:block;margin-bottom:4px;font-weight:bold;">Nœud aval :</label>
-                    <input type="text" id="correction-aval" class="correction-input" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box;">
+                    <input type="text" id="correction-aval" class="correction-input"
+                        style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box;">
                 </div>
                 <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
-                    <button type="button" onclick="closeCorrectionModal()" style="background:#999;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;">Annuler</button>
-                    <button type="button" onclick="applyManualCorrection()" style="background:#16213e;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;">✅ Corriger</button>
+                    <button type="button" onclick="closeCorrectionModal()"
+                        style="background:#999;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;">Annuler</button>
+                    <button type="button" onclick="applyManualCorrection()"
+                        style="background:#16213e;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;">✅
+                        Corriger</button>
                 </div>
             </form>
         </div>
     </div>
     <!-- Modal de Diagnostic/Analyse en cours (Bloquant avec chrono et barre de progression) -->
-    <div id="diagnostic-modal" class="modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:99999;align-items:center;justify-content:center;">
-        <div class="modal-content" style="background:#16213e;border-radius:12px;padding:30px;max-width:450px;width:90%;box-shadow:0 10px 40px rgba(0,0,0,0.5);color:white;text-align:center;border:1px solid #0f3460;">
+    <div id="diagnostic-modal" class="modal-overlay"
+        style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:99999;align-items:center;justify-content:center;">
+        <div class="modal-content"
+            style="background:#16213e;border-radius:12px;padding:30px;max-width:450px;width:90%;box-shadow:0 10px 40px rgba(0,0,0,0.5);color:white;text-align:center;border:1px solid #0f3460;">
             <h3 style="margin:0 0 15px 0;font-size:18px;color:#4ade80;">⚙️ Diagnostic du réseau en cours</h3>
-            <p id="diagnostic-status-msg" style="font-size:14px;color:#e5e7eb;margin-bottom:20px;">Initialisation de l'analyse...</p>
-            
+            <p id="diagnostic-status-msg" style="font-size:14px;color:#e5e7eb;margin-bottom:20px;">Initialisation de
+                l'analyse...</p>
+
             <!-- Barre de progression -->
-            <div style="width:100%;background:#0f3460;height:12px;border-radius:6px;overflow:hidden;margin-bottom:15px;border:1px solid #1f4068;">
-                <div id="diagnostic-progress-bar" style="width:0%;height:100%;background:linear-gradient(90deg, #4ade80, #3498db);transition:width 0.1s linear;border-radius:6px;"></div>
+            <div
+                style="width:100%;background:#0f3460;height:12px;border-radius:6px;overflow:hidden;margin-bottom:15px;border:1px solid #1f4068;">
+                <div id="diagnostic-progress-bar"
+                    style="width:0%;height:100%;background:linear-gradient(90deg, #4ade80, #3498db);transition:width 0.1s linear;border-radius:6px;">
+                </div>
             </div>
-            
+
             <!-- Chronomètre et pourcentage -->
-            <div style="display:flex;justify-content:space-between;font-size:12px;color:#bdc3c7;margin-bottom:25px;padding:0 5px;">
+            <div
+                style="display:flex;justify-content:space-between;font-size:12px;color:#bdc3c7;margin-bottom:25px;padding:0 5px;">
                 <span id="diagnostic-chrono">Temps écoulé : 0.0s</span>
                 <span id="diagnostic-percent">0%</span>
             </div>
-            
+
             <!-- Bouton d'annulation -->
-            <button id="btn-abort-diagnostic" onclick="annulerDiagnostic()" style="background:#e74c3c;color:white;border:none;padding:10px 24px;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;transition:background 0.2s;box-shadow:0 4px 6px rgba(0,0,0,0.15);">
+            <button id="btn-abort-diagnostic" onclick="annulerDiagnostic()"
+                style="background:#e74c3c;color:white;border:none;padding:10px 24px;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;transition:background 0.2s;box-shadow:0 4px 6px rgba(0,0,0,0.15);">
                 ❌ Annuler l'opération
             </button>
         </div>
     </div>
 </body>
+
 </html>

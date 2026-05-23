@@ -14,6 +14,11 @@ let stationsLayer = null;
 let ouvragesLayer = null;
 
 let conduitesCoordsMap = {};
+// Maps de lookup O(1) : id → coordonnées / layer (construites une fois au chargement)
+let regardsCoordsMap = {};     // regard_id → [lat, lng]
+let conduitesCoordsLookup = {}; // conduit_id → [lat, lng]
+let regardsLayerMap = {};      // regard_id → layer Leaflet
+let conduitesLayerMap = {};    // conduit_id → layer Leaflet
 
 // Onglets et mappings
 let currentTab = 'connexions';
@@ -25,7 +30,7 @@ const tabMappings = {
 };
 
 // Initialisation
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     console.log('Carte opérationnelle initialisée');
     initMap();
     chargerDonnees().then(() => {
@@ -37,17 +42,17 @@ function initMap() {
     map = L.map('map', {
         preferCanvas: true
     }).setView([36.13, 1.32], 13);
-    
+
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors',
         maxZoom: 19
     }).addTo(map);
 
-    map.on('click', function(e) {
+    map.on('click', function (e) {
         if (typeof deselectAnomalie === 'function') deselectAnomalie();
     });
 
-    map.on('zoomend', function() {
+    map.on('zoomend', function () {
         const zoom = map.getZoom();
         const indicator = document.getElementById('zoom-indicator');
         if (indicator) indicator.textContent = 'Zoom: ' + zoom;
@@ -62,13 +67,13 @@ async function chargerDonnees() {
         console.log('Fetching layers from API...');
         const response = await fetch(`${API_BASE_URL}/api/v1/layers`);
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        
+
         const data = await response.json();
         dataGlobal = data;
 
         // 1. Charger d'abord les couches de base (rapide)
         await chargerCouchesGeoJSON(data.couches);
-        
+
         showNotification('Carte prête !', 'success');
         if (typeof updateLegendForZoom === 'function') updateLegendForZoom();
         if (typeof centerOnData === 'function') centerOnData();
@@ -87,7 +92,7 @@ function precomputeConduiteStyles() {
     if (!diagnosticsLoaded || !anomaliesData) return;
 
     const activeTypesInTab = tabMappings[currentTab] || [];
-    
+
     // Cache checkbox states to avoid DOM queries inside the loop
     const activeGroupsChecked = {};
     activeTypesInTab.forEach(group => {
@@ -133,14 +138,14 @@ function getConduiteStyle(feature) {
     }
 
     const props = feature.properties || {};
-    
+
     const idCandidates = [
         feature.id,
-        props.fid, props.FID, props.id, props.ID, 
+        props.fid, props.FID, props.id, props.ID,
         props.OBJECTID, props.code, props.CODE,
         props.ID_CANALIS, props.ID_CONDUIT
     ];
-    
+
     for (let cand of idCandidates) {
         if (cand !== undefined && cand !== null && cand !== '') {
             const sCand = cand.toString();
@@ -149,18 +154,18 @@ function getConduiteStyle(feature) {
             }
         }
     }
-    
+
     return { color: '#bdc3c7', weight: 2, opacity: 0.6 };
 }
 
 async function chargerCouchesGeoJSON(couches) {
     if (!couches) return;
-    
+
     // Conduites
     if (couches.conduites && couches.conduites.features) {
         conduitesLayer = L.geoJSON(couches.conduites, {
             style: feature => getConduiteStyle(feature),
-            onEachFeature: function(feature, layer) {
+            onEachFeature: function (feature, layer) {
                 layer.bindPopup(createPopupContent(feature.properties, 'conduite'));
                 layer.on('click', () => selectFeature(feature.properties, 'conduite'));
             }
@@ -170,22 +175,22 @@ async function chargerCouchesGeoJSON(couches) {
     // Regards
     if (couches.regards && couches.regards.features) {
         regardsLayer = L.geoJSON(couches.regards, {
-            pointToLayer: function(feature, latlng) {
+            pointToLayer: function (feature, latlng) {
                 return L.circleMarker(latlng, {
-                    color: '#bdc3c7', 
-                    fillColor: '#bdc3c7', 
-                    fillOpacity: 0.6, 
+                    color: '#bdc3c7',
+                    fillColor: '#bdc3c7',
+                    fillOpacity: 0.6,
                     radius: 2, // Réduit encore la taille
                     weight: 1
                 });
             },
-            onEachFeature: function(feature, layer) {
+            onEachFeature: function (feature, layer) {
                 layer.bindPopup(createPopupContent(feature.properties, 'regard'));
                 layer.on('click', () => selectFeature(feature.properties, 'regard'));
             }
         });
     }
-    
+
     // Autres couches ponctuelles
     ['stations', 'rejets', 'ouvrages', 'step'].forEach(type => {
         if (couches[type] && couches[type].features) {
@@ -196,14 +201,14 @@ async function chargerCouchesGeoJSON(couches) {
 
             console.log(`Couche ${type}Layer créée avec ${couches[type].features.length} entités.`);
             layers[type + 'Layer'] = L.geoJSON(couches[type], {
-                pointToLayer: (feature, latlng) => L.circleMarker(latlng, { 
-                    radius: 6, 
-                    color: '#fff', 
-                    fillColor: color, 
-                    fillOpacity: 1, 
-                    weight: 2 
+                pointToLayer: (feature, latlng) => L.circleMarker(latlng, {
+                    radius: 6,
+                    color: '#fff',
+                    fillColor: color,
+                    fillOpacity: 1,
+                    weight: 2
                 }),
-                onEachFeature: function(feature, layer) {
+                onEachFeature: function (feature, layer) {
                     layer.bindPopup(createPopupContent(feature.properties, type));
                 }
             });
@@ -215,6 +220,41 @@ async function chargerCouchesGeoJSON(couches) {
     // Enregistrer les couches principales dans l'objet global pour la visibilité
     layers['conduitesLayer'] = conduitesLayer;
     layers['regardsLayer'] = regardsLayer;
+
+    // Construire les maps de lookup O(1) pour les coordonnées et les layers
+    // (évite d'itérer sur 10 000+ entités pour chaque anomalie)
+    if (regardsLayer) {
+        regardsLayer.eachLayer(layer => {
+            const p = layer.feature.properties;
+            const ids = [p.code, p.id, p.fid].filter(v => v !== undefined && v !== null);
+            const ll = layer.getLatLng();
+            const coords = [ll.lat, ll.lng];
+            ids.forEach(id => {
+                const key = id.toString();
+                regardsCoordsMap[key] = coords;
+                regardsLayerMap[key] = layer;
+            });
+        });
+        console.log(`[Lookup] regardsCoordsMap: ${Object.keys(regardsCoordsMap).length} entrées`);
+    }
+
+    if (conduitesLayer) {
+        conduitesLayer.eachLayer(layer => {
+            const p = layer.feature.properties;
+            const ids = [p.fid, p.id, p.ID, p.ID_AMONT, p.ID_AVAL, p.CODE, p.code]
+                .filter(v => v !== undefined && v !== null);
+            if (layer.getBounds) {
+                const c = layer.getBounds().getCenter();
+                const coords = [c.lat, c.lng];
+                ids.forEach(id => {
+                    const key = id.toString();
+                    conduitesCoordsLookup[key] = coords;
+                    conduitesLayerMap[key] = layer;
+                });
+            }
+        });
+        console.log(`[Lookup] conduitesCoordsLookup: ${Object.keys(conduitesCoordsLookup).length} entrées`);
+    }
 }
 
 function updateLegendForZoom() {
@@ -224,7 +264,7 @@ function updateLegendForZoom() {
 
     const layerMappings = {
         'conduitesLayer': { id: 'layer-conduites', minZoom: 15 },
-        'regardsLayer': { id: 'layer-regards', minZoom: 16 }, 
+        'regardsLayer': { id: 'layer-regards', minZoom: 16 },
         'stationsLayer': { id: 'layer-stations', minZoom: 13 },
         'stepLayer': { id: 'layer-step', minZoom: 13 },
         'ouvragesLayer': { id: 'layer-ouvrages', minZoom: 14 }
@@ -233,7 +273,7 @@ function updateLegendForZoom() {
     Object.entries(layerMappings).forEach(([layerKey, config]) => {
         const layer = layers[layerKey];
         const checkbox = document.getElementById(config.id);
-        
+
         if (!layer) {
             console.warn(`Layer ${layerKey} non trouvé dans l'objet layers.`);
             return;
@@ -298,34 +338,34 @@ let diagnosticStartTime = 0;
 
 function lancerDiagnostic(targetTab) {
     console.log("Démarrage du diagnostic pour :", targetTab);
-    
+
     // Afficher la modale bloquante
     const modal = document.getElementById('diagnostic-modal');
     if (modal) modal.style.display = 'flex';
-    
+
     const progressBar = document.getElementById('diagnostic-progress-bar');
     const percentText = document.getElementById('diagnostic-percent');
     const chronoText = document.getElementById('diagnostic-chrono');
     const statusMsg = document.getElementById('diagnostic-status-msg');
-    
+
     if (progressBar) progressBar.style.width = '0%';
     if (percentText) percentText.textContent = '0%';
     if (chronoText) chronoText.textContent = 'Temps écoulé : 0.0s';
     if (statusMsg) statusMsg.textContent = "Initialisation de l'analyse...";
-    
+
     // Annuler tout diagnostic précédent
     if (diagnosticInterval) clearInterval(diagnosticInterval);
     if (abortController) abortController.abort();
-    
+
     abortController = new AbortController();
     diagnosticStartTime = Date.now();
-    
+
     // Lancer le timer pour animer la barre de progression et le chrono
     diagnosticInterval = setInterval(() => {
         const elapsedMs = Date.now() - diagnosticStartTime;
         const elapsedSec = (elapsedMs / 1000).toFixed(1);
         if (chronoText) chronoText.textContent = `Temps écoulé : ${elapsedSec}s`;
-        
+
         // Progression simulée asymptotique (0% -> 95%)
         let progress = 0;
         if (elapsedMs < 2000) {
@@ -335,11 +375,11 @@ function lancerDiagnostic(targetTab) {
         } else {
             progress = 75 + (1 - Math.exp(-(elapsedMs - 5000) / 10000)) * 20; // asymptotique vers 95%
         }
-        
+
         const progressInt = Math.min(95, Math.floor(progress));
         if (progressBar) progressBar.style.width = progressInt + '%';
         if (percentText) percentText.textContent = progressInt + '%';
-        
+
         // Messages de statut dynamiques basés sur le temps écoulé
         let msg = "Initialisation de l'analyse...";
         if (elapsedMs > 12000) {
@@ -355,7 +395,7 @@ function lancerDiagnostic(targetTab) {
         }
         if (statusMsg) statusMsg.textContent = msg;
     }, 100);
-    
+
     // Lancer la requête API réelle
     fetch(`${API_BASE_URL}/api/v1/qualite/analyse`, { signal: abortController.signal })
         .then(async (response) => {
@@ -364,52 +404,79 @@ function lancerDiagnostic(targetTab) {
         })
         .then((anomData) => {
             console.log("Diagnostic calculé avec succès", anomData);
-            
+
             // Stopper le chrono
             clearInterval(diagnosticInterval);
             diagnosticInterval = null;
-            
+
             // Afficher 100% de progression
             if (progressBar) progressBar.style.width = '100%';
             if (percentText) percentText.textContent = '100%';
             if (statusMsg) statusMsg.textContent = "Calcul terminé !";
-            
-            // Intégrer les anomalies dans la carte
-            if (typeof buildAnomaliesMaps === 'function') buildAnomaliesMaps(anomData);
-            if (typeof updateAnomaliesLayers === 'function') updateAnomaliesLayers();
-            
-            setTimeout(() => {
+
+            // Fermer la modale IMMÉDIATEMENT pour ne pas bloquer l'UI
+            // pendant le traitement des 15 000+ anomalies
+            if (modal) modal.style.display = 'none';
+            showNotification('Diagnostic terminé !', 'success');
+
+            // Traitement différé : laisser le navigateur respirer entre chaque étape
+            // pour éviter de geler l'interface pendant le traitement de 3 Mo de données
+            const steps = [];
+
+            // Étape 1 : intégrer les anomalies dans la carte
+            steps.push(() => {
+                if (typeof buildAnomaliesMaps === 'function') buildAnomaliesMaps(anomData);
+                if (typeof updateAnomaliesLayers === 'function') updateAnomaliesLayers();
+            });
+
+            // Étape 2 : peupler les listes d'anomalies (async pour pré-charger les suggestions)
+            steps.push(async () => {
                 try {
-                    if (typeof populateAnomaliesLists === 'function') populateAnomaliesLists(anomData.anomalies || anomData);
+                    if (typeof populateAnomaliesLists === 'function') await populateAnomaliesLists(anomData.anomalies || anomData);
                 } catch (e) {
                     console.warn('populateAnomaliesLists fallback failed', e);
                 }
-            }, 500);
-            
-            // Mettre à jour les compteurs de tous les onglets
-            Object.keys(tabMappings).forEach(tab => {
-                if (typeof calculateTabStats === 'function') calculateTabStats(tab);
             });
-            
-            if (typeof updateStats === 'function') updateStats();
-            
-            diagnosticsLoaded = true;
-            
-            // Retirer la classe pending de tous les onglets
-            document.querySelectorAll('.tab-btn').forEach(btn => {
-                btn.classList.remove('pending');
+
+            // Étape 3 : mettre à jour les compteurs de tous les onglets
+            steps.push(() => {
+                Object.keys(tabMappings).forEach(tab => {
+                    if (typeof calculateTabStats === 'function') calculateTabStats(tab);
+                });
             });
-            
-            // Masquer le modal après un court délai pour effet visuel agréable
-            setTimeout(() => {
-                if (modal) modal.style.display = 'none';
-                showNotification('Diagnostic terminé !', 'success');
-                
-                // Activer l'onglet demandé
+
+            // Étape 4 : mettre à jour les scores
+            steps.push(() => {
+                if (typeof updateStats === 'function') updateStats();
+            });
+
+            // Étape 5 : finaliser
+            steps.push(() => {
+                diagnosticsLoaded = true;
+                document.querySelectorAll('.tab-btn').forEach(btn => {
+                    btn.classList.remove('pending');
+                });
                 if (typeof switchTabReal === 'function') {
                     switchTabReal(targetTab);
                 }
-            }, 400);
+            });
+
+            // Exécuter chaque étape en cédant la main au navigateur entre chaque
+            // Gère aussi les étapes async (ex: populateAnomaliesLists avec pré-chargement suggestions)
+            async function runStep(index) {
+                if (index >= steps.length) return;
+                // requestAnimationFrame garantit que le DOM est rendu avant de toucher les éléments
+                requestAnimationFrame(async () => {
+                    try {
+                        await steps[index]();
+                    } catch (e) {
+                        console.error(`Erreur étape traitement ${index}:`, e);
+                    }
+                    runStep(index + 1);
+                });
+            }
+
+            runStep(0);
         })
         .catch((error) => {
             if (error.name === 'AbortError') {
@@ -417,10 +484,10 @@ function lancerDiagnostic(targetTab) {
                 return; // Géré par annulerDiagnostic()
             }
             console.error("Erreur lors de l'analyse :", error);
-            
+
             clearInterval(diagnosticInterval);
             diagnosticInterval = null;
-            
+
             if (modal) modal.style.display = 'none';
             showNotification(`Erreur d'analyse: ${error.message}`, 'error');
         });
@@ -428,26 +495,26 @@ function lancerDiagnostic(targetTab) {
 
 function annulerDiagnostic() {
     console.log("Annulation du diagnostic...");
-    
+
     if (abortController) {
         abortController.abort();
         abortController = null;
     }
-    
+
     if (diagnosticInterval) {
         clearInterval(diagnosticInterval);
         diagnosticInterval = null;
     }
-    
+
     const modal = document.getElementById('diagnostic-modal');
     if (modal) modal.style.display = 'none';
-    
+
     showNotification("Opération annulée par l'utilisateur.", 'warning');
 }
 
 function showNotification(msg, type = 'info') {
     console.log(`[${type.toUpperCase()}] ${msg}`);
-    
+
     let toast = document.getElementById('toast-notification');
     if (!toast) {
         toast = document.createElement('div');
@@ -455,15 +522,15 @@ function showNotification(msg, type = 'info') {
         toast.className = 'notification';
         document.body.appendChild(toast);
     }
-    
+
     toast.className = `notification notification-${type}`;
     toast.innerHTML = msg;
     toast.style.display = 'block';
-    
+
     setTimeout(() => {
         toast.style.opacity = '1';
     }, 10);
-    
+
     setTimeout(() => {
         toast.style.opacity = '0';
         setTimeout(() => {

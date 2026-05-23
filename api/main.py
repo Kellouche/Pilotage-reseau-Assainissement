@@ -188,7 +188,8 @@ def get_layers():
         'regards': 'regards',
         'stations': 'station_de_relevage',
         'step': 'step',
-        'ouvrages': 'ouvrages_speciaux'
+        'ouvrages': 'ouvrages_speciaux',
+        'rejets': 'rejets'
     }
 
     try:

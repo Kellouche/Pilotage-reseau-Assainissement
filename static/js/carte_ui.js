@@ -20,7 +20,7 @@ function toggleSidebar() {
     if (!sidebar) return;
 
     sidebar.classList.toggle('collapsed');
-    
+
     if (sidebar.classList.contains('collapsed')) {
         if (toggleBtn) toggleBtn.textContent = '▶';
     } else {
@@ -125,7 +125,7 @@ function toggleAnalysisMode() {
 }
 
 // Event Listeners
-document.addEventListener('change', function(e) {
+document.addEventListener('change', function (e) {
     if (e.target.classList.contains('filter-checkbox') || e.target.id === 'analysis-mode') {
         if (typeof updateLayersVisibility === 'function') updateLayersVisibility();
         if (typeof updateAnomaliesLayers === 'function') updateAnomaliesLayers();
@@ -134,7 +134,7 @@ document.addEventListener('change', function(e) {
 
 // Mock functions for missing logic
 function corrigerAnomalie(type) { showNotification(`Correction pour ${type} non implémentée`, 'warning'); }
-function toggleFullscreen() { 
+function toggleFullscreen() {
     if (!document.fullscreenElement) {
         document.documentElement.requestFullscreen();
     } else {
@@ -198,9 +198,18 @@ function openCorrectionModal(id, type) {
 
         if (currentCorrectionFid) {
             tryProfile(currentCorrectionFid).then(data => {
-                // successful: show suggestion box and allow tracing
+                // successful: afficher automatiquement le profil réel et la suggestion
+                const isConduiteAnom = !type || type === 'conduite' || type === 'pente_negative' || type === 'pente_trop_forte' ||
+                    type === 'conduite_sans_regard' || type === 'troncon_orphelin' || type === 'champs_manquants_conduite' ||
+                    type === 'incoherence_profondeur' || type === 'incoherences_amont_aval';
+                if (isConduiteAnom) {
+                    // Tracer le profil réel automatiquement (sans clic sur le bouton)
+                    if (typeof drawCurrentProfile === 'function') {
+                        setTimeout(() => drawCurrentProfile(), 100);
+                    }
+                }
                 if (typeof fetchHybridSuggestion === 'function') {
-                    // fetchHybridSuggestion will call suggestion endpoint too
+                    // fetchHybridSuggestion appelle aussi l'endpoint de suggestion
                     fetchHybridSuggestion(currentCorrectionFid, type);
                 }
             }).catch(err => {
@@ -288,6 +297,11 @@ function fetchHybridSuggestion(id, type) {
                     if (s.prof_fe_av) av.value = s.prof_fe_av;
                 }
             }
+
+            // Tracer automatiquement le profil (réel + proposé) quand la suggestion est chargée
+            if (typeof drawCurrentProfile === 'function') {
+                setTimeout(() => drawCurrentProfile(), 200);
+            }
         })
         .catch(e => {
             console.warn('fetchHybridSuggestion error', e);
@@ -301,74 +315,80 @@ function drawCurrentProfile() {
     if (!profileBox) return;
     profileBox.style.display = 'block';
 
-    fetch(`/api/v1/corrections/profile/${encodeURIComponent(currentCorrectionFid)}`)
-        .then(res => {
+    // Récupérer d'abord le profil réel, puis ajouter la suggestion si disponible
+    Promise.all([
+        fetch(`/api/v1/corrections/profile/${encodeURIComponent(currentCorrectionFid)}`).then(res => {
             if (!res.ok) throw new Error('profile-not-found');
             return res.json();
-        })
-        .then(data => {
-            // Draw simple linear profile on canvas using actuelle and suggestion if any
-            const canvas = document.getElementById('profile-canvas');
-            if (!canvas) return;
-            const ctx = canvas.getContext('2d');
-            const w = canvas.width, h = canvas.height;
-            ctx.clearRect(0,0,w,h);
+        }),
+        // Si la suggestion n'est pas déjà en cache, la récupérer maintenant
+        (currentSuggestionPayload && currentSuggestionPayload.suggestion && currentSuggestionPayload.suggestion.available)
+            ? Promise.resolve(currentSuggestionPayload)
+            : fetch(`/api/v1/corrections/hybride/suggest?fid=${encodeURIComponent(currentCorrectionFid)}&anomalie_type=conduite`).then(res => res.json()).catch(() => null)
+    ]).then(([profileData, suggestionData]) => {
+        // Draw simple linear profile on canvas using actuelle and suggestion if any
+        const canvas = document.getElementById('profile-canvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const w = canvas.width, h = canvas.height;
+        ctx.clearRect(0, 0, w, h);
 
-            // baseline
-            ctx.fillStyle = '#fff'; ctx.fillRect(0,0,w,h);
-            ctx.strokeStyle = '#ccc'; ctx.strokeRect(0,0,w,h);
+        // baseline
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#ccc'; ctx.strokeRect(0, 0, w, h);
 
-            const marge = 30;
-            const usableW = w - marge*2; const usableH = h - marge*2;
+        const marge = 30;
+        const usableW = w - marge * 2; const usableH = h - marge * 2;
 
-            const actuel = data.actuel || {};
-            const sugg = (data.suggestion && data.suggestion.available) ? data.suggestion : null;
+        const actuel = profileData.actuel || {};
+        const sugg = (suggestionData && suggestionData.suggestion && suggestionData.suggestion.available)
+            ? suggestionData.suggestion : null;
 
-            // Determine depths: use prof_fe_am (upstream elevation) and prof_fe_av
-            const am = actuel.prof_fe_am; const av = actuel.prof_fe_av;
-            const sam = sugg ? sugg.prof_fe_am : null; const sav = sugg ? sugg.prof_fe_av : null;
+        // Determine depths: use prof_fe_am (upstream elevation) and prof_fe_av
+        const am = actuel.prof_fe_am; const av = actuel.prof_fe_av;
+        const sam = sugg ? sugg.prof_fe_am : null; const sav = sugg ? sugg.prof_fe_av : null;
 
-            // Fallback if null -> set flat zero baseline
-            const vals = [am, av, sam, sav].filter(v => v !== null && v !== undefined);
-            if (vals.length === 0) {
-                ctx.fillStyle = '#999'; ctx.fillText('Pas de cotes disponibles pour ce tronçon', marge, h/2);
-                return;
-            }
+        // Fallback if null -> set flat zero baseline
+        const vals = [am, av, sam, sav].filter(v => v !== null && v !== undefined);
+        if (vals.length === 0) {
+            ctx.fillStyle = '#999'; ctx.fillText('Pas de cotes disponibles pour ce tronçon', marge, h / 2);
+            return;
+        }
 
-            const minV = Math.min(...vals); const maxV = Math.max(...vals);
-            const range = Math.max(1e-3, maxV - minV);
+        const minV = Math.min(...vals); const maxV = Math.max(...vals);
+        const range = Math.max(1e-3, maxV - minV);
 
-            function yFromProf(p) { return marge + ((maxV - p) / range) * usableH; }
-            // Points: left = am, right = av
-            const x1 = marge, x2 = marge + usableW;
+        function yFromProf(p) { return marge + ((maxV - p) / range) * usableH; }
+        // Points: left = am, right = av
+        const x1 = marge, x2 = marge + usableW;
 
-            // Draw actuelle profile
-            if (am !== null && av !== null) {
-                ctx.beginPath(); ctx.moveTo(x1, yFromProf(am)); ctx.lineTo(x2, yFromProf(av));
-                ctx.strokeStyle = '#ff5722'; ctx.lineWidth = 3; ctx.stroke();
-                // labels
-                ctx.fillStyle = '#000'; ctx.font = '12px Arial';
-                ctx.fillText(`AM: ${am}`, x1 + 4, yFromProf(am) - 6);
-                ctx.fillText(`AV: ${av}`, x2 - 40, yFromProf(av) - 6);
-            }
+        // Draw actuelle profile
+        if (am !== null && av !== null) {
+            ctx.beginPath(); ctx.moveTo(x1, yFromProf(am)); ctx.lineTo(x2, yFromProf(av));
+            ctx.strokeStyle = '#ff5722'; ctx.lineWidth = 3; ctx.stroke();
+            // labels
+            ctx.fillStyle = '#000'; ctx.font = '12px Arial';
+            ctx.fillText(`AM: ${am}`, x1 + 4, yFromProf(am) - 6);
+            ctx.fillText(`AV: ${av}`, x2 - 40, yFromProf(av) - 6);
+        }
 
-            // Draw suggestion profile if present
-            if (sugg && sugg.prof_fe_am !== null && sugg.prof_fe_av !== null) {
-                ctx.beginPath(); ctx.moveTo(x1, yFromProf(sugg.prof_fe_am)); ctx.lineTo(x2, yFromProf(sugg.prof_fe_av));
-                ctx.strokeStyle = '#2e7d32'; ctx.lineWidth = 3; ctx.setLineDash([6,4]); ctx.stroke(); ctx.setLineDash([]);
-                ctx.fillStyle = '#2e7d32'; ctx.fillText(`Sugg AM: ${sugg.prof_fe_am}`, x1 + 4, yFromProf(sugg.prof_fe_am) - 6);
-                ctx.fillText(`Sugg AV: ${sugg.prof_fe_av}`, x2 - 70, yFromProf(sugg.prof_fe_av) - 6);
-            }
+        // Draw suggestion profile if present
+        if (sugg && sugg.prof_fe_am !== null && sugg.prof_fe_av !== null) {
+            ctx.beginPath(); ctx.moveTo(x1, yFromProf(sugg.prof_fe_am)); ctx.lineTo(x2, yFromProf(sugg.prof_fe_av));
+            ctx.strokeStyle = '#2e7d32'; ctx.lineWidth = 3; ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([]);
+            ctx.fillStyle = '#2e7d32'; ctx.fillText(`Sugg AM: ${sugg.prof_fe_am}`, x1 + 4, yFromProf(sugg.prof_fe_am) - 6);
+            ctx.fillText(`Sugg AV: ${sugg.prof_fe_av}`, x2 - 70, yFromProf(sugg.prof_fe_av) - 6);
+        }
 
-            // Legend
-            const legend = document.getElementById('profile-legend');
-            if (legend) {
-                legend.innerHTML = `<span style="color:#ff5722">— Profil actuel</span> &nbsp; <span style="color:#2e7d32">— Suggestion</span>`;
-            }
-        }).catch(e => {
-            console.warn('drawCurrentProfile error', e);
-            showNotification('Impossible de récupérer le profil', 'error');
-        });
+        // Legend
+        const legend = document.getElementById('profile-legend');
+        if (legend) {
+            legend.innerHTML = `<span style="color:#ff5722">— Profil actuel</span> &nbsp; <span style="color:#2e7d32">— Suggestion</span>`;
+        }
+    }).catch(e => {
+        console.warn('drawCurrentProfile error', e);
+        showNotification('Impossible de récupérer le profil', 'error');
+    });
 }
 
 function applyHybridSuggestion() {
@@ -395,18 +415,43 @@ function applyHybridSuggestion() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prof_fe_am: s.prof_fe_am, prof_fe_av: s.prof_fe_av })
     }).then(res => res.json())
-      .then(r => {
-        showNotification(r.message || 'Suggestion appliquée', 'success');
-        closeCorrectionModal();
-        // Refresh anomalies / layers
-        if (typeof chargerDonnees === 'function') chargerDonnees();
-      }).catch(e => {
-        console.warn('applyHybridSuggestion error', e);
-        showNotification('Erreur lors de l\'application de la suggestion', 'error');
-      });
+        .then(r => {
+            showNotification(r.message || 'Suggestion appliquée', 'success');
+            closeCorrectionModal();
+            // Refresh anomalies / layers
+            if (typeof chargerDonnees === 'function') chargerDonnees();
+        }).catch(e => {
+            console.warn('applyHybridSuggestion error', e);
+            showNotification('Erreur lors de l\'application de la suggestion', 'error');
+        });
 }
 
 function applyManualCorrection() {
+    // Si une suggestion automatique est disponible, l'appliquer d'office
+    if (currentSuggestionPayload && currentSuggestionPayload.suggestion && currentSuggestionPayload.suggestion.available) {
+        const s = currentSuggestionPayload.suggestion;
+        // Confirmation si la suggestion a été limitée par contraintes hydrauliques
+        if (s.capped) {
+            const ok = confirm('La proposition a été limitée pour respecter des contraintes hydrauliques (cappée). Confirmez-vous l\'application ?');
+            if (!ok) return;
+        }
+        fetch(`/api/v1/corrections/manuel/${encodeURIComponent(currentCorrectionFid)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prof_fe_am: s.prof_fe_am, prof_fe_av: s.prof_fe_av })
+        }).then(res => res.json())
+            .then(r => {
+                showNotification(r.message || 'Suggestion appliquée', 'success');
+                closeCorrectionModal();
+                if (typeof chargerDonnees === 'function') chargerDonnees();
+            }).catch(e => {
+                console.warn('applyManualCorrection (suggestion) error', e);
+                showNotification('Erreur lors de l\'application de la suggestion', 'error');
+            });
+        return;
+    }
+
+    // Sinon : appliquer la saisie manuelle
     const amont = document.getElementById('correction-amont');
     const aval = document.getElementById('correction-aval');
     if (!amont || !aval || !currentCorrectionFid) return;
@@ -415,18 +460,18 @@ function applyManualCorrection() {
     fetch(`/api/v1/corrections/manuel/${encodeURIComponent(currentCorrectionFid)}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
     }).then(res => res.json())
-      .then(r => {
-        showNotification(r.message || 'Correction appliquée', 'success');
-        closeCorrectionModal();
-        if (typeof chargerDonnees === 'function') chargerDonnees();
-      }).catch(e => {
-        console.warn('applyManualCorrection error', e);
-        showNotification('Erreur lors de l\'application de la correction', 'error');
-      });
+        .then(r => {
+            showNotification(r.message || 'Correction appliquée', 'success');
+            closeCorrectionModal();
+            if (typeof chargerDonnees === 'function') chargerDonnees();
+        }).catch(e => {
+            console.warn('applyManualCorrection error', e);
+            showNotification('Erreur lors de l\'application de la correction', 'error');
+        });
 }
 
 // Ensure dropdown selection opens modal when an id is present
-document.addEventListener('change', function(e) {
+document.addEventListener('change', function (e) {
     try {
         if (!e.target || !e.target.id) return;
         if (e.target.id.startsWith('select-anomalies-')) {
