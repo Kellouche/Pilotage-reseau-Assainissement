@@ -414,9 +414,10 @@ function lancerDiagnostic(targetTab) {
             if (percentText) percentText.textContent = '100%';
             if (statusMsg) statusMsg.textContent = "Calcul terminé !";
 
-            // Fermer la modale IMMÉDIATEMENT pour ne pas bloquer l'UI
-            // pendant le traitement des 15 000+ anomalies
-            if (modal) modal.style.display = 'none';
+            // Fermer la modale après un court délai pour que l'utilisateur voie les 100%
+            setTimeout(() => {
+                if (modal) modal.style.display = 'none';
+            }, 500);
             showNotification('Diagnostic terminé !', 'success');
 
             // Traitement différé : laisser le navigateur respirer entre chaque étape

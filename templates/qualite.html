@@ -358,14 +358,6 @@
                 <strong>Erreur:</strong> <span id="error-message"></span>
             </div>
 
-            <!-- Banner indicating cache is empty/expired, offering manual calculation -->
-            <div id="cache-empty-banner" style="display: none; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; max-width: 600px; margin: 40px auto; border-left: 5px solid #f39c12;">
-                <div style="font-size: 48px; margin-bottom: 15px;">📊</div>
-                <h3 style="color: #16213e; margin-bottom: 10px; font-size: 20px;">Aucune analyse en cache</h3>
-                <p style="color: #666; margin-bottom: 20px; line-height: 1.5;">Le rapport de qualité du réseau d'assainissement n'a pas encore été généré ou le cache a expiré. Cette opération peut prendre quelques secondes.</p>
-                <button class="button" onclick="chargerAnalyse(true)" style="background: #27ae60; font-weight: bold; font-size: 15px; padding: 12px 30px;">🔄 Lancer le diagnostic maintenant</button>
-            </div>
-
             <div id="overview" class="section">
                 <div class="stats-grid" id="stats-grid">
                     <!-- Les statistiques seront chargées dynamiquement -->
@@ -433,56 +425,19 @@
 
     <script>
         // Configuration
-        const API_BASE_URL = '';
+        const API_BASE_URL = 'http://127.0.0.1:5001';
         let currentData = null;
         let severiteChart = null;
         let communesChart = null;
 
         // Initialisation
-        document.addEventListener('DOMContentLoaded', async function() {
+        document.addEventListener('DOMContentLoaded', function() {
             console.log('Application Qualité Réseau initialisée');
-            await verifierEtCharger();
+            chargerAnalyse();
         });
-
-        async function verifierEtCharger() {
-            try {
-                showLoading(true);
-                hideError();
-                document.getElementById('cache-empty-banner').style.display = 'none';
-
-                const response = await fetch(`${API_BASE_URL}/api/v1/qualite/cache/status`);
-                if (response.ok) {
-                    const status = await response.json();
-                    if (status.analyse_disponible) {
-                        await chargerAnalyse(false);
-                    } else {
-                        showLoading(false);
-                        // Masquer les sections de données car elles sont vides
-                        document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
-                        document.getElementById('cache-empty-banner').style.display = 'block';
-                    }
-                } else {
-                    // Si le cache est inaccessible ou non généré, ne pas lancer d'analyse par défaut
-                    showLoading(false);
-                    document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
-                    document.getElementById('cache-empty-banner').style.display = 'block';
-                }
-            } catch (e) {
-                console.error('Erreur vérification cache:', e);
-                showLoading(false);
-                document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
-                document.getElementById('cache-empty-banner').style.display = 'block';
-            }
-        }
 
         // Navigation
         function showSection(sectionName) {
-            // Si le cache est vide, interdire la navigation
-            if (!currentData) {
-                alert("Veuillez d'abord lancer le diagnostic.");
-                return;
-            }
-
             // Masquer toutes les sections
             document.querySelectorAll('.section').forEach(section => {
                 section.style.display = 'none';
@@ -501,27 +456,18 @@
         }
 
         // Chargement des données
-        async function chargerAnalyse(force = false) {
+        async function chargerAnalyse() {
             try {
                 showLoading(true);
                 hideError();
-                document.getElementById('cache-empty-banner').style.display = 'none';
 
-                const url = force ? `${API_BASE_URL}/api/v1/qualite/analyse?force_refresh=true` : `${API_BASE_URL}/api/v1/qualite/analyse`;
-                const response = await fetch(url);
+                const response = await fetch(`${API_BASE_URL}/api/v1/qualite/analyse`);
                 if (!response.ok) {
                     throw new Error(`Erreur HTTP: ${response.status}`);
                 }
 
                 currentData = await response.json();
                 console.log('Données chargées:', currentData);
-
-                // Afficher par défaut la section Overview
-                document.getElementById('overview').style.display = 'block';
-                // Activer le premier bouton de nav
-                document.querySelectorAll('.nav-btn').forEach((btn, idx) => {
-                    btn.classList.toggle('active', idx === 0);
-                });
 
                 afficherStatistiques();
                 afficherAnomalies();
@@ -943,17 +889,9 @@
                 const response = await fetch(`${API_BASE_URL}/api/v1/qualite/cache/status`);
                 if (response.ok) {
                     const status = await response.json();
-                    if (status.analyse_disponible) {
-                        // Mettre à jour si on n'a pas encore de données, ou si le cache a changé
-                        if (!currentData || (status.derniere_mise_a_jour && currentData.date_analyse !== status.derniere_mise_a_jour)) {
-                            console.log('Nouveau cache disponible, mise à jour...');
-                            chargerAnalyse(false);
-                        }
-                    } else {
-                        // Cache expiré ou vide, afficher la bannière et masquer le reste
-                        currentData = null;
-                        document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
-                        document.getElementById('cache-empty-banner').style.display = 'block';
+                    if (!status.analyse_disponible) {
+                        console.log('Cache expiré, rechargement...');
+                        chargerAnalyse();
                     }
                 }
             } catch (error) {

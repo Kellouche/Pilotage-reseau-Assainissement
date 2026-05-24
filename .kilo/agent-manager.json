@@ -13,12 +13,23 @@
       "parentBranch": "master",
       "createdAt": "2026-05-10T21:14:01.876Z",
       "remote": "origin"
+    },
+    "wt-1779110534636-1": {
+      "branch": "impossible-care",
+      "path": "d:\\IA Water Data Analysis\\Assainissement\\swmm-platform-poc\\.kilo\\worktrees\\impossible-care",
+      "parentBranch": "master",
+      "createdAt": "2026-05-18T13:22:14.636Z",
+      "remote": "origin"
     }
   },
   "sessions": {
     "ses_1ec4218b4ffeRf9uEodRXbZXOi": {
       "worktreeId": "wt-1778447641876-1",
       "createdAt": "2026-05-10T21:14:47.671Z"
+    },
+    "ses_1c4bf54f7ffeqamDN1AZQMjOTl": {
+      "worktreeId": "wt-1779110534636-1",
+      "createdAt": "2026-05-18T13:22:34.920Z"
     }
   },
   "tabOrder": {
@@ -28,6 +39,7 @@
   },
   "worktreeOrder": [
     "wt-1778106444796-1",
-    "wt-1778447641876-1"
+    "wt-1778447641876-1",
+    "wt-1779110534636-1"
   ]
 }

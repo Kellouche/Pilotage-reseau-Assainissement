@@ -327,12 +327,223 @@
             left: 50%;
             transform: translate(-50%, -50%);
             background: white;
-            padding: 20px;
+            padding: 18px 20px;
             border-radius: 8px;
             box-shadow: 0 4px 8px rgba(0,0,0,0.2);
             z-index: 2000;
-            text-align: center;
+            text-align: left;
+            width: min(360px, calc(100vw - 40px));
         }
+
+        .loading-title {
+            display: block;
+            color: #16213e;
+            font-size: 15px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .loading-detail {
+            display: block;
+            color: #4b5563;
+            font-size: 13px;
+            line-height: 1.4;
+            min-height: 18px;
+        }
+
+        .loading-progress {
+            height: 4px;
+            margin-top: 14px;
+            overflow: hidden;
+            border-radius: 999px;
+            background: #e5e7eb;
+        }
+
+        .loading-progress span {
+            display: block;
+            width: 45%;
+            height: 100%;
+            border-radius: inherit;
+            background: #3498db;
+            animation: loading-slide 1.1s ease-in-out infinite;
+        }
+
+        @keyframes loading-slide {
+            0% { transform: translateX(-110%); }
+            100% { transform: translateX(240%); }
+        }
+
+        .error {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #f8d7da;
+            color: #721c24;
+            padding: 12px 20px;
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            z-index: 1500;
+            max-width: 400px;
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 6px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            z-index: 2000;
+            font-size: 14px;
+            max-width: 300px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .zoom-indicator {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .legend-item.disabled {
+            opacity: 0.4;
+            pointer-events: none;
+        }
+
+        .legend-item.clickable {
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .legend-item.clickable:hover {
+            opacity: 0.7;
+        }
+
+        /* Améliorer l'alignement des contrôles de couche */
+        .filter-group label {
+            display: flex;
+            align-items: center;
+            margin-bottom: 6px;
+            cursor: pointer;
+        }
+
+        .filter-checkbox {
+            margin-right: 8px;
+            flex-shrink: 0;
+        }
+
+        .filter-group label strong {
+            margin-right: 4px;
+        }
+
+        .filter-group label span[style*="color"] {
+            margin-right: 6px;
+            font-size: 12px;
+        }
+
+        .notification-success { background: #4caf50; }
+        .notification-warning { background: #ff9800; }
+        .notification-error { background: #f44336; }
+        .notification-info { background: #2196f3; }
+
+        .measure-marker {
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        /* Onglets */
+        .tab-btn {
+            flex: 1;
+            padding: 8px;
+            background: #f0f0f0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+            color: #666;
+            transition: all 0.2s;
+        }
+
+        .tab-btn.active {
+            background: #16213e;
+            color: white;
+            border-color: #16213e;
+        }
+
+        .tab-btn:hover {
+            background: #e0e0e0;
+        }
+
+        .tab-btn.active:hover {
+            background: #16213e;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Panneau diagnostic */
+        .diagnostic-panel {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+
+        .diagnostic-panel h4 {
+            margin: 0 0 10px 0;
+            color: #16213e;
+            font-size: 14px;
+        }
+
+        .diagnostic-stats {
+            margin-bottom: 10px;
+            font-size: 12px;
+        }
+
+        .diagnostic-stats div {
+            margin-bottom: 4px;
+        }
+
+        .action-btn {
+            width: 100%;
+            padding: 8px;
+            background: #2196f3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .action-btn:hover {
+            background: #1976d2;
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 300px;
+            }
+
+            .header-stats {
+                display: none;
+            }
 
         .error {
             position: absolute;
@@ -511,4 +722,29 @@
                 left: 10px;
                 max-width: 200px;
             }
+        }
+
+        /* Diagnostic boutons en attente (pending) */
+        .tab-btn.pending {
+            background: #e2e8f0 !important;
+            color: #475569 !important;
+            border: 1px dashed #94a3b8 !important;
+            opacity: 0.85;
+            cursor: pointer;
+            position: relative;
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);
+            transition: all 0.2s ease;
+        }
+
+        .tab-btn.pending:hover {
+            background: #cbd5e1 !important;
+            border-color: #64748b !important;
+            opacity: 1;
+        }
+
+        .tab-btn.pending::after {
+            content: ' ⚡';
+            font-size: 10px;
+            color: #f59e0b;
+            font-weight: bold;
         }

@@ -433,45 +433,31 @@ const SEVERITY_ORDER = { 'critique': 0, 'majeure': 1, 'mineure': 2, 'info': 3 };
 // Cache des suggestions de profil par fid (évite de re-appeler l'API pour chaque anomalie)
 const _suggestionCache = {};
 
-// Pré-charge les suggestions pour un ensemble de fids de conduite (appels parallèles limités)
-async function prefetchSuggestions(fids) {
-    // LIMITATION IMPORTANTE: Ne précharger que les premières 150 conduites pour ne pas DDOS le serveur
-    const uniqueFids = [...new Set(fids.filter(f => f && !_suggestionCache[f]))].slice(0, 150);
-    if (uniqueFids.length === 0) return;
-    
-    // Concurrency très basse pour laisser le serveur respirer
-    const CONCURRENCY = 2;
-    for (let i = 0; i < uniqueFids.length; i += CONCURRENCY) {
-        const batch = uniqueFids.slice(i, i + CONCURRENCY);
-        await Promise.all(batch.map(async fid => {
-            try {
-                const controller = new AbortController();
-                const timer = setTimeout(() => controller.abort(), 8000);
-                const res = await fetch(`/api/v1/corrections/hybride/suggest?fid=${encodeURIComponent(fid)}&anomalie_type=conduite`, { signal: controller.signal });
-                clearTimeout(timer);
-                if (res.ok) {
-                    const data = await res.json();
-                    _suggestionCache[fid] = (data.suggestion && data.suggestion.available) || false;
-                    
-                    // NOUVEAU: Mettre à jour l'UI dynamiquement (ajouter l'étoile) si trouvé
-                    if (_suggestionCache[fid]) {
-                        document.querySelectorAll('select[id^="select-anomalies-"] option').forEach(opt => {
-                            if (opt.value.startsWith(fid + '|') || opt.value === String(fid)) {
-                                if (!opt.textContent.includes('⭐')) {
-                                    opt.textContent = opt.textContent + ' ⭐';
-                                }
-                            }
-                        });
-                    }
-                } else {
-                    _suggestionCache[fid] = false;
+let suggestableFidsFetched = false;
+
+async function fetchSuggestableFids() {
+    if (suggestableFidsFetched) return;
+    try {
+        const res = await fetch('/api/v1/corrections/hybride/suggestable_fids');
+        if (res.ok) {
+            const data = await res.json();
+            const fids = data.suggestable_fids || [];
+            fids.forEach(fid => {
+                _suggestionCache[fid] = true;
+            });
+            suggestableFidsFetched = true;
+            
+            // Mettre à jour l'UI dynamiquement pour TOUTES les options
+            document.querySelectorAll('select[id^="select-anomalies-"] option').forEach(opt => {
+                if (!opt.value) return;
+                const fid = opt.value.split('|')[0];
+                if (_suggestionCache[fid] && !opt.textContent.includes('⭐')) {
+                    opt.textContent = opt.textContent + ' ⭐';
                 }
-            } catch {
-                _suggestionCache[fid] = false;
-            }
-        }));
-        // Petite pause entre chaque batch pour ne pas bloquer le thread Node/Python serveur
-        await new Promise(r => setTimeout(r, 100));
+            });
+        }
+    } catch (e) {
+        console.error("Erreur lors de la récupération des FIDs suggestibles:", e);
     }
 }
 
@@ -501,10 +487,6 @@ async function populateAnomaliesLists(data) {
         'donnees': ['champs_manquants'],
         'topologie': ['troncons_orphelins']
     };
-
-    // Nous ne faisons plus de prefetch bloquant global ici.
-    // Les FIDs prioritaires seront collectés pendant la création des options.
-    const priorityFidsToPrefetch = [];
 
     Object.entries(tabMappings).forEach(([tab, types]) => {
         const select = document.getElementById(`select-anomalies-${tab}`);
@@ -565,10 +547,6 @@ async function populateAnomaliesLists(data) {
                 }
 
                 option.textContent = label;
-                if (count < 50 && id !== 'Inconnu') {
-                    priorityFidsToPrefetch.push(id.toString());
-                }
-                
                 select.appendChild(option);
                 count++;
             });
@@ -578,11 +556,8 @@ async function populateAnomaliesLists(data) {
         container.style.display = count > 0 ? 'block' : 'none';
     });
 
-    // Lancer le prefetch en arrière-plan sans 'await' pour ne pas bloquer l'UI.
-    // L'UI sera mise à jour dynamiquement quand les suggestions arriveront.
-    if (priorityFidsToPrefetch.length > 0) {
-        prefetchSuggestions(priorityFidsToPrefetch).catch(e => console.error("Prefetch error:", e));
-    }
+    // Lancer la récupération globale de toutes les étoiles (1 seule requête rapide !)
+    fetchSuggestableFids();
 }
 
 function zoomToAnomalie(valueStr) {
