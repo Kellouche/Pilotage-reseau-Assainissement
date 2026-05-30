@@ -62,9 +62,10 @@ export const syncService = {
     }
   },
 
-  async pushChanges(changes) {
+  async pushChanges(deviceId, changes) {
     try {
       const response = await api.post('/api/v1/sync/push', {
+        device_id: deviceId,
         changes: changes
       });
       return response.data;

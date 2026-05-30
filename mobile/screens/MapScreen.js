@@ -1,422 +1,278 @@
-import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-  Modal,
-  TextInput,
-  Alert,
-} from 'react-native';
+/**
+ * Nom Auteur : Dr Abdelhakim Kellouche
+ * Nom de l'application : Plateforme de Pilotage du Réseau d'Assainissement
+ * Numéro version : 1.0.0
+ * Date de création : 30-05-2026
+ * Date de modification : 30-05-2026
+ * 
+ * Objectif du module :
+ * Écran cartographique principal (SIG mobile). Affiche les conduites, regards,
+ * stations et ouvrages. Intègre la géolocalisation, le calcul de proximité,
+ * les fiches d'inspection, la déclaration d'incidents et le simulateur QR.
+ */
+
+import React, { useEffect, useState, useRef } from 'react';
+import { View, StyleSheet, TouchableOpacity, Text, Alert, Modal } from 'react-native';
 import MapView, { Polyline, Marker } from 'react-native-maps';
-import { networkService, clusterService } from '../services/api';
+import * as Location from 'expo-location';
+
+import { networkService } from '../services/api';
+import { storageService } from '../services/storage';
+import FicheTerrain from '../components/FicheTerrain';
+import IncidentForm from '../components/IncidentForm';
+import ScannerSim from '../components/ScannerSim';
+import ProximiteList from '../components/ProximiteList';
 
 export default function MapScreen() {
+  const mapRef = useRef(null);
   const [layers, setLayers] = useState(null);
-  const [clusters, setClusters] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [showClusters, setShowClusters] = useState(false);
-  const [editModalVisible, setEditModalVisible] = useState(false);
-  const [editingConduit, setEditingConduit] = useState(null);
-  const [editForm, setEditForm] = useState({
-    longueur: '',
-    diametre: '',
-    materiau: '',
-    f_nom: '',
-  });
+  const [networkMode, setNetworkMode] = useState('online');
+
+  // GPS & États Position
+  const [userLocation, setUserLocation] = useState(null);
+
+  // Modals & États Fiches
+  const [activeObject, setActiveObject] = useState(null);
+  const [activeType, setActiveType] = useState('regard');
+  const [showProximite, setShowProximite] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+  
+  // Incidents
+  const [declaringIncident, setDeclaringIncident] = useState(false);
+  const [tempCoordinate, setTempCoordinate] = useState(null);
+  const [showIncidentForm, setShowIncidentForm] = useState(false);
+  const [localIncidents, setLocalIncidents] = useState([]);
 
   useEffect(() => {
-    loadNetworkData();
+    loadInitialData();
   }, []);
 
-  const loadNetworkData = async () => {
+  const loadInitialData = async () => {
     try {
       setLoading(true);
-      const layersData = await networkService.getLayers();
-      setLayers(layersData);
-    } catch (error) {
-      Alert.alert('Erreur', 'Impossible de charger les données du réseau');
+      const mode = await storageService.getNetworkMode();
+      setNetworkMode(mode);
+      const data = await networkService.getLayers();
+      setLayers(data);
+      requestGPSLocation();
+    } catch (e) {
+      Alert.alert('Erreur', 'Impossible de charger la carte');
     } finally {
       setLoading(false);
     }
   };
 
-  const detectClusters = async () => {
+  const requestGPSLocation = async () => {
     try {
-      setLoading(true);
-      const clusterData = await clusterService.detectClusters();
-      setClusters(clusterData.resultats);
-      setShowClusters(true);
-      Alert.alert('Succès', `${clusterData.clusters_crees} bassins détectés`);
-    } catch (error) {
-      Alert.alert('Erreur', 'Impossible de détecter les bassins versants');
-    } finally {
-      setLoading(false);
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+      const loc = await Location.getCurrentPositionAsync({});
+      setUserLocation(loc.coords);
+    } catch (e) {
+      console.warn('GPS non disponible');
     }
   };
 
-  const openEditConduit = (conduit) => {
-    Alert.alert('Edit Conduit', `Opening edit for conduit ${conduit.id || conduit.fid}`);
-    setEditingConduit(conduit);
-    setEditForm({
-      longueur: conduit.longueur?.toString() || '',
-      diametre: conduit.diametre?.toString() || '',
-      materiau: conduit.materiau || '',
-      f_nom: conduit.f_nom || '',
-    });
-    setEditModalVisible(true);
+  const centerOnUser = () => {
+    if (!userLocation || !mapRef.current) {
+      Alert.alert('GPS', 'Position GPS non encore détectée.');
+      return;
+    }
+    mapRef.current.animateToRegion({
+      latitude: userLocation.latitude,
+      longitude: userLocation.longitude,
+      latitudeDelta: 0.005,
+      longitudeDelta: 0.005,
+    }, 1000);
   };
 
-  const saveConduitEdit = async () => {
-    try {
-      const updateData = {
-        longueur: parseFloat(editForm.longueur) || null,
-        diametre: parseFloat(editForm.diametre) || null,
-        materiau: editForm.materiau || null,
-        f_nom: editForm.f_nom || null,
-      };
-
-      await networkService.updateConduite(editingConduit.id, updateData);
-      Alert.alert('Succès', 'Conduite mise à jour');
-      setEditModalVisible(false);
-      // Recharger les données
-      loadNetworkData();
-    } catch (error) {
-      Alert.alert('Erreur', 'Impossible de mettre à jour la conduite');
+  const handleMapPress = (e) => {
+    if (declaringIncident) {
+      setTempCoordinate(e.nativeEvent.coordinate);
+      setShowIncidentForm(true);
+      setDeclaringIncident(false);
     }
   };
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#16213e" />
-        <Text style={styles.loadingText}>Chargement des données...</Text>
-      </View>
-    );
-  }
+  const saveInspection = async (inspectionData) => {
+    try {
+      if (networkMode === 'online') {
+        // Envoi direct via API (si connectée)
+        try {
+          const api = require('../services/api').default;
+          await api.post('/api/v1/terrain/inspections', inspectionData);
+        } catch {
+          await storageService.addPendingChange({ type: 'inspection', ...inspectionData });
+        }
+      } else {
+        await storageService.addPendingChange({ type: 'inspection', ...inspectionData });
+      }
+      setActiveObject(null);
+    } catch (e) {
+      Alert.alert('Erreur', 'Impossible d\'enregistrer l\'inspection');
+    }
+  };
+
+  const saveIncident = async (incidentData) => {
+    try {
+      if (networkMode === 'online') {
+        try {
+          const api = require('../services/api').default;
+          const res = await api.post('/api/v1/terrain/incidents', incidentData);
+          setLocalIncidents([...localIncidents, res.data]);
+        } catch {
+          const saved = await storageService.addPendingChange({ type: 'incident', ...incidentData });
+          setLocalIncidents([...localIncidents, saved]);
+        }
+      } else {
+        const saved = await storageService.addPendingChange({ type: 'incident', ...incidentData });
+        setLocalIncidents([...localIncidents, saved]);
+      }
+      setShowIncidentForm(false);
+      setTempCoordinate(null);
+    } catch (e) {
+      Alert.alert('Erreur', 'Impossible d\'enregistrer l\'incident');
+    }
+  };
+
+  const getScannerTargets = () => {
+    const list = [];
+    if (layers?.couches?.regards?.features) {
+      layers.couches.regards.features.slice(0, 5).forEach(f => {
+        list.push({ type: 'regard', object: f.properties });
+      });
+    }
+    return list;
+  };
 
   return (
     <View style={styles.container}>
-      <View style={styles.controls}>
-        <TouchableOpacity
-          style={[styles.button, styles.primaryButton]}
-          onPress={loadNetworkData}
-        >
-          <Text style={styles.primaryButtonText}>🔄 Actualiser</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.button, styles.secondaryButton]}
-          onPress={detectClusters}
-        >
-          <Text style={styles.secondaryButtonText}>
-            🏔 Détecter Bassins
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.button, styles.secondaryButton]}
-          onPress={() => openEditConduit({
-            id: 1,
-            longueur: 100,
-            diametre: 200,
-            materiau: 'PVC',
-            f_nom: 'Test Conduite'
-          })}
-        >
-          <Text style={styles.secondaryButtonText}>
-            ✏️ Test Edit Conduite
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.legend}>
-        <Text style={styles.legendTitle}>Légende:</Text>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendColor, { backgroundColor: '#3498db' }]} />
-          <Text style={styles.legendText}>Conduites</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendColor, { backgroundColor: '#f1c40f' }]} />
-          <Text style={styles.legendText}>Regards</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendColor, { backgroundColor: '#e67e22' }]} />
-          <Text style={styles.legendText}>Stations</Text>
-        </View>
-        {showClusters && (
-          <View style={styles.legendItem}>
-            <View style={[styles.legendColor, { backgroundColor: '#27ae60' }]} />
-            <Text style={styles.legendText}>Bassins</Text>
-          </View>
-        )}
-      </View>
-
       <MapView
+        ref={mapRef}
         style={styles.map}
         initialRegion={{
           latitude: 36.15,
           longitude: 1.33,
-          latitudeDelta: 0.1,
-          longitudeDelta: 0.1,
+          latitudeDelta: 0.05,
+          longitudeDelta: 0.05,
         }}
+        onPress={handleMapPress}
       >
-        {/* Conduites */}
-        {layers?.couches?.conduites?.features?.map((feature, index) => (
-          <Polyline
-            key={`conduite-${index}`}
-            coordinates={feature.geometry.coordinates.map(coord => ({
-              latitude: coord[1],
-              longitude: coord[0],
-            }))}
-            strokeColor="#3498db"
-            strokeWidth={8}
-            onPress={() => openEditConduit(feature.properties)}
-          />
-        ))}
-
         {/* Regards */}
-        {layers?.couches?.regards?.features?.map((feature, index) => (
+        {layers?.couches?.regards?.features?.map((f, i) => (
           <Marker
-            key={`regard-${index}`}
-            coordinate={{
-              latitude: feature.geometry.coordinates[1],
-              longitude: feature.geometry.coordinates[0],
-            }}
-            title={`Regard ${feature.properties.code || feature.properties.id}`}
-            description={`Diamètre: ${feature.properties.diametre}mm`}
+            key={`regard-${i}`}
+            coordinate={{ latitude: f.geometry.coordinates[1], longitude: f.geometry.coordinates[0] }}
+            pinColor="#f1c40f"
+            onPress={() => { setActiveType('regard'); setActiveObject(f.properties); }}
           />
         ))}
 
-        {/* Stations */}
-        {layers?.couches?.stations?.features?.map((feature, index) => (
-          <Marker
-            key={`station-${index}`}
-            coordinate={{
-              latitude: feature.geometry.coordinates[1],
-              longitude: feature.geometry.coordinates[0],
-            }}
-            pinColor="#e67e22"
-            title={`Station ${feature.properties.nom || feature.properties.id}`}
+        {/* Conduites */}
+        {layers?.couches?.conduites?.features?.map((f, i) => (
+          <Polyline
+            key={`conduite-${i}`}
+            coordinates={f.geometry.coordinates.map(c => ({ latitude: c[1], longitude: c[0] }))}
+            strokeColor="#3498db"
+            strokeWidth={5}
+            tappable
+            onPress={() => { setActiveType('conduite'); setActiveObject(f.properties); }}
           />
         ))}
 
-        {/* STEP */}
-        {layers?.couches?.step?.features?.map((feature, index) => (
+        {/* Incidents locaux signalés */}
+        {localIncidents.map((inc, i) => (
           <Marker
-            key={`step-${index}`}
-            coordinate={{
-              latitude: feature.geometry.coordinates[1],
-              longitude: feature.geometry.coordinates[0],
-            }}
-            pinColor="#27ae60"
-            title={`STEP ${feature.properties.nom || feature.properties.id}`}
-          />
-        ))}
-
-        {/* Ouvrages */}
-        {layers?.couches?.ouvrages?.features?.map((feature, index) => (
-          <Marker
-            key={`ouvrage-${index}`}
-            coordinate={{
-              latitude: feature.geometry.coordinates[1],
-              longitude: feature.geometry.coordinates[0],
-            }}
-            pinColor="#9b59b6"
-            title={`Ouvrage ${feature.properties.nom || feature.properties.id}`}
+            key={`incident-${i}`}
+            coordinate={{ latitude: inc.latitude, longitude: inc.longitude }}
+            pinColor="#e74c3c"
+            title={inc.type_incident}
+            description={inc.description}
           />
         ))}
       </MapView>
 
-      {/* Modal d'édition des conduites */}
-      <Modal
-        visible={editModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setEditModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Modifier Conduite</Text>
+      {/* Barre de boutons flottants */}
+      <View style={styles.floatingControls}>
+        <TouchableOpacity style={styles.floatBtn} onPress={centerOnUser}>
+          <Text style={styles.floatBtnText}>📍 GPS</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.floatBtn} onPress={() => setShowProximite(true)}>
+          <Text style={styles.floatBtnText}>🔍 Proches</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.floatBtn} onPress={() => setShowScanner(true)}>
+          <Text style={styles.floatBtnText}>📷 QR Scan</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.floatBtn, declaringIncident && styles.floatBtnActive]}
+          onPress={() => setDeclaringIncident(!declaringIncident)}
+        >
+          <Text style={styles.floatBtnText}>🚨 Incident</Text>
+        </TouchableOpacity>
+      </View>
 
-            <Text style={styles.inputLabel}>Longueur (m):</Text>
-            <TextInput
-              style={styles.textInput}
-              value={editForm.longueur}
-              onChangeText={(text) => setEditForm({...editForm, longueur: text})}
-              keyboardType="numeric"
-              placeholder="Longueur"
-            />
+      {/* Modal Fiche Terrain */}
+      <Modal visible={activeObject !== null} animationType="slide">
+        {activeObject && (
+          <FicheTerrain
+            object={activeObject}
+            type={activeType}
+            onClose={() => setActiveObject(null)}
+            onSave={saveInspection}
+          />
+        )}
+      </Modal>
 
-            <Text style={styles.inputLabel}>Diamètre (mm):</Text>
-            <TextInput
-              style={styles.textInput}
-              value={editForm.diametre}
-              onChangeText={(text) => setEditForm({...editForm, diametre: text})}
-              keyboardType="numeric"
-              placeholder="Diamètre"
-            />
+      {/* Modal Déclarer Incident */}
+      <Modal visible={showIncidentForm} animationType="slide">
+        {tempCoordinate && (
+          <IncidentForm
+            coordinate={tempCoordinate}
+            onClose={() => { setShowIncidentForm(false); setTempCoordinate(null); }}
+            onSave={saveIncident}
+          />
+        )}
+      </Modal>
 
-            <Text style={styles.inputLabel}>Matériau:</Text>
-            <TextInput
-              style={styles.textInput}
-              value={editForm.materiau}
-              onChangeText={(text) => setEditForm({...editForm, materiau: text})}
-              placeholder="Matériau"
-            />
+      {/* Modal Proximité */}
+      <Modal visible={showProximite} animationType="slide">
+        <ProximiteList
+          location={userLocation || { latitude: 36.15, longitude: 1.33 }}
+          networkData={layers}
+          onClose={() => setShowProximite(false)}
+          onSelect={(obj, type, coords) => {
+            setShowProximite(false);
+            setActiveType(type);
+            setActiveObject(obj);
+            if (mapRef.current) {
+              mapRef.current.animateToRegion({ ...coords, latitudeDelta: 0.002, longitudeDelta: 0.002 }, 1000);
+            }
+          }}
+        />
+      </Modal>
 
-            <Text style={styles.inputLabel}>Nom:</Text>
-            <TextInput
-              style={styles.textInput}
-              value={editForm.f_nom}
-              onChangeText={(text) => setEditForm({...editForm, f_nom: text})}
-              placeholder="Nom"
-            />
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.button, styles.cancelButton]}
-                onPress={() => setEditModalVisible(false)}
-              >
-                <Text style={styles.cancelButtonText}>Annuler</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.button, styles.primaryButton]}
-                onPress={saveConduitEdit}
-              >
-                <Text style={styles.primaryButtonText}>Enregistrer</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
+      {/* Modal QR Scanner */}
+      <Modal visible={showScanner} animationType="slide">
+        <ScannerSim
+          targets={getScannerTargets()}
+          onClose={() => setShowScanner(false)}
+          onScanSuccess={(obj, type) => {
+            setShowScanner(false);
+            setActiveType(type);
+            setActiveObject(obj);
+          }}
+        />
       </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#666',
-  },
-  controls: {
-    flexDirection: 'row',
-    padding: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
-  },
-  button: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 6,
-    marginHorizontal: 4,
-    alignItems: 'center',
-  },
-  primaryButton: {
-    backgroundColor: '#16213e',
-  },
-  primaryButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  secondaryButton: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#16213e',
-  },
-  secondaryButtonText: {
-    color: '#16213e',
-    fontWeight: 'bold',
-  },
-  legend: {
-    backgroundColor: '#fff',
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
-  },
-  legendTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 8,
-    color: '#16213e',
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  legendColor: {
-    width: 16,
-    height: 16,
-    borderRadius: 2,
-    marginRight: 8,
-  },
-  legendText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  map: {
-    flex: 1,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    padding: 20,
-    borderRadius: 10,
-    width: '90%',
-    maxHeight: '80%',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    textAlign: 'center',
-    color: '#16213e',
-  },
-  inputLabel: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginBottom: 5,
-    color: '#333',
-  },
-  textInput: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 5,
-    padding: 10,
-    marginBottom: 15,
-    fontSize: 16,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 20,
-  },
-  cancelButton: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#16213e',
-    flex: 1,
-    marginRight: 10,
-  },
-  cancelButtonText: {
-    color: '#16213e',
-  },
+  container: { flex: 1 },
+  map: { flex: 1 },
+  floatingControls: { position: 'absolute', bottom: 20, left: 10, right: 10, flexDirection: 'row', justifyContent: 'space-around', backgroundColor: 'transparent' },
+  floatBtn: { backgroundColor: '#16213e', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 20, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84 },
+  floatBtnActive: { backgroundColor: '#e74c3c' },
+  floatBtnText: { color: '#fff', fontSize: 12, fontWeight: 'bold' }
 });
