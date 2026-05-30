@@ -8,6 +8,16 @@ let measureLine = null;
 let measureMarker = null;
 let anomaliesMode = false;
 
+// Switch sidebar tabs (Recherche vs Diagnostic)
+function switchSidebarTab(tabId) {
+    document.querySelectorAll('[id^="sidebar-content-"]').forEach(el => {
+        el.classList.toggle('active', el.id === `sidebar-content-${tabId}`);
+    });
+    document.querySelectorAll('[id^="sidebar-tab-"]').forEach(btn => {
+        btn.classList.toggle('active', btn.id === `sidebar-tab-${tabId}`);
+    });
+}
+
 function updateSymbolSizes() {
     const zoom = map.getZoom();
     const radius = Math.max(2, Math.min(6, zoom - 10));

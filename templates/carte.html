@@ -37,8 +37,213 @@
                     <button class="sidebar-toggle" onclick="toggleSidebar()"
                         style="background: none; border: none; color: white; font-size: 16px; cursor: pointer;">◀</button>
                 </div>
-                <div class="sidebar-content">
-                    <!-- Onglets thématiques -->
+                 <div class="sidebar-content">
+<div class="sidebar-content">
+        <!-- Onglets principaux : Recherche/Filtres vs Diagnostics -->
+        <div class="main-tabs" style="padding: 10px; background: #0f3460; display: flex; gap: 5px; border-bottom: 1px solid #16213e;">
+            <button class="tab-btn active" onclick="switchSidebarTab('recherche')" id="sidebar-tab-recherche"
+                style="flex: 1; padding: 8px; background: #4a90f7; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">🔍 Recherche &
+                Filtres</button>
+            <button class="tab-btn" onclick="switchSidebarTab('diagnostic')" id="sidebar-tab-diagnostic"
+                style="flex: 1; padding: 8px; background: #333; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">📊 Diagnostics</button>
+        </div>
+
+        <!-- Contenu Onglet Recherche & Filtres -->
+        <div id="sidebar-content-recherche" class="sidebar-tab-content active">
+            <!-- Section de recherche -->
+            <div class="search-section" style="padding: 15px;">
+                <input type="text" id="search-input" placeholder="Rechercher par code, voie, commune, bassin ou identifiant..."
+                    style="width: 100%; padding: 8px; margin-bottom: 8px; border-radius: 4px; border: 1px solid #ddd;">
+                <button id="search-button" onclick="performSearch()"
+                    style="width: 100%; padding: 8px; background: #4a90f7; color: white; border: none; border-radius: 4px; cursor: pointer;">Rechercher</button>
+            </div>
+
+            <!-- Filtres avancés -->
+            <div class="advanced-filters-section" style="padding: 0 15px 15px;">
+                <h3 class="filters-title" style="margin-bottom: 10px; font-size: 14px;">Filtres avancés</h3>
+
+                <!-- Filtre par diamètre -->
+                <div class="filter-group" style="margin-bottom: 10px;">
+                    <label class="filter-label" style="font-size: 12px;">Diamètre (mm):</label>
+                    <input type="text" id="filter-diametre" placeholder="Ex: 200, 300, 400" class="filter-input"
+                        style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #ddd; font-size: 12px;">
+                </div>
+
+                <!-- Filtre par matériau -->
+                <div class="filter-group" style="margin-bottom: 10px;">
+                    <label class="filter-label" style="font-size: 12px;">Matériau:</label>
+                    <select id="filter-materiau" class="filter-input"
+                        style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #ddd; font-size: 12px;">
+                        <option value="">Tous les matériaux</option>
+                        <option value="PVC">PVC</option>
+                        <option value="BETON">Béton</option>
+                        <option value="FONTE">Fonte</option>
+                        <option value="PEHD">PEHD</option>
+                        <option value="ACIER">Acier</option>
+                    </select>
+                </div>
+
+                <!-- Filtre par longueur -->
+                <div class="filter-group" style="margin-bottom: 10px;">
+                    <label class="filter-label" style="font-size: 12px;">Longueur minimale (m):</label>
+                    <input type="number" id="filter-longueur-min" placeholder="Minimum" class="filter-input"
+                        style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #ddd; font-size: 12px;">
+                </div>
+
+                <!-- Filtre par année de construction -->
+                <div class="filter-group" style="margin-bottom: 10px;">
+                    <label class="filter-label" style="font-size: 12px;">Année de construction:</label>
+                    <input type="number" id="filter-annee" placeholder="Ex: 2000" class="filter-input"
+                        style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #ddd; font-size: 12px;">
+                </div>
+
+                <button onclick="applyAdvancedFilters()" class="action-btn"
+                    style="width: 100%; padding: 8px; background: #4caf50; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                    Appliquer les filtres avancés
+                </button>
+            </div>
+        </div>
+
+        <!-- Contenu Onglet Diagnostics -->
+        <div id="sidebar-content-diagnostic" class="sidebar-tab-content" style="display: none;">
+            <!-- Onglets thématiques des diagnostics -->
+            <div class="filters-section" style="padding: 10px;">
+                <div style="margin-bottom: 15px;">
+                    <div style="display: flex; gap: 5px; margin-bottom: 10px;">
+                        <button class="tab-btn pending" onclick="switchTab('connexions')" id="tab-connexions"
+                            style="flex: 1; padding: 6px; font-size: 11px;">🔗 Connexions</button>
+                        <button class="tab-btn pending" onclick="switchTab('geometrie')" id="tab-geometrie"
+                            style="flex: 1; padding: 6px; font-size: 11px;">📐 Géométrie</button>
+                    </div>
+                    <div style="display: flex; gap: 5px;">
+                        <button class="tab-btn pending" onclick="switchTab('donnees')" id="tab-donnees"
+                            style="flex: 1; padding: 6px; font-size: 11px;">📋 Données</button>
+                        <button class="tab-btn pending" onclick="switchTab('topologie')" id="tab-topologie"
+                            style="flex: 1; padding: 6px; font-size: 11px;">🌐 Topologie</button>
+                    </div>
+                </div>
+
+                <!-- Contenu des onglets de diagnostics -->
+                <div id="tab-content">
+                    <!-- Onglet Connexions -->
+                    <div id="content-connexions" class="tab-content active">
+                        <div class="diagnostic-panel">
+                            <h4 style="margin-bottom: 10px;">🔗 Diagnostic Connexions</h4>
+                            <div id="stats-connexions">Veuillez cocher les cases pour lancer l'analyse.
+                            </div>
+                            <div class="filter-group" style="margin: 15px 0;">
+                                <label><input type="checkbox" class="filter-checkbox"
+                                        id="type-conduites_sans_regards" checked> <strong>Connexions manquantes
+                                        (Amont/Aval)</strong> <span
+                                        id="count-conduites_sans_regards"></span></label>
+                                <label><input type="checkbox" class="filter-checkbox"
+                                        id="type-incoherences_amont_aval" checked> <strong>Incohérences de
+                                        profondeur (Sauts)</strong> <span
+                                        id="count-incoherences_amont_aval"></span></label>
+                            </div>
+                            <div style="display: flex; gap: 5px;">
+                                <button onclick="applyFilters()" class="action-btn"
+                                    style="flex: 1; background: #4caf50;">✅ Filtrer</button>
+                                <button onclick="zoomOnTabAnomalies('connexions')" class="action-btn"
+                                    style="flex: 1;">🔍 Zoom</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Onglet Géométrie -->
+                    <div id="content-geometrie" class="tab-content" style="display: none;">
+                        <div class="diagnostic-panel">
+                            <h4 style="margin-bottom: 10px;">📐 Diagnostic Géométrie</h4>
+                            <div id="stats-geometrie">Veuillez cocher les cases pour lancer l'analyse.
+                            </div>
+                            <div class="filter-group" style="margin: 15px 0;">
+                                <label><input type="checkbox" class="filter-checkbox"
+                                        id="type-geometries_invalides" checked> <strong>Géométries
+                                        invalides</strong> <span id="count-geometries_invalides"></span></label>
+                                <label><input type="checkbox" class="filter-checkbox"
+                                        id="type-pentes_suspectes"
+                                        checked> <strong>Pentes suspectes</strong> <span
+                                        id="count-pentes_suspectes"></span></label>
+                            </div>
+                            <div style="display: flex; gap: 5px;">
+                                <button onclick="applyFilters()" class="action-btn"
+                                    style="flex: 1; background: #4caf50;">✅ Filtrer</button>
+                                <button onclick="zoomOnTabAnomalies('geometrie')" class="action-btn"
+                                    style="flex: 1;">🔍 Zoom</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Onglet Données -->
+                    <div id="content-donnees" class="tab-content" style="display: none;">
+                        <div class="diagnostic-panel">
+                            <h4 style="margin-bottom: 10px;">📋 Diagnostic Données</h4>
+                            <div id="stats-donnees">Veuillez cocher les cases pour lancer l'analyse.
+                            </div>
+                            <div class="filter-group" style="margin: 15px 0;">
+                                <label><input type="checkbox" class="filter-checkbox"
+                                        id="type-champs_manquants"
+                                        checked> <strong>Champs manquants</strong> <span
+                                        id="count-champs_manquants"></span></label>
+                            </div>
+                            <div style="display: flex; gap: 5px;">
+                                <button onclick="applyFilters()" class="action-btn"
+                                    style="flex: 1; background: #4caf50;">✅ Filtrer</button>
+                                <button onclick="zoomOnTabAnomalies('donnees')" class="action-btn"
+                                    style="flex: 1;">🔍 Zoom</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Onglet Topologie -->
+                    <div id="content-topologie" class="tab-content" style="display: none;">
+                        <div class="diagnostic-panel">
+                            <h4 style="margin-bottom: 10px;">🌐 Diagnostic Topologie</h4>
+                            <div id="stats-topologie">Veuillez cocher les cases pour lancer l'analyse.
+                            </div>
+                            <div class="filter-group" style="margin: 15px 0;">
+                                <label><input type="checkbox" class="filter-checkbox"
+                                        id="type-troncons_orphelins" checked> <strong>Tronçons
+                                        orphelins</strong> <span id="count-troncons_orphelins"></span></label>
+                            </div>
+                            <div style="display: flex; gap: 5px;">
+                                <button onclick="applyFilters()" class="action-btn"
+                                    style="flex: 1; background: #4caf50;">✅ Filtrer</button>
+                                <button onclick="zoomOnTabAnomalies('topologie')" class="action-btn"
+                                    style="flex: 1;">🔍 Zoom</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Options avancées -->
+        <div class="filter-group"
+            style="position: absolute; bottom: 0; width: 100%; padding: 15px; background: #f8f9fa; border-top: 1px solid #dee2e6;">
+            <button onclick="toggleAdvancedOptions()"
+                style="width: 100%; padding: 8px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">⚙️
+                Options avancées</button>
+            <div id="advanced-options" style="display: none; margin-top: 10px;">
+                <label><input type="checkbox" class="filter-checkbox" id="layer-conduites" checked
+                        onchange="updateLayersVisibility()"> <strong>Conduite</strong></label>
+                <label><input type="checkbox" class="filter-checkbox" id="layer-regards" checked
+                        onchange="updateLayersVisibility()"> <strong>Regard</strong></label>
+                <label><input type="checkbox" class="filter-checkbox" id="layer-stations"
+                        onchange="updateLayersVisibility()"> <strong>Stations de
+                        relevage</strong></label>
+                <label><input type="checkbox" class="filter-checkbox" id="layer-ouvrages"
+                        onchange="updateLayersVisibility()"> <strong>Ouvrage spécial</strong></label>
+                <hr style="margin: 10px 0; border: 0; border-top: 1px solid #ddd;">
+                <label><input type="checkbox" class="filter-checkbox" id="analysis-mode"
+                        onchange="toggleAnalysisMode()"> <strong>Mode
+                        analyse</strong></label>
+                <small style="color: #666; font-size: 11px;">Forcer affichage indépendamment du zoom</small>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Onglets thématiques -->
                     <div class="filters-section">
                         <div style="margin-bottom: 15px;">
                             <div style="display: flex; gap: 5px; margin-bottom: 10px;">
@@ -55,7 +260,46 @@
                             </div>
                         </div>
 
-                        <!-- Contenu des onglets -->
+    <!-- Section des filtres avancés -->
+    <div class="advanced-filters-section">
+        <h3 class="filters-title">Filtres avancés</h3>
+        
+        <!-- Filtre par diamètre -->
+        <div class="filter-group">
+            <label class="filter-label">Diamètre (mm):</label>
+            <input type="text" id="filter-diametre" placeholder="Ex: 200, 300, 400" class="filter-input">
+        </div>
+        
+        <!-- Filtre par matériau -->
+        <div class="filter-group">
+            <label class="filter-label">Matériau:</label>
+            <select id="filter-materiau" class="filter-input">
+                <option value="">Tous les matériaux</option>
+                <option value="PVC">PVC</option>
+                <option value="BETON">Béton</option>
+                <option value="FONTE">Fonte</option>
+                <option value="PEHD">PEHD</option>
+                <option value="ACIER">Acier</option>
+            </select>
+        </div>
+        
+        <!-- Filtre par longueur -->
+        <div class="filter-group">
+            <label class="filter-label">Longueur minimale (m):</label>
+            <input type="number" id="filter-longueur-min" placeholder="Minimum" class="filter-input">
+        </div>
+        
+        <!-- Filtre par année de construction -->
+        <div class="filter-group">
+            <label class="filter-label">Année de construction:</label>
+            <input type="number" id="filter-annee" placeholder="Ex: 2000" class="filter-input">
+        </div>
+        
+        <button onclick="applyAdvancedFilters()" class="action-btn" style="width: 100%; margin-top: 10px;">
+            Appliquer les filtres avancés
+        </button>
+    </div>
+                         <!-- Contenu des onglets -->
                         <div id="tab-content">
                             <!-- Onglet Connexions -->
                             <div id="content-connexions" class="tab-content active">
