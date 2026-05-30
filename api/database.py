@@ -67,8 +67,9 @@ def init_db():
     existing_tables = inspector.get_table_names()
 
     from api.models import Regard, Canalisation, Rejet, Cluster, Simulation, AuditLog
+    from api.models_terrain import Inspection, Incident
 
-    required_tables = ['regards', 'conduites', 'rejets', 'clusters', 'simulations']
+    required_tables = ['regards', 'conduites', 'rejets', 'clusters', 'simulations', 'inspections', 'incidents']
     need_create = any(t not in existing_tables for t in required_tables)
 
     if need_create:

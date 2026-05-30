@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 import json
 
 from api.database import get_db
-from api import schemas, crud
+from api import schemas, crud, crud_terrain
 from api.websocket import manager
 
 router = APIRouter(prefix="/sync", tags=["Synchronisation"])
@@ -124,6 +124,23 @@ def push_changes(
                     accepted += 1
                 else:
                     crud.create_canalisation(db, changes, user_id=user_id)
+                    accepted += 1
+
+            elif layer == "inspections":
+                crud_terrain.create_inspection(db, changes, user_id=user_id)
+                accepted += 1
+
+            elif layer == "incidents":
+                if "id" in changes and changes["id"]:
+                    crud_terrain.update_incident_status(
+                        db=db,
+                        incident_id=int(changes["id"]),
+                        statut=changes.get("statut", "À traiter"),
+                        user_id=user_id
+                    )
+                    accepted += 1
+                else:
+                    crud_terrain.create_incident(db, changes, user_id=user_id)
                     accepted += 1
 
             else:
