@@ -38,18 +38,17 @@
                         style="background: none; border: none; color: white; font-size: 16px; cursor: pointer;">◀</button>
                 </div>
                  <div class="sidebar-content">
-<div class="sidebar-content">
         <!-- Onglets principaux : Recherche/Filtres vs Diagnostics -->
         <div class="main-tabs" style="padding: 10px; background: #0f3460; display: flex; gap: 5px; border-bottom: 1px solid #16213e;">
-            <button class="tab-btn active" onclick="switchSidebarTab('recherche')" id="sidebar-tab-recherche"
-                style="flex: 1; padding: 8px; background: #4a90f7; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">🔍 Recherche &
+            <button class="tab-btn active" onclick="switchSidebarTab('diagnostic')" id="sidebar-tab-diagnostic"
+                style="flex: 1; padding: 8px; background: #4a90f7; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">📊 Diagnostics</button>
+            <button class="tab-btn" onclick="switchSidebarTab('recherche')" id="sidebar-tab-recherche"
+                style="flex: 1; padding: 8px; background: #333; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">🔍 Recherche &
                 Filtres</button>
-            <button class="tab-btn" onclick="switchSidebarTab('diagnostic')" id="sidebar-tab-diagnostic"
-                style="flex: 1; padding: 8px; background: #333; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">📊 Diagnostics</button>
         </div>
 
-        <!-- Contenu Onglet Recherche & Filtres -->
-        <div id="sidebar-content-recherche" class="sidebar-tab-content active">
+        <!-- Contenu Onglet Recherche & Filtres (hidden by default) -->
+        <div id="sidebar-content-recherche" class="sidebar-tab-content" style="display: none;">
             <!-- Section de recherche -->
             <div class="search-section" style="padding: 15px;">
                 <input type="text" id="search-input" placeholder="Rechercher par code, voie, commune, bassin ou identifiant..."
@@ -104,8 +103,8 @@
             </div>
         </div>
 
-        <!-- Contenu Onglet Diagnostics -->
-        <div id="sidebar-content-diagnostic" class="sidebar-tab-content" style="display: none;">
+        <!-- Contenu Onglet Diagnostics (actif par défaut) -->
+        <div id="sidebar-content-diagnostic" class="sidebar-tab-content active">
             <!-- Onglets thématiques des diagnostics -->
             <div class="filters-section" style="padding: 10px;">
                 <div style="margin-bottom: 15px;">
