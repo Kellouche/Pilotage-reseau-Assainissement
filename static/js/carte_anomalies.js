@@ -13,6 +13,16 @@ let currentCorrectionId = null;
 let currentCorrectionType = null;
 
 function applyFilters() {
+    console.log('Applying filters for current tab:', currentTab);
+    // Met à jour la visibilité des couches (conduites, regards, etc.)
+    if (typeof updateLayersVisibility === 'function') updateLayersVisibility();
+    // Met à jour les couches d'anomalies en fonction des cases à cocher du tab actif
+    if (typeof updateAnomaliesLayers === 'function') updateAnomaliesLayers();
+    // Rafraîchit l'affichage du tab (ajoute ou retire les layers pertinentes)
+    if (typeof updateTabDisplay === 'function') updateTabDisplay();
+    // Optionnel : mettre à jour le compteur d'anomalies visibles dans l'UI
+    if (typeof updateVisibleCount === 'function') updateVisibleCount();
+}
     console.log('Applying filters manually...');
     if (typeof updateLayersVisibility === 'function') updateLayersVisibility();
     if (typeof updateAnomaliesLayers === 'function') updateAnomaliesLayers();
@@ -78,13 +88,14 @@ function buildAnomaliesMaps(data) {
             });
 
             // CRÉATION DES MARQUEURS (différée par lots)
-            const isConduiteAnom = [
-                'pente_negative',
-                'pente_trop_forte',
-                'champs_manquants_conduite',
-                'troncon_orphelin',
-                'conduite_sans_regard'
-            ].includes(anom.type);
+            const isConduiteAnom =
+                anom.type === 'pente_negative' ||
+                anom.type === 'pente_trop_forte' ||
+                anom.type === 'champs_manquants_conduite' ||
+                anom.type === 'troncon_orphelin' ||
+                anom.type === 'conduite_sans_regard' ||
+                anom.type === 'incoherence_profondeur' ||
+                anom.type === 'incoherences_amont_aval';
 
             if (!isConduiteAnom) {
                 let coords = findAnomalieCoords(anom);
@@ -137,7 +148,7 @@ function updateAnomaliesLayers() {
 
     // 1. Mettre à jour le style des conduites (Couleurs de diagnostic)
     // RÈGLE : Si la couche globale "Conduite" est décochée, on ne colorie rien
-    const showConduitesGlobal = document.getElementById('layer-conduites')?.checked;
+    const showConduitesGlobal = document.getElementById('layer-conduites')?.checked ?? true;
     if (typeof conduitesLayer !== 'undefined' && conduitesLayer) {
         if (showConduitesGlobal === false) {
             // Style neutre forcé
@@ -148,10 +159,10 @@ function updateAnomaliesLayers() {
     }
 
     // 2. Gérer la visibilité des couches de marqueurs pré-calculées
-    const showRegardsGlobal = document.getElementById('layer-regards')?.checked;
-    const showStationsGlobal = document.getElementById('layer-stations')?.checked;
-    const showStepGlobal = document.getElementById('layer-step')?.checked;
-    const showOuvragesGlobal = document.getElementById('layer-ouvrages')?.checked;
+    const showRegardsGlobal = document.getElementById('layer-regards')?.checked ?? true;
+    const showStationsGlobal = document.getElementById('layer-stations')?.checked ?? true;
+    const showStepGlobal = document.getElementById('layer-step')?.checked ?? true;
+    const showOuvragesGlobal = document.getElementById('layer-ouvrages')?.checked ?? true;
 
     try {
         Object.entries(anomaliesLayers).forEach(([group, layer]) => {
@@ -220,7 +231,7 @@ function shouldShowAnomalie(anomalie, group) {
     // Si c'est une anomalie liée à un regard, vérifier si la couche Regards est cochée
     const isRegardAnom = !!(anomalie.id_regard || anomalie.code || anomalie.point_connexion || anomalie.type === 'champs_manquants_regard');
     if (isRegardAnom) {
-        const showRegards = document.getElementById('layer-regards')?.checked;
+        const showRegards = document.getElementById('layer-regards')?.checked ?? true;
         if (showRegards === false) return false;
     }
 
@@ -246,15 +257,30 @@ function getAnomalieTitre(anomalie) {
         'geometrie_invalide': 'Position invalide',
         'pente_negative': 'Pente négative',
         'pente_trop_forte': 'Pente excessive',
-        'incoherence_profondeur': 'Connexion incohérente'
+        'incoherence_profondeur': 'Connexion incohérente',
+        // Phase 1 - Fondations topologiques
+        'incoherence_profondeur_topologie': 'Dénivellation excessive',
+        'chevauchement_geometrique': 'Chevauchement géométrique',
+        'doublon_regards': 'Doublons regards'
     };
     return titres[anomalie.type] || anomalie.type;
 }
 
 function getAnomalieDescription(anomalie) {
+    // Phase 1 descriptions
+    if (anomalie.type === 'incoherence_profondeur_topologie') {
+        return `Écart: ${anomalie.difference || (anomalie.details && anomalie.details.difference) || 0}m`;
+    }
+    if (anomalie.type === 'chevauchement_geometrique') {
+        return `Distance: ${anomalie.distance_min || 0}m`;
+    }
+    if (anomalie.type === 'doublon_regards') {
+        return `Distance: ${anomalie.distance || 0}m`;
+    }
+    
     if (anomalie.champs_manquants) return `Champs manquants: ${anomalie.champs_manquants.join(", ")}`;
     if (anomalie.pente_pourcent !== undefined) return `Pente: ${anomalie.pente_pourcent.toFixed(1)}%`;
-    if (anomalie.difference) return `Ecart: ${anomalie.difference.toFixed(2)}m`;
+    if (anomalie.difference) return `Écart: ${anomalie.difference.toFixed(2)}m`;
     return 'Anomalie détectée';
 }
 
@@ -313,8 +339,13 @@ function updateStats() {
         .then(data => {
             const scoreEl = document.getElementById('global-score');
             const totalEl = document.getElementById('total-anomalies');
-            if (scoreEl) scoreEl.textContent = `${data.global.score_qualite}%`;
-            if (totalEl) totalEl.textContent = data.global.total_anomalies;
+            if (scoreEl && data.global) {
+                let score = data.global.score_qualite;
+                if (typeof score === 'string') score = score.replace(',', '.');
+                const scoreFmt = Number(score || 0).toFixed(1);
+                scoreEl.textContent = `${scoreFmt}%`;
+            }
+            if (totalEl && data.global) totalEl.textContent = data.global.total_anomalies;
         })
         .catch(e => console.error('Erreur stats:', e));
 }
@@ -485,7 +516,7 @@ async function populateAnomaliesLists(data) {
         'connexions': ['conduites_sans_regards', 'incoherences_amont_aval'],
         'geometrie': ['geometries_invalides', 'pentes_suspectes'],
         'donnees': ['champs_manquants'],
-        'topologie': ['troncons_orphelins']
+        'topologie': ['troncons_orphelins', 'incoherence_profondeur_topologie', 'chevauchement_geometrique', 'doublon_regards']
     };
 
     Object.entries(tabMappings).forEach(([tab, types]) => {
@@ -547,6 +578,8 @@ async function populateAnomaliesLists(data) {
                 }
 
                 option.textContent = label;
+                option.dataset.anomalieType = anom.type;
+                option.dataset.anomalieSeverite = anom.severite;
                 select.appendChild(option);
                 count++;
             });
@@ -619,7 +652,11 @@ function zoomToAnomalie(valueStr) {
         try {
             setTimeout(() => {
                 if (typeof openCorrectionModal === 'function') {
-                    openCorrectionModal(targetId, 'conduite');
+                    // Récupérer le type d'anomalie depuis l'option sélectionnée
+                    const sel = document.getElementById(`select-anomalies-${currentTab}`);
+                    const optSelected = sel?.options?.[sel.selectedIndex];
+                    const anomType = optSelected?.dataset?.anomalieType || 'conduite';
+                    openCorrectionModal(targetId, anomType);
                 }
             }, 250);
         } catch (e) { console.warn('openCorrectionModal failed', e); }
