@@ -26,7 +26,7 @@ const tabMappings = {
     'connexions': ['conduites_sans_regards', 'incoherences_amont_aval'],
     'geometrie': ['pentes_suspectes', 'geometries_invalides'],
     'donnees': ['champs_manquants'],
-    'topologie': ['troncons_orphelins']
+    'topologie': ['troncons_orphelins', 'incoherence_profondeur_topologie', 'chevauchement_geometrique', 'doublon_regards']
 };
 
 // Initialisation
@@ -96,6 +96,11 @@ async function chargerDonnees() {
         if (typeof updateLegendForZoom === 'function') updateLegendForZoom();
         if (typeof centerOnData === 'function') centerOnData();
         showLoading(false);
+
+        // Auto-lancer le diagnostic après chargement carte (Phase 0)
+        if (typeof lancerDiagnostic === 'function') {
+            setTimeout(() => lancerDiagnostic('connexions'), 500);
+        }
     } catch (error) {
         console.error('❌ Erreur lors du chargement:', error);
         showError(`Impossible de charger les données: ${error.message}`);
@@ -174,6 +179,15 @@ function getConduiteStyle(feature) {
     }
 
     return { color: '#bdc3c7', weight: 2, opacity: 0.6 };
+}
+
+function createPopupContent(props, type) {
+    let html = `<div class="popup-content"><div class="popup-title">${type.toUpperCase()}</div>`;
+    for (const [k, v] of Object.entries(props)) {
+        if (v !== null && v !== undefined) html += `<div class="popup-info"><strong>${k}:</strong> ${v}</div>`;
+    }
+    html += '</div>';
+    return html;
 }
 
 async function chargerCouchesGeoJSON(couches) {
@@ -278,7 +292,7 @@ async function chargerCouchesGeoJSON(couches) {
 function updateLegendForZoom() {
     if (!map) return;
     const zoom = map.getZoom();
-    const analysisMode = document.getElementById('analysis-mode')?.checked;
+    const analysisMode = document.getElementById('analysis-mode')?.checked ?? false;
 
     const layerMappings = {
         'conduitesLayer': { id: 'layer-conduites', minZoom: 15 },
@@ -297,7 +311,7 @@ function updateLegendForZoom() {
             return;
         }
 
-        const isChecked = checkbox?.checked;
+        const isChecked = checkbox?.checked ?? true;
         const shouldShow = isChecked && (zoom >= config.minZoom || analysisMode);
 
         console.log(`Layer ${layerKey}: isChecked=${isChecked}, shouldShow=${shouldShow}`);
