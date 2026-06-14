@@ -284,7 +284,31 @@ function getAnomalieDescription(anomalie) {
     return 'Anomalie détectée';
 }
 
-function calculateTabStats(tabName) {
+
+function updateVisibleCount() {
+    const activeTypes = tabMappings[currentTab] || [];
+    activeTypes.forEach(type => {
+        const layer = anomaliesLayers[type];
+        const countEl = document.getElementById(`count-${type}`);
+        if (!countEl) return;
+        let visibleCount = 0;
+        if (layer && typeof map !== 'undefined' && map.hasLayer(layer)) {
+            layer.eachLayer(marker => {
+                let visible = true;
+                if (marker._isPointAnom) {
+                    if (marker._pointType === 'station' && !(document.getElementById('layer-stations')?.checked)) visible = false;
+                    else if (marker._pointType === 'step' && !(document.getElementById('layer-step')?.checked)) visible = false;
+                    else if (marker._pointType === 'ouvrage' && !(document.getElementById('layer-ouvrages')?.checked)) visible = false;
+                    else if (!(document.getElementById('layer-regards')?.checked)) visible = false;
+                }
+                if (visible) visibleCount++;
+            });
+        }
+        countEl.textContent = `(${visibleCount})`;
+        countEl.style.color = visibleCount > 0 ? '#16213e' : '#ccc';
+    });
+}
+
     if (!anomaliesData) return;
     const activeTypes = tabMappings[tabName] || [];
     let total = 0, critiques = 0, majeures = 0, mineures = 0;
