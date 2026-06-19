@@ -1,0 +1,480 @@
+// Backup of the current broken state - DO NOT USE THIS FOR PRODUCTION
+// This file contains the attempted optimizations that introduced numerous errors
+// It's kept only for reference
+
+import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:swmm_mobile/services/api_service.dart';
+import 'package:swmm_mobile/services/storage_service.dart';
+import 'dart:async';
+import 'dart:math' as math;
+
+class MapScreen extends StatefulWidget {
+  const MapScreen({super.key});
+
+  @override
+  State<MapScreen> createState() => _MapScreenState();
+}
+
+class _MapScreenState extends State<MapScreen> {
+  Map<String, dynamic>? layers;
+  bool loading = true;
+  String networkMode = 'online';
+  Position? userLocation;
+  Map<String, dynamic>? activeObject;
+  String activeType = 'regard';
+  bool showProximite = false;
+  bool showScanner = false;
+  bool declaringIncident = false;
+  LatLng? tempCoordinate;
+  bool showIncidentForm = false;
+  List<Map<String, dynamic>> localIncidents = [];
+  
+  // Nouveaux champs pour l'optimisation
+  LatLngBounds? currentBounds;
+  double currentZoom = 12.0;
+  String? lastFetchCacheKey;
+  Timer? _debounceTimer;
+  static const Duration debounceDuration = Duration(milliseconds: 500);
+
+  LatLngBounds _estimateBoundsFromPosition(MapPosition position) {
+    // Estimer les bounds visibles basé sur la position centrale, le zoom et une taille d'écran approximative
+    // Ceci est une approximation qui fonctionne raisonnablement bien pour éviter les rechargements excessifs
+    
+    const double earthRadius = 6378137.0; // Rayon de la Terre en mètres (à l'équateur)
+    const double tileSize = 256.0; // Taille d'une tuile en pixels
+    
+    // Résolution au niveau du zoom donné (mètres par pixel)
+    double resolution = (2 * math.pi * earthRadius) / (tileSize * math.pow(2, position.zoom));
+    
+    // Nous n'avons pas facilement accès à la taille de l'écran ici, donc nous utilisons une estimation
+    // Supposons une taille d'écran typique de 400 pixels pour le calcul (peut être ajusté)
+    const double screenSizePx = 400.0;
+    
+    // Taille de la zone visible en mètres
+    double visibleSizeMeters = resolution * screenSizePx;
+    
+    // Convertir en degrés de latitude (1 degré de latitude = ~111132 mètres)
+    double latDelta = visibleSizeMeters / 111132.0;
+    
+    // Convertir en degrés de longitude (dépend de la latitude)
+    double lonDelta = latDelta / math.cos(position.center.latitude * math.pi / 180.0);
+    
+    // Retourner les bounds avec une petite marge pour éviter les rechargements trop fréquents
+    double marginFactor = 1.2; // 20% de marge
+    return LatLngBounds(
+      LatLng(
+        position.center.latitude - latDelta * marginFactor,
+        position.center.longitude - lonDelta * marginFactor,
+      ),
+      LatLng(
+        position.center.latitude + latDelta * marginFactor,
+        position.center.longitude + lonDelta * marginFactor,
+      ),
+    );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    loadInitialData();
+  }
+
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> loadInitialData() async {
+    await loadMapData();
+    await requestGPSLocation();
+  }
+
+  Future<void> loadMapData({LatLngBounds? bounds}) async {
+    try {
+      // Générer une clé de cache basée sur les bounds et le zoom
+      final cacheKey = '${bounds?.northeast.latitude}|${bounds?.northeast.longitude}|'
+          '${bounds?.southwest.latitude}|${bounds?.southwest.longitude}|$currentZoom';
+      
+      // Éviter de recharger les mêmes données
+      if (cacheKey == lastFetchCacheKey) return;
+      
+      setState(() => loading = true);
+      final data = await apiService.getLayers(bounds: bounds);
+      setState(() {
+        layers = data;
+        lastFetchCacheKey = cacheKey;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Erreur lors du chargement de la carte')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => loading = false);
+      }
+    }
+  }
+
+  Future<void> requestGPSLocation() async {
+    try {
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.whileInUse ||
+          permission == LocationPermission.always) {
+        final position = await Geolocator.getCurrentPosition();
+        setState(() => userLocation = position);
+        
+        // Centrer la carte sur la position GPS après l'avoir obtenue
+        if (mounted) {
+          // Note: Pour réellement déplacer la carte, nous aurions besoin d'une référence au contrôleur de carte
+          // Cela nécessiterait une refonte plus importante pour utiliser MapController
+          // Pour l'instant, nous allons simplement charger les données autour de cette position
+          final bounds = LatLngBounds(
+            LatLng(position.latitude - 0.1, position.longitude - 0.1),
+            LatLng(position.latitude + 0.1, position.longitude + 0.1),
+          );
+          await loadMapData(bounds: bounds);
+        }
+      }
+    } catch (e) {
+      debugPrint('GPS non disponible');
+    }
+  }
+
+  void centerOnUser() {
+    if (userLocation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Position GPS non encore détectée')),
+      );
+      return;
+    }
+    // Note: Pour réellement déplacer la carte, nous aurions besoin d'une référence au contrôleur de carte
+    // Pour l'instant, nous allons simplement charger les données autour de cette position
+    final bounds = LatLngBounds(
+      LatLng(userLocation!.latitude - 0.1, userLocation!.longitude - 0.1),
+      LatLng(userLocation!.latitude + 0.1, userLocation!.longitude + 0.1),
+    );
+    loadMapData(bounds: bounds);
+  }
+
+  void _onMapMoved(MapEvent event) {
+    // Ignorer les événements pendant le chargement initial ou si nous ne avons pas encore de données
+    if (!mounted || layers == null) return;
+
+    // Mettre à jour les bounds et le zoom actuels à partir de l'événement
+    if (event.bounds != null) {
+      setState(() {
+        currentBounds = event.bounds;
+        currentZoom = event.zoom ?? currentZoom;
+      });
+    } else if (event.zoom != null) {
+      setState(() {
+        currentZoom = event.zoom!;
+      });
+    }
+
+    // Annuler le timer précédent s'il existe
+    _debounceTimer?.cancel();
+    
+    // Programmer un nouveau chargement avec debounce
+    _debounceTimer = Timer(debounceDuration, () {
+      if (mounted && currentBounds != null) {
+        loadMapData(bounds: currentBounds);
+      }
+    });
+  }
+
+  List<Map<String, dynamic>> getScannerTargets() {
+    final list = <Map<String, dynamic>>[];
+    if (layers?.containsKey('couches') == true) {
+      final regards = layers!['couches']['regards']?['features'];
+      if (regards != null && regards is List && regards.length > 5) {
+        for (var i = 0; i < 5; i++) {
+          final f = regards[i];
+          list.add({
+            'type': 'regard',
+            'object': f['properties'],
+          });
+        }
+      }
+    }
+    return list;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Carte du Réseau'),
+      ),
+      body: Stack(
+        children: [
+          FlutterMap(
+            options: MapOptions(
+              initialCenter: LatLng(36.15, 1.33),
+              initialZoom: 12.0,
+              onTap: (tapPosition, point) {
+                if (declaringIncident) {
+                  setState(() {
+                    tempCoordinate = point;
+                    showIncidentForm = true;
+                    declaringIncident = false;
+                  });
+                }
+              },
+              onMapMoved: _onMapMoved,
+            ),
+            children: [
+              TileLayer(
+                urlTemplate:
+                    'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                subdomains: const ['a', 'b', 'c'],
+              ),
+              if (layers?.containsKey('couches') == true) ...[
+                // Couches conditionnelles selon le zoom
+                if (currentZoom >= 13)
+                  MarkerLayer(
+                    markers: [
+                      if (layers!['couches']['regards']?['features'] != null)
+                        ...List<Marker>.from(
+                          (layers!['couches']['regards']['features'] as List)
+                              .asMap()
+                              .entries
+                              .map((entry) {
+                            final f = entry.value;
+                            final geom = f['geometry'];
+                            if (geom == null || !geom.containsKey('coordinates')) return null;
+                            final coords = geom['coordinates'] as List;
+                            if (coords.length < 2) return null;
+                            if (coords[1] is! num || coords[0] is! num) return null;
+                            final lat = (coords[1] as num).toDouble();
+                            final lng = (coords[0] as num).toDouble();
+                            return Marker(
+                              point: LatLng(lat, lng),
+                              child: GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    activeType = 'regard';
+                                    activeObject = f['properties'];
+                                  });
+                                },
+                                child: const Icon(Icons.water,
+                                    color: Color(0xFFf1c40f)),
+                              ),
+                            );
+                          })
+                          .whereType<Marker>()
+                          .toList(),
+                        ),
+                      ...localIncidents.whereType<Map<String, dynamic>>().map((inc) {
+                            if (!inc.containsKey('latitude') || 
+                                !inc.containsKey('longitude') ||
+                                inc['latitude'] is! num || 
+                                inc['longitude'] is! num) {
+                              return null;
+                            }
+                            return Marker(
+                              point: LatLng(
+                                  (inc['latitude'] as num).toDouble(),
+                                  (inc['longitude'] as num).toDouble()),
+                              child: const Icon(Icons.warning,
+                                  color: Color(0xFFe74c3c)),
+                            );
+                          })
+                          .whereType<Marker>()
+                          .toList(),
+                    ],
+                  ),
+                if (currentZoom >= 15)
+                  PolylineLayer(
+                    polylines: [
+                      if (layers!['couches']['conduites']?['features'] != null)
+                        ...(layers!['couches']['conduites']['features'] as List)
+                            .map((f) {
+                              final geom = f['geometry'];
+                              if (geom == null || !geom.containsKey('coordinates')) return null;
+                              final coords = geom['coordinates'] as List;
+                              final points = <LatLng>[];
+                              try {
+                                for (final coord in coords) {
+                                  if (coord is! List || coord.length < 2) continue;
+                                  if (coord[1] is! num || coord[0] is! num) continue;
+                                  final lat = (coord[1] as num).toDouble();
+                                  final lng = (coord[0] as num).toDouble();
+                                  points.add(LatLng(lat, lng));
+                                }
+                              } catch (e) {
+                                debugPrint('Error processing conduite coords: $e');
+                                return null;
+                              }
+                              if (points.isEmpty) return null;
+                              return Polyline(
+                                points: points,
+                                color: const Color(0xFF3498db),
+                                strokeWidth: 5.0,
+                              );
+                            })
+                            .whereType<Polyline>()
+                            .toList(),
+                    ],
+                  ),
+              ],
+              // Indicateur de chargement
+              if (loading)
+                const Positioned.fill(
+                  child: ColoredBox(
+                    color: Colors.black54,
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircularProgressIndicator(
+                            color: Colors.white,
+                          ),
+                          SizedBox(height: 16),
+                          Text(
+                            'Chargement des données cartographiques...',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              // Légende dynamique
+              Positioned(
+                bottom: 20,
+                left: 10,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (currentZoom < 13)
+                      const _LegendItem(
+                        label: 'Zoomez pour voir les détails',
+                        isActive: false,
+                      )
+                    else ...[
+                      if (currentZoom >= 13)
+                        const _LegendItem(
+                          label: 'Regards',
+                          color: Color(0xFFf1c40f),
+                          isActive: true,
+                        ),
+                      if (currentZoom >= 15)
+                        const _LegendItem(
+                          label: 'Conduites',
+                          color: Color(0xFF3498db),
+                          isActive: true,
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              Positioned(
+                bottom: 20,
+                right: 10,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    FloatingActionButton(
+                      backgroundColor: const Color(0xFF16213e),
+                      onPressed: centerOnUser,
+                      child: const Text('📍', style: TextStyle(fontSize: 12)),
+                    ),
+                    const SizedBox(width: 8),
+                    FloatingActionButton(
+                      backgroundColor: const Color(0xFF16213e),
+                      onPressed: () => setState(() => showProximite = true),
+                      child: const Text('🔍', style: TextStyle(fontSize: 12)),
+                    ),
+                    const SizedBox(width: 8),
+                    FloatingActionButton(
+                      backgroundColor: const Color(0xFF16213e),
+                      onPressed: () => setState(() => showScanner = true),
+                      child: const Text('📷', style: TextStyle(fontSize: 12)),
+                    ),
+                    const SizedBox(width: 8),
+                    FloatingActionButton(
+                      backgroundColor: declaringIncident
+                          ? const Color(0xFFe74c3c)
+                          : const Color(0xFF16213e),
+                      onPressed: () =>
+                          setState(() => declaringIncident = !declaringIncident),
+                      child: const Text('🚨', style: TextStyle(fontSize: 12)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LegendItem extends StatelessWidget {
+  final String label;
+  final Color? color;
+  final bool isActive;
+
+  const _LegendItem({
+    required this.label,
+    this.color,
+    this.isActive = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (color != null && isActive)
+            Container(
+              width: 16,
+              height: 16,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.white70, width: 1),
+              ),
+            )
+          else if (color != null && !isActive)
+            Container(
+              width: 16,
+              height: 16,
+              decoration: BoxDecoration(
+                color: color!.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.white70.withValues(alpha: 0.3), width: 1),
+              ),
+            )
+          else
+            const Icon(Icons.info_outline, size: 16, color: Colors.white70),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: TextStyle(
+              color: isActive ? Colors.white : Colors.white70,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

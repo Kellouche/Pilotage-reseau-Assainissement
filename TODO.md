@@ -5,34 +5,103 @@
 
 ---
 
-## À faire
+## À faire — Priorité hydraulique
 
-- [ ] Délimitation automatique des bassins versants
-- [ ] Phase suivante du rapport : reprendre la délimitation des bassins versants (MNT/DEM)
-- [ ] Pousser sur GitHub quand tout est stable
+### Phase 0 — Diagnostic qualité existant (base)
+
+- [X] Anomalie détection : champs manquants, géométries invalides, pentes
+- [X] Intégrer auto-lancement après chargement carte (pas d'attente utilisateur)
+- [X] Regrouper les icônes par phase d'analyse (🔧 topologie, ⛰ pente, 📊 débit, 🌊 MNT)
+- [X] Adapter boîte correction par type anomaly (pas profil pour coords invalides)
+
+### Phase 1 — Fondations topologiques (immédiat)
+
+- [X] Validation des connexions amont-aval (tolérance 50cm)
+- [X] Détection des chevauchements géométriques (conduites se croisant sans nœud)
+- [X] Détection des doublons regards à < 2m
+
+### Phase 2 — Analyse de pente et profil
+
+- [ ] Calcul continu des pentes avec vérification de débitilité
+- [ ] Détection des sauts de pente > 2m (inversion brutale)
+- [ ] Courbes caractéristiques longueur-cumul / profondeur-cumul
+
+### Phase 3 — Capacité débitaire
+
+- [ ] Calcul débit nominal selon NP 650 (Q = 3.1 * D^2.2)
+- [ ] Détection conduites sous-dimensionnées (défaut de charge)
+- [ ] Vérification vitesse d'écoulement (0.3 - 3 m/s)
+
+### Phase 4 — Limites MNT intégrées
+
+- [ ] Intégrer MNT/DEM pour bassins versants réels
+- [ ] Comparaison avec bassins topologiques
+- [ ] Détection des hors-bassin (écoulement inversé géographique)
+
+---
+
+## À faire — UI/UX cartographique
+
+### Phase 5 — Visualisation hydraulique
+
+- [ ] Mode "flux continu" animation sens débit
+- [ ] Coloration par ordre topologique (débit cumulé)
+- [ ] Heatmap débit maximal par bassin
+
+### Phase 6 — Diagnostic spatial
+
+- [ ] Panel scores qualité par bassin (rouge/orange/vert)
+- [ ] Timeline modifications avec lien carto
+- [ ] Mode "contrôle terrain" validation terrain
+
+### Phase 7 — Mobile terrain
+
+- [ ] Synchronisation offline
+- [ ] Capture GPS + photo anomalies
+- [ ] Mode orientation flèche débit
+
+---
+
+## À faire — Architecture
+
+### Phase 8 — Performance
+
+- [ ] Cache calculs topologiques (graphe statique)
+- [ ] Validation incrémentale par bassin
+- [ ] Batch processing parallèle
+
+### Phase 9 — Traçabilité
+
+- [ ] Versionning géométries (timestamp)
+- [ ] Audit trail modifications
+- [ ] Impact hydraulique calculé à la volée
+
+---
 
 ## Fait
 
-- [x] Restructuration MVC du projet (règles 1-5)
-- [x] En-têtes de module standardisés (auteur, version, dates, objectif)
-- [x] Découpage des fichiers >250 lignes en sous-modules
-- [x] Architecture : src/controllers, src/domain, src/infrastructure, src/views, tests
-- [x] Sens d'écoulement hydraulique (cotes de radier, inversion des coordonnées)
-- [x] Noms de rues comme labels sur la carte (134 rues depuis les regards)
-- [x] Flèches de sens d'écoulement visibles à partir du zoom 14
-- [x] Labels noms de rues visibles à partir du zoom 13
-- [x] Taille des symboles adaptative selon le zoom
-- [x] Centre de la carte calculé automatiquement depuis les données
-- [x] Filtrage des colonnes GeoPackage → performance (58s → 6s)
-- [x] Popups enrichis (rue, commune, diamètre, profondeur, matériau)
-- [x] Clustering Leaflet désactivé (points individuels)
-- [x] Supprimer Streamlit, garder Flask uniquement
-- [x] Supprimer graph_analysis.py et toute logique de clustering
-- [x] Simplifier server.py (chargement GeoPackage → API JSON)
-- [x] Simplifier index.html (6 couches, pas de clusters)
-- [x] Corriger les accents UTF-8 (console Windows + interface web)
-- [x] Ajouter en-têtes anti-cache dans Flask (Cache-Control)
-- [x] Corriger le zoom (fitBounds uniquement au chargement initial)
+## Fait
+
+- [X] Restructuration MVC du projet (règles 1-5)
+- [X] En-têtes de module standardisés (auteur, version, dates, objectif)
+- [X] Découpage des fichiers >250 lignes en sous-modules
+- [X] Architecture : src/controllers, src/domain, src/infrastructure, src/views, tests
+- [X] Sens d'écoulement hydraulique (cotes de radier, inversion des coordonnées)
+- [X] Noms de rues comme labels sur la carte (134 rues depuis les regards)
+- [X] Flèches de sens d'écoulement visibles à partir du zoom 14
+- [X] Labels noms de rues visibles à partir du zoom 13
+- [X] Taille des symboles adaptative selon le zoom
+- [X] Centre de la carte calculé automatiquement depuis les données
+- [X] Filtrage des colonnes GeoPackage → performance (58s → 6s)
+- [X] Popups enrichis (rue, commune, diamètre, profondeur, matériau)
+- [X] Clustering Leaflet désactivé (points individuels)
+- [X] Supprimer Streamlit, garder Flask uniquement
+- [X] Supprimer graph_analysis.py et toute logique de clustering
+- [X] Simplifier server.py (chargement GeoPackage → API JSON)
+- [X] Simplifier index.html (6 couches, pas de clusters)
+- [X] Corriger les accents UTF-8 (console Windows + interface web)
+- [X] Ajouter en-têtes anti-cache dans Flask (Cache-Control)
+- [X] Corriger le zoom (fitBounds uniquement au chargement initial)
 
 ---
 

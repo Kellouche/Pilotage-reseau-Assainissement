@@ -7,7 +7,31 @@ Lancement du serveur FastAPI pour la plateforme SWMM POC.
 import uvicorn
 from config.settings import API_HOST, API_PORT, API_RELOAD
 
+import os
+import subprocess
+import time
+
+def kill_process_on_port(port):
+    """Cherche et tue le processus écoutant sur le port donné (Windows)."""
+    try:
+        output = subprocess.check_output(['netstat', '-ano']).decode('utf-8', errors='ignore')
+        killed_pids = set()
+        for line in output.splitlines():
+            if f":{port}" in line and 'LISTENING' in line:
+                parts = line.split()
+                pid = parts[-1]
+                if pid != "0" and pid not in killed_pids:
+                    print(f"Port {port} deja utilise par le PID {pid}. Fermeture forcée de l'arbre de processus...")
+                    subprocess.call(['taskkill', '/F', '/T', '/PID', pid])
+                    killed_pids.add(pid)
+        
+        if killed_pids:
+            time.sleep(2)
+    except Exception as e:
+        pass
+
 if __name__ == "__main__":
+    kill_process_on_port(API_PORT)
     uvicorn.run(
         "api.main:app",
         host=API_HOST,

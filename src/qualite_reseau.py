@@ -1,83 +1,99 @@
-"""
-Module de qualité des données réseau - Phase 2
-Détection et analyse des anomalies dans le réseau d'assainissement
-"""
-
 import os
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, Session
 from typing import Dict, List, Any, Tuple
 from pathlib import Path
 import pandas as pd
 from datetime import datetime
 
-# Configuration base de données
+from src.validateurs.topologie import ValidateurTopologie
+
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg2://swmm_user:swmm_password_2026@localhost:5010/swmm_platform")
 
-# Fallback vers SQLite si PostgreSQL indisponible
 try:
     engine = create_engine(DATABASE_URL)
-    # Test de connexion
     with engine.connect() as conn:
         conn.execute(text("SELECT 1"))
-    print("✅ Connexion PostgreSQL établie")
+    print("Connexion PostgreSQL etablie")
     USE_POSTGRESQL = True
 except Exception as e:
-    print(f"⚠️ PostgreSQL indisponible ({e}), fallback vers SQLite")
+    print(f"PostgreSQL indisponible ({e}), fallback vers SQLite")
     DATABASE_URL = "sqlite:///swmm_platform.db"
     engine = create_engine(DATABASE_URL)
     USE_POSTGRESQL = False
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+_cache_report: dict | None = None
+_cache_timestamp: float = 0.0
+_cache_ttl = 300  # seconds
+
 
 class QualiteReseau:
-    """
-    Module principal pour l'analyse de la qualité des données réseau.
-    Détecte les anomalies, calcule les scores de qualité, et génère des rapports.
-    """
+    """Module principal pour l'analyse de la qualité des données réseau."""
 
     def __init__(self, db_url: str = None):
-        """Initialise la connexion à la base de données."""
         self.db_url = db_url or DATABASE_URL
         self.engine = create_engine(self.db_url)
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
 
+    def fermer_connexion(self):
+        if self.engine:
+            self.engine.dispose()
+
     def analyser_reseau_complet(self) -> Dict[str, Any]:
-        """
-        Analyse complète de la qualité du réseau.
-        Retourne un rapport détaillé avec toutes les anomalies détectées.
-        """
-        print("🔍 Analyse de la qualité du réseau d'assainissement...")
+        """Analyse le réseau et renvoie le rapport.
+        Le résultat est mis en cache pendant 5 minutes afin d'éviter de
+        recalculer à chaque appel HTTP (opération lourde)."""
+        import time
+        global _cache_report, _cache_timestamp, _cache_ttl
+        # Si le cache est encore valable, on le renvoie immédiatement
+        if _cache_report is not None and (time.time() - _cache_timestamp) < _cache_ttl:
+            print("Retour du rapport qualite depuis le cache (%.1f s)" % (time.time() - _cache_timestamp))
+            return _cache_report
+
+        print("Lancement d'une analyse complete (pas de cache)")
+        print("Analyse de la qualite du reseau d'assainissement...")
+        print("Phase 0 : Detectons basiques (geometrie, pentes)")
+        print("Phase 1 : Validations topologiques (fondations)")
+
+        session = self.SessionLocal()
+        validateur_topo = ValidateurTopologie(session)
+
+        anomalies = {
+            "conduites_sans_regards": self.detecter_conduites_sans_regards(),
+            "troncons_orphelins": self.detecter_troncons_orphelins(),
+            "champs_manquants": self.detecter_champs_manquants(),
+            "geometries_invalides": self.detecter_geometries_invalides(),
+            "pentes_suspectes": self.detecter_pentes_suspectes(),
+            "incoherences_amont_aval": self.detecter_incoherences_amont_aval(),
+            "incoherence_profondeur_topologie": validateur_topo.valider_coherence_profondeurs(),
+            "chevauchement_geometrique": validateur_topo.valider_chevauchements_geometriques(),
+            "doublon_regards": validateur_topo.detecter_doublons_regards()
+        }
 
         rapport = {
             "date_analyse": datetime.now().isoformat(),
             "statistiques_globales": self._get_statistiques_globales(),
-            "anomalies": {
-                "conduites_sans_regards": self.detecter_conduites_sans_regards(),
-                "troncons_orphelins": self.detecter_troncons_orphelins(),
-                "champs_manquants": self.detecter_champs_manquants(),
-                "geometries_invalides": self.detecter_geometries_invalides(),
-                "pentes_suspectes": self.detecter_pentes_suspectes(),
-                "incoherences_amont_aval": self.detecter_incoherences_amont_aval()
-            },
-            "scores_qualite": self.calculer_scores_qualite()
+            "anomalies": anomalies,
+            "scores_qualite": self.calculer_scores_qualite(anomalies)
         }
 
-        print(f"✅ Analyse terminée - {len(rapport['anomalies'])} catégories d'anomalies détectées")
+        session.close()
+        print(f"Analyse terminee - {len(rapport['anomalies'])} categories d'anomalies detectees")
+        # Mémoriser le résultat dans le cache
+        _cache_report = rapport
+        _cache_timestamp = time.time()
         return rapport
 
     def _get_statistiques_globales(self) -> Dict[str, Any]:
-        """Récupère les statistiques globales du réseau."""
         stats = {}
 
         with self.SessionLocal() as session:
-            # Nombre d'éléments par type
             for table in ['regards', 'conduites', 'rejets']:
                 result = session.execute(text(f"SELECT COUNT(*) as count FROM {table}"))
                 stats[f"nb_{table}"] = result.fetchone()[0]
 
-            # Statistiques géographiques
             result = session.execute(text("""
                 SELECT
                     COUNT(DISTINCT commune) as nb_communes,
@@ -99,17 +115,12 @@ class QualiteReseau:
         return stats
 
     def detecter_conduites_sans_regards(self) -> List[Dict[str, Any]]:
-        """
-        Détecte les conduites dont les regards amont ou aval n'existent pas dans la base.
-        """
         anomalies = []
 
         with self.SessionLocal() as session:
-            # Récupérer tous les codes de regards existants (avec strip pour éviter les espaces)
             result = session.execute(text("SELECT code FROM regards"))
             codes_regards = {str(row[0]).strip() for row in result.fetchall() if row[0] is not None}
 
-            # Conduites avec problèmes de connexion
             result = session.execute(text("""
                 SELECT c.id, c.fid, c.id_amont, c.id_aval, c.nom_voie
                 FROM conduites c
@@ -117,7 +128,6 @@ class QualiteReseau:
             """))
 
             for row in result.fetchall():
-                # Nettoyer les IDs de la conduite pour comparaison
                 id_amont = str(row[2]).strip() if row[2] else None
                 id_aval = str(row[3]).strip() if row[3] else None
 
@@ -141,17 +151,13 @@ class QualiteReseau:
                         anomalie["latitude"] = lat
                     anomalies.append(anomalie)
 
-        print(f"🔍 Conduites sans regards: {len(anomalies)} détectées")
+        print(f"Conduites sans regards: {len(anomalies)} detectees")
         return anomalies
 
     def detecter_troncons_orphelins(self) -> List[Dict[str, Any]]:
-        """
-        Détecte les tronçons qui ne sont connectés à aucun autre élément.
-        """
         anomalies = []
 
         with self.SessionLocal() as session:
-            # Récupérer les connexions existantes
             result = session.execute(text("SELECT DISTINCT id_amont FROM conduites WHERE id_amont IS NOT NULL"))
             connexions_amont = {row[0] for row in result.fetchall()}
 
@@ -161,17 +167,12 @@ class QualiteReseau:
             result = session.execute(text("SELECT code FROM regards"))
             codes_regards = {row[0] for row in result.fetchall()}
 
-            # Trouver les tronçons orphelins
-            result = session.execute(text("""
-                SELECT c.id, c.fid, c.id_amont, c.id_aval
-                FROM conduites c
-            """))
+            result = session.execute(text("SELECT c.id, c.fid, c.id_amont, c.id_aval FROM conduites c"))
 
             for row in result.fetchall():
                 id_amont = row[2]
                 id_aval = row[3]
 
-                # Vérifier si le tronçon est connecté
                 est_connecte_amont = id_amont and (id_amont in connexions_aval or id_amont in codes_regards)
                 est_connecte_aval = id_aval and (id_aval in connexions_amont or id_aval in codes_regards)
 
@@ -184,24 +185,19 @@ class QualiteReseau:
                         "id_aval": id_aval,
                         "severite": "mineure"
                     }
-                    # Ajouter les coordonnées (utilisant id_amont ou id_aval comme regard)
                     lon, lat = self._get_coords_for_anomalie(session, anomalie)
                     if lon is not None and lat is not None:
                         anomalie["longitude"] = lon
                         anomalie["latitude"] = lat
                     anomalies.append(anomalie)
 
-        print(f"🔍 Tronçons orphelins: {len(anomalies)} détectés")
+        print(f"Troncons orphelins: {len(anomalies)} detectes")
         return anomalies
 
     def detecter_champs_manquants(self) -> List[Dict[str, Any]]:
-        """
-        Détecte les champs obligatoires manquants.
-        """
         anomalies = []
 
         with self.SessionLocal() as session:
-            # Champs manquants dans conduites
             result = session.execute(text("""
                 SELECT id, fid, diametre, longueur, materiau, prof_fe_am, prof_fe_av
                 FROM conduites
@@ -214,11 +210,11 @@ class QualiteReseau:
 
             for row in result.fetchall():
                 champs_manquants = []
-                if row[2] is None or row[2] == 0: champs_manquants.append("diamètre")  # diametre
-                if row[3] is None or row[3] == 0: champs_manquants.append("longueur")  # longueur
-                if row[4] is None or row[4] == '': champs_manquants.append("matériau")  # materiau
-                if row[5] is None: champs_manquants.append("profondeur amont")  # prof_fe_am
-                if row[6] is None: champs_manquants.append("profondeur aval")  # prof_fe_av
+                if row[2] is None or row[2] == 0: champs_manquants.append("diamÃ¨tre")
+                if row[3] is None or row[3] == 0: champs_manquants.append("longueur")
+                if row[4] is None or row[4] == '': champs_manquants.append("matÃ©riau")
+                if row[5] is None: champs_manquants.append("profondeur amont")
+                if row[6] is None: champs_manquants.append("profondeur aval")
 
                 if champs_manquants:
                     anomalie = {
@@ -226,18 +222,14 @@ class QualiteReseau:
                         "id_conduite": row[0],
                         "fid": row[1],
                         "champs_manquants": champs_manquants,
-                        "severite": "majeure" if "diamètre" in champs_manquants else "mineure"
+                        "severite": "majeure" if "diamÃ¨tre" in champs_manquants else "mineure"
                     }
-                    # Pour les coordonnées, essayer de trouver un regard lié
-                    # Pour POC, on pourrait utiliser une requête pour le centroïde, mais pour simplifier, utiliser id_amont/id_aval si disponibles
-                    # Ici, on laisse la fonction _get_coords_for_anomalie gérer
                     lon, lat = self._get_coords_for_anomalie(session, anomalie)
                     if lon is not None and lat is not None:
                         anomalie["longitude"] = lon
                         anomalie["latitude"] = lat
                     anomalies.append(anomalie)
 
-            # Champs manquants dans regards
             result = session.execute(text("""
                 SELECT id, code, profondeur, diametre
                 FROM regards
@@ -246,8 +238,8 @@ class QualiteReseau:
 
             for row in result.fetchall():
                 champs_manquants = []
-                if row[2] is None: champs_manquants.append("profondeur")  # profondeur
-                if row[3] is None: champs_manquants.append("diamètre")    # diametre
+                if row[2] is None: champs_manquants.append("profondeur")
+                if row[3] is None: champs_manquants.append("diamÃ¨tre")
 
                 if champs_manquants:
                     anomalie = {
@@ -263,20 +255,15 @@ class QualiteReseau:
                         anomalie["latitude"] = lat
                     anomalies.append(anomalie)
 
-        print(f"🔍 Champs manquants: {len(anomalies)} éléments affectés")
+        print(f"Champs manquants: {len(anomalies)} elements affectes")
         return anomalies
 
     def detecter_geometries_invalides(self) -> List[Dict[str, Any]]:
-        """
-        Détecte les géométries invalides (coordonnées nulles, hors limites, etc.)
-        """
         anomalies = []
 
         with self.SessionLocal() as session:
-            # Coordonnées invalides dans regards
             result = session.execute(text("""
-                SELECT 'regard' as type_element, id, code as identifiant,
-                       longitude, latitude
+                SELECT 'regard' as type_element, id, code as identifiant, longitude, latitude
                 FROM regards
                 WHERE longitude IS NULL OR latitude IS NULL
                    OR longitude < -180 OR longitude > 180
@@ -292,15 +279,13 @@ class QualiteReseau:
                     "identifiant": row[2],
                     "longitude": row[3],
                     "latitude": row[4],
-                    "probleme": "coordonnées nulles ou hors limites" if row[3] is None else "coordonnées à zéro",
+                    "probleme": "coordonnÃ©es nulles ou hors limites" if row[3] is None else "coordonnÃ©es Ã  zÃ©ro",
                     "severite": "majeure"
                 }
                 anomalies.append(anomalie)
 
-            # Coordonnées invalides dans rejets
             result = session.execute(text("""
-                SELECT 'rejet' as type_element, id, nom as identifiant,
-                       longitude, latitude
+                SELECT 'rejet' as type_element, id, nom as identifiant, longitude, latitude
                 FROM rejets
                 WHERE longitude IS NULL OR latitude IS NULL
                    OR longitude < -180 OR longitude > 180
@@ -316,18 +301,15 @@ class QualiteReseau:
                     "identifiant": row[2],
                     "longitude": row[3],
                     "latitude": row[4],
-                    "probleme": "coordonnées nulles ou hors limites" if row[3] is None else "coordonnées à zéro",
+                    "probleme": "coordonnÃ©es nulles ou hors limites" if row[3] is None else "coordonnÃ©es Ã  zÃ©ro",
                     "severite": "majeure"
                 }
                 anomalies.append(anomalie)
 
-        print(f"🔍 Géométries invalides: {len(anomalies)} éléments affectés")
+        print(f"Geometries invalides: {len(anomalies)} elements affectes")
         return anomalies
 
     def detecter_pentes_suspectes(self) -> List[Dict[str, Any]]:
-        """
-        Détecte les pentes suspectes (négatives, trop fortes, etc.)
-        """
         anomalies = []
 
         with self.SessionLocal() as session:
@@ -339,14 +321,13 @@ class QualiteReseau:
             """))
 
             for row in result.fetchall():
-                prof_am = row[2]  # prof_fe_am
-                prof_av = row[3]  # prof_fe_av
-                longueur = row[4]  # longueur
+                prof_am = row[2]
+                prof_av = row[3]
+                longueur = row[4]
 
                 if longueur > 0:
                     pente = ((prof_am - prof_av) / longueur) * 100
 
-                    # Pente négative (contre le sens de l'écoulement)
                     if pente < 0:
                         anomalie = {
                             "type": "pente_negative",
@@ -360,7 +341,6 @@ class QualiteReseau:
                             anomalie["longitude"] = lon
                             anomalie["latitude"] = lat
                         anomalies.append(anomalie)
-                    # Pente trop forte (> 50%)
                     elif pente > 50:
                         anomalie = {
                             "type": "pente_trop_forte",
@@ -375,13 +355,11 @@ class QualiteReseau:
                             anomalie["latitude"] = lat
                         anomalies.append(anomalie)
 
-        print(f"🔍 Pentes suspectes: {len(anomalies)} conduites affectées")
+        print(f"Pentes suspectes: {len(anomalies)} conduites affectees")
         return anomalies
 
     def _get_coords_for_anomalie(self, session, anomalie: Dict[str, Any]) -> Tuple[float, float]:
-        """Récupère les coordonnées pour une anomalie donnée."""
         if anomalie["type"] == "incoherence_profondeur":
-            # Pour incoherence_profondeur, utiliser le point_connexion (regard)
             point_connexion = anomalie.get("point_connexion")
             if point_connexion:
                 result = session.execute(text("SELECT longitude, latitude FROM regards WHERE code = :code"), {"code": str(point_connexion)})
@@ -389,7 +367,6 @@ class QualiteReseau:
                 if row and row[0] is not None and row[1] is not None:
                     return row[0], row[1]
         elif anomalie["type"] == "conduite_sans_regard":
-            # Utiliser id_amont_manquant ou id_aval_manquant
             regard_id = anomalie.get("id_amont_manquant") or anomalie.get("id_aval_manquant")
             if regard_id:
                 result = session.execute(text("SELECT longitude, latitude FROM regards WHERE code = :code"), {"code": str(regard_id)})
@@ -397,20 +374,15 @@ class QualiteReseau:
                 if row and row[0] is not None and row[1] is not None:
                     return row[0], row[1]
         elif anomalie["type"] in ["troncon_orphelin", "champs_manquants_conduite", "pente_negative", "pente_trop_forte"]:
-            # Utiliser id_conduite ou fid pour centroïde de la conduite
             conduite_id = anomalie.get("id_conduite") or anomalie.get("fid")
             if conduite_id:
-                # Pour simplifier, prendre les coordonnées de l'amont ou aval s'ils existent
-                # Sinon, on pourrait calculer le centroïde, mais pour POC, utiliser un regard lié
                 if anomalie["type"] == "troncon_orphelin":
-                    # Essayer id_amont ou id_aval comme regard
                     regard_id = anomalie.get("id_amont") or anomalie.get("id_aval")
                     if regard_id:
                         result = session.execute(text("SELECT longitude, latitude FROM regards WHERE code = :code"), {"code": str(regard_id)})
                         row = result.fetchone()
                         if row and row[0] is not None and row[1] is not None:
                             return row[0], row[1]
-                # Sinon, on pourrait faire une requête plus complexe pour le centroïde
         elif anomalie["type"] == "champs_manquants_regard":
             code = anomalie.get("code")
             if code:
@@ -429,13 +401,9 @@ class QualiteReseau:
         return None, None
 
     def detecter_incoherences_amont_aval(self) -> List[Dict[str, Any]]:
-        """
-        Détecte les incohérences entre connexions amont/aval.
-        """
         anomalies = []
 
         with self.SessionLocal() as session:
-            # Vérifier que les conduites connectées ont des profondeurs cohérentes
             result = session.execute(text("""
                 SELECT c1.id as id_conduite1, c1.fid as fid1, c1.id_aval,
                        c2.id as id_conduite2, c2.fid as fid2, c2.id_amont,
@@ -459,24 +427,19 @@ class QualiteReseau:
                     "difference": abs(row[6] - row[7]),
                     "severite": "majeure"
                 }
-                # Ajouter les coordonnées
                 lon, lat = self._get_coords_for_anomalie(session, anomalie)
                 if lon is not None and lat is not None:
                     anomalie["longitude"] = lon
                     anomalie["latitude"] = lat
                 anomalies.append(anomalie)
 
-        print(f"🔍 Incohérences amont/aval: {len(anomalies)} connexions problématiques")
+        print(f"Incoherences amont/aval: {len(anomalies)} connexions problematiques")
         return anomalies
 
-    def calculer_scores_qualite(self) -> Dict[str, Any]:
-        """
-        Calcule les scores de qualité par commune, bassin, et type d'objet.
-        """
+    def calculer_scores_qualite(self, anomalies: Dict[str, List] = None) -> Dict[str, Any]:
         scores = {}
 
         with self.SessionLocal() as session:
-            # Score par commune
             result = session.execute(text("""
                 SELECT commune,
                        COUNT(*) as total_regards,
@@ -488,7 +451,7 @@ class QualiteReseau:
 
             scores['par_commune'] = []
             for row in result.fetchall():
-                score = (row[2] / row[1]) * 100 if row[1] > 0 else 0  # regards_complets / total_regards
+                score = (row[2] / row[1]) * 100 if row[1] > 0 else 0
                 scores['par_commune'].append({
                     "commune": row[0],
                     "score_qualite": round(score, 1),
@@ -496,15 +459,10 @@ class QualiteReseau:
                     "total_regards": row[1]
                 })
 
-        # Score global (calculé après avoir détecté toutes les anomalies)
-        total_anomalies = sum(len(anomalies) for anomalies in [
-            self.detecter_conduites_sans_regards(),
-            self.detecter_troncons_orphelins(),
-            self.detecter_champs_manquants(),
-            self.detecter_geometries_invalides(),
-            self.detecter_pentes_suspectes(),
-            self.detecter_incoherences_amont_aval()
-        ])
+        if anomalies is None:
+            anomalies = {}
+
+        total_anomalies = sum(len(v) for v in anomalies.values()) if anomalies else 0
 
         stats_globales = self._get_statistiques_globales()
         total_elements = (
@@ -521,16 +479,12 @@ class QualiteReseau:
             "total_anomalies": total_anomalies
         }
 
-        print(f"📊 Scores de qualité calculés - Score global: {scores['global']['score_qualite']}%")
+        print(f"Scores de qualite calcules - Score global: {scores['global']['score_qualite']}%")
         return scores
 
     def exporter_rapport_csv(self, rapport: Dict[str, Any], fichier_sortie: str = "rapport_qualite_reseau.csv"):
-        """
-        Exporte le rapport d'anomalies au format CSV.
-        """
         anomalies = []
 
-        # Aplatir toutes les anomalies
         for categorie, liste_anomalies in rapport['anomalies'].items():
             for anomalie in liste_anomalies:
                 anomalie['categorie'] = categorie
@@ -539,12 +493,11 @@ class QualiteReseau:
         if anomalies:
             df = pd.DataFrame(anomalies)
             df.to_csv(fichier_sortie, index=False, encoding='utf-8-sig')
-            print(f"💾 Rapport exporté: {fichier_sortie} ({len(anomalies)} anomalies)")
+            print(f"Rapport exporte: {fichier_sortie} ({len(anomalies)} anomalies)")
         else:
-            print("✅ Aucune anomalie détectée - pas d'export nécessaire")
+            print("Aucune anomalie detectee - pas d'export necessaire")
 
     def fermer_connexion(self):
-        """Ferme la connexion à la base de données."""
         if hasattr(self, 'engine'):
             self.engine.dispose()
 
@@ -556,23 +509,19 @@ class QualiteReseau:
 
 
 def analyser_qualite_reseau(exporter_csv: bool = True):
-    """
-    Fonction principale pour analyser la qualité du réseau.
-    Utilisable en ligne de commande ou import.
-    """
     try:
         with QualiteReseau() as analyseur:
             rapport = analyseur.analyser_reseau_complet()
 
             print("\n" + "="*60)
-            print("RAPPORT DE QUALITÉ DU RÉSEAU D'ASSAINISSEMENT")
+            print("RAPPORT DE QUALITE DU RESEAU D'ASSAINISSEMENT")
             print("="*60)
             print(f"Date d'analyse: {rapport['date_analyse']}")
             print(f"Score global: {rapport['scores_qualite']['global']['score_qualite']}%")
-            print(f"Total éléments: {rapport['scores_qualite']['global']['total_elements']}")
+            print(f"Total elements: {rapport['scores_qualite']['global']['total_elements']}")
             print(f"Total anomalies: {rapport['scores_qualite']['global']['total_anomalies']}")
 
-            print("\nDÉTAIL DES ANOMALIES:")
+            print("\nDETAIL DES ANOMALIES:")
             for categorie, anomalies in rapport['anomalies'].items():
                 print(f"- {categorie}: {len(anomalies)} anomalies")
 
@@ -582,10 +531,9 @@ def analyser_qualite_reseau(exporter_csv: bool = True):
             return rapport
 
     except Exception as e:
-        print(f"❌ Erreur lors de l'analyse: {e}")
+        print(f"Erreur lors de l'analyse: {e}")
         return None
 
 
 if __name__ == "__main__":
-    # Analyse en ligne de commande
     analyser_qualite_reseau()

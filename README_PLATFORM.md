@@ -65,7 +65,7 @@ Si PostgreSQL n'est pas installé, l'API utilise un mode démo avec données en 
 
 **Mode simple (sans Celery) :**
 ```bash
-python run_api.py
+python run_server.py
 # ou
 python -m uvicorn api.main:app --reload --port 5001
 ```
@@ -88,31 +88,30 @@ Une fois l'API lancée :
 - **Swagger UI interactive** : http://localhost:5001/docs
 - **ReDoc** : http://localhost:5001/redoc
 
-## 📱 Application Mobile (React Native Expo)
+## 📱 Application Mobile (Flutter)
 
-À créer dans `/mobile` (non inclus dans ce POC).
+Implémentée dans `/mobile` avec Flutter/Dart.
 
-Structure minimale :
+Structure actuelle :
 ```
 mobile/
-├── App.js              # Point d'entrée
-├── /screens
-│   ├── MapScreen.js    # Carte réseau
-│   ├── EditScreen.js   # Formulaire édition
-│   └── SimList.js      # Liste simulations
-├── /services
-│   ├── api.js          # Appels API
-│   └── sync.js         # Synchronisation delta
-└── /storage
-    └── database.js     # SQLite local
+├── lib/
+│   ├── main.dart           # Point d'entrée
+│   ├── /screens
+│   │   ├── map_screen.dart # Carte réseau
+│   │   └── edit_screen.dart# Formulaire édition
+│   ├── /services
+│   │   └── api_service.dart # Appels API
+│   └── /models
+│       └── feature.dart  # Modèles données
+└── pubspec.yaml        # Dépendances Flutter
 ```
 
-Lancement Expo :
+Lancement Flutter :
 ```bash
 cd mobile
-npm install
-npx expo start
-# Scanner QR avec Expo Go sur téléphone
+flutter pub get
+flutter run
 ```
 
 ## 🔄 Synchronisation Mobile

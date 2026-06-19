@@ -79,12 +79,6 @@ function switchTabReal(tabId) {
     if (typeof updateAnomaliesLayers === 'function') updateAnomaliesLayers();
 }
 
-function zoomOnTabAnomalies(tabId) {
-    if (typeof zoomToVisibleAnomalies === 'function') {
-        zoomToVisibleAnomalies();
-    }
-}
-
 function createPopupContent(props, type) {
     let html = `<div class="popup-content"><div class="popup-title">${type.toUpperCase()}</div>`;
     for (const [k, v] of Object.entries(props)) {
@@ -96,13 +90,24 @@ function createPopupContent(props, type) {
 
 function createAnomaliePopup(anomalie) {
     const color = getAnomalieColor(anomalie.severite);
+    const isGeometrie = anomalie.type === 'geometrie_invalide';
+    const isTopologie = anomalie.type === 'conduite_sans_regard' || anomalie.type === 'troncon_orphelin' || anomalie.type === 'incoherence_profondeur' || anomalie.type === 'incoherences_amont_aval';
+
+    const id = anomalie.id || anomalie.fid || anomalie.id_conduite || anomalie.type_element || '';
+
+    const correctionBtn = anomalie.type === 'geometrie_invalide'
+        ? `<button class="popup-btn" onclick="openCorrectionModal('${id}', 'geometrie_invalide')">Corriger coords</button>`
+        : anomalie.type === 'conduite_sans_regard' || anomalie.type === 'troncon_orphelin' || anomalie.type === 'incoherence_profondeur' || anomalie.type === 'incoherences_amont_aval'
+        ? `<button class="popup-btn" onclick="openCorrectionModal('${id}', 'conduite_sans_regard')">Creer connexion</button>`
+        : `<button class="popup-btn primary" onclick="openCorrectionModal('${id}', 'pente_negative')">Corriger profil</button>`;
+
     return `
         <div class="popup-content">
             <div class="popup-title" style="color: ${color}">${getAnomalieTitre(anomalie)}</div>
             <div class="popup-info">${getAnomalieDescription(anomalie)}</div>
-            <div class="popup-info"><strong>Sévérité:</strong> ${anomalie.severite}</div>
+            <div class="popup-info"><strong>Severite:</strong> ${anomalie.severite}</div>
             <div class="popup-actions">
-                <button class="popup-btn primary" onclick="corrigerAnomalie('${anomalie.type}')">Corriger</button>
+                ${correctionBtn}
             </div>
         </div>
     `;
@@ -142,8 +147,19 @@ document.addEventListener('change', function (e) {
     }
 });
 
-// Mock functions for missing logic
-function corrigerAnomalie(type) { showNotification(`Correction pour ${type} non implémentée`, 'warning'); }
+// Mock functions for missing logic - adaptées par type d'anomalie
+function corrigerGeometrie(id) {
+    if (typeof openCorrectionModal === 'function') openCorrectionModal(id, 'geometrie_invalide');
+}
+
+function corrigerTopologie(id) {
+    if (typeof openCorrectionModal === 'function') openCorrectionModal(id, 'conduite_sans_regard');
+}
+
+function corrigerAnomalie(type) {
+    if (typeof openCorrectionModal === 'function') openCorrectionModal(null, type);
+}
+
 function toggleFullscreen() {
     if (!document.fullscreenElement) {
         document.documentElement.requestFullscreen();
@@ -155,10 +171,6 @@ function toggleAdvancedOptions() {
     const el = document.getElementById('advanced-options');
     if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
-function zoomOnTabAnomalies(tab) {
-    if (typeof switchTab === 'function') switchTab(tab);
-    if (typeof zoomToVisibleAnomalies === 'function') zoomToVisibleAnomalies();
-}
 function exportVisibleData() {
     showNotification("L'exportation des données sera bientôt disponible.", 'info');
 }
@@ -166,14 +178,102 @@ function exportVisibleData() {
 // Minimal modal control (ensure modal opens even if other scripts missing)
 function openCorrectionModal(id, type) {
     try {
-        if (!id || id === 'Inconnu') {
-            if (typeof showError === 'function') showError('Impossible de corriger : identifiant invalide.');
+        // Normaliser l'identifiant : accepter les formats "fid|lat,lng" ou simple "fid"
+        let fidCandidate = null;
+        if (typeof id === 'string' && id.includes('|')) {
+            fidCandidate = id.split('|')[0];
+        } else {
+            fidCandidate = id;
+        }
+        // Si l'identifiant reste vide ou non résolvable, afficher une erreur claire
+        if (!fidCandidate || fidCandidate === 'Inconnu') {
+            if (typeof showError === 'function')
+                showError('Impossible de corriger : identifiant invalide ou non reconnu.');
             return;
+        }
+        // Conserver le fid normalisé pour le reste du flux
+        id = fidCandidate;
+
+        // Descriptions et solutions pour chaque type de diagnostic
+        const diagnosticSolutions = {
+            'geometrie_invalide': {
+                title: 'Corriger la position',
+                description: 'Corrigez les coordonnées XY du point ou du début de la conduite.',
+                solution: 'formulaire_coords',
+                suggestionTitle: 'Saisie des coordonnées'
+            },
+            'conduite_sans_regard': {
+                title: 'Ajouter une connexion manquante',
+                description: 'Cette conduite n\'est pas connectée à un regard. Créez la connexion en indiquant les nœuds amont et aval.',
+                solution: 'formulaire_connexion_with_suggestion',
+                suggestionTitle: 'Solution de connexion'
+            },
+            'troncon_orphelin': {
+                title: 'Relier le tronçon orphelin',
+                description: 'Ce tronçon est isolé du réseau. Connectez-le aux nœuds amont et aval appropriés.',
+                solution: 'formulaire_connexion_with_suggestion',
+                suggestionTitle: 'Solution de connexion'
+            },
+            'incoherence_profondeur': {
+                title: 'Corriger l\'incohérence de profondeur',
+                description: 'Les profondeurs des nœuds amont et aval sont incohérentes. Ajustez le profil de la conduite.',
+                solution: 'formulaire_profil_with_profile',
+                suggestionTitle: 'Solution hydraulique'
+            },
+            'incoherences_amont_aval': {
+                title: 'Corriger l\'incohérence amont/aval',
+                description: 'Les connexions amont/aval sont manquantes ou incorrectes. Corrigez les nœuds.',
+                solution: 'formulaire_connexion_with_suggestion',
+                suggestionTitle: 'Solution de connexion'
+            },
+            'pente_negative': {
+                title: 'Corriger la pente négative',
+                description: 'La pente est négative. Inversez le profil ou corrigez les profondeurs pour obtenir une pente positive.',
+                solution: 'formulaire_profil_with_profile',
+                suggestionTitle: 'Solution hydraulique'
+            },
+            'pente_trop_forte': {
+                title: 'Corriger la pente excessive',
+                description: 'La pente est trop forte (>50%). Ajustez les profondeurs ou la longueur de la conduite.',
+                solution: 'formulaire_profil_with_profile',
+                suggestionTitle: 'Solution hydraulique'
+            },
+            'champs_manquants_conduite': {
+                title: 'Compléter les données (conduite)',
+                description: 'Des champs essentiels manquent. Complétez les informations de la conduite.',
+                solution: 'formulaire_profil_simple',
+                suggestionTitle: 'Données manquantes'
+            },
+            'champs_manquants_regard': {
+                title: 'Compléter les données (regard)',
+                description: 'Des champs essentiels manquent pour ce regard. Complétez les informations.',
+                solution: 'formulaire_coords',
+                suggestionTitle: 'Données manquantes'
+            }
+        };
+
+        const solutionConfig = diagnosticSolutions[type] || {
+            title: 'Correction d\'anomalie',
+            description: 'Corrigez cette anomalie en saisissant les valeurs appropriées.',
+            solution: 'formulaire_profil_with_profile',
+            suggestionTitle: 'Proposition'
+        };
+
+        // Mettre à jour le titre et la description de la modale
+        const titleEl = document.getElementById('modal-title-diagnostic');
+        if (titleEl) {
+            titleEl.textContent = solutionConfig.title;
+        }
+
+        // Mettre à jour le titre de la boîte de suggestion
+        const suggestionTitleEl = document.getElementById('suggestion-title');
+        if (suggestionTitleEl) {
+            suggestionTitleEl.textContent = solutionConfig.suggestionTitle;
         }
 
         // Parse id value: may be "fid|lat,lng" or just fid or coords
-        let fidCandidate = null;
-        let coords = null;
+        fidCandidate = null;
+        coords = null;
         if (typeof id === 'string' && id.includes('|')) {
             const parts = id.split('|');
             fidCandidate = parts[0];
@@ -189,13 +289,81 @@ function openCorrectionModal(id, type) {
         currentCorrectionFid = fidCandidate || null;
 
         const tgt = document.getElementById('correction-target-id');
-        if (tgt) tgt.textContent = `Cible : ${fidCandidate || (coords ? coords.lat + ',' + coords.lng : id)} (${type || 'conduite'})`;
+        if (tgt) {
+            tgt.innerHTML = `<strong>Problème :</strong> ${solutionConfig.description}<br><strong>Cible :</strong> ${fidCandidate || (coords ? coords.lat + ',' + coords.lng : id)}`;
+        }
+
+        // Afficher/masquer les sections appropriées
+        const profile = document.getElementById('profile-container');
+        const suggestionBox = document.getElementById('hybrid-suggestion-box');
+        const formCoords = document.getElementById('form-coords');
+        const formConnexion = document.getElementById('form-connexion');
+        const formProfil = document.getElementById('form-profil');
+        const btnApply = document.getElementById('btn-apply-correction');
+
+        // Masquer tous les formulaires par défaut
+        if (profile) profile.style.display = 'none';
+        if (suggestionBox) suggestionBox.style.display = 'none';
+        if (formCoords) formCoords.style.display = 'none';
+        if (formConnexion) formConnexion.style.display = 'none';
+        if (formProfil) formProfil.style.display = 'none';
+
+        // Afficher la solution appropriée selon le type
+        switch (solutionConfig.solution) {
+            case 'formulaire_coords':
+                // Géométrie: afficher formulaire coordonnées uniquement
+                if (formCoords) formCoords.style.display = 'block';
+                if (btnApply) btnApply.onclick = () => applyGeometrieCorrection();
+                break;
+
+            case 'formulaire_connexion_with_suggestion':
+                // Connexion: afficher formulaire + suggestion
+                if (suggestionBox) suggestionBox.style.display = 'block';
+                if (formConnexion) formConnexion.style.display = 'block';
+                if (btnApply) btnApply.onclick = () => applyTopologieCorrection();
+                break;
+
+            case 'formulaire_profil_with_profile':
+                // Profil avec graphique: afficher profil + formulaire profondeur + suggestion
+                if (profile) profile.style.display = 'block';
+                if (suggestionBox) suggestionBox.style.display = 'block';
+                if (formProfil) formProfil.style.display = 'block';
+                if (btnApply) btnApply.onclick = () => applyManualCorrection();
+                break;
+
+            case 'formulaire_profil_simple':
+                // Profil simple: formulaire profondeur sans graphique
+                if (formProfil) formProfil.style.display = 'block';
+                if (btnApply) btnApply.onclick = () => applyManualCorrection();
+                break;
+
+            default:
+                // Défaut: formulaire profil complet
+                if (profile) profile.style.display = 'block';
+                if (formProfil) formProfil.style.display = 'block';
+                if (btnApply) btnApply.onclick = () => applyManualCorrection();
+        }
+
+        // Mapper les IDs pour les formulaires profil
+        if (formProfil) {
+            // Déplacer les valeurs vers les nouveaux IDs
+            const am = document.getElementById('correction-amont');
+            const av = document.getElementById('correction-aval');
+            const amProf = document.getElementById('correction-amont-profil');
+            const avProf = document.getElementById('correction-aval-profil');
+            if (amProf && avProf) {
+                amProf.value = am ? am.value : '';
+                avProf.value = av ? av.value : '';
+            }
+        }
+
         const modal = document.getElementById('correction-modal');
         if (modal) modal.style.display = 'flex';
-        const box = document.getElementById('hybrid-suggestion-box'); if (box) box.style.display = 'none';
-        const profile = document.getElementById('profile-container'); if (profile) profile.style.display = 'none';
-        const am = document.getElementById('correction-amont'); const av = document.getElementById('correction-aval');
-        if (am) am.value = ''; if (av) av.value = '';
+
+        const am = document.getElementById('correction-amont'); 
+        const av = document.getElementById('correction-aval');
+        if (am) am.value = ''; 
+        if (av) av.value = '';
 
         // Try to fetch profile with candidate fid first
         function tryProfile(fidToTry) {
@@ -206,56 +374,31 @@ function openCorrectionModal(id, type) {
                 });
         }
 
-        if (currentCorrectionFid) {
+        // Charger les données appropriées selon le type de solution
+        if (currentCorrectionFid && (solutionConfig.solution === 'formulaire_profil_with_profile' || solutionConfig.solution === 'formulaire_profil_simple')) {
+            // Pour les problèmes de profil: charger le profil et la suggestion
             tryProfile(currentCorrectionFid).then(data => {
-                // successful: afficher automatiquement le profil réel et la suggestion
-                const isConduiteAnom = !type || type === 'conduite' || type === 'pente_negative' || type === 'pente_trop_forte' ||
-                    type === 'conduite_sans_regard' || type === 'troncon_orphelin' || type === 'champs_manquants_conduite' ||
-                    type === 'incoherence_profondeur' || type === 'incoherences_amont_aval';
-                if (isConduiteAnom) {
-                    // Tracer le profil réel automatiquement (sans clic sur le bouton)
-                    if (typeof drawCurrentProfile === 'function') {
-                        setTimeout(() => drawCurrentProfile(), 100);
-                    }
+                // Tracer le profil réel automatiquement
+                if (typeof drawCurrentProfile === 'function') {
+                    setTimeout(() => drawCurrentProfile(), 100);
                 }
                 if (typeof fetchHybridSuggestion === 'function') {
-                    // fetchHybridSuggestion appelle aussi l'endpoint de suggestion
                     fetchHybridSuggestion(currentCorrectionFid, type);
                 }
             }).catch(err => {
-                // profile not found for fidCandidate, try fallback with coords
-                if (coords && typeof findConduiteByCoords === 'function') {
-                    const found = findConduiteByCoords(coords.lat, coords.lng);
-                    if (found) {
-                        currentCorrectionFid = found;
-                        if (typeof fetchHybridSuggestion === 'function') fetchHybridSuggestion(currentCorrectionFid, type);
-                    } else {
-                        const content = document.getElementById('hybrid-suggestion-content');
-                        if (content) content.textContent = 'Aucune donnée topo disponible pour cette conduite. Saisir manuellement.';
-                        const box2 = document.getElementById('hybrid-suggestion-box'); if (box2) box2.style.display = 'block';
-                    }
-                } else {
-                    const content = document.getElementById('hybrid-suggestion-content');
-                    if (content) content.textContent = 'Aucune donnée topo disponible pour cette conduite. Saisir manuellement.';
-                    const box2 = document.getElementById('hybrid-suggestion-box'); if (box2) box2.style.display = 'block';
-                }
-            });
-        } else if (coords && typeof findConduiteByCoords === 'function') {
-            const found = findConduiteByCoords(coords.lat, coords.lng);
-            if (found) {
-                currentCorrectionFid = found;
-                if (typeof fetchHybridSuggestion === 'function') fetchHybridSuggestion(currentCorrectionFid, type);
-            } else {
+                // Profil non trouvé - afficher un message
                 const content = document.getElementById('hybrid-suggestion-content');
-                if (content) content.textContent = 'Aucune donnée topo disponible pour cette conduite. Saisir manuellement.';
-                const box2 = document.getElementById('hybrid-suggestion-box'); if (box2) box2.style.display = 'block';
+                if (content) content.textContent = 'Données topographiques non disponibles. Veuillez saisir les profondeurs manuellement.';
+                const box2 = document.getElementById('hybrid-suggestion-box'); 
+                if (box2) box2.style.display = 'block';
+            });
+        } else if (currentCorrectionFid && (solutionConfig.solution === 'formulaire_connexion_with_suggestion')) {
+            // Pour les problèmes de connexion: charger la suggestion de connexion
+            if (typeof fetchHybridSuggestion === 'function') {
+                fetchHybridSuggestion(currentCorrectionFid, type);
             }
-        } else {
-            // No fid and no coords: show fallback message
-            const content = document.getElementById('hybrid-suggestion-content');
-            if (content) content.textContent = 'Aucune donnée topo disponible pour cette conduite. Saisir manuellement.';
-            const box2 = document.getElementById('hybrid-suggestion-box'); if (box2) box2.style.display = 'block';
         }
+        // Pour formulaire_coords: pas de chargement spécifique requis
 
     } catch (e) { console.warn('openCorrectionModal error', e); }
 }
@@ -276,32 +419,76 @@ function fetchHybridSuggestion(id, type) {
     currentCorrectionFid = id;
     currentSuggestionPayload = null;
 
+    // Messages adapté selon le type de diagnostic
+    const typeMessages = {
+        'pente_negative': 'Solution : inverser ou augmenter les profondeurs pour obtenir une pente positive',
+        'pente_trop_forte': 'Solution : réduire la différence de profondeur ou augmenter la longueur pour diminuer la pente',
+        'incoherence_profondeur': 'Solution : harmoniser les profondeurs des nœuds amont et aval',
+        'incoherences_amont_aval': 'Solution : vérifier et corriger les connexions amont/aval',
+        'conduite_sans_regard': 'Solution : connecter cette conduite à un nœud (regard/station/ouvrage) amont et aval',
+        'troncon_orphelin': 'Solution : intégrer ce tronçon orphelin au réseau en créant les connexions'
+    };
+
     // Call backend suggestion endpoint
     fetch(`/api/v1/corrections/hybride/suggest?fid=${encodeURIComponent(id)}&anomalie_type=${encodeURIComponent(type || '')}`)
         .then(res => res.json())
         .then(data => {
             currentSuggestionPayload = data;
             if (!data || !data.suggestion) {
-                content.textContent = 'Aucune suggestion disponible.';
+                content.textContent = typeMessages[type] || 'Veuillez saisir manuellement la correction appropriée.';
                 return;
             }
 
             const s = data.suggestion;
+            const typeMsg = typeMessages[type] || 'Solution hydraulique proposée';
+            
             // Build detailed suggestion display with metrics
-            const cappedNote = (s.capped) ? '<div style="color:#b36b00;font-size:12px;margin-top:6px;">⚠️ Proposition limitée par contraintes hydraulique (cappée). Vérifier avant application.</div>' : '';
-            content.innerHTML = `
-                <div style="font-size:13px;">${s.message || 'Proposition'}</div>
-                <div style="margin-top:6px;font-size:13px;"><strong>Pente proposée:</strong> ${s.pente_pourcent ? s.pente_pourcent + ' %' : '—'}</div>
-                <div style="margin-top:4px;font-size:13px;"><strong>Amont / Aval proposés:</strong> ${s.prof_fe_am || '—'} / ${s.prof_fe_av || '—'}</div>
-                <div style="margin-top:6px;font-size:12px;color:#666">Confiance: ${s.confidence || 'indisponible'} — Sources: ${data.suggestion.source_count || 0}</div>
-                ${cappedNote}
-                <div style="margin-top:6px;font-size:11px;color:#666">Détails: S_req=${data.suggestion.s_req || '—'}, final_S=${data.suggestion.final_S || '—'}, V_final=${data.suggestion.V_final || '—'}, n=${data.suggestion.n_manning || '—'}</div>
-            `;
+            const cappedNote = (s.capped) ? '<div style="color:#b36b00;font-size:12px;margin-top:6px;">⚠️ Proposition limitée par contraintes hydrauliques (cappée). Vérifier avant application.</div>' : '';
+            
+            // Adapter le contenu selon le type
+            let solutionDisplay = '';
+            if (type && (type.includes('pente') || type.includes('profondeur') || type.includes('coherence'))) {
+                // Pour les problèmes de profil/pente
+                solutionDisplay = `
+                    <div style="font-size:13px;color:#2c5aa0;"><strong>💧 Solution hydraulique :</strong></div>
+                    <div style="font-size:12px;margin-top:4px;">${typeMsg}</div>
+                    <div style="margin-top:8px;font-size:12px;background:#e8f4f8;padding:6px;border-radius:4px;">
+                        <strong>Profondeur amont proposée :</strong> ${s.prof_fe_am ? s.prof_fe_am + ' m' : '—'} <br>
+                        <strong>Profondeur aval proposée :</strong> ${s.prof_fe_av ? s.prof_fe_av + ' m' : '—'} <br>
+                        <strong>Pente résultante :</strong> ${s.pente_pourcent ? s.pente_pourcent.toFixed(2) + ' %' : '—'}
+                    </div>
+                    <div style="margin-top:6px;font-size:11px;color:#666">Confiance: ${s.confidence || 'indisponible'} — Sources: ${data.suggestion.source_count || 0}</div>
+                    ${cappedNote}
+                `;
+            } else if (type && type.includes('conduite_sans_regard')) {
+                // Pour connexion manquante
+                solutionDisplay = `
+                    <div style="font-size:13px;color:#2c5aa0;"><strong>🔗 Solution de connexion :</strong></div>
+                    <div style="font-size:12px;margin-top:4px;">${typeMsg}</div>
+                    <div style="margin-top:8px;font-size:12px;background:#e8f4f8;padding:6px;border-radius:4px;">
+                        <strong>Nœud amont suggéré :</strong> ${s.noeud_amont || '—'} <br>
+                        <strong>Nœud aval suggéré :</strong> ${s.noeud_aval || '—'} <br>
+                        <strong>Type de nœud :</strong> ${s.type_noeud || 'regard'}
+                    </div>
+                    <div style="margin-top:6px;font-size:11px;color:#666">Confiance: ${s.confidence || 'indisponible'}</div>
+                `;
+            } else {
+                // Affichage par défaut
+                solutionDisplay = `
+                    <div style="font-size:13px;">${s.message || 'Proposition'}</div>
+                    <div style="margin-top:6px;font-size:13px;"><strong>Pente proposée:</strong> ${s.pente_pourcent ? s.pente_pourcent + ' %' : '—'}</div>
+                    <div style="margin-top:4px;font-size:13px;"><strong>Amont / Aval proposés:</strong> ${s.prof_fe_am || '—'} / ${s.prof_fe_av || '—'}</div>
+                    <div style="margin-top:6px;font-size:12px;color:#666">Confiance: ${s.confidence || 'indisponible'} — Sources: ${data.suggestion.source_count || 0}</div>
+                    ${cappedNote}
+                `;
+            }
+
+            content.innerHTML = solutionDisplay;
 
             // Fill inputs if suggestion available
             if (s.available) {
-                const am = document.getElementById('correction-amont');
-                const av = document.getElementById('correction-aval');
+                const am = document.getElementById('correction-amont-profil');
+                const av = document.getElementById('correction-aval-profil');
                 if (am && av) {
                     if (s.prof_fe_am) am.value = s.prof_fe_am;
                     if (s.prof_fe_av) av.value = s.prof_fe_av;
@@ -315,7 +502,7 @@ function fetchHybridSuggestion(id, type) {
         })
         .catch(e => {
             console.warn('fetchHybridSuggestion error', e);
-            content.textContent = 'Erreur lors de la récupération de la suggestion.';
+            content.textContent = typeMessages[type] || 'Veuillez saisir manuellement la correction appropriée.';
         });
 }
 
@@ -462,8 +649,8 @@ function applyManualCorrection() {
     }
 
     // Sinon : appliquer la saisie manuelle
-    const amont = document.getElementById('correction-amont');
-    const aval = document.getElementById('correction-aval');
+    const amont = document.getElementById('correction-amont-profil');
+    const aval = document.getElementById('correction-aval-profil');
     if (!amont || !aval || !currentCorrectionFid) return;
 
     const payload = { prof_fe_am: (amont.value !== '') ? parseFloat(amont.value) : null, prof_fe_av: (aval.value !== '') ? parseFloat(aval.value) : null };
@@ -487,11 +674,60 @@ document.addEventListener('change', function (e) {
         if (e.target.id.startsWith('select-anomalies-')) {
             const val = e.target.value;
             if (!val) return;
+            const optSelected = e.target.options?.[e.target.selectedIndex];
+            const anomType = optSelected?.dataset?.anomalieType || 'conduite';
             if (typeof openCorrectionModal === 'function') {
-                // open modal after zoom (small delay) and pass full value (may contain coords)
-                setTimeout(() => openCorrectionModal(val, 'conduite'), 300);
+                setTimeout(() => openCorrectionModal(val, anomType), 300);
             }
         }
     } catch (err) { console.warn('select change handler error', err); }
 });
+
+// Correction géométrie (coordonnées GPS)
+function applyGeometrieCorrection() {
+    const lat = document.getElementById('correction-lat');
+    const lng = document.getElementById('correction-lng');
+    if (!lat || !lng || !currentCorrectionFid) return;
+
+    const payload = {
+        latitude: parseFloat(lat.value),
+        longitude: parseFloat(lng.value)
+    };
+    fetch(`/api/v1/corrections/coords/${encodeURIComponent(currentCorrectionFid)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    }).then(res => res.json())
+        .then(r => {
+            showNotification(r.message || 'Coordonnées corrigées', 'success');
+            closeCorrectionModal();
+            if (typeof chargerDonnees === 'function') chargerDonnees();
+        }).catch(e => {
+            showNotification('Erreur correction coords', 'error');
+        });
+}
+
+// Correction topologie (connexion amont/aval)
+function applyTopologieCorrection() {
+    const am = document.getElementById('correction-amont');
+    const av = document.getElementById('correction-aval');
+    if (!am || !av || !currentCorrectionFid) return;
+
+    const payload = {
+        noeud_amont: am.value,
+        noeud_aval: av.value
+    };
+    fetch(`/api/v1/corrections/connexion/${encodeURIComponent(currentCorrectionFid)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    }).then(res => res.json())
+        .then(r => {
+            showNotification(r.message || 'Connexion corrigée', 'success');
+            closeCorrectionModal();
+            if (typeof chargerDonnees === 'function') chargerDonnees();
+        }).catch(e => {
+            showNotification('Erreur correction topologie', 'error');
+        });
+}
 

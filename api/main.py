@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Optional
 
 from config.settings import APP_NAME, APP_VERSION, APP_DESCRIPTION
 from api.database import init_db, get_db
@@ -78,6 +79,7 @@ class NoCacheJSMiddleware(BaseHTTPMiddleware):
         if request.url.path.startswith("/static/js/") and request.url.path.endswith(".js"):
             response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
             response.headers["Pragma"] = "no-cache"
+            response.headers["Content-Type"] = "text/javascript; charset=utf-8"
         return response
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -168,12 +170,64 @@ def get_map():
 
 _LAYERS_CACHE = None
 
+
+def _has_bounds(ne_lat, ne_lng, sw_lat, sw_lng):
+    return None not in (ne_lat, ne_lng, sw_lat, sw_lng)
+
+
+def _iter_geojson_positions(coords):
+    if not isinstance(coords, (list, tuple)) or not coords:
+        return
+    if (
+        len(coords) >= 2
+        and isinstance(coords[0], (int, float))
+        and isinstance(coords[1], (int, float))
+    ):
+        yield coords[0], coords[1]
+        return
+    for item in coords:
+        yield from _iter_geojson_positions(item)
+
+
+def _feature_intersects_bounds(feature, ne_lat, ne_lng, sw_lat, sw_lng):
+    geometry = feature.get("geometry") or {}
+    coords = geometry.get("coordinates")
+    for lng, lat in _iter_geojson_positions(coords):
+        if sw_lng <= lng <= ne_lng and sw_lat <= lat <= ne_lat:
+            return True
+    return False
+
+
+def _filter_layers_by_bounds(layers_result, ne_lat, ne_lng, sw_lat, sw_lng):
+    filtered = {
+        "statut": layers_result.get("statut", "ok"),
+        "couches": {},
+        "compteurs": {},
+    }
+    for key, collection in layers_result.get("couches", {}).items():
+        features = collection.get("features", [])
+        kept = [
+            feature for feature in features
+            if _feature_intersects_bounds(feature, ne_lat, ne_lng, sw_lat, sw_lng)
+        ]
+        filtered["couches"][key] = {**collection, "features": kept}
+        filtered["compteurs"][key] = len(kept)
+    return filtered
+
 @app.get("/api/v1/layers")
-def get_layers():
+def get_layers(
+    ne_lat: Optional[float] = None,
+    ne_lng: Optional[float] = None,
+    sw_lat: Optional[float] = None,
+    sw_lng: Optional[float] = None,
+):
     """Retourne les données GeoJSON des couches du réseau (avec cache mémoire)."""
     global _LAYERS_CACHE
-    if _LAYERS_CACHE is not None:
+    has_bounds = _has_bounds(ne_lat, ne_lng, sw_lat, sw_lng)
+    if _LAYERS_CACHE is not None and not has_bounds:
         return _LAYERS_CACHE
+    if _LAYERS_CACHE is not None and has_bounds:
+        return _filter_layers_by_bounds(_LAYERS_CACHE, ne_lat, ne_lng, sw_lat, sw_lng)
 
     from pathlib import Path
     import geopandas as gpd
@@ -209,6 +263,8 @@ def get_layers():
             gdf = gpd.read_file(GPKG_PATH, layer=layer_name)
             if gdf.crs and gdf.crs != WGS84:
                 gdf = gpd.GeoDataFrame(gdf, geometry=gdf.geometry.to_crs(WGS84))
+            if has_bounds and not gdf.empty:
+                gdf = gdf.cx[sw_lng:ne_lng, sw_lat:ne_lat]
 
             geojson = gdf.__geo_interface__
             result["couches"][key] = geojson
@@ -218,7 +274,8 @@ def get_layers():
             result["couches"][key] = {"type": "FeatureCollection", "features": []}
             result["compteurs"][key] = 0
 
-    _LAYERS_CACHE = result
+    if not has_bounds:
+        _LAYERS_CACHE = result
     return result
 
 

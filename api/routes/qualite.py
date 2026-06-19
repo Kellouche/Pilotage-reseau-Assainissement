@@ -38,11 +38,11 @@ async def analyser_qualite_reseau(force_refresh: bool = False):
         _cache_qualite["timestamp"] is not None and
         (maintenant - _cache_qualite["timestamp"]) < _cache_qualite["duree_validite"]):
 
-        print("✅ Utilisation du cache pour l'analyse qualité")
+        print("Utilisation du cache pour l'analyse qualite")
         return _cache_qualite["rapport"]
 
     try:
-        print("🔄 Lancement d'une nouvelle analyse qualité...")
+        print("Lancement d'une nouvelle analyse qualite...")
 
         # Créer l'analyseur et lancer l'analyse dans un thread séparé
         # pour ne pas bloquer l'event loop FastAPI (sinon la réponse HTTP
@@ -58,11 +58,11 @@ async def analyser_qualite_reseau(force_refresh: bool = False):
         _cache_qualite["rapport"] = rapport
         _cache_qualite["timestamp"] = maintenant
 
-        print("✅ Analyse qualité terminée et mise en cache")
+        print("Analyse qualite terminee et mise en cache")
         return rapport
 
     except Exception as e:
-        print(f"❌ Erreur lors de l'analyse qualité: {e}")
+        print(f"Erreur lors de l'analyse qualite: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Erreur lors de l'analyse de qualité: {str(e)}"
@@ -233,7 +233,7 @@ async def _export_async(fichier_destination: str):
         global _cache_qualite
 
         if _cache_qualite["rapport"] is None:
-            print("❌ Aucun rapport disponible pour l'export")
+            print("Aucun rapport disponible pour l'export")
             return
 
         # Créer l'analyseur pour l'export
@@ -241,10 +241,10 @@ async def _export_async(fichier_destination: str):
         analyseur.exporter_rapport_csv(_cache_qualite["rapport"], fichier_destination)
         analyseur.fermer_connexion()
 
-        print(f"✅ Export CSV terminé: {fichier_destination}")
+        print(f"Export CSV termine: {fichier_destination}")
 
     except Exception as e:
-        print(f"❌ Erreur lors de l'export CSV: {e}")
+        print(f"Erreur lors de l'export CSV: {e}")
 
 
 # Schéma de réponse pour la documentation automatique

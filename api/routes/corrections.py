@@ -118,21 +118,43 @@ def correction_manuelle(fid: str, data: Dict[str, Any], db: Session = Depends(ge
 @router.get("/hybride/suggestable_fids")
 def suggestable_fids(db: Session = Depends(get_db)):
     """
-    Returns a list of FIDs for Canalisation that have at least one valid boundary
-    (amont or aval) from adjacent pipes, meaning they can potentially have a suggestion.
-    This avoids making thousands of individual /suggest requests just to populate UI stars.
+    Returns FIDs that can have a reliable profile suggestion from both adjacent
+    conduites without calling the heavy suggestion endpoint for every row.
     """
-    from sqlalchemy import text
-    query = text("""
-        SELECT DISTINCT c.fid
-        FROM canalisation c
-        LEFT JOIN canalisation c_amont ON c.id_amont = c_amont.id_aval AND c.id != c_amont.id
-        LEFT JOIN canalisation c_aval ON c.id_aval = c_aval.id_amont AND c.id != c_aval.id
-        WHERE c.longueur IS NOT NULL AND c.longueur > 0
-          AND (c_amont.prof_fe_av IS NOT NULL OR c_aval.prof_fe_am IS NOT NULL)
-    """)
-    result = db.execute(query).fetchall()
-    return {"suggestable_fids": [row[0] for row in result if row[0] is not None]}
+    conduites = db.query(
+        Canalisation.id,
+        Canalisation.fid,
+        Canalisation.id_amont,
+        Canalisation.id_aval,
+        Canalisation.longueur,
+        Canalisation.prof_fe_am,
+        Canalisation.prof_fe_av,
+    ).all()
+
+    prof_fe_av_by_downstream_id = {
+        row.id_aval: row.prof_fe_av
+        for row in conduites
+        if row.id_aval is not None and row.prof_fe_av is not None
+    }
+    prof_fe_am_by_upstream_id = {
+        row.id_amont: row.prof_fe_am
+        for row in conduites
+        if row.id_amont is not None and row.prof_fe_am is not None
+    }
+
+    suggestable = []
+    for conduite in conduites:
+        if conduite.longueur is None or conduite.longueur <= 0:
+            continue
+        boundary_am = prof_fe_av_by_downstream_id.get(conduite.id_amont)
+        boundary_av = prof_fe_am_by_upstream_id.get(conduite.id_aval)
+        if boundary_am is None or boundary_av is None:
+            continue
+        slope = (boundary_am - boundary_av) / conduite.longueur
+        if 0 < slope <= 0.05:
+            suggestable.append(conduite.fid)
+
+    return {"suggestable_fids": sorted(set(suggestable))}
 
 
 @router.get("/hybride/suggest")
@@ -527,6 +549,7 @@ def profil_conduite(fid: str, db: Session = Depends(get_db)):
         pass
 
     raise HTTPException(status_code=404, detail="Conduite non trouvée")
+@router.post("/automatique")
 def correction_automatique(db: Session = Depends(get_db)):
     """
     Batch repair for obvious topology issues. Kept conservative for the PoC.

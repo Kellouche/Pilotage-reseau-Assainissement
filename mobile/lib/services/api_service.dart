@@ -1,14 +1,31 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:flutter_map/flutter_map.dart';
 
 class ApiService {
   final String baseUrl;
   
   ApiService({String? baseUrl}) 
-      : baseUrl = baseUrl ?? const String.fromEnvironment('EXPO_PUBLIC_API_BASE_URL', defaultValue: 'http://127.0.0.1:5001');
+      : baseUrl = baseUrl ??
+            const String.fromEnvironment(
+              'API_BASE_URL',
+              defaultValue: 'http://10.0.2.2:5001',
+            );
 
-  Future<Map<String, dynamic>> getLayers() async {
-    final response = await http.get(Uri.parse('$baseUrl/api/v1/layers'));
+  Future<Map<String, dynamic>> getLayers({LatLngBounds? bounds}) async {
+    final queryParameters = <String, String>{};
+    if (bounds != null) {
+      queryParameters.addAll({
+        'ne_lat': bounds.northEast.latitude.toString(),
+        'ne_lng': bounds.northEast.longitude.toString(),
+        'sw_lat': bounds.southWest.latitude.toString(),
+        'sw_lng': bounds.southWest.longitude.toString(),
+      });
+    }
+    final uri = Uri.parse('$baseUrl/api/v1/layers').replace(
+      queryParameters: queryParameters.isEmpty ? null : queryParameters,
+    );
+    final response = await http.get(uri);
     if (response.statusCode == 200) {
       return json.decode(response.body);
     }

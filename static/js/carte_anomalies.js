@@ -12,22 +12,6 @@ let currentGeometryHighlight = null;
 let currentCorrectionId = null;
 let currentCorrectionType = null;
 
-function applyFilters() {
-    console.log('Applying filters for current tab:', currentTab);
-    // Met à jour la visibilité des couches (conduites, regards, etc.)
-    if (typeof updateLayersVisibility === 'function') updateLayersVisibility();
-    // Met à jour les couches d'anomalies en fonction des cases à cocher du tab actif
-    if (typeof updateAnomaliesLayers === 'function') updateAnomaliesLayers();
-    // Rafraîchit l'affichage du tab (ajoute ou retire les layers pertinentes)
-    if (typeof updateTabDisplay === 'function') updateTabDisplay();
-    // Optionnel : mettre à jour le compteur d'anomalies visibles dans l'UI
-    if (typeof updateVisibleCount === 'function') updateVisibleCount();
-}
-    console.log('Applying filters manually...');
-    if (typeof updateLayersVisibility === 'function') updateLayersVisibility();
-    if (typeof updateAnomaliesLayers === 'function') updateAnomaliesLayers();
-}
-
 // Traite les anomalies par lots pour ne pas bloquer le thread principal
 const CHUNK_SIZE = 500; // anomalies traitées par intervalle
 
@@ -309,6 +293,7 @@ function updateVisibleCount() {
     });
 }
 
+function calculateTabStats(tabName) {
     if (!anomaliesData) return;
     const activeTypes = tabMappings[tabName] || [];
     let total = 0, critiques = 0, majeures = 0, mineures = 0;
@@ -385,59 +370,6 @@ function updateTabDisplay() {
     });
 }
 
-function zoomToVisibleAnomalies() {
-    console.log('Zooming on visible anomalies for tab:', currentTab);
-    const bounds = L.latLngBounds([]);
-    let count = 0;
-
-    // 1. Marqueurs ponctuels
-    Object.values(anomaliesLayers).forEach(layer => {
-        if (map.hasLayer(layer)) {
-            layer.eachLayer(m => {
-                if (m.getLatLng) {
-                    bounds.extend(m.getLatLng());
-                    count++;
-                }
-            });
-        }
-    });
-
-    // 2. Conduites coloriées (fallback)
-    if (count < 20 && conduitesLayer && map.hasLayer(conduitesLayer)) {
-        const activeTypesInTab = tabMappings[currentTab] || [];
-        conduitesLayer.eachLayer(layer => {
-            const props = layer.feature.properties;
-            // Utiliser la même logique que getConduiteStyle
-            const idCandidates = [layer.feature.id, props.fid, props.FID, props.id, props.ID, props.OBJECTID, props.code, props.ID_CANALIS];
-            let fid = null;
-            for (let cand of idCandidates) {
-                if (cand !== undefined && cand !== null && cand !== '' && conduiteAnomaliesMap[cand.toString()]) {
-                    fid = cand.toString();
-                    break;
-                }
-            }
-
-            if (fid) {
-                const anom = conduiteAnomaliesMap[fid];
-                const isVisible = anom.types.some(t => activeTypesInTab.includes(t) && document.getElementById(`type-${t}`)?.checked);
-                if (isVisible && layer.getBounds) {
-                    bounds.extend(layer.getBounds());
-                    count++;
-                }
-            }
-        });
-    }
-
-    console.log(`Zoom logic found ${count} matching elements.`);
-
-    if (count > 0 && bounds.isValid()) {
-        map.fitBounds(bounds, { padding: [40, 40] });
-    } else {
-        console.warn('No visible anomalies found to zoom on.');
-        if (typeof centerOnData === 'function') centerOnData();
-    }
-}
-
 function findLayerById(layer, id) {
     if (!layer || id === undefined || id === null) return null;
     const key = id.toString();
@@ -502,7 +434,7 @@ async function fetchSuggestableFids() {
             });
             suggestableFidsFetched = true;
             
-            // Mettre à jour l'UI dynamiquement pour TOUTES les options
+            // Mettre à jour l'UI uniquement pour les options qui ont une suggestion fiable disponible
             document.querySelectorAll('select[id^="select-anomalies-"] option').forEach(opt => {
                 if (!opt.value) return;
                 const fid = opt.value.split('|')[0];

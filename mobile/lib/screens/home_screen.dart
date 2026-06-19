@@ -127,13 +127,13 @@ class _HomeScreenState extends State<HomeScreen> {
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Switch(
-                          value: networkMode == 'online',
-                          onChanged: toggleNetworkMode,
-                          activeColor: const Color(0xFF2ecc71),
-                        ),
+                           ),
+                         ),
+                         Switch(
+                           value: networkMode == 'online',
+                           onChanged: toggleNetworkMode,
+                           activeThumbColor: const Color(0xFF2ecc71),
+                         ),
                       ],
                     ),
                     const SizedBox(height: 8),

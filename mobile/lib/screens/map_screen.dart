@@ -1,13 +1,54 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:swmm_mobile/services/api_service.dart';
 import 'package:swmm_mobile/services/storage_service.dart';
-import 'package:swmm_mobile/components/fiche_terrain.dart';
-import 'package:swmm_mobile/components/incident_form.dart';
-import 'package:swmm_mobile/components/scanner_sim.dart';
-import 'package:swmm_mobile/components/proximite_list.dart';
+
+class _LegendItem extends StatelessWidget {
+  final String label;
+  final Color? color;
+  final bool isActive;
+
+  const _LegendItem({
+    required this.label,
+    this.color,
+    this.isActive = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final itemColor = isActive ? Colors.white : Colors.white70;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (color != null)
+            Container(
+              width: 16,
+              height: 16,
+              decoration: BoxDecoration(
+                color: isActive ? color : color!.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: itemColor, width: 1),
+              ),
+            )
+          else
+            Icon(Icons.info_outline, size: 16, color: itemColor),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: TextStyle(color: itemColor, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -29,6 +70,15 @@ class _MapScreenState extends State<MapScreen> {
   LatLng? tempCoordinate;
   bool showIncidentForm = false;
   List<Map<String, dynamic>> localIncidents = [];
+  List<Marker> regardMarkers = [];
+  List<Polyline> conduitePolylines = [];
+
+  LatLngBounds? currentBounds;
+  double currentZoom = 12.0;
+  String? lastFetchCacheKey;
+  Timer? _debounceTimer;
+  int _zoomDisplayBucket = 0;
+  static const Duration debounceDuration = Duration(milliseconds: 900);
 
   @override
   void initState() {
@@ -36,22 +86,71 @@ class _MapScreenState extends State<MapScreen> {
     loadInitialData();
   }
 
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    super.dispose();
+  }
+
   Future<void> loadInitialData() async {
     try {
-      setState(() => loading = true);
+      if (layers == null) {
+        setState(() => loading = true);
+      }
       final mode = await storageService.getNetworkMode();
       setState(() => networkMode = mode);
-      final data = await apiService.getLayers();
-      setState(() => layers = data);
+
+      final defaultBounds = LatLngBounds(
+        LatLng(36.15 - 0.35, 1.33 - 0.35),
+        LatLng(36.15 + 0.35, 1.33 + 0.35),
+      );
+      await loadMapData(bounds: defaultBounds);
       await requestGPSLocation();
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Erreur lors du chargement de la carte')),
         );
       }
     } finally {
-      setState(() => loading = false);
+      if (mounted) {
+        setState(() => loading = false);
+      }
+    }
+  }
+
+  Future<void> loadMapData({LatLngBounds? bounds, bool force = false}) async {
+    if (!mounted) return;
+
+    try {
+      final cacheKey = bounds == null ? 'all-layers' : _boundsCacheKey(bounds);
+
+      if (!force && cacheKey == lastFetchCacheKey) return;
+
+      if (layers == null) {
+        setState(() => loading = true);
+      }
+      final data = await apiService.getLayers(bounds: bounds);
+      final parsedRegards = _parseRegardMarkers(data);
+      final parsedConduites = _parseConduitePolylines(data);
+
+      setState(() {
+        layers = data;
+        currentBounds = bounds ?? currentBounds;
+        lastFetchCacheKey = cacheKey;
+        regardMarkers = parsedRegards;
+        conduitePolylines = parsedConduites;
+      });
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Erreur lors du chargement de la carte')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => loading = false);
+      }
     }
   }
 
@@ -61,20 +160,51 @@ class _MapScreenState extends State<MapScreen> {
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
+
       if (permission == LocationPermission.whileInUse ||
           permission == LocationPermission.always) {
         final position = await Geolocator.getCurrentPosition();
         setState(() => userLocation = position);
+
+        final gpsBounds = LatLngBounds(
+          LatLng(position.latitude - 0.2, position.longitude - 0.2),
+          LatLng(position.latitude + 0.2, position.longitude + 0.2),
+        );
+        await loadMapData(bounds: gpsBounds);
       }
-    } catch (e) {
+    } catch (_) {
       debugPrint('GPS non disponible');
+    }
+  }
+
+  void _onMapMoved(MapCamera camera, bool hasGesture) {
+    if (!mounted) return;
+
+    final newBucket = _zoomBucket(camera.zoom);
+    final shouldRefreshUi =
+        newBucket != _zoomDisplayBucket || (camera.zoom - currentZoom).abs() > 0.25;
+
+    currentBounds = camera.visibleBounds;
+    currentZoom = camera.zoom;
+
+    if (hasGesture) {
+      _debounceTimer?.cancel();
+      _debounceTimer = Timer(debounceDuration, () {
+        if (mounted && currentBounds != null) {
+          loadMapData(bounds: currentBounds);
+        }
+      });
+    }
+
+    if (shouldRefreshUi) {
+      setState(() => _zoomDisplayBucket = newBucket);
     }
   }
 
   void centerOnUser() {
     if (userLocation == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Position GPS non encore détectée')),
+        const SnackBar(content: Text('Position GPS non encore detectee')),
       );
       return;
     }
@@ -86,24 +216,21 @@ class _MapScreenState extends State<MapScreen> {
         try {
           await apiService.post('/api/v1/terrain/inspections', inspectionData);
         } catch (_) {
-          await storageService.addPendingChange({
-            'type': 'inspection',
-            ...inspectionData
-          });
+          await storageService
+              .addPendingChange({'type': 'inspection', ...inspectionData});
         }
       } else {
-        await storageService.addPendingChange({
-          'type': 'inspection',
-          ...inspectionData
-        });
+        await storageService
+            .addPendingChange({'type': 'inspection', ...inspectionData});
       }
+
       setState(() => activeObject = null);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Inspection enregistrée avec succès !')),
+          const SnackBar(content: Text('Inspection enregistree avec succes !')),
         );
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Erreur lors de l'enregistrement")),
@@ -116,35 +243,35 @@ class _MapScreenState extends State<MapScreen> {
     try {
       if (networkMode == 'online') {
         try {
-          final result = await apiService.post('/api/v1/terrain/incidents', incidentData);
+          final result =
+              await apiService.post('/api/v1/terrain/incidents', incidentData);
           setState(() => localIncidents.add(result));
         } catch (_) {
-          final saved = await storageService.addPendingChange({
-            'type': 'incident',
-            ...incidentData
-          });
+          final saved = await storageService
+              .addPendingChange({'type': 'incident', ...incidentData});
           setState(() => localIncidents.add(saved));
         }
       } else {
-        final saved = await storageService.addPendingChange({
-          'type': 'incident',
-          ...incidentData
-        });
+        final saved = await storageService
+            .addPendingChange({'type': 'incident', ...incidentData});
         setState(() => localIncidents.add(saved));
       }
+
       setState(() {
         showIncidentForm = false;
         tempCoordinate = null;
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Incident signalé avec succès !')),
+          const SnackBar(content: Text('Incident signale avec succes !')),
         );
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Erreur lors de l'enregistrement de l'incident")),
+          const SnackBar(
+            content: Text("Erreur lors de l'enregistrement de l'incident"),
+          ),
         );
       }
     }
@@ -152,16 +279,14 @@ class _MapScreenState extends State<MapScreen> {
 
   List<Map<String, dynamic>> getScannerTargets() {
     final list = <Map<String, dynamic>>[];
-    if (layers?.containsKey('couches') == true) {
-      final regards = layers!['couches']['regards']?['features'];
-      if (regards != null && regards is List && regards.length > 5) {
-        for (var i = 0; i < 5; i++) {
-          final f = regards[i];
-          list.add({
-            'type': 'regard',
-            'object': f['properties'],
-          });
-        }
+    final regards = layers?['couches']?['regards']?['features'];
+    if (regards is List && regards.length > 5) {
+      for (var i = 0; i < 5; i++) {
+        final f = regards[i];
+        list.add({
+          'type': 'regard',
+          'object': f['properties'],
+        });
       }
     }
     return list;
@@ -171,7 +296,7 @@ class _MapScreenState extends State<MapScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Carte du Réseau'),
+        title: const Text('Carte du Reseau'),
       ),
       body: Stack(
         children: [
@@ -188,90 +313,120 @@ class _MapScreenState extends State<MapScreen> {
                   });
                 }
               },
+              onPositionChanged: _onMapMoved,
             ),
             children: [
               TileLayer(
-                urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                urlTemplate:
+                    'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
                 subdomains: const ['a', 'b', 'c'],
               ),
-              if (layers?.containsKey('couches') == true) ...[
-                MarkerLayer(
-                  markers: [
-                    if (layers!['couches']['regards']?['features'] != null)
-                      ...List<Marker>.from(
-                        (layers!['couches']['regards']['features'] as List)
-                            .asMap()
-                            .entries
-                            .map((entry) {
-                          final f = entry.value;
-                          final coords = f['geometry']['coordinates'] as List;
-                          return Marker(
-                            point: LatLng(coords[1], coords[0]),
-                            child: IconButton(
-                              icon: const Icon(Icons.water, color: Color(0xFFf1c40f)),
-                              onPressed: () {
-                                setState(() {
-                                  activeType = 'regard';
-                                  activeObject = f['properties'];
-                                });
-                              },
-                            ),
-                          );
-                        }),
-                      ),
-                    ...localIncidents.map((inc) => Marker(
-                          point: LatLng(inc['latitude'], inc['longitude']),
-                          child: const Icon(Icons.warning, color: Color(0xFFe74c3c)),
-                        )),
-                  ],
-                ),
-                PolylineLayer(
-                  polylines: [
-                    if (layers!['couches']['conduites']?['features'] != null)
-                      ...(layers!['couches']['conduites']['features'] as List)
-                          .map((f) {
-                        final coords = f['geometry']['coordinates'] as List;
-                        return Polyline(
-                          points: coords
-                              .map((c) => LatLng((c as List)[1], (c as List)[0]))
-                              .toList(),
-                          color: const Color(0xFF3498db),
-                          strokeWidth: 5.0,
-                        );
-                      }),
-                  ],
-                ),
+              if (layers != null) ...[
+                if (currentZoom >= 13)
+                  MarkerLayer(
+                    markers: [
+                      ...regardMarkers,
+                      ..._buildIncidentMarkers(),
+                    ],
+                  ),
+                if (currentZoom >= 15)
+                  PolylineLayer(polylines: conduitePolylines),
               ],
             ],
           ),
+          if (loading)
+            const Positioned.fill(
+              child: ColoredBox(
+                color: Colors.black54,
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(color: Colors.white),
+                      SizedBox(height: 16),
+                      Text(
+                        'Chargement des donnees cartographiques...',
+                        style: TextStyle(color: Colors.white, fontSize: 16),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          Positioned(
+            top: 12,
+            left: 10,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: const Color(0xDD16213e),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white24),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Zoom ${currentZoom.toStringAsFixed(1)}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    _LegendItem(
+                      label: 'Regards (${regardMarkers.length})',
+                      color: const Color(0xFFf1c40f),
+                      isActive: currentZoom >= 13,
+                    ),
+                    _LegendItem(
+                      label: 'Conduites (${conduitePolylines.length})',
+                      color: const Color(0xFF3498db),
+                      isActive: currentZoom >= 15,
+                    ),
+                    if (currentZoom < 13)
+                      const _LegendItem(
+                        label: 'Zoomez pour afficher les objets',
+                        isActive: false,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
           Positioned(
             bottom: 20,
-            left: 10,
             right: 10,
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 FloatingActionButton(
                   backgroundColor: const Color(0xFF16213e),
                   onPressed: centerOnUser,
-                  child: const Text('📍', style: TextStyle(fontSize: 12)),
+                  child: const Icon(Icons.my_location, color: Colors.white),
                 ),
+                const SizedBox(width: 8),
                 FloatingActionButton(
                   backgroundColor: const Color(0xFF16213e),
                   onPressed: () => setState(() => showProximite = true),
-                  child: const Text('🔍', style: TextStyle(fontSize: 12)),
+                  child: const Icon(Icons.search, color: Colors.white),
                 ),
+                const SizedBox(width: 8),
                 FloatingActionButton(
                   backgroundColor: const Color(0xFF16213e),
                   onPressed: () => setState(() => showScanner = true),
-                  child: const Text('📷', style: TextStyle(fontSize: 12)),
+                  child: const Icon(Icons.qr_code_scanner, color: Colors.white),
                 ),
+                const SizedBox(width: 8),
                 FloatingActionButton(
                   backgroundColor: declaringIncident
                       ? const Color(0xFFe74c3c)
                       : const Color(0xFF16213e),
-                  onPressed: () => setState(() => declaringIncident = !declaringIncident),
-                  child: const Text('🚨', style: TextStyle(fontSize: 12)),
+                  onPressed: () =>
+                      setState(() => declaringIncident = !declaringIncident),
+                  child: const Icon(Icons.warning, color: Colors.white),
                 ),
               ],
             ),
@@ -279,5 +434,92 @@ class _MapScreenState extends State<MapScreen> {
         ],
       ),
     );
+  }
+
+  String _boundsCacheKey(LatLngBounds bounds) {
+    return '${bounds.northEast.latitude.toStringAsFixed(4)}|'
+        '${bounds.northEast.longitude.toStringAsFixed(4)}|'
+        '${bounds.southWest.latitude.toStringAsFixed(4)}|'
+        '${bounds.southWest.longitude.toStringAsFixed(4)}';
+  }
+
+  int _zoomBucket(double zoom) {
+    if (zoom >= 15) return 2;
+    if (zoom >= 13) return 1;
+    return 0;
+  }
+
+  List<Marker> _parseRegardMarkers(Map<String, dynamic> data) {
+    final features = data['couches']?['regards']?['features'];
+    if (features is! List) return [];
+
+    return features.map((f) {
+      final geom = f['geometry'];
+      if (geom is! Map || !geom.containsKey('coordinates')) return null;
+      final coords = geom['coordinates'];
+      if (coords is! List || coords.length < 2) return null;
+      if (coords[1] is! num || coords[0] is! num) return null;
+
+      return Marker(
+        point: LatLng(
+          (coords[1] as num).toDouble(),
+          (coords[0] as num).toDouble(),
+        ),
+        child: GestureDetector(
+          onTap: () {
+            setState(() {
+              activeType = 'regard';
+              activeObject = f['properties'];
+            });
+          },
+          child: const Icon(Icons.water, color: Color(0xFFf1c40f)),
+        ),
+      );
+    }).whereType<Marker>().toList();
+  }
+
+  List<Marker> _buildIncidentMarkers() {
+    return localIncidents.map((inc) {
+      if (inc['latitude'] is! num || inc['longitude'] is! num) return null;
+
+      return Marker(
+        point: LatLng(
+          (inc['latitude'] as num).toDouble(),
+          (inc['longitude'] as num).toDouble(),
+        ),
+        child: const Icon(Icons.warning, color: Color(0xFFe74c3c)),
+      );
+    }).whereType<Marker>().toList();
+  }
+
+  List<Polyline> _parseConduitePolylines(Map<String, dynamic> data) {
+    final features = data['couches']?['conduites']?['features'];
+    if (features is! List) return [];
+
+    return features.map((f) {
+      final geom = f['geometry'];
+      if (geom is! Map || !geom.containsKey('coordinates')) return null;
+      final coords = geom['coordinates'];
+      if (coords is! List) return null;
+
+      final points = <LatLng>[];
+      for (final coord in coords) {
+        if (coord is! List || coord.length < 2) continue;
+        if (coord[1] is! num || coord[0] is! num) continue;
+        points.add(
+          LatLng(
+            (coord[1] as num).toDouble(),
+            (coord[0] as num).toDouble(),
+          ),
+        );
+      }
+
+      if (points.isEmpty) return null;
+      return Polyline(
+        points: points,
+        color: const Color(0xFF3498db),
+        strokeWidth: 5.0,
+      );
+    }).whereType<Polyline>().toList();
   }
 }

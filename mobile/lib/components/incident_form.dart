@@ -199,6 +199,7 @@ class _IncidentFormState extends State<IncidentForm> {
           ),
           const SizedBox(height: 40),
         ],
-      ),
-    );
-  }
+       ),
+     );
+   }
+}

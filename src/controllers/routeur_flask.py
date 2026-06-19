@@ -29,6 +29,7 @@ from src.domain.detecteur_clusters import (
     construire_geojson_cluster,
     calculer_statistiques
 )
+from src.qualite_reseau import QualiteReseau
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +164,18 @@ def get_all_clusters():
         "total_conduites": total_conduites,
         "temps_s": duree
     })
+
+
+@app.route("/api/qualite")
+def get_qualite():
+    """Retourne le rapport de qualité du réseau (Phase 1, etc.)."""
+    try:
+        with QualiteReseau() as analyseur:
+            rapport = analyseur.analyser_reseau_complet()
+            return jsonify(rapport)
+    except Exception as e:
+        logger.error(f"Erreur lors de l'analyse qualite: {e}")
+        return jsonify({"erreur": str(e)}), 500
 
 
 def demarrer_serveur():

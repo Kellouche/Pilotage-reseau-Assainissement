@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:math' as math;
 
 double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
-  if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return 999999;
   const r = 6371e3;
   final phi1 = lat1 * math.pi / 180;
   final phi2 = lat2 * math.pi / 180;
@@ -138,5 +136,6 @@ class ProximiteList extends StatelessWidget {
                 ),
               ),
             ),
-    );
-  }
+     );
+   }
+}

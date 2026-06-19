@@ -175,11 +175,11 @@ class _FicheTerrainState extends State<FicheTerrain> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text('Débordement actif :', style: TextStyle(fontSize: 13)),
-                      Switch(
-                        value: debordement,
-                        onChanged: (v) => setState(() => debordement = v),
-                        activeColor: const Color(0xFFe74c3c),
-                      ),
+                       Switch(
+                         value: debordement,
+                         onChanged: (v) => setState(() => debordement = v),
+                         activeThumbColor: const Color(0xFFe74c3c),
+                       ),
                     ],
                   ),
                   renderDropdown('Statut de validation', statut, ['À vérifier', 'Corrigé terrain', 'Validé bureau'], (v) => setState(() => statut = v)),
@@ -245,8 +245,9 @@ class _FicheTerrainState extends State<FicheTerrain> {
               ),
             ],
           ),
-          const SizedBox(height: 40),
-        ],
-      ),
-    );
-  }
+           const SizedBox(height: 40),
+         ],
+       ),
+     );
+   }
+ }

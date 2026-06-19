@@ -59,6 +59,7 @@
             <label><input type="checkbox" id="f-stations" checked><span class="legend-dot" style="background:#3498db"></span> Stations</label>
             <label><input type="checkbox" id="f-ouvrages" checked><span class="legend-dot" style="background:#9b59b6"></span> Ouvrages</label>
             <label><input type="checkbox" id="f-orphelins" checked><span class="legend-dot" style="background:#e67e22"></span> Orphelins</label>
+            <label><input type="checkbox" id="f-anomalies" checked><span class="legend-dot" style="background:#f1c40f"></span> Anomalies</label>
         </div>
         
         <button class="btn" id="btn-calc">🔄 Calculer réseaux</button>
@@ -105,11 +106,12 @@ function init() {
         rejets: L.layerGroup().addTo(map),
         stations: L.layerGroup().addTo(map),
         ouvrages: L.layerGroup().addTo(map),
-        orphelins: L.layerGroup().addTo(map)
+        orphelins: L.layerGroup().addTo(map),
+        anomalies: L.layerGroup().addTo(map)
     };
     
     // Toggle couches
-    ['rejets','stations','ouvrages','orphelins'].forEach(k => {
+    ['rejets','stations','ouvrages','orphelins','anomalies'].forEach(k => {
         document.getElementById('f-'+k).onchange = e => {
             if(e.target.checked) couches[k].addTo(map);
             else map.removeLayer(couches[k]);
@@ -118,13 +120,7 @@ function init() {
     
     // Calculer
     document.getElementById('btn-calc').onclick = calc;
-    document.getElementById('btn-orphans').onclick = () => {
-        const orp = clusters.find(c => !c.exutoire.type);
-        if(orp && orp.geojson) {
-            map.fitBounds(L.geoJSON(orp.geojson).getBounds());
-            toast('Anomalies: '+orp.troncons+' tronçons');
-        }
-    };
+    document.getElementById('btn-orphans').onclick = analyserQualite;
     
     document.getElementById('sel-cluster').onchange = e => {
         if(e.target.value==="") { closePanel(); return; }
@@ -150,9 +146,74 @@ function calc() {
             afficher(data);
             majStats(data);
             majSelect();
-            btn.disabled=false; btn.textContent='🔄 Calculer';
+            btn.disabled=false; btn.textContent='🔄 Calculer réseaux';
             toast('Fait: '+data.clusters.length+' clusters');
         }).catch(e => { btn.disabled=false; btn.textContent='Erreur'; toast(e.message); });
+}
+
+function analyserQualite() {
+    const btn = document.getElementById('btn-orphans');
+    btn.disabled = true; btn.textContent = '⏳ Analyse...';
+    toast('Lancement du diagnostic complet...');
+    fetch('/api/qualite')
+        .then(r=>r.json())
+        .then(data => {
+            btn.disabled = false; btn.textContent = '🚨 Voir anomalies';
+            afficherAnomalies(data.anomalies);
+            if(data.scores_qualite && data.scores_qualite.global) {
+                toast('Score: ' + data.scores_qualite.global.score_qualite + '% (' + data.scores_qualite.global.total_anomalies + ' anomalies)');
+            }
+        }).catch(e => { btn.disabled=false; btn.textContent='Erreur'; toast(e.message); });
+}
+
+function afficherAnomalies(anomalies) {
+    couches.anomalies.clearLayers();
+    if(!anomalies) return;
+    
+    let anomaliesAffichees = 0;
+    const bounds = L.latLngBounds([]);
+
+    const icones = {
+        incoherence_profondeur_topologie: '⚠️',
+        chevauchement_geometrique: '🔀',
+        doublon_regards: '🔄',
+        pente_negative: '📉',
+        pente_trop_forte: '🎢',
+        conduite_sans_regard: '❓',
+        geometrie_invalide: '❌'
+    };
+
+    Object.keys(anomalies).forEach(type => {
+        anomalies[type].forEach(a => {
+            if(a.latitude && a.longitude) {
+                const icone = icones[type] || '🚨';
+                const divIcon = L.divIcon({
+                    html: `<div style="font-size:18px;background:white;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 5px rgba(0,0,0,0.5)">${icone}</div>`,
+                    className: '',
+                    iconSize: [24, 24],
+                    iconAnchor: [12, 12]
+                });
+                
+                let detailsHtml = `<b>${type.replace(/_/g, ' ')}</b><br>`;
+                detailsHtml += `Sévérité: ${a.severite || 'inconnue'}<br>`;
+                if(a.description) detailsHtml += `<i>${a.description}</i><br>`;
+                if(a.distance) detailsHtml += `Distance: ${a.distance}m<br>`;
+                if(a.nom_voie) detailsHtml += `Voie: ${a.nom_voie}<br>`;
+
+                const marker = L.marker([a.latitude, a.longitude], {icon: divIcon});
+                marker.bindPopup(detailsHtml);
+                couches.anomalies.addLayer(marker);
+                bounds.extend([a.latitude, a.longitude]);
+                anomaliesAffichees++;
+            }
+        });
+    });
+
+    if(anomaliesAffichees > 0) {
+        map.fitBounds(bounds, {padding:[50,50]});
+    } else {
+        toast('Aucune anomalie géolocalisée à afficher.');
+    }
 }
 
 function afficher(data) {
