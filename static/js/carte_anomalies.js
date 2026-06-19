@@ -72,32 +72,50 @@ function buildAnomaliesMaps(data) {
             });
 
             // CRÉATION DES MARQUEURS (différée par lots)
-            const isConduiteAnom =
-                anom.type === 'pente_negative' ||
-                anom.type === 'pente_trop_forte' ||
-                anom.type === 'champs_manquants_conduite' ||
-                anom.type === 'troncon_orphelin' ||
-                anom.type === 'conduite_sans_regard' ||
-                anom.type === 'incoherence_profondeur' ||
-                anom.type === 'incoherences_amont_aval';
+            // On veut afficher une icône visuelle pour TOUTES les anomalies,
+            // y compris celles sur les conduites (au centre géométrique).
+            let coords = findAnomalieCoords(anom);
+            if (coords) {
+                const icones = {
+                    incoherence_profondeur_topologie: '⚠️',
+                    incoherence_profondeur: '⚠️',
+                    incoherences_amont_aval: '⚠️',
+                    chevauchement_geometrique: '🔀',
+                    doublon_regards: '🔄',
+                    pente_negative: '📉',
+                    pente_trop_forte: '🎢',
+                    pentes_suspectes: '🎢',
+                    conduite_sans_regard: '❓',
+                    conduites_sans_regards: '❓',
+                    troncon_orphelin: '❓',
+                    troncons_orphelins: '❓',
+                    geometrie_invalide: '❌',
+                    geometries_invalides: '❌',
+                    champs_manquants_conduite: '📝',
+                    champs_manquants_regard: '📝',
+                    champs_manquants: '📝'
+                };
+                
+                const icone = icones[anom.type] || icones[group] || '🚨';
+                const color = getAnomalieColor(anom.severite);
+                
+                const divIcon = L.divIcon({
+                    html: `<div style="font-size:16px;background:white;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 5px rgba(0,0,0,0.5);border:2px solid ${color};">${icone}</div>`,
+                    className: '',
+                    iconSize: [24, 24],
+                    iconAnchor: [12, 12]
+                });
 
-            if (!isConduiteAnom) {
-                let coords = findAnomalieCoords(anom);
-                if (coords) {
-                    const color = getAnomalieColor(anom.severite);
-                    const marker = L.circleMarker(coords, {
-                        color: color, fillColor: color, fillOpacity: 0.8, radius: 8, weight: 2
-                    });
-                    marker.bindPopup(createAnomaliePopup(anom));
-                    marker._isPointAnom = !!(anom.id_regard || anom.code || anom.point_connexion || anom.type === 'champs_manquants_regard' || anom.type === 'incoherence_profondeur');
-                    marker._pointType = 'regard';
-                    if (anom.type && anom.type.includes('station')) marker._pointType = 'station';
-                    if (anom.type && anom.type.includes('step')) marker._pointType = 'step';
-                    if (anom.type && anom.type.includes('ouvrage')) marker._pointType = 'ouvrage';
+                const marker = L.marker(coords, { icon: divIcon });
+                marker.bindPopup(createAnomaliePopup(anom));
+                marker._isPointAnom = !!(anom.id_regard || anom.code || anom.point_connexion || anom.id_regard1 || anom.type === 'champs_manquants_regard' || anom.type === 'incoherence_profondeur');
+                marker._pointType = 'regard';
+                if (anom.type && anom.type.includes('station')) marker._pointType = 'station';
+                if (anom.type && anom.type.includes('step')) marker._pointType = 'step';
+                if (anom.type && anom.type.includes('ouvrage')) marker._pointType = 'ouvrage';
 
-                    if (!allMarkersByCategory[group]) allMarkersByCategory[group] = [];
-                    allMarkersByCategory[group].push(marker);
-                }
+                if (!allMarkersByCategory[group]) allMarkersByCategory[group] = [];
+                allMarkersByCategory[group].push(marker);
             }
         }
 
@@ -193,12 +211,12 @@ function findConduiteCoords(conduiteId) {
 
 function findAnomalieCoords(anomalie) {
     if (anomalie.latitude && anomalie.longitude) return [anomalie.latitude, anomalie.longitude];
-    const id = anomalie.id_regard || anomalie.code || anomalie.point_connexion || anomalie.id_amont_manquant || anomalie.id_aval_manquant;
+    const id = anomalie.id_regard || anomalie.code || anomalie.point_connexion || anomalie.id_amont_manquant || anomalie.id_aval_manquant || anomalie.id_regard1;
     if (id) {
         const coords = findRegardCoords(id);
         if (coords) return coords;
     }
-    const cid = anomalie.id_conduite || anomalie.fid || anomalie.fid1 || anomalie.fid2;
+    const cid = anomalie.id_conduite || anomalie.fid || anomalie.fid1 || anomalie.fid2 || anomalie.id_conduite1 || anomalie.id_conduite2;
     if (cid) {
         const coords = findConduiteCoords(cid);
         if (coords) return coords;
