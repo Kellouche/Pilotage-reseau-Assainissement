@@ -62,6 +62,18 @@
             <label><input type="checkbox" id="f-anomalies" checked><span class="legend-dot" style="background:#f1c40f"></span> Anomalies</label>
         </div>
         
+        <div class="filtres" id="legend-anomalies" style="display:none;">
+            <h3 style="color:#f1c40f; font-size:14px; margin-bottom:8px;">Légende Anomalies</h3>
+            <div style="font-size:12px; display:flex; flex-direction:column; gap:6px; color:#ccc;">
+                <div>⚠️ Incohérence profondeur</div>
+                <div>🔀 Chevauchement</div>
+                <div>🔄 Doublon regard</div>
+                <div>❓ Conduite sans regard</div>
+                <div>❌ Géométrie invalide</div>
+                <div>📉/🎢 Pente anormale</div>
+            </div>
+        </div>
+        
         <button class="btn" id="btn-calc">🔄 Calculer réseaux</button>
         <button class="btn" id="btn-orphans" style="background:#e67e22">🚨 Voir anomalies</button>
         <button class="btn" onclick="location.reload()" style="background:#34495e">🔄 Recharger</button>
@@ -160,6 +172,7 @@ function analyserQualite() {
         .then(data => {
             btn.disabled = false; btn.textContent = '🚨 Voir anomalies';
             afficherAnomalies(data.anomalies);
+            document.getElementById('legend-anomalies').style.display = 'block';
             if(data.scores_qualite && data.scores_qualite.global) {
                 toast('Score: ' + data.scores_qualite.global.score_qualite + '% (' + data.scores_qualite.global.total_anomalies + ' anomalies)');
             }
