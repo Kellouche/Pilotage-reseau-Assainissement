@@ -42,7 +42,8 @@
             conduites_sans_regards: 'fas fa-link',
             troncons_orphelins: 'fas fa-cut',
             champs_manquants: 'fas fa-asterisk',
-            geometries_invalides: 'fas fa-map-marker-alt'
+            geometries_invalides: 'fas fa-map-marker-alt',
+            capacite_debit: 'fas fa-tint'
         };
         const colors = {
             pente_negative: '#e74c3c',
@@ -50,7 +51,8 @@
             conduites_sans_regards: '#3498db',
             troncons_orphelins: '#9b59b6',
             champs_manquants: '#f1c40f',
-            geometries_invalides: '#e74c3c'
+            geometries_invalides: '#e74c3c',
+            capacite_debit: '#2980b9'
         };
 
         return Object.entries(anomalies).map(([type, items]) => {

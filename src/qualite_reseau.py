@@ -1,4 +1,5 @@
 import os
+import math
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session
 from typing import Dict, List, Any, Tuple
@@ -56,6 +57,7 @@ class QualiteReseau:
         print("Analyse de la qualite du reseau d'assainissement...")
         print("Phase 0 : Detectons basiques (geometrie, pentes)")
         print("Phase 1 : Validations topologiques (fondations)")
+        print("Phase 3 : Capacite debitaire (NP 650)")
 
         session = self.SessionLocal()
         validateur_topo = ValidateurTopologie(session)
@@ -69,7 +71,8 @@ class QualiteReseau:
             "incoherences_amont_aval": self.detecter_incoherences_amont_aval(),
             "incoherence_profondeur_topologie": validateur_topo.valider_coherence_profondeurs(),
             "chevauchement_geometrique": validateur_topo.valider_chevauchements_geometriques(),
-            "doublon_regards": validateur_topo.detecter_doublons_regards()
+            "doublon_regards": validateur_topo.detecter_doublons_regards(),
+            "capacite_debit": self.detecter_capacite_debit()
         }
 
         rapport = {
@@ -358,6 +361,80 @@ class QualiteReseau:
         print(f"Pentes suspectes: {len(anomalies)} conduites affectées")
         return anomalies
 
+    def detecter_capacite_debit(self) -> List[Dict[str, Any]]:
+        """Détecte les conduites sous-dimensionnées selon la formule NP 650.
+
+        Formule : Q_nominal = 3.1 * D^2.2  (D en mm, Q en L/s)
+        Vérifie également la vitesse d'écoulement : 0.3 < V < 3.0 m/s
+        """
+        anomalies = []
+
+        with self.SessionLocal() as session:
+            result = session.execute(text("""
+                SELECT id, fid, diametre, longueur, prof_fe_am, prof_fe_av, nom_voie
+                FROM conduites
+                WHERE diametre IS NOT NULL AND diametre > 0
+                   AND prof_fe_am IS NOT NULL AND prof_fe_av IS NOT NULL
+                   AND longueur IS NOT NULL AND longueur > 0
+            """))
+
+            for row in result.fetchall():
+                id_conduite, fid, diametre, longueur, prof_am, prof_av, nom_voie = row
+                d_mm = float(diametre)
+                d_m = d_mm / 1000.0
+                l_m = float(longueur)
+
+                # Formule NP 650 : Q_nominal (L/s) = 3.1 * D^2.2
+                q_nominal_ls = 3.1 * (d_mm ** 2.2)
+
+                # Section mouillée pour conduite circulaire pleine
+                section_mouillee = (math.pi / 4.0) * (d_m ** 2)
+
+                # Vitesse d'écoulement (m/s) = Q (m3/s) / section (m2)
+                q_m3s = q_nominal_ls / 1000.0
+                vitesse = q_m3s / section_mouillee if section_mouillee > 0 else 0
+
+                # Pente (%)
+                pente = ((float(prof_am) - float(prof_av)) / l_m) * 100 if l_m > 0 else 0
+
+                severite = "mineure"
+                problemes = []
+
+                if vitesse < 0.3:
+                    problemes.append(f"vitesse trop faible ({vitesse:.2f} m/s < 0.3 m/s)")
+                    severite = "majeure"
+                elif vitesse > 3.0:
+                    problemes.append(f"vitesse trop forte ({vitesse:.2f} m/s > 3.0 m/s)")
+                    severite = "majeure"
+
+                if pente < 0.1:
+                    problemes.append(f"pente insuffisante ({pente:.2f}% < 0.1%)")
+                    if severite != "majeure":
+                        severite = "majeure"
+
+                if problemes:
+                    anomalie = {
+                        "type": "capacite_debit",
+                        "id_conduite": id_conduite,
+                        "fid": fid,
+                        "nom_voie": nom_voie,
+                        "diametre_mm": d_mm,
+                        "longueur_m": l_m,
+                        "q_nominal_ls": round(q_nominal_ls, 2),
+                        "vitesse_mps": round(vitesse, 3),
+                        "pente_pct": round(pente, 3),
+                        "problemes": problemes,
+                        "severite": severite
+                    }
+                    lon, lat = self._get_coords_for_anomalie(session, anomalie)
+                    if lon is not None and lat is not None:
+                        anomalie["longitude"] = lon
+                        anomalie["latitude"] = lat
+                    anomalies.append(anomalie)
+
+        print(f"Capacite debitaire: {len(anomalies)} conduites sous-dimensionnees")
+        return anomalies
+
     def _get_coords_for_anomalie(self, session, anomalie: Dict[str, Any]) -> Tuple[float, float]:
         if anomalie["type"] == "incoherence_profondeur":
             point_connexion = anomalie.get("point_connexion")
@@ -373,10 +450,27 @@ class QualiteReseau:
                 row = result.fetchone()
                 if row and row[0] is not None and row[1] is not None:
                     return row[0], row[1]
-        elif anomalie["type"] in ["troncon_orphelin", "champs_manquants_conduite", "pente_negative", "pente_trop_forte"]:
+        elif anomalie["type"] in ["troncon_orphelin", "champs_manquants_conduite", "pente_negative", "pente_trop_forte", "capacite_debit"]:
             conduite_id = anomalie.get("id_conduite") or anomalie.get("fid")
             if conduite_id:
-                if anomalie["type"] == "troncon_orphelin":
+                if anomalie["type"] in ["troncon_orphelin", "capacite_debit"]:
+                    # Pour capacite_debit, essayer de récupérer les coordonnées du regard amont ou aval
+                    result = session.execute(text("""
+                        SELECT c.id_amont, c.id_aval, r_am.longitude, r_am.latitude, r_av.longitude, r_av.latitude
+                        FROM conduites c
+                        LEFT JOIN regards r_am ON CAST(r_am.code AS TEXT) = CAST(c.id_amont AS TEXT)
+                        LEFT JOIN regards r_av ON CAST(r_av.code AS TEXT) = CAST(c.id_aval AS TEXT)
+                        WHERE c.id = :cid OR c.fid = :fid
+                        LIMIT 1
+                    """), {"cid": conduite_id, "fid": str(conduite_id)})
+                    row = result.fetchone()
+                    if row:
+                        lon, lat = row[2], row[3]
+                        if lon is None or lat is None:
+                            lon, lat = row[4], row[5]
+                        if lon is not None and lat is not None:
+                            return lon, lat
+                else:
                     regard_id = anomalie.get("id_amont") or anomalie.get("id_aval")
                     if regard_id:
                         result = session.execute(text("SELECT longitude, latitude FROM regards WHERE code = :code"), {"code": str(regard_id)})

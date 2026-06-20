@@ -93,7 +93,8 @@ function buildAnomaliesMaps(data) {
                     geometries_invalides: '❌',
                     champs_manquants_conduite: '📝',
                     champs_manquants_regard: '📝',
-                    champs_manquants: '📝'
+                    champs_manquants: '📝',
+                    capacite_debit: '💧'
                 };
                 
                 const icone = icones[anom.type] || icones[group] || '🚨';
@@ -488,7 +489,7 @@ async function populateAnomaliesLists(data) {
     console.log('Populating anomalies lists with data:', Object.keys(data || {}));
     const tabMappings = {
         'connexions': ['conduites_sans_regards', 'incoherences_amont_aval'],
-        'geometrie': ['geometries_invalides', 'pentes_suspectes'],
+        'geometrie': ['geometries_invalides', 'pentes_suspectes', 'capacite_debit'],
         'donnees': ['champs_manquants'],
         'topologie': ['troncons_orphelins', 'incoherence_profondeur_topologie', 'chevauchement_geometrique', 'doublon_regards']
     };

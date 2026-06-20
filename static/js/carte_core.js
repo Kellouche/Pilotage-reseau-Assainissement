@@ -24,7 +24,7 @@ let conduitesLayerMap = {};    // conduit_id → layer Leaflet
 let currentTab = 'connexions';
 const tabMappings = {
     'connexions': ['conduites_sans_regards', 'incoherences_amont_aval'],
-    'geometrie': ['pentes_suspectes', 'geometries_invalides'],
+    'geometrie': ['pentes_suspectes', 'geometries_invalides', 'capacite_debit'],
     'donnees': ['champs_manquants'],
     'topologie': ['troncons_orphelins', 'incoherence_profondeur_topologie', 'chevauchement_geometrique', 'doublon_regards']
 };
