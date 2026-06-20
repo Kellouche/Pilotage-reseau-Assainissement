@@ -306,7 +306,7 @@ class QualiteReseau:
                 }
                 anomalies.append(anomalie)
 
-        print(f"Geometries invalides: {len(anomalies)} elements affectes")
+        print(f"Géométries invalides: {len(anomalies)} éléments affectés")
         return anomalies
 
     def detecter_pentes_suspectes(self) -> List[Dict[str, Any]]:
@@ -355,7 +355,7 @@ class QualiteReseau:
                             anomalie["latitude"] = lat
                         anomalies.append(anomalie)
 
-        print(f"Pentes suspectes: {len(anomalies)} conduites affectees")
+        print(f"Pentes suspectes: {len(anomalies)} conduites affectées")
         return anomalies
 
     def _get_coords_for_anomalie(self, session, anomalie: Dict[str, Any]) -> Tuple[float, float]:
@@ -433,7 +433,7 @@ class QualiteReseau:
                     anomalie["latitude"] = lat
                 anomalies.append(anomalie)
 
-        print(f"Incoherences amont/aval: {len(anomalies)} connexions problematiques")
+        print(f"Incohérences amont/aval: {len(anomalies)} connexions problématiques")
         return anomalies
 
     def calculer_scores_qualite(self, anomalies: Dict[str, List] = None) -> Dict[str, Any]:
@@ -479,7 +479,7 @@ class QualiteReseau:
             "total_anomalies": total_anomalies
         }
 
-        print(f"Scores de qualite calcules - Score global: {scores['global']['score_qualite']}%")
+        print(f"Scores de qualité calculés - Score global: {scores['global']['score_qualite']}%")
         return scores
 
     def exporter_rapport_csv(self, rapport: Dict[str, Any], fichier_sortie: str = "rapport_qualite_reseau.csv"):
@@ -495,7 +495,7 @@ class QualiteReseau:
             df.to_csv(fichier_sortie, index=False, encoding='utf-8-sig')
             print(f"Rapport exporte: {fichier_sortie} ({len(anomalies)} anomalies)")
         else:
-            print("Aucune anomalie detectee - pas d'export necessaire")
+            print("Aucune anomalie détectée - pas d'export nécessaire")
 
     def fermer_connexion(self):
         if hasattr(self, 'engine'):
