@@ -175,10 +175,9 @@ def get_layers():
     if _LAYERS_CACHE is not None:
         return _LAYERS_CACHE
 
-    from pathlib import Path
     import geopandas as gpd
+    from config.settings import GPKG_PATH
 
-    GPKG_PATH = Path(r"D:\IA Water Data Analysis\Assainissement\Assainissement_Ville.gpkg")
     WGS84 = "EPSG:4326"
 
     result = {"statut": "ok", "couches": {}, "compteurs": {}}

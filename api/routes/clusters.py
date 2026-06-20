@@ -40,6 +40,8 @@ def get_graph_status():
     return _GRAPH_STATUS
 
 
+# ── Routes statiques AVANT les routes dynamiques /{cluster_id} ──
+
 @router.get("", response_model=schemas.ClusterListResponse)
 def list_clusters(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     """Liste tous les clusters."""
@@ -54,6 +56,27 @@ def get_cluster_status():
     return {"graph_cache": _GRAPH_STATUS}
 
 
+@router.get("/recalculate-all")
+def recalculate_all_clusters_get(db: Session = Depends(get_db)):
+    """Recalcule tous les clusters (GET, appel synchrone depuis le front).
+
+    Exécution synchrone : retourne directement les résultats avec GeoJSON
+    pour affichage immédiat dans l'interface cartographique.
+    """
+    return _calculate_clusters_sync(db)
+
+
+@router.post("/recalculate-all")
+def recalculate_all_clusters(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    """Reconstruit tous les clusters en bassins exclusifs (sans chevauchement).
+
+    Exécution synchrone (POST) - retourne le résultat.
+    """
+    return _calculate_clusters_sync(db)
+
+
+# ── Routes dynamiques (après les routes statiques) ──
+
 @router.get("/{cluster_id}", response_model=schemas.ClusterResponse)
 def get_cluster(cluster_id: int, db: Session = Depends(get_db)):
     """Détail d'un cluster."""
@@ -61,27 +84,6 @@ def get_cluster(cluster_id: int, db: Session = Depends(get_db)):
     if not cluster:
         raise HTTPException(status_code=404, detail="Cluster non trouvé")
     return cluster
-
-
-@router.post("/recalculate-all")
-def recalculate_all_clusters(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    """Reconstruit tous les clusters en bassins exclusifs (sans chevauchement).
-
-    Par défaut: exécution synchrone (POST) - retourne le résultat.
-    Pour les appels GET (interface/rafraîchissement), voir /recalculate-all (GET) qui programme un job en arrière-plan.
-    """
-    return _calculate_clusters_sync(db)
-
-
-@router.get("/recalculate-all")
-def recalculate_all_clusters_async(background_tasks: BackgroundTasks):
-    """Schedule cluster recalculation as a background task and return 202.
-
-    Ceci évite de bloquer le client pour les opérations longues et résout le problème
-    d'appels GET depuis le front qui provoquaient une 422.
-    """
-    background_tasks.add_task(_calculate_clusters_background)
-    return {"status": "scheduled"}
 
 
 # Helpers
@@ -184,17 +186,20 @@ def _calculate_clusters(db: Session):
             "nb_ouvrages":     infrastructures["nb_ouvrages"]
         }
 
+        cluster = None
         nom_exutoire = info["nom"]
-        existing = db.query(crud.Cluster).filter(crud.Cluster.nom == nom_exutoire).first()
-
-        if existing:
-            cluster = crud.update_cluster_stats(db, existing.id, db_stats)
-        else:
-            cluster = crud.create_cluster(db, {
-                "nom": nom_exutoire,
-                "exutoire_noeud": str(noeud_exutoire),
-                **db_stats
-            })
+        try:
+            existing = db.query(crud.Cluster).filter(crud.Cluster.nom == nom_exutoire).first()
+            if existing:
+                cluster = crud.update_cluster_stats(db, existing.id, db_stats)
+            else:
+                cluster = crud.create_cluster(db, {
+                    "nom": nom_exutoire,
+                    "exutoire_noeud": str(noeud_exutoire),
+                    **db_stats
+                })
+        except Exception as e:
+            print(f"[cluster] DB persistence skipped for {nom_exutoire}: {e}", flush=True)
 
         results.append({
             "cluster": cluster,
