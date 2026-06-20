@@ -198,3 +198,90 @@ def trouver_exutoires(G):
           flush=True)
 
     return exutoires
+
+
+def calculer_ordre_topologique(G, edges):
+    """Calcule l'ordre topologique des conduites dans un bassin.
+
+    Utilise un tri topologique sur le sous-graphe formé par les edges
+    du bassin. Retourne une liste ordonnée de (conduite_id, rang).
+
+    Args:
+        G: graphe NetworkX du réseau complet
+        edges: liste des edge IDs (conduite_id) du bassin
+
+    Returns:
+        list: [(conduite_id, rang), ...] trié par rang croissant
+    """
+    # Construire le sous-graphe du bassin
+    sous_graphe = G.edge_subgraph([
+        (u, v) for u, v, d in G.edges(data=True)
+        if d.get("conduit_id") in edges
+    ]).copy()
+
+    # Vérifier que le sous-graphe est un DAG
+    if not nx.is_directed_acyclic_graph(sous_graphe):
+        # Le graphe contient des cycles, on utilise un tri partiel
+        try:
+            ordre = list(nx.topological_sort(sous_graphe))
+        except nx.NetworkXError:
+            # Fallback : tri par profondeur depuis les exutoires
+            ordre = _tri_par_profondeur(sous_graphe)
+    else:
+        ordre = list(nx.topological_sort(sous_graphe))
+
+    # Construire le mapping edge_id -> rang
+    edge_id_to_node = {}
+    for u, v, d in sous_graphe.edges(data=True):
+        edge_id = d.get("conduit_id")
+        if edge_id is not None:
+            edge_id_to_node[edge_id] = (u, v)
+
+    resultat = []
+    for idx, node in enumerate(ordre):
+        # Trouver l'edge sortant de ce nœud
+        for u, v, d in sous_graphe.out_edges(node, data=True):
+            cid = d.get("conduit_id")
+            if cid and cid not in [r[0] for r in resultat]:
+                resultat.append((cid, idx))
+
+    # Trier par rang
+    resultat.sort(key=lambda x: x[1])
+
+    return resultat
+
+
+def _tri_par_profondeur(G):
+    """Tri de fallback par profondeur depuis les exutoires (nœuds sans sortie)."""
+    # Trouver les exutoires (nœuds avec out_degree == 0)
+    exutoires = [n for n in G.nodes() if G.out_degree(n) == 0]
+
+    if not exutoires:
+        # Pas d'exutoire, tri arbitraire
+        return list(G.nodes())
+
+    # BFS inverse depuis chaque exutoire
+    visites = set()
+    ordre = []
+
+    from collections import deque
+    file = deque(exutoires)
+
+    while file:
+        noeud = file.popleft()
+        if noeud in visites:
+            continue
+        visites.add(noeud)
+        ordre.append(noeud)
+
+        # Ajouter les prédécesseurs
+        for pred in G.predecessors(noeud):
+            if pred not in visites:
+                file.append(pred)
+
+    # Ajouter les nœuds non visités (cycles)
+    for noeud in G.nodes():
+        if noeud not in visites:
+            ordre.append(noeud)
+
+    return ordre

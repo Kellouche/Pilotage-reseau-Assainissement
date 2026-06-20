@@ -118,7 +118,7 @@ def _calculate_clusters_background():
 
 def _calculate_clusters(db: Session, persist: bool = True):
     """Core logic extracted from the original endpoint. Returns the same result structure."""
-    from src.domain.graphe_reseau import construire_graphe
+    from src.domain.graphe_reseau import construire_graphe, calculer_ordre_topologique
     from src.domain.detecteur_clusters import (
         trouver_exutoires_physiques,
         partitionner_bassins_exclusifs,
@@ -177,6 +177,9 @@ def _calculate_clusters(db: Session, persist: bool = True):
         }
         geojson = construire_geojson_cluster(G, edges, classification)
 
+        # Calculer l'ordre topologique des conduites dans ce bassin
+        ordre_topologique = calculer_ordre_topologique(G, edges)
+
         db_stats = {
             "nb_conduites":    stats["nb_conduites"],
             "nb_noeuds":       stats["nb_noeuds"],
@@ -210,7 +213,8 @@ def _calculate_clusters(db: Session, persist: bool = True):
             "stats": stats,
             "infrastructures": infrastructures,
             "geojson": geojson,
-            "troncons": len(edges)
+            "troncons": len(edges),
+            "ordre_topologique": ordre_topologique
         })
 
     # 4. Identifier et classifier les tronçons orphelins
@@ -261,9 +265,10 @@ def recalculate_cluster(cluster_id: int, background_tasks: BackgroundTasks, db: 
 
 @router.get("/{cluster_id}/geojson")
 def export_cluster_geojson(cluster_id: int, db: Session = Depends(get_db)):
-    """Export d'un cluster au format GeoJSON."""
+    """Export d'un cluster au format GeoJSON avec ordre topologique."""
     import ast
     from src.domain.detecteur_clusters import tracer_cluster_depuis_exutoire, construire_geojson_cluster
+    from src.domain.graphe_reseau import calculer_ordre_topologique
     
     cluster = crud.get_cluster(db, cluster_id)
     if not cluster:
@@ -278,4 +283,12 @@ def export_cluster_geojson(cluster_id: int, db: Session = Depends(get_db)):
     
     edges = tracer_cluster_depuis_exutoire(G, node_tuple)
     
-    return construire_geojson_cluster(G, edges, {})
+    geojson = construire_geojson_cluster(G, edges, {})
+    ordre_topologique = calculer_ordre_topologique(G, edges)
+    
+    return {
+        "geojson": geojson,
+        "ordre_topologique": ordre_topologique,
+        "cluster_id": cluster_id,
+        "nb_conduites": len(edges)
+    }
