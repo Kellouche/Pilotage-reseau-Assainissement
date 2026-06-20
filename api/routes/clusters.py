@@ -64,13 +64,18 @@ def get_cluster(cluster_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/recalculate-all")
-def recalculate_all_clusters(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def recalculate_all_clusters(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    persist: bool = True
+):
     """Reconstruit tous les clusters en bassins exclusifs (sans chevauchement).
 
     Par défaut: exécution synchrone (POST) - retourne le résultat.
     Pour les appels GET (interface/rafraîchissement), voir /recalculate-all (GET) qui programme un job en arrière-plan.
+    Le paramètre persist=false permet à l'interface carte de recalculer sans écrire en base, évitant les verrous SQLite.
     """
-    return _calculate_clusters_sync(db)
+    return _calculate_clusters_sync(db, persist=persist)
 
 
 @router.get("/recalculate-all")
@@ -87,10 +92,10 @@ def recalculate_all_clusters_async(background_tasks: BackgroundTasks):
 # Helpers
 from api.database import SessionLocal
 
-def _calculate_clusters_sync(db: Session):
+def _calculate_clusters_sync(db: Session, persist: bool = True):
     """Wrapper to run the heavy calculation synchronously using provided DB session."""
     try:
-        return _calculate_clusters(db)
+        return _calculate_clusters(db, persist=persist)
     except HTTPException:
         raise
     except Exception as e:
@@ -111,7 +116,7 @@ def _calculate_clusters_background():
         db.close()
 
 
-def _calculate_clusters(db: Session):
+def _calculate_clusters(db: Session, persist: bool = True):
     """Core logic extracted from the original endpoint. Returns the same result structure."""
     from src.domain.graphe_reseau import construire_graphe
     from src.domain.detecteur_clusters import (
@@ -185,16 +190,19 @@ def _calculate_clusters(db: Session):
         }
 
         nom_exutoire = info["nom"]
-        existing = db.query(crud.Cluster).filter(crud.Cluster.nom == nom_exutoire).first()
+        cluster = None
 
-        if existing:
-            cluster = crud.update_cluster_stats(db, existing.id, db_stats)
-        else:
-            cluster = crud.create_cluster(db, {
-                "nom": nom_exutoire,
-                "exutoire_noeud": str(noeud_exutoire),
-                **db_stats
-            })
+        if persist:
+            existing = db.query(crud.Cluster).filter(crud.Cluster.nom == nom_exutoire).first()
+
+            if existing:
+                cluster = crud.update_cluster_stats(db, existing.id, db_stats)
+            else:
+                cluster = crud.create_cluster(db, {
+                    "nom": nom_exutoire,
+                    "exutoire_noeud": str(noeud_exutoire),
+                    **db_stats
+                })
 
         results.append({
             "cluster": cluster,
