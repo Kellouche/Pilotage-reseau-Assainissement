@@ -54,6 +54,15 @@ def get_cluster_status():
     return {"graph_cache": _GRAPH_STATUS}
 
 
+@router.post("/graph/rebuild")
+def rebuild_graph_cache(background_tasks: BackgroundTasks):
+    """Reconstruit le cache du graphe (utile après modification des données)."""
+    _reset_graph_cache()
+    # Pré-chauffer le graphe en arrière-plan pour ne pas bloquer le client
+    background_tasks.add_task(_warm_graph_cache)
+    return {"status": "scheduled", "message": "Reconstruction du graphe programmée"}
+
+
 @router.get("/{cluster_id}", response_model=schemas.ClusterResponse)
 def get_cluster(cluster_id: int, db: Session = Depends(get_db)):
     """Détail d'un cluster."""
@@ -100,6 +109,22 @@ def _calculate_clusters_sync(db: Session, persist: bool = True):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur calcul clusters: {str(e)}")
+
+
+def _warm_graph_cache():
+    """Warm the graph cache in background."""
+    global _GRAPH_CACHE, _GRAPH_STATUS
+    if _GRAPH_CACHE is None:
+        _GRAPH_STATUS = "building"
+        try:
+            from src.domain.graphe_reseau import construire_graphe
+            print("[clusters] Warming graph cache...", flush=True)
+            _GRAPH_CACHE = construire_graphe()
+            _GRAPH_STATUS = "ready"
+            print("[clusters] Graph cache warmed.", flush=True)
+        except Exception as e:
+            _GRAPH_STATUS = "error"
+            print(f"[clusters] ERROR warming graph cache: {e}", flush=True)
 
 
 def _calculate_clusters_background():

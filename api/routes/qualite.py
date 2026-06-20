@@ -144,6 +144,28 @@ async def get_statistiques_reseau():
     return _cache_qualite["rapport"]["statistiques_globales"]
 
 
+@router.post("/valider-incremental", response_model=Dict[str, Any])
+async def valider_incremental(request: Dict[str, Any]):
+    """Validation incrémentale sur un sous-ensemble de conduites.
+
+    Corps attendu: {"ids_conduites": [1, 2, 3]}
+    """
+    ids = request.get("ids_conduites")
+    if not ids or not isinstance(ids, list):
+        raise HTTPException(status_code=400, detail="ids_conduites requis (liste d'entiers)")
+
+    try:
+        from src.qualite_reseau import QualiteReseau
+        analyseur = QualiteReseau()
+        try:
+            result = analyseur.valider_incremental([int(i) for i in ids])
+            return result
+        finally:
+            analyseur.fermer_connexion()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur validation incrémentale: {str(e)}")
+
+
 @router.get("/scores-bassins", response_model=Dict[str, Any])
 async def get_scores_qualite_par_bassin():
     """

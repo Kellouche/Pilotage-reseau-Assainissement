@@ -91,6 +91,57 @@ class QualiteReseau:
         _cache_timestamp = time.time()
         return rapport
 
+    def valider_incremental(self, ids_conduites: List[int]) -> Dict[str, Any]:
+        """Validation incrémentale sur un sous-ensemble de conduites.
+
+        Analyse uniquement les conduites dont les IDs sont fournis, ainsi que
+        leurs voisins directs, pour un diagnostic ciblé et rapide.
+        """
+        if not ids_conduites:
+            return {"anomalies": {}, "scores_qualite": {}, "statistiques_globales": {}}
+
+        with self.SessionLocal() as session:
+            # Récupérer les voisins directs (amont/aval) pour élargir le contexte
+            ids_str = ",".join(str(i) for i in ids_conduites)
+            result = session.execute(text(f"""
+                SELECT DISTINCT id_amont, id_aval
+                FROM conduites
+                WHERE id IN ({ids_str})
+                  AND (id_amont IS NOT NULL OR id_aval IS NOT NULL)
+            """))
+            voisins = set()
+            for row in result.fetchall():
+                if row[0]:
+                    voisins.add(row[0])
+                if row[1]:
+                    voisins.add(row[1])
+
+        ids_etendus = list(set(ids_conduites) | voisins)
+
+        # Construire un analyseur dédié pour ne pas polluer le cache global
+        analyseur = QualiteReseau()
+        try:
+            anomalies = {
+                "conduites_sans_regards": analyseur.detecter_conduites_sans_regards(ids_conduites=ids_etendus),
+                "troncons_orphelins": analyseur.detecter_troncons_orphelins(ids_conduites=ids_etendus),
+                "champs_manquants": analyseur.detecter_champs_manquants(ids_conduites=ids_etendus),
+                "geometries_invalides": analyseur.detecter_geometries_invalides(ids_conduites=ids_etendus),
+                "pentes_suspectes": analyseur.detecter_pentes_suspectes(ids_conduites=ids_etendus),
+                "sauts_pente": analyseur.detecter_sauts_pente(ids_conduites=ids_etendus),
+                "incoherences_amont_aval": analyseur.detecter_incoherences_amont_aval(ids_conduites=ids_etendus),
+                "capacite_debit": analyseur.detecter_capacite_debit(ids_conduites=ids_etendus)
+            }
+            scores = analyseur.calculer_scores_qualite(anomalies)
+            stats = analyseur._get_statistiques_globales()
+            return {
+                "anomalies": anomalies,
+                "scores_qualite": scores,
+                "statistiques_globales": stats,
+                "nb_conduites_analysees": len(ids_etendus)
+            }
+        finally:
+            analyseur.fermer_connexion()
+
     def _get_statistiques_globales(self) -> Dict[str, Any]:
         stats = {}
 
@@ -119,18 +170,26 @@ class QualiteReseau:
 
         return stats
 
-    def detecter_conduites_sans_regards(self) -> List[Dict[str, Any]]:
+    def detecter_conduites_sans_regards(self, ids_conduites: List[int] = None) -> List[Dict[str, Any]]:
         anomalies = []
 
         with self.SessionLocal() as session:
             result = session.execute(text("SELECT code FROM regards"))
             codes_regards = {str(row[0]).strip() for row in result.fetchall() if row[0] is not None}
 
-            result = session.execute(text("""
+            sql = """
                 SELECT c.id, c.fid, c.id_amont, c.id_aval, c.nom_voie
                 FROM conduites c
                 WHERE c.id_amont IS NOT NULL OR c.id_aval IS NOT NULL
-            """))
+            """
+            params = {}
+            if ids_conduites:
+                placeholders = ",".join([f":id_{i}" for i in range(len(ids_conduites))])
+                sql += f" AND c.id IN ({placeholders})"
+                for i, cid in enumerate(ids_conduites):
+                    params[f"id_{i}"] = cid
+
+            result = session.execute(text(sql), params if params else {})
 
             for row in result.fetchall():
                 id_amont = str(row[2]).strip() if row[2] else None
@@ -159,7 +218,7 @@ class QualiteReseau:
         print(f"Conduites sans regards: {len(anomalies)} detectees")
         return anomalies
 
-    def detecter_troncons_orphelins(self) -> List[Dict[str, Any]]:
+    def detecter_troncons_orphelins(self, ids_conduites: List[int] = None) -> List[Dict[str, Any]]:
         anomalies = []
 
         with self.SessionLocal() as session:
@@ -172,7 +231,15 @@ class QualiteReseau:
             result = session.execute(text("SELECT code FROM regards"))
             codes_regards = {row[0] for row in result.fetchall()}
 
-            result = session.execute(text("SELECT c.id, c.fid, c.id_amont, c.id_aval FROM conduites c"))
+            sql = "SELECT c.id, c.fid, c.id_amont, c.id_aval FROM conduites c"
+            params = {}
+            if ids_conduites:
+                placeholders = ",".join([f":id_{i}" for i in range(len(ids_conduites))])
+                sql += f" WHERE c.id IN ({placeholders})"
+                for i, cid in enumerate(ids_conduites):
+                    params[f"id_{i}"] = cid
+
+            result = session.execute(text(sql), params if params else {})
 
             for row in result.fetchall():
                 id_amont = row[2]
@@ -199,11 +266,11 @@ class QualiteReseau:
         print(f"Troncons orphelins: {len(anomalies)} detectes")
         return anomalies
 
-    def detecter_champs_manquants(self) -> List[Dict[str, Any]]:
+    def detecter_champs_manquants(self, ids_conduites: List[int] = None) -> List[Dict[str, Any]]:
         anomalies = []
 
         with self.SessionLocal() as session:
-            result = session.execute(text("""
+            sql = """
                 SELECT id, fid, diametre, longueur, materiau, prof_fe_am, prof_fe_av
                 FROM conduites
                 WHERE diametre IS NULL OR diametre = 0
@@ -211,7 +278,15 @@ class QualiteReseau:
                    OR materiau IS NULL OR materiau = ''
                    OR prof_fe_am IS NULL
                    OR prof_fe_av IS NULL
-            """))
+            """
+            params = {}
+            if ids_conduites:
+                placeholders = ",".join([f":id_{i}" for i in range(len(ids_conduites))])
+                sql += f" AND id IN ({placeholders})"
+                for i, cid in enumerate(ids_conduites):
+                    params[f"id_{i}"] = cid
+
+            result = session.execute(text(sql), params if params else {})
 
             for row in result.fetchall():
                 champs_manquants = []
@@ -263,18 +338,26 @@ class QualiteReseau:
         print(f"Champs manquants: {len(anomalies)} elements affectes")
         return anomalies
 
-    def detecter_geometries_invalides(self) -> List[Dict[str, Any]]:
+    def detecter_geometries_invalides(self, ids_conduites: List[int] = None) -> List[Dict[str, Any]]:
         anomalies = []
 
         with self.SessionLocal() as session:
-            result = session.execute(text("""
+            sql = """
                 SELECT 'regard' as type_element, id, code as identifiant, longitude, latitude
                 FROM regards
                 WHERE longitude IS NULL OR latitude IS NULL
                    OR longitude < -180 OR longitude > 180
                    OR latitude < -90 OR latitude > 90
                    OR (longitude = 0 AND latitude = 0)
-            """))
+            """
+            params = {}
+            if ids_conduites:
+                placeholders = ",".join([f":id_{i}" for i in range(len(ids_conduites))])
+                sql += f" AND id IN ({placeholders})"
+                for i, cid in enumerate(ids_conduites):
+                    params[f"id_{i}"] = cid
+
+            result = session.execute(text(sql), params if params else {})
 
             for row in result.fetchall():
                 anomalie = {
@@ -314,16 +397,24 @@ class QualiteReseau:
         print(f"Géométries invalides: {len(anomalies)} éléments affectés")
         return anomalies
 
-    def detecter_pentes_suspectes(self) -> List[Dict[str, Any]]:
+    def detecter_pentes_suspectes(self, ids_conduites: List[int] = None) -> List[Dict[str, Any]]:
         anomalies = []
 
         with self.SessionLocal() as session:
-            result = session.execute(text("""
+            sql = """
                 SELECT id, fid, prof_fe_am, prof_fe_av, longueur, nom_voie
                 FROM conduites
                 WHERE prof_fe_am IS NOT NULL AND prof_fe_av IS NOT NULL
                   AND longueur IS NOT NULL AND longueur > 0
-            """))
+            """
+            params = {}
+            if ids_conduites:
+                placeholders = ",".join([f":id_{i}" for i in range(len(ids_conduites))])
+                sql += f" AND id IN ({placeholders})"
+                for i, cid in enumerate(ids_conduites):
+                    params[f"id_{i}"] = cid
+
+            result = session.execute(text(sql), params if params else {})
 
             for row in result.fetchall():
                 id_conduite, fid, prof_am, prof_av, longueur, nom_voie = row
@@ -381,18 +472,25 @@ class QualiteReseau:
         print(f"Pentes suspectes: {len(anomalies)} conduites affectées")
         return anomalies
 
-    def detecter_sauts_pente(self) -> List[Dict[str, Any]]:
+    def detecter_sauts_pente(self, ids_conduites: List[int] = None) -> List[Dict[str, Any]]:
         """Détecte les sauts de pente brutaux (> 2m de dénivellation) entre
         conduites consécutives connectées (amont/aval)."""
         anomalies = []
 
         with self.SessionLocal() as session:
-            # Récupérer toutes les conduites avec leurs profondeurs
-            result = session.execute(text("""
+            sql = """
                 SELECT c.id, c.fid, c.id_amont, c.id_aval, c.prof_fe_am, c.prof_fe_av, c.nom_voie
                 FROM conduites c
                 WHERE c.prof_fe_am IS NOT NULL AND c.prof_fe_av IS NOT NULL
-            """))
+            """
+            params = {}
+            if ids_conduites:
+                placeholders = ",".join([f":id_{i}" for i in range(len(ids_conduites))])
+                sql += f" AND c.id IN ({placeholders})"
+                for i, cid in enumerate(ids_conduites):
+                    params[f"id_{i}"] = cid
+
+            result = session.execute(text(sql), params if params else {})
 
             conduites = {}
             for row in result.fetchall():
@@ -455,7 +553,7 @@ class QualiteReseau:
             pass
         return None, None
 
-    def detecter_capacite_debit(self) -> List[Dict[str, Any]]:
+    def detecter_capacite_debit(self, ids_conduites: List[int] = None) -> List[Dict[str, Any]]:
         """Détecte les conduites sous-dimensionnées selon la formule NP 650.
 
         Formule : Q_nominal = 3.1 * D^2.2  (D en mm, Q en L/s)
@@ -464,13 +562,21 @@ class QualiteReseau:
         anomalies = []
 
         with self.SessionLocal() as session:
-            result = session.execute(text("""
+            sql = """
                 SELECT id, fid, diametre, longueur, prof_fe_am, prof_fe_av, nom_voie
                 FROM conduites
                 WHERE diametre IS NOT NULL AND diametre > 0
                    AND prof_fe_am IS NOT NULL AND prof_fe_av IS NOT NULL
                    AND longueur IS NOT NULL AND longueur > 0
-            """))
+            """
+            params = {}
+            if ids_conduites:
+                placeholders = ",".join([f":id_{i}" for i in range(len(ids_conduites))])
+                sql += f" AND id IN ({placeholders})"
+                for i, cid in enumerate(ids_conduites):
+                    params[f"id_{i}"] = cid
+
+            result = session.execute(text(sql), params if params else {})
 
             for row in result.fetchall():
                 id_conduite, fid, diametre, longueur, prof_am, prof_av, nom_voie = row
