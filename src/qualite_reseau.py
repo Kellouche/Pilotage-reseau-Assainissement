@@ -210,9 +210,9 @@ class QualiteReseau:
 
             for row in result.fetchall():
                 champs_manquants = []
-                if row[2] is None or row[2] == 0: champs_manquants.append("diamÃ¨tre")
+                if row[2] is None or row[2] == 0: champs_manquants.append("diamètre")
                 if row[3] is None or row[3] == 0: champs_manquants.append("longueur")
-                if row[4] is None or row[4] == '': champs_manquants.append("matÃ©riau")
+                if row[4] is None or row[4] == '': champs_manquants.append("matériau")
                 if row[5] is None: champs_manquants.append("profondeur amont")
                 if row[6] is None: champs_manquants.append("profondeur aval")
 
@@ -222,7 +222,7 @@ class QualiteReseau:
                         "id_conduite": row[0],
                         "fid": row[1],
                         "champs_manquants": champs_manquants,
-                        "severite": "majeure" if "diamÃ¨tre" in champs_manquants else "mineure"
+                        "severite": "majeure" if "diamètre" in champs_manquants else "mineure"
                     }
                     lon, lat = self._get_coords_for_anomalie(session, anomalie)
                     if lon is not None and lat is not None:
@@ -239,7 +239,7 @@ class QualiteReseau:
             for row in result.fetchall():
                 champs_manquants = []
                 if row[2] is None: champs_manquants.append("profondeur")
-                if row[3] is None: champs_manquants.append("diamÃ¨tre")
+                if row[3] is None: champs_manquants.append("diamètre")
 
                 if champs_manquants:
                     anomalie = {
@@ -279,7 +279,7 @@ class QualiteReseau:
                     "identifiant": row[2],
                     "longitude": row[3],
                     "latitude": row[4],
-                    "probleme": "coordonnÃ©es nulles ou hors limites" if row[3] is None else "coordonnÃ©es Ã  zÃ©ro",
+                    "probleme": "coordonnées nulles ou hors limites" if row[3] is None else "coordonnées à zéro",
                     "severite": "majeure"
                 }
                 anomalies.append(anomalie)
@@ -301,7 +301,7 @@ class QualiteReseau:
                     "identifiant": row[2],
                     "longitude": row[3],
                     "latitude": row[4],
-                    "probleme": "coordonnÃ©es nulles ou hors limites" if row[3] is None else "coordonnÃ©es Ã  zÃ©ro",
+                    "probleme": "coordonnées nulles ou hors limites" if row[3] is None else "coordonnées à zéro",
                     "severite": "majeure"
                 }
                 anomalies.append(anomalie)
