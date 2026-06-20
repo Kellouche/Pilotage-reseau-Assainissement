@@ -2,10 +2,10 @@
 Validateurs topologiques - Phase 1
 Fondations topologiques : validations hydrauliquement essentielles
 
-DÃ©tections :
-1. Connexions amont-aval cohÃ©rentes (tolÃ©rance 50cm)
-2. Chevauchements gÃ©omÃ©triques (conduites se croisant sans nÅ“ud)
-3. Doublons regards Ã  < 2m
+Détections :
+1. Connexions amont-aval cohérentes (tolérance 50cm)
+2. Chevauchements géométriques (conduites se croisant sans nœud)
+3. Doublons regards à < 2m
 """
 
 from typing import Dict, List, Any, Tuple
@@ -15,7 +15,7 @@ import math
 
 
 class ValidateurTopologie:
-    """Validateur des connexions topologiques du rÃ©seau."""
+    """Validateur des connexions topologiques du réseau."""
 
     TOLERANCE_PROFONDEUR = 0.50
     DISTANCE_DOUBLONS = 2.0
@@ -54,7 +54,7 @@ class ValidateurTopologie:
                         "fid": fid,
                         "id_noeud": id_aval,
                         "nom_voie": nom_voie,
-                        "description": f"DÃ©nivellation excessive au nÅ“ud aval : {diff_aval:.2f}m",
+                        "description": f"Dénivellation excessive au nœud aval : {diff_aval:.2f}m",
                         "details": {
                             "profondeur_fin_conduite": float(prof_av),
                             "profondeur_noeud": float(prof_noeud_av),
@@ -73,7 +73,7 @@ class ValidateurTopologie:
                         "fid": fid,
                         "id_noeud": id_amont,
                         "nom_voie": nom_voie,
-                        "description": f"DÃ©nivellation excessive au nÅ“ud amont : {diff_amont:.2f}m",
+                        "description": f"Dénivellation excessive au nœud amont : {diff_amont:.2f}m",
                         "details": {
                             "profondeur_fin_conduite": float(prof_am),
                             "profondeur_noeud": float(prof_noeud_am),
@@ -163,7 +163,7 @@ class ValidateurTopologie:
                                     "id_conduite_2": id2,
                                     "nom_voie_1": nom1,
                                     "nom_voie_2": nom2,
-                                    "description": f"Chevauchement gÃ©omÃ©trique dÃ©tectÃ© entre {nom1} et {nom2}",
+                                    "description": f"Chevauchement géométrique détecté entre {nom1} et {nom2}",
                                     "distance_min": round(min(dist_start, dist_end, dist_cross), 3),
                                     "longitude": (sx1 + sx2) / 2,
                                     "latitude": (sy1 + sy2) / 2
@@ -224,7 +224,7 @@ class ValidateurTopologie:
                                     "code_2": code2,
                                     "profondeur_2": float(prof2) if prof2 else None,
                                     "commune": comm1,
-                                    "description": f"Doublons suspects : {code1} et {code2} Ã  {dist:.1f}m",
+                                    "description": f"Doublons suspects : {code1} et {code2} à {dist:.1f}m",
                                     "distance": round(dist, 2),
                                     "longitude": (float(lon1) + float(lon2)) / 2,
                                     "latitude": (float(lat1) + float(lat2)) / 2
