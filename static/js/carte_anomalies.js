@@ -85,6 +85,8 @@ function buildAnomaliesMaps(data) {
                     pente_negative: '📉',
                     pente_trop_forte: '🎢',
                     pentes_suspectes: '🎢',
+                    pente_trop_faible: '📉',
+                    saut_pente: '⛰️',
                     conduite_sans_regard: '❓',
                     conduites_sans_regards: '❓',
                     troncon_orphelin: '❓',
@@ -489,7 +491,7 @@ async function populateAnomaliesLists(data) {
     console.log('Populating anomalies lists with data:', Object.keys(data || {}));
     const tabMappings = {
         'connexions': ['conduites_sans_regards', 'incoherences_amont_aval'],
-        'geometrie': ['geometries_invalides', 'pentes_suspectes', 'capacite_debit'],
+        'geometrie': ['geometries_invalides', 'pentes_suspectes', 'capacite_debit', 'sauts_pente'],
         'donnees': ['champs_manquants'],
         'topologie': ['troncons_orphelins', 'incoherence_profondeur_topologie', 'chevauchement_geometrique', 'doublon_regards']
     };

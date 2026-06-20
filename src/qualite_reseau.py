@@ -57,6 +57,7 @@ class QualiteReseau:
         print("Analyse de la qualite du reseau d'assainissement...")
         print("Phase 0 : Detectons basiques (geometrie, pentes)")
         print("Phase 1 : Validations topologiques (fondations)")
+        print("Phase 2 : Analyse pente et profil (sauts, courbes)")
         print("Phase 3 : Capacite debitaire (NP 650)")
 
         session = self.SessionLocal()
@@ -68,6 +69,7 @@ class QualiteReseau:
             "champs_manquants": self.detecter_champs_manquants(),
             "geometries_invalides": self.detecter_geometries_invalides(),
             "pentes_suspectes": self.detecter_pentes_suspectes(),
+            "sauts_pente": self.detecter_sauts_pente(),
             "incoherences_amont_aval": self.detecter_incoherences_amont_aval(),
             "incoherence_profondeur_topologie": validateur_topo.valider_coherence_profondeurs(),
             "chevauchement_geometrique": validateur_topo.valider_chevauchements_geometriques(),
@@ -317,16 +319,14 @@ class QualiteReseau:
 
         with self.SessionLocal() as session:
             result = session.execute(text("""
-                SELECT id, fid, prof_fe_am, prof_fe_av, longueur
+                SELECT id, fid, prof_fe_am, prof_fe_av, longueur, nom_voie
                 FROM conduites
                 WHERE prof_fe_am IS NOT NULL AND prof_fe_av IS NOT NULL
                   AND longueur IS NOT NULL AND longueur > 0
             """))
 
             for row in result.fetchall():
-                prof_am = row[2]
-                prof_av = row[3]
-                longueur = row[4]
+                id_conduite, fid, prof_am, prof_av, longueur, nom_voie = row
 
                 if longueur > 0:
                     pente = ((prof_am - prof_av) / longueur) * 100
@@ -334,10 +334,12 @@ class QualiteReseau:
                     if pente < 0:
                         anomalie = {
                             "type": "pente_negative",
-                            "id_conduite": row[0],
-                            "fid": row[1],
-                            "pente_pourcent": pente,
-                            "severite": "critique"
+                            "id_conduite": id_conduite,
+                            "fid": fid,
+                            "nom_voie": nom_voie,
+                            "pente_pourcent": round(pente, 3),
+                            "severite": "critique",
+                            "description": f"Pente négative ({pente:.2f}%) : inversion de sens hydraulique"
                         }
                         lon, lat = self._get_coords_for_anomalie(session, anomalie)
                         if lon is not None and lat is not None:
@@ -347,10 +349,28 @@ class QualiteReseau:
                     elif pente > 50:
                         anomalie = {
                             "type": "pente_trop_forte",
-                            "id_conduite": row[0],
-                            "fid": row[1],
-                            "pente_pourcent": pente,
-                            "severite": "majeure"
+                            "id_conduite": id_conduite,
+                            "fid": fid,
+                            "nom_voie": nom_voie,
+                            "pente_pourcent": round(pente, 3),
+                            "severite": "majeure",
+                            "description": f"Pente excessive ({pente:.2f}%) : risque d'érosion et de décantation insuffisante"
+                        }
+                        lon, lat = self._get_coords_for_anomalie(session, anomalie)
+                        if lon is not None and lat is not None:
+                            anomalie["longitude"] = lon
+                            anomalie["latitude"] = lat
+                        anomalies.append(anomalie)
+                    elif pente < 0.1:
+                        # Pente trop faible pour l'auto-curage (< 0.1%)
+                        anomalie = {
+                            "type": "pente_trop_faible",
+                            "id_conduite": id_conduite,
+                            "fid": fid,
+                            "nom_voie": nom_voie,
+                            "pente_pourcent": round(pente, 3),
+                            "severite": "majeure",
+                            "description": f"Pente insuffisante ({pente:.2f}% < 0.1%) : risque de stagnation et de dépôts"
                         }
                         lon, lat = self._get_coords_for_anomalie(session, anomalie)
                         if lon is not None and lat is not None:
@@ -360,6 +380,80 @@ class QualiteReseau:
 
         print(f"Pentes suspectes: {len(anomalies)} conduites affectées")
         return anomalies
+
+    def detecter_sauts_pente(self) -> List[Dict[str, Any]]:
+        """Détecte les sauts de pente brutaux (> 2m de dénivellation) entre
+        conduites consécutives connectées (amont/aval)."""
+        anomalies = []
+
+        with self.SessionLocal() as session:
+            # Récupérer toutes les conduites avec leurs profondeurs
+            result = session.execute(text("""
+                SELECT c.id, c.fid, c.id_amont, c.id_aval, c.prof_fe_am, c.prof_fe_av, c.nom_voie
+                FROM conduites c
+                WHERE c.prof_fe_am IS NOT NULL AND c.prof_fe_av IS NOT NULL
+            """))
+
+            conduites = {}
+            for row in result.fetchall():
+                id_c, fid, id_amont, id_aval, prof_am, prof_av, nom_voie = row
+                conduites[id_c] = {
+                    'fid': fid,
+                    'id_amont': id_amont,
+                    'id_aval': id_aval,
+                    'prof_am': float(prof_am),
+                    'prof_av': float(prof_av),
+                    'nom_voie': nom_voie
+                }
+
+            # Pour chaque conduite, vérifier la connexion avec la suivante
+            for id_c, c in conduites.items():
+                id_aval = c['id_aval']
+                if id_aval and id_aval in conduites:
+                    c_suivante = conduites[id_aval]
+                    # Saut de pente = différence entre prof_av de c1 et prof_am de c2
+                    saut = abs(c['prof_av'] - c_suivante['prof_am'])
+
+                    if saut > 2.0:
+                        anomalie = {
+                            "type": "saut_pente",
+                            "id_conduite_amont": id_c,
+                            "fid_amont": c['fid'],
+                            "id_conduite_aval": id_aval,
+                            "fid_aval": c_suivante['fid'],
+                            "nom_voie": c['nom_voie'],
+                            "prof_aval_amont": c['prof_av'],
+                            "prof_amont_aval": c_suivante['prof_am'],
+                            "saut_m": round(saut, 2),
+                            "severite": "majeure" if saut > 5.0 else "mineure",
+                            "description": f"Saut de pente de {saut:.2f}m entre conduites {c['fid']} et {c_suivante['fid']}"
+                        }
+                        # Positionner au point de connexion (regard aval de c1 / amont de c2)
+                        lon, lat = self._get_coords_saut_pente(session, id_c, id_aval)
+                        if lon is not None and lat is not None:
+                            anomalie["longitude"] = lon
+                            anomalie["latitude"] = lat
+                        anomalies.append(anomalie)
+
+        print(f"Sauts de pente: {len(anomalies)} détectés")
+        return anomalies
+
+    def _get_coords_saut_pente(self, session, id_amont: int, id_aval: int) -> Tuple[float, float]:
+        """Récupère les coordonnées du regard de connexion entre deux conduites."""
+        try:
+            result = session.execute(text("""
+                SELECT r.longitude, r.latitude
+                FROM regards r
+                JOIN conduites c ON CAST(c.id_aval AS TEXT) = CAST(r.code AS TEXT)
+                WHERE c.id = :cid
+                LIMIT 1
+            """), {"cid": id_amont})
+            row = result.fetchone()
+            if row and row[0] is not None and row[1] is not None:
+                return row[0], row[1]
+        except Exception:
+            pass
+        return None, None
 
     def detecter_capacite_debit(self) -> List[Dict[str, Any]]:
         """Détecte les conduites sous-dimensionnées selon la formule NP 650.
@@ -450,7 +544,7 @@ class QualiteReseau:
                 row = result.fetchone()
                 if row and row[0] is not None and row[1] is not None:
                     return row[0], row[1]
-        elif anomalie["type"] in ["troncon_orphelin", "champs_manquants_conduite", "pente_negative", "pente_trop_forte", "capacite_debit"]:
+        elif anomalie["type"] in ["troncon_orphelin", "champs_manquants_conduite", "pente_negative", "pente_trop_forte", "pente_trop_faible", "capacite_debit"]:
             conduite_id = anomalie.get("id_conduite") or anomalie.get("fid")
             if conduite_id:
                 if anomalie["type"] in ["troncon_orphelin", "capacite_debit"]:
@@ -477,6 +571,14 @@ class QualiteReseau:
                         row = result.fetchone()
                         if row and row[0] is not None and row[1] is not None:
                             return row[0], row[1]
+        elif anomalie["type"] == "sauts_pente":
+            # Récupérer les coordonnées du regard de connexion entre les deux conduites
+            id_amont = anomalie.get("id_conduite_amont")
+            id_aval = anomalie.get("id_conduite_aval")
+            if id_amont:
+                lon, lat = self._get_coords_saut_pente(session, id_amont, id_aval)
+                if lon is not None and lat is not None:
+                    return lon, lat
         elif anomalie["type"] == "champs_manquants_regard":
             code = anomalie.get("code")
             if code:
