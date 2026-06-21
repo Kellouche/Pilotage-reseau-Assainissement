@@ -55,6 +55,50 @@ class ApiService {
     }
     throw Exception('POST failed: $endpoint');
   }
+
+  Future<Map<String, dynamic>> getQualityScoresByBasin() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/v1/qualite/scores-bassins'),
+    );
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    }
+    throw Exception('Failed to load quality scores by basin');
+  }
+
+  Future<Map<String, dynamic>> validateIncremental(List<int> conduitIds) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/v1/qualite/valider-incremental'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'ids_conduites': conduitIds}),
+    );
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    }
+    throw Exception('Failed to validate incremental');
+  }
+
+  Future<Map<String, dynamic>> getClusterGeojson(int clusterId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/v1/clusters/$clusterId/geojson'),
+    );
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    }
+    throw Exception('Failed to load cluster geojson');
+  }
+
+  Future<Map<String, dynamic>> analyseMntBasins() async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/v1/mnt/analyser-bassins'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({}),
+    );
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    }
+    throw Exception('Failed to analyse MNT basins');
+  }
 }
 
 final apiService = ApiService();

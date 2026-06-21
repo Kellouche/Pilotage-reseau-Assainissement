@@ -16,7 +16,7 @@ from config.settings import APP_NAME, APP_VERSION, APP_DESCRIPTION
 from api.database import init_db, get_db
 from api import schemas, crud
 
-from api.routes import network, simulations, sync, clusters, qualite, corrections, terrain, mnt
+from api.routes import network, simulations, sync, clusters, qualite, corrections, terrain, mnt, audit
 
 # ============================================================
 # LIFESPAN (démarrage/arrêt)
@@ -344,3 +344,4 @@ app.include_router(qualite.router, prefix="/api/v1", tags=["Qualité réseau"])
 app.include_router(corrections.router, prefix="/api/v1/corrections", tags=["Corrections"])
 app.include_router(terrain.router, prefix="/api/v1", tags=["Collecte Terrain"])
 app.include_router(mnt.router, prefix="/api/v1", tags=["MNT / DEM"])
+app.include_router(audit.router, prefix="/api/v1", tags=["Traçabilité / Audit"])
