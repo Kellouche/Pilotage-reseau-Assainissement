@@ -200,7 +200,16 @@ def _calculate_clusters(db: Session, persist: bool = True):
             edge: {"type": f"connecte_{info['type']}", "couleur": couleur}
             for edge in edges
         }
-        geojson = construire_geojson_cluster(G, edges, classification)
+        bassin_polygon = calculer_bassin_polygon(edges, G=G)
+        geojson = construire_geojson_cluster(
+            G,
+            edges,
+            classification,
+            bassin_hull=bassin_polygon,
+            cluster_id=cluster.id if cluster else None,
+            exutoire_node=noeud_exutoire if isinstance(noeud_exutoire, tuple) else ast.literal_eval(noeud_exutoire),
+            exutoire_info=info,
+        )
 
         # Calculer l'ordre topologique des conduites dans ce bassin
         ordre_topologique = calculer_ordre_topologique(G, edges)

@@ -308,35 +308,59 @@ def tracer_cluster_depuis_exutoire(G, exutoire_noeud, max_profondeur=2000):
     return set(G_bassin.edges())
 
 
-def calculer_bassin_polygon(edges_cluster):
-    """Calcule le polygone (convex hull buffered) représentant le bassin urbain.
-    
+def calculer_bassin_polygon(edges_cluster, G=None):
+    """Calcule le polygone représentant la zone drainée par le bassin.
+
+    La forme est obtenue en union des tronçons du cluster, puis par
+    buffer/fermeture pour obtenir un polygone fermé représentant
+    la surface drainée par le réseau vers l'exutoire.
+
     Args:
         edges_cluster: set des arêtes (amont, aval)
-        
+        G: graphe NetworkX (optionnel, pour récupérer les géométries)
+
     Returns:
         shapely.geometry.Polygon: Le polygone du bassin ou None
     """
-    from shapely.geometry import MultiPoint, Point
-    
-    noeuds = set()
-    for amont, aval in edges_cluster:
-        noeuds.add(amont)
-        noeuds.add(aval)
-    
-    if len(noeuds) < 2:
+    from shapely.geometry import LineString, MultiLineString, Polygon
+    from shapely.ops import unary_union
+
+    if not edges_cluster:
         return None
-        
-    points = [Point(n) for n in noeuds]
-    hull = MultiPoint(points).convex_hull
-    
-    # Appliquer un buffer pour donner du volume au bassin
-    if hull.geom_type == 'Point':
-        return hull.buffer(0.003)
-    elif hull.geom_type == 'LineString':
-        return hull.buffer(0.002)
+
+    lignes = []
+    for amont, aval in edges_cluster:
+        if G is not None and G.has_edge(amont, aval):
+            geom = G[amont][aval].get("geometry_wkt")
+            if geom:
+                try:
+                    lignes.append(LineString(geom))
+                    continue
+                except Exception:
+                    pass
+        lignes.append(LineString([amont, aval]))
+
+    if not lignes:
+        return None
+
+    union = unary_union(lignes)
+    if union.is_empty:
+        return None
+
+    # Si l'union n'est pas déjà une surface, on applique un petit buffer
+    # pour fermer le contour et représenter la zone drainée.
+    if union.geom_type in ("LineString", "MultiLineString"):
+        poly = union.buffer(0.0005)
     else:
-        return hull.buffer(0.001)
+        poly = union
+
+    if poly.geom_type == "Polygon":
+        return poly
+    if poly.geom_type == "MultiPolygon":
+        # On garde le plus grand polygone comme bassin principal
+        return max(poly.geoms, key=lambda p: p.area)
+
+    return None
 
 
 def construire_geojson_cluster(G, edges_cluster, classification=None, bassin_hull=None, cluster_id=None, exutoire_node=None, exutoire_info=None):

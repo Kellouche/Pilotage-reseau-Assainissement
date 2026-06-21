@@ -121,13 +121,20 @@ def construire_graphe():
             except (ValueError, TypeError):
                 diametre = 0.0
 
+            geom_wkt = None
+            try:
+                geom_wkt = list(seg.coords)
+            except Exception:
+                geom_wkt = None
+
             G.add_edge(
                 noeud_amont, noeud_aval,
                 conduit_id=f"C_{idx}",
                 longueur=longueur,
                 diametre=diametre,
                 materiau=str(ligne.get("MATERIAU", "")),
-                idx_origine=idx
+                idx_origine=idx,
+                geometry_wkt=geom_wkt
             )
 
     n_noeuds = G.number_of_nodes()
