@@ -146,11 +146,11 @@ def _calculate_clusters(db: Session, persist: bool = True):
     from src.domain.graphe_reseau import construire_graphe, calculer_ordre_topologique
     from src.domain.detecteur_clusters import (
         trouver_exutoires_physiques,
-        partitionner_bassins_exclusifs,
         construire_geojson_cluster,
         calculer_statistiques,
+        compter_infrastructures,
+        calculer_bassin_depuis_exutoire,
         detecter_composantes_orphelines,
-        compter_infrastructures
     )
 
     # Reconstruire le graphe
@@ -170,9 +170,14 @@ def _calculate_clusters(db: Session, persist: bool = True):
 
     print(f"[cluster] {len(exutoires_physiques)} exutoires, {len(composantes_orphelines)} composantes", flush=True)
 
-    # 3. ── Partition BFS multi-sources : bassins exclusifs ────────────
-    print("[cluster] Partition BFS multi-sources…", flush=True)
-    bassins, nb_orphelines = partitionner_bassins_exclusifs(G, exutoires_physiques)
+    # 3. ── Bassins hydrauliques par exutoire (zone drainée) ────────────
+    print("[cluster] Calcul des bassins drainés par exutoire…", flush=True)
+    bassins_par_exutoire = {}
+    tous_les_troncons_connexes = set()
+    for noeud_exutoire, info in exutoires_physiques.items():
+        bassin = calculer_bassin_depuis_exutoire(G, noeud_exutoire)
+        bassins_par_exutoire[noeud_exutoire] = bassin
+        tous_les_troncons_connexes.update(bassin["edges"])
     # ──────────────────────────────────────────────────────────────────
 
     color_map = {
@@ -183,16 +188,14 @@ def _calculate_clusters(db: Session, persist: bool = True):
     }
 
     results = []
-    tous_les_troncons_connexes = set()
 
-    for noeud_exutoire, edges in bassins.items():
+    for noeud_exutoire, info in exutoires_physiques.items():
+        bassin = bassins_par_exutoire[noeud_exutoire]
+        edges = bassin["edges"]
         if not edges:
             continue
 
-        info = exutoires_physiques[noeud_exutoire]
-        tous_les_troncons_connexes.update(edges)
-
-        stats = calculer_statistiques(G, edges)
+        stats = bassin["stats"]
         infrastructures = compter_infrastructures(edges)
 
         couleur = color_map.get(info["type"], "#4a90e2")
@@ -200,13 +203,12 @@ def _calculate_clusters(db: Session, persist: bool = True):
             edge: {"type": f"connecte_{info['type']}", "couleur": couleur}
             for edge in edges
         }
-        bassin_polygon = calculer_bassin_polygon(edges, G=G)
         geojson = construire_geojson_cluster(
             G,
             edges,
             classification,
-            bassin_hull=bassin_polygon,
-            cluster_id=cluster.id if cluster else None,
+            bassin_hull=bassin["polygon"],
+            cluster_id=None,
             exutoire_node=noeud_exutoire if isinstance(noeud_exutoire, tuple) else ast.literal_eval(noeud_exutoire),
             exutoire_info=info,
         )
