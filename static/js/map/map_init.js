@@ -6,9 +6,7 @@
         initEditAttributes();
         initNotifications();
 
-        chargerDonneesInitiales().then(() => {
-            initQuality();
-        });
+        chargerDonneesInitiales();
     }
 
     if (document.readyState === 'loading') {

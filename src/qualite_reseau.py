@@ -764,7 +764,21 @@ class QualiteReseau:
         if anomalies is None:
             anomalies = {}
 
-        total_anomalies = sum(len(v) for v in anomalies.values()) if anomalies else 0
+        # Déduplication : un même élément ne doit être compté qu'une fois,
+        # même s'il présente plusieurs types d'anomalies.
+        elements_affectes = set()
+        for categorie, liste in anomalies.items():
+            for anomalie in liste:
+                eid = (
+                    anomalie.get("id_conduite")
+                    or anomalie.get("id_regard")
+                    or anomalie.get("id")
+                    or anomalie.get("fid")
+                )
+                if eid is not None:
+                    elements_affectes.add((categorie, str(eid)))
+
+        total_elements_uniques = len(elements_affectes)
 
         stats_globales = self._get_statistiques_globales()
         total_elements = (
@@ -773,12 +787,18 @@ class QualiteReseau:
             stats_globales.get('nb_rejets', 0)
         )
 
-        score_global = ((total_elements - total_anomalies) / total_elements) * 100 if total_elements > 0 else 0
+        # Score borné entre 0 et 100 pour éviter les valeurs négatives
+        if total_elements > 0:
+            score_global = ((total_elements - total_elements_uniques) / total_elements) * 100
+            score_global = max(0.0, min(100.0, score_global))
+        else:
+            score_global = 100.0
 
         scores['global'] = {
             "score_qualite": round(score_global, 1),
             "total_elements": total_elements,
-            "total_anomalies": total_anomalies
+            "total_elements_uniques_affectes": total_elements_uniques,
+            "total_anomalies_brutes": sum(len(v) for v in anomalies.values()) if anomalies else 0
         }
 
         print(f"Scores de qualité calculés - Score global: {scores['global']['score_qualite']}%")
