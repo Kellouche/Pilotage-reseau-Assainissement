@@ -363,6 +363,48 @@ def calculer_bassin_polygon(edges_cluster, G=None):
     return None
 
 
+def calculer_bassin_depuis_exutoire(G, exutoire_noeud, max_profondeur=2000):
+    """Calcule le bassin drainé complet depuis un exutoire donné.
+
+    Utilise une remontée topologique depuis l'exutoire pour collecter
+    toutes les conduites qui alimentent cet exutoire, puis construit
+    un polygone représentant la zone drainée.
+
+    Args:
+        G: graphe NetworkX
+        exutoire_noeud: nœud exutoire (tuple lon/lat)
+        max_profondeur: profondeur max de remontée
+
+    Returns:
+        dict avec 'edges', 'polygon', 'stats'
+    """
+    if exutoire_noeud not in G:
+        return {"edges": set(), "polygon": None, "stats": {}}
+
+    # Remontée topologique : tous les noeuds qui peuvent atteindre l'exutoire
+    noeuds_amont = nx.ancestors(G, exutoire_noeud)
+    noeuds_amont.add(exutoire_noeud)
+
+    # Collecter les arêtes du bassin
+    edges = set()
+    for u, v in G.edges():
+        if u in noeuds_amont and v in noeuds_amont:
+            edges.add((u, v))
+
+    # Construire le polygone du bassin
+    polygon = calculer_bassin_polygon(edges, G=G)
+
+    # Statistiques
+    stats = calculer_statistiques(G, edges)
+
+    return {
+        "edges": edges,
+        "polygon": polygon,
+        "stats": stats,
+        "nb_noeuds": len(noeuds_amont)
+    }
+
+
 def construire_geojson_cluster(G, edges_cluster, classification=None, bassin_hull=None, cluster_id=None, exutoire_node=None, exutoire_info=None):
     """Convertit les arêtes du cluster en GeoJSON avec couleur par type hydraulique.
     
