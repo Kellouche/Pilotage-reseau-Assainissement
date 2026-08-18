@@ -380,7 +380,7 @@ class _MapScreenState extends State<MapScreen> {
                     ),
                     _LegendItem(
                       label: 'Regards (${layers?['compteurs']?['regards'] ?? 0})',
-                      color: const Color(0xFFCCCCCC),
+                      color: const Color(0xFF8E44AD),
                       isActive: currentZoom >= 13,
                     ),
                     _LegendItem(
@@ -487,7 +487,7 @@ class _MapScreenState extends State<MapScreen> {
           },
           child: const DecoratedBox(
             decoration: BoxDecoration(
-              color: Color(0xFFCCCCCC), // Light gray
+              color: Color(0xFF8E44AD), // Violet
               shape: BoxShape.circle,
             ),
           ),
