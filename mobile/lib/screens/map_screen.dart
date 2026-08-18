@@ -58,6 +58,7 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
+  final MapController mapController = MapController();
   Map<String, dynamic>? layers;
   bool loading = true;
   String networkMode = 'online';
@@ -74,7 +75,7 @@ class _MapScreenState extends State<MapScreen> {
   List<Polyline> conduitePolylines = [];
 
   LatLngBounds? currentBounds;
-  double currentZoom = 12.0;
+  double currentZoom = 13.0;
   String? lastFetchCacheKey;
   Timer? _debounceTimer;
   int _zoomDisplayBucket = 0;
@@ -164,13 +165,9 @@ class _MapScreenState extends State<MapScreen> {
       if (permission == LocationPermission.whileInUse ||
           permission == LocationPermission.always) {
         final position = await Geolocator.getCurrentPosition();
-        setState(() => userLocation = position);
-
-        final gpsBounds = LatLngBounds(
-          LatLng(position.latitude - 0.2, position.longitude - 0.2),
-          LatLng(position.latitude + 0.2, position.longitude + 0.2),
-        );
-        await loadMapData(bounds: gpsBounds);
+        if (mounted) {
+          setState(() => userLocation = position);
+        }
       }
     } catch (_) {
       debugPrint('GPS non disponible');
@@ -208,6 +205,10 @@ class _MapScreenState extends State<MapScreen> {
       );
       return;
     }
+    mapController.move(
+      LatLng(userLocation!.latitude, userLocation!.longitude),
+      15.0,
+    );
   }
 
   Future<void> saveInspection(Map<String, dynamic> inspectionData) async {
@@ -301,9 +302,10 @@ class _MapScreenState extends State<MapScreen> {
       body: Stack(
         children: [
           FlutterMap(
+            mapController: mapController,
             options: MapOptions(
               initialCenter: LatLng(36.15, 1.33),
-              initialZoom: 12.0,
+              initialZoom: 13.0,
               onTap: (tapPosition, point) {
                 if (declaringIncident) {
                   setState(() {
@@ -322,7 +324,7 @@ class _MapScreenState extends State<MapScreen> {
                 subdomains: const ['a', 'b', 'c'],
               ),
               if (layers != null) ...[
-                if (currentZoom >= 12)
+                if (currentZoom >= 13)
                   MarkerLayer(
                     markers: [
                       ...regardMarkers,
@@ -379,14 +381,14 @@ class _MapScreenState extends State<MapScreen> {
                     _LegendItem(
                       label: 'Regards (${layers?['compteurs']?['regards'] ?? 0})',
                       color: const Color(0xFFf1c40f),
-                      isActive: currentZoom >= 12,
+                      isActive: currentZoom >= 13,
                     ),
                     _LegendItem(
                       label: 'Conduites (${layers?['compteurs']?['conduites'] ?? 0})',
                       color: const Color(0xFF3498db),
                       isActive: currentZoom >= 14,
                     ),
-                    if (currentZoom < 12)
+                    if (currentZoom < 13)
                       const _LegendItem(
                         label: 'Zoomez pour afficher les objets',
                         isActive: false,
@@ -454,7 +456,7 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   List<Marker> _parseRegardMarkers(Map<String, dynamic> data) {
-    if (currentZoom < 12) return []; // Match the rendering condition to avoid parsing when not displayed
+    if (currentZoom < 13) return []; // Match the rendering condition to avoid parsing when not displayed
     final features = data['couches']?['regards']?['features'];
     if (features is! List) return [];
 
