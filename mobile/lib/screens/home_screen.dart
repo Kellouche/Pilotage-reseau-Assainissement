@@ -57,7 +57,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> checkServerStatus() async {
     try {
       setState(() => serverStatus = 'checking');
-      final healthData = await HealthService().checkHealth();
+      final healthData = await healthService.checkHealth();
       setState(() {
         serverStatus = 'online';
         serverInfo = healthData;

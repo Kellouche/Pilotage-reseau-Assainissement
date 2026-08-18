@@ -9,7 +9,7 @@ class ApiService {
       : baseUrl = baseUrl ??
             const String.fromEnvironment(
               'API_BASE_URL',
-              defaultValue: 'http://10.0.2.2:5001',
+              defaultValue: 'http://127.0.0.1:5001',
             );
 
   Future<Map<String, dynamic>> getLayers({LatLngBounds? bounds}) async {
@@ -104,9 +104,13 @@ class ApiService {
 final apiService = ApiService();
 
 class SyncService {
+  final ApiService _api;
+  
+  SyncService(this._api);
+
   Future<Map<String, dynamic>> getDelta(int sinceVersion) async {
     final response = await http.get(
-      Uri.parse('http://127.0.0.1:5001/api/v1/sync/delta?since_version=$sinceVersion'),
+      Uri.parse('${_api.baseUrl}/api/v1/sync/delta?since_version=$sinceVersion'),
     );
     if (response.statusCode == 200) {
       return json.decode(response.body);
@@ -116,7 +120,7 @@ class SyncService {
 
   Future<Map<String, dynamic>> pushChanges(String deviceId, List<Map<String, dynamic>> changes) async {
     final response = await http.post(
-      Uri.parse('http://127.0.0.1:5001/api/v1/sync/push'),
+      Uri.parse('${_api.baseUrl}/api/v1/sync/push'),
       headers: {'Content-Type': 'application/json'},
       body: json.encode({'device_id': deviceId, 'changes': changes}),
     );
@@ -128,7 +132,7 @@ class SyncService {
 
   Future<Map<String, dynamic>> registerSession(String deviceId) async {
     final response = await http.post(
-      Uri.parse('http://127.0.0.1:5001/api/v1/sync/session?device_id=$deviceId'),
+      Uri.parse('${_api.baseUrl}/api/v1/sync/session?device_id=$deviceId'),
     );
     if (response.statusCode == 200) {
       return json.decode(response.body);
@@ -137,12 +141,16 @@ class SyncService {
   }
 }
 
-final syncService = SyncService();
+final syncService = SyncService(apiService);
 
 class HealthService {
+  final ApiService _api;
+  
+  HealthService(this._api);
+
   Future<Map<String, dynamic>> checkHealth() async {
     final response = await http.get(
-      Uri.parse('http://127.0.0.1:5001/health'),
+      Uri.parse('${_api.baseUrl}/health'),
     );
     if (response.statusCode == 200) {
       return json.decode(response.body);
@@ -150,3 +158,5 @@ class HealthService {
     throw Exception('Failed to check health');
   }
 }
+
+final healthService = HealthService(apiService);
