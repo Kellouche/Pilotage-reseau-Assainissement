@@ -460,8 +460,9 @@ class _MapScreenState extends State<MapScreen> {
     final features = data['couches']?['regards']?['features'];
     if (features is! List) return [];
 
-    // Zoom 13 = 3px radius (6px diam), Zoom 14 = 5px radius (10px diam)
-    final double diameter = (currentZoom - 11.5).clamp(1.0, 6.0) * 4.0;
+    // zoom 13: rayon 1px (diam 2), zoom 14: rayon 2px (diam 4)
+    // zoom 15: rayon 3px (diam 6), zoom >= 16: rayon 4px (diam 8)
+    final double diameter = (currentZoom - 12.0).clamp(1.0, 4.0) * 2.0;
 
     return features.map((f) {
       final geom = f['geometry'];
