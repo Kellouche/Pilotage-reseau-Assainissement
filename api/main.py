@@ -190,6 +190,13 @@ def _iter_geojson_positions(coords):
 
 
 def _feature_intersects_bounds(feature, ne_lat, ne_lng, sw_lat, sw_lng):
+    bbox = feature.get("bbox")
+    if bbox:
+        min_lng, min_lat, max_lng, max_lat = bbox
+        if max_lng < sw_lng or min_lng > ne_lng or max_lat < sw_lat or min_lat > ne_lat:
+            return False
+        return True
+        
     geometry = feature.get("geometry") or {}
     coords = geometry.get("coordinates")
     for lng, lat in _iter_geojson_positions(coords):
@@ -263,10 +270,24 @@ def get_layers(
             gdf = gpd.read_file(GPKG_PATH, layer=layer_name)
             if gdf.crs and gdf.crs != WGS84:
                 gdf = gpd.GeoDataFrame(gdf, geometry=gdf.geometry.to_crs(WGS84))
+            
+            # Appliquer le filtrage géospatial initial si demandé
             if has_bounds and not gdf.empty:
                 gdf = gdf.cx[sw_lng:ne_lng, sw_lat:ne_lat]
 
             geojson = gdf.__geo_interface__
+            
+            # Pré-calculer les bboxes pour accélérer considérablement le filtre en mémoire
+            for feature in geojson.get('features', []):
+                geom = feature.get('geometry')
+                if geom and geom.get('coordinates'):
+                    lngs, lats = [], []
+                    for lng, lat in _iter_geojson_positions(geom['coordinates']):
+                        lngs.append(lng)
+                        lats.append(lat)
+                    if lngs and lats:
+                        feature['bbox'] = (min(lngs), min(lats), max(lngs), max(lats))
+
             result["couches"][key] = geojson
             result["compteurs"][key] = len(geojson.get('features', []))
         except Exception as e:

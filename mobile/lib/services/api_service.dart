@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_map/flutter_map.dart';
@@ -27,10 +28,13 @@ class ApiService {
     );
     final response = await http.get(uri);
     if (response.statusCode == 200) {
-      return json.decode(response.body);
+      return compute(_decodeJson, response.body);
     }
     throw Exception('Failed to load layers');
   }
+
+  // Helper method for compute
+  static Map<String, dynamic> _decodeJson(String source) => json.decode(source);
 
   Future<Map<String, dynamic>> updateConduite(String conduiteId, Map<String, dynamic> updateData) async {
     final response = await http.patch(

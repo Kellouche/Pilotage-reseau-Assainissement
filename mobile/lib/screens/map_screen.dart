@@ -322,14 +322,14 @@ class _MapScreenState extends State<MapScreen> {
                 subdomains: const ['a', 'b', 'c'],
               ),
               if (layers != null) ...[
-                if (currentZoom >= 13)
+                if (currentZoom >= 12)
                   MarkerLayer(
                     markers: [
                       ...regardMarkers,
                       ..._buildIncidentMarkers(),
                     ],
                   ),
-                if (currentZoom >= 15)
+                if (currentZoom >= 14)
                   PolylineLayer(polylines: conduitePolylines),
               ],
             ],
@@ -379,14 +379,14 @@ class _MapScreenState extends State<MapScreen> {
                     _LegendItem(
                       label: 'Regards (${layers?['compteurs']?['regards'] ?? 0})',
                       color: const Color(0xFFf1c40f),
-                      isActive: currentZoom >= 13,
+                      isActive: currentZoom >= 12,
                     ),
                     _LegendItem(
                       label: 'Conduites (${layers?['compteurs']?['conduites'] ?? 0})',
                       color: const Color(0xFF3498db),
-                      isActive: currentZoom >= 15,
+                      isActive: currentZoom >= 14,
                     ),
-                    if (currentZoom < 13)
+                    if (currentZoom < 12)
                       const _LegendItem(
                         label: 'Zoomez pour afficher les objets',
                         isActive: false,
@@ -454,7 +454,7 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   List<Marker> _parseRegardMarkers(Map<String, dynamic> data) {
-    if (currentZoom < 13) return []; // Match the rendering condition to avoid parsing when not displayed
+    if (currentZoom < 12) return []; // Match the rendering condition to avoid parsing when not displayed
     final features = data['couches']?['regards']?['features'];
     if (features is! List) return [];
 
@@ -505,7 +505,7 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   List<Polyline> _parseConduitePolylines(Map<String, dynamic> data) {
-    if (currentZoom < 13) return []; // Too zoomed out, don't freeze UI
+    if (currentZoom < 14) return []; // Too zoomed out, don't freeze UI
     final features = data['couches']?['conduites']?['features'];
     if (features is! List) return [];
 
