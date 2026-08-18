@@ -101,8 +101,8 @@ class _MapScreenState extends State<MapScreen> {
       setState(() => networkMode = mode);
 
       final defaultBounds = LatLngBounds(
-        LatLng(36.15 - 0.35, 1.33 - 0.35),
-        LatLng(36.15 + 0.35, 1.33 + 0.35),
+        LatLng(36.15 - 0.05, 1.33 - 0.05),
+        LatLng(36.15 + 0.05, 1.33 + 0.05),
       );
       await loadMapData(bounds: defaultBounds);
       await requestGPSLocation();
@@ -377,12 +377,12 @@ class _MapScreenState extends State<MapScreen> {
                       ),
                     ),
                     _LegendItem(
-                      label: 'Regards (${regardMarkers.length})',
+                      label: 'Regards (${layers?['compteurs']?['regards'] ?? 0})',
                       color: const Color(0xFFf1c40f),
                       isActive: currentZoom >= 13,
                     ),
                     _LegendItem(
-                      label: 'Conduites (${conduitePolylines.length})',
+                      label: 'Conduites (${layers?['compteurs']?['conduites'] ?? 0})',
                       color: const Color(0xFF3498db),
                       isActive: currentZoom >= 15,
                     ),
@@ -466,6 +466,8 @@ class _MapScreenState extends State<MapScreen> {
       if (coords[1] is! num || coords[0] is! num) return null;
 
       return Marker(
+        width: 14.0, // 7px radius = 14px diameter
+        height: 14.0,
         point: LatLng(
           (coords[1] as num).toDouble(),
           (coords[0] as num).toDouble(),
@@ -477,7 +479,12 @@ class _MapScreenState extends State<MapScreen> {
               activeObject = f['properties'];
             });
           },
-          child: const Icon(Icons.water, color: Color(0xFFf1c40f)),
+          child: const DecoratedBox(
+            decoration: BoxDecoration(
+              color: Color(0xFFf1c40f),
+              shape: BoxShape.circle,
+            ),
+          ),
         ),
       );
     }).whereType<Marker>().toList();
