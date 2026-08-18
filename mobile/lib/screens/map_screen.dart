@@ -380,7 +380,7 @@ class _MapScreenState extends State<MapScreen> {
                     ),
                     _LegendItem(
                       label: 'Regards (${layers?['compteurs']?['regards'] ?? 0})',
-                      color: const Color(0xFFf1c40f),
+                      color: const Color(0xFFCCCCCC),
                       isActive: currentZoom >= 13,
                     ),
                     _LegendItem(
@@ -460,6 +460,9 @@ class _MapScreenState extends State<MapScreen> {
     final features = data['couches']?['regards']?['features'];
     if (features is! List) return [];
 
+    // Zoom 13 = 3px radius (6px diam), Zoom 14 = 5px radius (10px diam)
+    final double diameter = (currentZoom - 11.5).clamp(1.0, 6.0) * 4.0;
+
     return features.map((f) {
       final geom = f['geometry'];
       if (geom is! Map || !geom.containsKey('coordinates')) return null;
@@ -468,8 +471,8 @@ class _MapScreenState extends State<MapScreen> {
       if (coords[1] is! num || coords[0] is! num) return null;
 
       return Marker(
-        width: 14.0, // 7px radius = 14px diameter
-        height: 14.0,
+        width: diameter,
+        height: diameter,
         point: LatLng(
           (coords[1] as num).toDouble(),
           (coords[0] as num).toDouble(),
@@ -483,7 +486,7 @@ class _MapScreenState extends State<MapScreen> {
           },
           child: const DecoratedBox(
             decoration: BoxDecoration(
-              color: Color(0xFFf1c40f),
+              color: Color(0xFFCCCCCC), // Light gray
               shape: BoxShape.circle,
             ),
           ),
