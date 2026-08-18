@@ -403,24 +403,28 @@ class _MapScreenState extends State<MapScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 FloatingActionButton(
+                  heroTag: 'fab_location',
                   backgroundColor: const Color(0xFF16213e),
                   onPressed: centerOnUser,
                   child: const Icon(Icons.my_location, color: Colors.white),
                 ),
                 const SizedBox(width: 8),
                 FloatingActionButton(
+                  heroTag: 'fab_search',
                   backgroundColor: const Color(0xFF16213e),
                   onPressed: () => setState(() => showProximite = true),
                   child: const Icon(Icons.search, color: Colors.white),
                 ),
                 const SizedBox(width: 8),
                 FloatingActionButton(
+                  heroTag: 'fab_scanner',
                   backgroundColor: const Color(0xFF16213e),
                   onPressed: () => setState(() => showScanner = true),
                   child: const Icon(Icons.qr_code_scanner, color: Colors.white),
                 ),
                 const SizedBox(width: 8),
                 FloatingActionButton(
+                  heroTag: 'fab_incident',
                   backgroundColor: declaringIncident
                       ? const Color(0xFFe74c3c)
                       : const Color(0xFF16213e),
@@ -450,6 +454,7 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   List<Marker> _parseRegardMarkers(Map<String, dynamic> data) {
+    if (currentZoom < 13) return []; // Match the rendering condition to avoid parsing when not displayed
     final features = data['couches']?['regards']?['features'];
     if (features is! List) return [];
 
@@ -493,33 +498,43 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   List<Polyline> _parseConduitePolylines(Map<String, dynamic> data) {
+    if (currentZoom < 13) return []; // Too zoomed out, don't freeze UI
     final features = data['couches']?['conduites']?['features'];
     if (features is! List) return [];
 
-    return features.map((f) {
+    final polylines = <Polyline>[];
+    for (final f in features) {
       final geom = f['geometry'];
-      if (geom is! Map || !geom.containsKey('coordinates')) return null;
+      if (geom is! Map || !geom.containsKey('coordinates')) continue;
+      final type = geom['type'];
       final coords = geom['coordinates'];
-      if (coords is! List) return null;
+      if (coords is! List) continue;
 
-      final points = <LatLng>[];
-      for (final coord in coords) {
-        if (coord is! List || coord.length < 2) continue;
-        if (coord[1] is! num || coord[0] is! num) continue;
-        points.add(
-          LatLng(
-            (coord[1] as num).toDouble(),
-            (coord[0] as num).toDouble(),
-          ),
-        );
+      if (type == 'LineString') {
+        final points = _parseLineString(coords);
+        if (points.isNotEmpty) {
+          polylines.add(Polyline(points: points, color: const Color(0xFF3498db), strokeWidth: 5.0));
+        }
+      } else if (type == 'MultiLineString') {
+        for (final lineCoords in coords) {
+          if (lineCoords is! List) continue;
+          final points = _parseLineString(lineCoords);
+          if (points.isNotEmpty) {
+            polylines.add(Polyline(points: points, color: const Color(0xFF3498db), strokeWidth: 5.0));
+          }
+        }
       }
+    }
+    return polylines;
+  }
 
-      if (points.isEmpty) return null;
-      return Polyline(
-        points: points,
-        color: const Color(0xFF3498db),
-        strokeWidth: 5.0,
-      );
-    }).whereType<Polyline>().toList();
+  List<LatLng> _parseLineString(List coords) {
+    final points = <LatLng>[];
+    for (final coord in coords) {
+      if (coord is! List || coord.length < 2) continue;
+      if (coord[1] is! num || coord[0] is! num) continue;
+      points.add(LatLng((coord[1] as num).toDouble(), (coord[0] as num).toDouble()));
+    }
+    return points;
   }
 }
