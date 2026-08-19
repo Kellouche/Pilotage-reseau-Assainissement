@@ -10,7 +10,7 @@ class ApiService {
       : baseUrl = baseUrl ??
             const String.fromEnvironment(
               'API_BASE_URL',
-              defaultValue: 'http://127.0.0.1:5001',
+              defaultValue: 'http://127.0.0.1:5002',
             );
 
   Future<Map<String, dynamic>> getLayers({LatLngBounds? bounds}) async {
