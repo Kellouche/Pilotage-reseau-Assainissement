@@ -169,57 +169,10 @@ def get_map():
 # ============================================================
 
 _LAYERS_CACHE = None
-
+_GDF_CACHE = None
 
 def _has_bounds(ne_lat, ne_lng, sw_lat, sw_lng):
     return None not in (ne_lat, ne_lng, sw_lat, sw_lng)
-
-
-def _iter_geojson_positions(coords):
-    if not isinstance(coords, (list, tuple)) or not coords:
-        return
-    if (
-        len(coords) >= 2
-        and isinstance(coords[0], (int, float))
-        and isinstance(coords[1], (int, float))
-    ):
-        yield coords[0], coords[1]
-        return
-    for item in coords:
-        yield from _iter_geojson_positions(item)
-
-
-def _feature_intersects_bounds(feature, ne_lat, ne_lng, sw_lat, sw_lng):
-    bbox = feature.get("bbox")
-    if bbox:
-        min_lng, min_lat, max_lng, max_lat = bbox
-        if max_lng < sw_lng or min_lng > ne_lng or max_lat < sw_lat or min_lat > ne_lat:
-            return False
-        return True
-        
-    geometry = feature.get("geometry") or {}
-    coords = geometry.get("coordinates")
-    for lng, lat in _iter_geojson_positions(coords):
-        if sw_lng <= lng <= ne_lng and sw_lat <= lat <= ne_lat:
-            return True
-    return False
-
-
-def _filter_layers_by_bounds(layers_result, ne_lat, ne_lng, sw_lat, sw_lng):
-    filtered = {
-        "statut": layers_result.get("statut", "ok"),
-        "couches": {},
-        "compteurs": {},
-    }
-    for key, collection in layers_result.get("couches", {}).items():
-        features = collection.get("features", [])
-        kept = [
-            feature for feature in features
-            if _feature_intersects_bounds(feature, ne_lat, ne_lng, sw_lat, sw_lng)
-        ]
-        filtered["couches"][key] = {**collection, "features": kept}
-        filtered["compteurs"][key] = len(kept)
-    return filtered
 
 @app.get("/api/v1/layers")
 def get_layers(
@@ -228,14 +181,28 @@ def get_layers(
     sw_lat: Optional[float] = None,
     sw_lng: Optional[float] = None,
 ):
-    """Retourne les données GeoJSON des couches du réseau (avec cache mémoire)."""
-    global _LAYERS_CACHE
+    """Retourne les données GeoJSON des couches du réseau (avec cache optimisé par index spatial)."""
+    global _LAYERS_CACHE, _GDF_CACHE
     has_bounds = _has_bounds(ne_lat, ne_lng, sw_lat, sw_lng)
+    
     if _LAYERS_CACHE is not None and not has_bounds:
         return _LAYERS_CACHE
-    if _LAYERS_CACHE is not None and has_bounds:
-        return _filter_layers_by_bounds(_LAYERS_CACHE, ne_lat, ne_lng, sw_lat, sw_lng)
+        
+    if _GDF_CACHE is not None and has_bounds:
+        # Filtrage ultra-rapide via index spatial GeoPandas (.cx)
+        result = {"statut": "ok", "couches": {}, "compteurs": {}}
+        for key, gdf in _GDF_CACHE.items():
+            if not gdf.empty:
+                filtered_gdf = gdf.cx[sw_lng:ne_lng, sw_lat:ne_lat]
+                geojson = filtered_gdf.__geo_interface__
+                result["couches"][key] = geojson
+                result["compteurs"][key] = len(geojson.get('features', []))
+            else:
+                result["couches"][key] = {"type": "FeatureCollection", "features": []}
+                result["compteurs"][key] = 0
+        return result
 
+    # Construction du cache (première fois)
     from pathlib import Path
     import geopandas as gpd
 
@@ -243,6 +210,7 @@ def get_layers(
     WGS84 = "EPSG:4326"
 
     result = {"statut": "ok", "couches": {}, "compteurs": {}}
+    gdf_cache_temp = {}
 
     KEYWORDS = {
         'conduites': 'canalisations',
@@ -264,6 +232,7 @@ def get_layers(
         if not layer_name:
             result["couches"][key] = {"type": "FeatureCollection", "features": []}
             result["compteurs"][key] = 0
+            gdf_cache_temp[key] = gpd.GeoDataFrame()
             continue
 
         try:
@@ -271,32 +240,29 @@ def get_layers(
             if gdf.crs and gdf.crs != WGS84:
                 gdf = gpd.GeoDataFrame(gdf, geometry=gdf.geometry.to_crs(WGS84))
             
-            # Appliquer le filtrage géospatial initial si demandé
-            if has_bounds and not gdf.empty:
-                gdf = gdf.cx[sw_lng:ne_lng, sw_lat:ne_lat]
-
-            geojson = gdf.__geo_interface__
+            # Construire explicitement l'index spatial (R-tree) pour de meilleures perfs
+            _ = gdf.sindex
             
-            # Pré-calculer les bboxes pour accélérer considérablement le filtre en mémoire
-            for feature in geojson.get('features', []):
-                geom = feature.get('geometry')
-                if geom and geom.get('coordinates'):
-                    lngs, lats = [], []
-                    for lng, lat in _iter_geojson_positions(geom['coordinates']):
-                        lngs.append(lng)
-                        lats.append(lat)
-                    if lngs and lats:
-                        feature['bbox'] = (min(lngs), min(lats), max(lngs), max(lats))
+            gdf_cache_temp[key] = gdf
+            
+            if has_bounds and not gdf.empty:
+                gdf_to_export = gdf.cx[sw_lng:ne_lng, sw_lat:ne_lat]
+            else:
+                gdf_to_export = gdf
 
+            geojson = gdf_to_export.__geo_interface__
             result["couches"][key] = geojson
             result["compteurs"][key] = len(geojson.get('features', []))
         except Exception as e:
             print(f"[ERROR] {key}: {e}")
             result["couches"][key] = {"type": "FeatureCollection", "features": []}
             result["compteurs"][key] = 0
+            gdf_cache_temp[key] = gpd.GeoDataFrame()
 
+    _GDF_CACHE = gdf_cache_temp
     if not has_bounds:
         _LAYERS_CACHE = result
+
     return result
 
 
