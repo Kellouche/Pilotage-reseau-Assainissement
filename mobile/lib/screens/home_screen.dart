@@ -60,17 +60,56 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     if (newMode == 'online') {
       checkServerStatus();
       if (pendingCount > 0) {
-        // Auto-sync in background logic placeholder
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Synchronisation en arrière-plan démarrée...')),
+          SnackBar(content: Text('Synchronisation en arrière-plan démarrée ($pendingCount éléments)...')),
         );
-        // Call sync logic here...
+        _runBackgroundSync();
       }
     } else {
       setState(() {
         serverStatus = 'offline';
         serverInfo = null;
       });
+    }
+  }
+
+  Future<void> _runBackgroundSync() async {
+    try {
+      final pendingChanges = await storageService.getPendingChanges();
+      if (pendingChanges.isEmpty) return;
+      
+      final formattedChanges = pendingChanges.map((change) => ({
+        'type': change['type'] == 'incident' ? 'create' : 'update',
+        'layer': change['type'] == 'incident'
+            ? 'incidents'
+            : change['type'] == 'inspection'
+                ? 'inspections'
+                : '${change['type']}s',
+        'feature_id': change['object_id'] ?? '0',
+        'changes': change,
+      })).toList();
+
+      final result = await syncService.pushChanges('mobile-device-001', formattedChanges);
+      await storageService.clearPendingChanges();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Synchronisation réussie ! (${result['accepted']} envoyés)'),
+            backgroundColor: const Color(0xFF10B981),
+          ),
+        );
+        setState(() => pendingCount = 0);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Échec de la synchronisation en arrière-plan'),
+            backgroundColor: Color(0xFFEF4444),
+          ),
+        );
+      }
     }
   }
 
