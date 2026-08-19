@@ -277,7 +277,7 @@
                 indicator.className = 'status-indicator status-checking';
                 text.textContent = 'Vérification...';
 
-                const response = await fetch('http://127.0.0.1:8000/health');
+                const response = await fetch('http://127.0.0.1:5002/health');
                 if (response.ok) {
                     indicator.className = 'status-indicator status-online';
                     text.textContent = 'Serveur en ligne';
@@ -299,7 +299,7 @@
             status.textContent = 'Actualisation en cours...';
 
             try {
-                const response = await fetch('http://127.0.0.1:8000/network');
+                const response = await fetch('http://127.0.0.1:5002/network');
                 if (response.ok) {
                     const data = await response.json();
                     status.textContent = `${data.length} éléments chargés`;
@@ -318,7 +318,7 @@
             status.textContent = 'Détection des bassins...';
 
             try {
-                const response = await fetch('http://127.0.0.1:8000/clusters/detect', {
+                const response = await fetch('http://127.0.0.1:5002/clusters/detect', {
                     method: 'POST'
                 });
                 if (response.ok) {
@@ -338,7 +338,7 @@
             showSyncStatus('Téléchargement en cours...', true);
 
             try {
-                const response = await fetch('http://127.0.0.1:8000/sync/delta?last_sync=0');
+                const response = await fetch('http://127.0.0.1:5002/sync/delta?last_sync=0');
                 if (response.ok) {
                     const data = await response.json();
                     showSyncStatus(`Téléchargement terminé (${data.changes.length} changements)`, false);
@@ -360,7 +360,7 @@
                     { type: 'update', layer: 'regard', feature_id: '1', changes: { description: 'Test update' } }
                 ];
 
-                const response = await fetch('http://127.0.0.1:8000/sync/push', {
+                const response = await fetch('http://127.0.0.1:5002/sync/push', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(changes)
