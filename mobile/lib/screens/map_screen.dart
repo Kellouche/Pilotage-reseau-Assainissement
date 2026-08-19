@@ -194,7 +194,13 @@ class _MapScreenState extends State<MapScreen> {
     }
 
     if (shouldRefreshUi) {
-      setState(() => _zoomDisplayBucket = newBucket);
+      setState(() {
+        _zoomDisplayBucket = newBucket;
+        if (layers != null) {
+          regardMarkers = _parseRegardMarkers(layers!);
+          conduitePolylines = _parseConduitePolylines(layers!);
+        }
+      });
     }
   }
 
@@ -450,7 +456,8 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   int _zoomBucket(double zoom) {
-    if (zoom >= 15) return 2;
+    if (zoom >= 15) return 3;
+    if (zoom >= 14) return 2;
     if (zoom >= 13) return 1;
     return 0;
   }
