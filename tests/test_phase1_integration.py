@@ -15,7 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.qualite_reseau import QualiteReseau
-from config.settings import Settings
+from config import settings
 
 def test_phase1_complete():
     """Test complet Phase 1"""
@@ -26,8 +26,7 @@ def test_phase1_complete():
     
     try:
         # Initialiser
-        settings = Settings()
-        qualite = QualiteReseau(settings)
+        qualite = QualiteReseau(settings.DATABASE_URL)
         
         print("\n✓ Connexion à la base de données établie")
         
