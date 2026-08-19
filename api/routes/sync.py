@@ -63,11 +63,29 @@ def get_delta(
 # DELTA UPLOAD (client → server: "here are my changes")
 # ============================================================
 
+import time
+from fastapi import Request
+
+_SYNC_RATE_LIMITS = {}
+SYNC_COOLDOWN_SECONDS = 5
+
+def check_rate_limit(user_id: str = "device"):
+    """Vérifie que l'utilisateur/appareil ne spam pas la synchronisation (Rate Limiting)."""
+    now = time.time()
+    last_sync = _SYNC_RATE_LIMITS.get(user_id, 0)
+    if now - last_sync < SYNC_COOLDOWN_SECONDS:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Rate limit exceeded. Please wait {SYNC_COOLDOWN_SECONDS - int(now - last_sync)}s before next sync."
+        )
+    _SYNC_RATE_LIMITS[user_id] = now
+    return user_id
+
 @router.post("/push", response_model=schemas.SyncAck)
 def push_changes(
     push: schemas.SyncPush,
     background_tasks: BackgroundTasks,
-    user_id: str = "device",
+    user_id: str = Depends(check_rate_limit),
     db: Session = Depends(get_db)
 ):
     """
