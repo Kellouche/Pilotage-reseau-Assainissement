@@ -74,11 +74,16 @@ def create_regard(db: Session, regard_data: Dict[str, Any], user_id: str = None)
 
 def update_regard(
     db: Session,
-    regard_id: int,
+    regard_id: Any,
     update_data: Dict[str, Any],
     user_id: str = None
 ) -> Optional[Regard]:
-    regard = get_regard(db, regard_id)
+    regard = None
+    if isinstance(regard_id, int) or (isinstance(regard_id, str) and regard_id.isdigit()):
+        regard = get_regard(db, int(regard_id))
+    if not regard:
+        regard = get_regard_by_code(db, str(regard_id))
+        
     if not regard:
         return None
 
@@ -193,11 +198,16 @@ def create_canalisation(
 
 def update_canalisation(
     db: Session,
-    canalisation_id: int,
+    canalisation_id: Any,
     update_data: Dict[str, Any],
     user_id: str = None
 ) -> Optional[Canalisation]:
-    canalisation = get_canalisation(db, canalisation_id)
+    canalisation = None
+    if isinstance(canalisation_id, int) or (isinstance(canalisation_id, str) and canalisation_id.isdigit()):
+        canalisation = get_canalisation(db, int(canalisation_id))
+    if not canalisation:
+        canalisation = get_canalisation_by_fid(db, str(canalisation_id))
+        
     if not canalisation:
         return None
 

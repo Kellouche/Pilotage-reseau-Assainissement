@@ -114,7 +114,9 @@
 
     function initNotifications() {
         const syncIndicator = document.getElementById('sync-indicator');
-        const ws = new WebSocket('ws://localhost:5002/ws/sync');
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${window.location.host}/ws/sync`;
+        const ws = new WebSocket(wsUrl);
 
         ws.onmessage = (event) => {
             console.log('=== NOUVELLE NOTIFICATION ===');
@@ -165,17 +167,21 @@
                     messageDiv.onmouseout = () => messageDiv.style.backgroundColor = 'rgba(231, 76, 60, 0.1)';
 
                     // Add a persistent marker to the map
-                    if (state.carte) {
-                        const incidentMarker = L.marker([lat, lng], {
-                            icon: L.divIcon({
-                                className: 'incident-marker',
-                                html: '<div style="background-color: #e74c3c; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; box-shadow: 0 0 5px rgba(0,0,0,0.5);">⚠️</div>',
-                                iconSize: [20, 20],
-                                iconAnchor: [10, 10]
-                            })
-                        }).addTo(state.carte);
+                    if (state.carte && state.couches && state.couches.incidents) {
+                        const incidentMarker = L.circleMarker([lat, lng], {
+                            radius: 8,
+                            color: '#e74c3c',
+                            fillColor: '#c0392b',
+                            fillOpacity: 0.8,
+                            weight: 2
+                        }).addTo(state.couches.incidents);
                         
-                        incidentMarker.bindPopup(`<b>🚨 Nouvel Incident</b><br>${event.data}`);
+                        incidentMarker.bindPopup(`
+                            <div style="font-family: Arial, sans-serif; font-size: 12px;">
+                                <b>🚨 Nouvel Incident</b><br>
+                                ${event.data}
+                            </div>
+                        `);
                     }
                 }
             } else if (event.data.includes('Modifications synchronisées')) {

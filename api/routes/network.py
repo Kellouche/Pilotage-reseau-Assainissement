@@ -69,7 +69,7 @@ from api.websocket import manager
 
 @router.patch("/regards/{regard_id}", response_model=schemas.RegardResponse)
 async def update_regard(
-    regard_id: int,
+    regard_id: str,
     update: schemas.RegardUpdate,
     user_id: str = "system",
     db: Session = Depends(get_db)
@@ -149,7 +149,7 @@ def create_conduite(
 
 @router.patch("/conduites/{conduite_id}", response_model=schemas.CanalisationResponse)
 async def update_conduite(
-    conduite_id: int,
+    conduite_id: str,
     update: schemas.CanalisationUpdate,
     user_id: str = "system",
     db: Session = Depends(get_db)

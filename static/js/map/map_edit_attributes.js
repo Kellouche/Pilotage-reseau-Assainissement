@@ -67,7 +67,7 @@
             addField(form, 'longueur', 'Longueur (m)', properties.longueur || properties.LONGUEUR || '');
             addField(form, 'diametre', 'Diamètre (mm)', properties.diametre || properties.DIAMETRE || '');
             addField(form, 'materiau', 'Matériau', properties.materiau || properties.MATERIAU || '');
-            addField(form, 'f_nom', 'Nom', properties.f_nom || properties.NOM || '');
+            addField(form, 'nom_voie', 'Nom', properties.nom_voie || properties.NOM || properties.f_nom || '');
         } else if (type === 'regards') {
             addField(form, 'code', 'Code', properties.code || '');
             addField(form, 'type_regard', 'Type', properties.type_regard || '');
