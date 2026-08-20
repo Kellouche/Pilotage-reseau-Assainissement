@@ -314,7 +314,7 @@
                         if (log.table === 'regards') { icon = '📍'; typeObj = 'Regard'; }
                         else if (log.table === 'conduites') { icon = '🛣️'; typeObj = 'Conduite'; }
                         
-                        messageDiv.innerHTML = `<span>${icon}</span> [Historique] ${typeObj} ID:${log.record_id} (${log.operation}) - <span style="color:#999">${dateStr}</span>`;
+                        messageDiv.innerHTML = `<span>${icon}</span> ${typeObj} ID:${log.record_id} (${log.operation}) - <span style="color:#999">${dateStr}</span>`;
                         messageDiv.title = 'Cliquer pour localiser';
                         messageDiv.onclick = () => zoomToFeature(log.table, log.record_id);
                         messageDiv.onmouseover = () => messageDiv.style.backgroundColor = 'rgba(0,0,0,0.05)';
