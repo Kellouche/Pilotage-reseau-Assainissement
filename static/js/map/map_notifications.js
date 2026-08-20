@@ -134,10 +134,8 @@
                 messageDiv.innerHTML = `<span style="color: #27ae60;">📍</span> ${event.data} <small style="color: #666; float: right;">clic pour zoomer</small>`;
 
                 if (coordMatch) {
-                    const lng = parseFloat(coordMatch[1]);
-                    const lat = parseFloat(coordMatch[2]);
                     messageDiv.title = 'Cliquer pour zoomer sur ce regard';
-                    messageDiv.onclick = () => zoomToCoordinates(lat, lng, "Regard modifié");
+                    messageDiv.onclick = () => zoomToFeature('regards', regardIdFromText(event.data));
                     messageDiv.onmouseover = () => messageDiv.style.backgroundColor = 'rgba(39, 174, 96, 0.3)';
                     messageDiv.onmouseout = () => messageDiv.style.backgroundColor = 'rgba(39, 174, 96, 0.1)';
                 }
@@ -148,9 +146,8 @@
 
                 if (coordMatch) {
                     const lng = parseFloat(coordMatch[1]);
-                    const lat = parseFloat(coordMatch[2]);
                     messageDiv.title = 'Cliquer pour zoomer sur cette conduite';
-                    messageDiv.onclick = () => zoomToConduit(conduitIdFromText(event.data));
+                    messageDiv.onclick = () => zoomToFeature('conduites', conduitIdFromText(event.data));
                     messageDiv.onmouseover = () => messageDiv.style.backgroundColor = 'rgba(52, 152, 219, 0.3)';
                     messageDiv.onmouseout = () => messageDiv.style.backgroundColor = 'rgba(52, 152, 219, 0.1)';
                 }
@@ -257,21 +254,27 @@
             
             let found = false;
             state.couches[layerName].eachLayer(layer => {
-                if (layer.feature && layer.feature.properties &&
-                    (layer.feature.properties.id == recordId || layer.feature.properties.code == recordId)) {
-                    
-                    found = true;
-                    if (layer.getBounds) {
-                        state.carte.fitBounds(layer.getBounds(), { padding: [50, 50], maxZoom: 18 });
-                    } else if (layer.getLatLng) {
-                        state.carte.setView(layer.getLatLng(), 18);
-                    }
-                    
-                    // Visual effect
-                    if (layer.setStyle) {
-                        const originalColor = layer.options.color;
-                        layer.setStyle({ color: '#ff0000', weight: 6 });
-                        setTimeout(() => layer.setStyle({ color: originalColor, weight: 3 }), 3000);
+                if (layer.feature) {
+                    const props = layer.feature.properties || {};
+                    if (props.id == recordId || 
+                        props.code == recordId || 
+                        props.fid == recordId || 
+                        props.conduit_id == recordId || 
+                        layer.feature.id == recordId) {
+                        
+                        found = true;
+                        if (layer.getBounds) {
+                            state.carte.fitBounds(layer.getBounds(), { padding: [50, 50], maxZoom: 18 });
+                        } else if (layer.getLatLng) {
+                            state.carte.setView(layer.getLatLng(), 18);
+                        }
+                        
+                        // Visual effect
+                        if (layer.setStyle) {
+                            const originalColor = layer.options.color;
+                            layer.setStyle({ color: '#ff0000', weight: 6 });
+                            setTimeout(() => layer.setStyle({ color: originalColor, weight: 3 }), 3000);
+                        }
                     }
                 }
             });
@@ -352,6 +355,11 @@
 
     function conduitIdFromText(text) {
         const match = text.match(/Conduite\s+([^\s\[]+)/i);
+        return match ? match[1] : null;
+    }
+
+    function regardIdFromText(text) {
+        const match = text.match(/Regard\s+([^\s\[]+)/i);
         return match ? match[1] : null;
     }
 
