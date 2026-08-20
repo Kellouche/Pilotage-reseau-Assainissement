@@ -9,7 +9,7 @@
     }
 
     function initLayerFilters() {
-        ['conduites', 'regards', 'stations', 'step', 'ouvrages', 'bassins'].forEach(type => {
+        ['conduites', 'regards', 'stations', 'step', 'ouvrages', 'bassins', 'incidents'].forEach(type => {
             const input = document.getElementById('f-' + type);
             if (!input) return;
 
@@ -111,6 +111,37 @@
                     }
                 }).addTo(state.couches[type]);
             });
+
+            // Récupération des incidents
+            try {
+                const incidentsRes = await fetch('/api/v1/terrain/incidents');
+                if (incidentsRes.ok) {
+                    const incidents = await incidentsRes.json();
+                    incidents.forEach(inc => {
+                        const marker = L.circleMarker([inc.latitude, inc.longitude], {
+                            radius: 8,
+                            color: '#e74c3c',
+                            fillColor: '#c0392b',
+                            fillOpacity: 0.8,
+                            weight: 2
+                        });
+                        
+                        const popupContent = `<div style="font-family: Arial, sans-serif; font-size: 12px;">
+                            <b>🚨 Incident ${inc.id}</b><br>
+                            <b>Type:</b> ${inc.type_incident}<br>
+                            <b>Gravité:</b> ${inc.gravite}<br>
+                            <b>Statut:</b> ${inc.statut}<br>
+                            <b>Date:</b> ${new Date(inc.date_creation).toLocaleString()}<br>
+                            ${inc.description ? `<b>Desc:</b> ${inc.description}` : ''}
+                        </div>`;
+                        
+                        marker.bindPopup(popupContent);
+                        marker.addTo(state.couches.incidents);
+                    });
+                }
+            } catch (err) {
+                console.error('Erreur chargement incidents:', err);
+            }
 
             const bounds = L.latLngBounds([]);
             Object.values(state.couches).forEach(l => l.getLayers().forEach(layer => {

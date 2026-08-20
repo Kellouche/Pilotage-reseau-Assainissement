@@ -285,11 +285,12 @@
 
         let couches = {
             conduites: L.layerGroup().addTo(carte),
-            regards: L.layerGroup(), // Pas de .addTo(carte) par défaut
+            regards: L.layerGroup(),
             stations: L.layerGroup().addTo(carte),
             step: L.layerGroup().addTo(carte),
             ouvrages: L.layerGroup().addTo(carte),
-            bassins: L.layerGroup() // Pas de .addTo(carte) par défaut
+            bassins: L.layerGroup(),
+            incidents: L.layerGroup().addTo(carte)
         };
 
         // Couche pour les clusters détectés
@@ -300,11 +301,14 @@
         // Map clusterId -> bounds du bassin
         let _bassinBounds = {};
 
-        ['conduites', 'regards', 'stations', 'step', 'ouvrages', 'bassins'].forEach(type => {
-            document.getElementById('f-' + type).onchange = (e) => {
-                if (e.target.checked) couches[type].addTo(carte);
-                else carte.removeLayer(couches[type]);
-            };
+        ['conduites', 'regards', 'stations', 'step', 'ouvrages', 'bassins', 'incidents'].forEach(type => {
+            const el = document.getElementById('f-' + type);
+            if (el) {
+                el.onchange = (e) => {
+                    if (e.target.checked) couches[type].addTo(carte);
+                    else carte.removeLayer(couches[type]);
+                };
+            }
         });
 
         // Fonction pour afficher/masquer l'overlay de chargement
@@ -688,6 +692,37 @@
                         }).addTo(couches[type]);
                     });
 
+                    // Fetch incidents
+                    fetch('/api/v1/terrain/incidents')
+                        .then(r => r.json())
+                        .then(incidents => {
+                            if (Array.isArray(incidents)) {
+                                incidents.forEach(inc => {
+                                    const marker = L.circleMarker([inc.latitude, inc.longitude], {
+                                        radius: 8,
+                                        color: '#e74c3c',
+                                        fillColor: '#c0392b',
+                                        fillOpacity: 0.8,
+                                        weight: 2
+                                    });
+                                    
+                                    const popupContent = `<div style="font-family: Arial, sans-serif; font-size: 12px;">
+                                        <b>🚨 Incident ${inc.id}</b><br>
+                                        <b>Type:</b> ${inc.type_incident}<br>
+                                        <b>Gravité:</b> ${inc.gravite}<br>
+                                        <b>Statut:</b> ${inc.statut}<br>
+                                        <b>Date:</b> ${new Date(inc.date_creation).toLocaleString()}<br>
+                                        ${inc.description ? `<b>Desc:</b> ${inc.description}` : ''}
+                                    </div>`;
+                                    
+                                    marker.bindPopup(popupContent);
+                                    marker.addTo(couches.incidents);
+                                });
+                            }
+                        })
+                        .catch(err => console.error('Erreur chargement incidents:', err));
+
+                    // Ajuster la vue
                     const bounds = L.latLngBounds([]);
                     Object.values(couches).forEach(l => l.getLayers().forEach(layer => {
                         bounds.extend(layer.getBounds ? layer.getBounds() : layer.getLatLng());

@@ -11,7 +11,8 @@
         stations: L.layerGroup().addTo(state.carte),
         step: L.layerGroup().addTo(state.carte),
         ouvrages: L.layerGroup().addTo(state.carte),
-        bassins: L.layerGroup()
+        bassins: L.layerGroup(),
+        incidents: L.layerGroup().addTo(state.carte)
     };
 
     state.clusterCouche = L.layerGroup().addTo(state.carte);
