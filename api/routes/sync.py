@@ -234,24 +234,19 @@ def push_changes(
             change_index += 1
 
         # Calculer le nombre total de modifications
-    total_modified = len(push.changes)
+        total_modified = len(push.changes)
 
-    # Diffuser le résumé d'abord
-    summary_message = f"Modifications synchronisées: {accepted} acceptées"
-    if total_modified > 1:
-        summary_message += f" ({total_modified} points modifiés)"
-    print(f"Sending broadcast: {summary_message}")
-    background_tasks.add_task(manager.broadcast, summary_message)
-
-    # Puis diffuser chaque message détaillé
-    for message in messages:
-        print(f"Sending broadcast: {message}")
-        background_tasks.add_task(manager.broadcast, message)
-
-        # Message de synthèse
+        # Diffuser le résumé d'abord
         summary_message = f"Modifications synchronisées: {accepted} acceptées"
+        if total_modified > 1:
+            summary_message += f" ({total_modified} points modifiés)"
         print(f"Sending broadcast: {summary_message}")
         background_tasks.add_task(manager.broadcast, summary_message)
+
+        # Puis diffuser chaque message détaillé
+        for message in messages:
+            print(f"Sending broadcast: {message}")
+            background_tasks.add_task(manager.broadcast, message)
 
     return {
         "accepted": accepted,

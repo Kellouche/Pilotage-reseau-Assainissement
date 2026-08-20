@@ -86,6 +86,9 @@
             L.geoJSON(d.couches.conduites, {
                 style: { color: '#3498db', weight: 8 },
                 onEachFeature: (feature, layer) => {
+                    if (!feature.properties.fid && !feature.properties.conduit_id) {
+                        feature.properties.fid = `C_${feature.id}`;
+                    }
                     const index = state.conduitProperties.length;
                     state.conduitProperties.push(feature.properties);
                     layer.bindPopup(conduitPopup(feature, index));
@@ -104,6 +107,9 @@
                     pointToLayer: (feature, latlng) => L.circleMarker(latlng, styles[type]),
                     onEachFeature: (feature, layer) => {
                         if (type === 'regards') {
+                            if (!feature.properties.code && !feature.properties.Code) {
+                                feature.properties.code = `UNKNOWN_${feature.id}`;
+                            }
                             const index = state.regardProperties.length;
                             state.regardProperties.push(feature.properties);
                             layer.bindPopup(regardPopup(feature, index));

@@ -55,7 +55,7 @@
     function openEditModal(properties, type) {
         currentEditProperties = properties;
         currentEditType = type;
-        currentEditId = properties.conduit_id || properties.fid || properties.id;
+        currentEditId = properties.conduit_id || properties.fid || properties.code || properties.Code || properties.id;
 
         const title = type === 'conduite' ? 'Modifier Conduite' : `Modifier ${type.charAt(0).toUpperCase() + type.slice(1)}`;
         document.getElementById('modal-title').textContent = title;
