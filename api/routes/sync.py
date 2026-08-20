@@ -127,10 +127,11 @@ def push_changes(
                     accepted += 1
 
             elif layer == "conduites":
-                if "id" in changes:
-                    canalisation = crud.get_canalisation(db, int(changes["id"]))
-                else:
-                    canalisation = crud.get_canalisation_by_fid(db, changes["fid"])
+                canalisation = None
+                if isinstance(change.feature_id, int) or (isinstance(change.feature_id, str) and str(change.feature_id).isdigit()):
+                    canalisation = crud.get_canalisation(db, int(change.feature_id))
+                if not canalisation:
+                    canalisation = crud.get_canalisation_by_fid(db, str(change.feature_id))
 
                 if canalisation:
                     updated = crud.update_canalisation(
@@ -173,6 +174,9 @@ def push_changes(
             })
             rejected += 1
         except Exception as e:
+            print(f"[SYNC ERROR] Failed to update {change.layer} {change.feature_id}: {repr(e)}")
+            import traceback
+            traceback.print_exc()
             rejected += 1
 
     # Nouvelle version globale
@@ -213,10 +217,11 @@ def push_changes(
 
             elif layer == "conduites":
                 try:
-                    if "id" in change.changes:
-                        conduite = crud.get_canalisation(db, int(change.changes["id"]))
-                    else:
-                        conduite = crud.get_canalisation_by_fid(db, change.changes.get("fid"))
+                    conduite = None
+                    if isinstance(feature_id, int) or (isinstance(feature_id, str) and feature_id.isdigit()):
+                        conduite = crud.get_canalisation(db, int(feature_id))
+                    if not conduite:
+                        conduite = crud.get_canalisation_by_fid(db, str(feature_id))
 
                     if conduite:
                         import re

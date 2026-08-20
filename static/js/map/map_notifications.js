@@ -1,7 +1,7 @@
 (() => {
     const state = window.mapState;
 
-    function zoomToCoordinates(lat, lng) {
+    function zoomToCoordinates(lat, lng, title = "Élément sélectionné", extraHtml = "") {
         const carte = state.carte;
         if (!carte) {
             console.error('❌ Carte non disponible');
@@ -31,8 +31,9 @@
             marker.addTo(carte);
             marker.bindPopup(`
                 <div style="font-family: Arial, sans-serif; font-size: 12px;">
-                    <b>📍 Regard modifié</b><br>
-                    <span style="color: #666;">Coordonnées:</span> ${lat.toFixed(2)}, ${lng.toFixed(2)}<br>
+                    <b>📍 ${title}</b><br>
+                    ${extraHtml ? extraHtml + '<br>' : ''}
+                    <span style="color: #666;">Coordonnées:</span> ${lat.toFixed(4)}, ${lng.toFixed(4)}<br>
                     <small style="color: #999;">Marqueur temporaire (5s)</small>
                 </div>
             `).openPopup();
@@ -136,7 +137,7 @@
                     const lng = parseFloat(coordMatch[1]);
                     const lat = parseFloat(coordMatch[2]);
                     messageDiv.title = 'Cliquer pour zoomer sur ce regard';
-                    messageDiv.onclick = () => zoomToCoordinates(lat, lng);
+                    messageDiv.onclick = () => zoomToCoordinates(lat, lng, "Regard modifié");
                     messageDiv.onmouseover = () => messageDiv.style.backgroundColor = 'rgba(39, 174, 96, 0.3)';
                     messageDiv.onmouseout = () => messageDiv.style.backgroundColor = 'rgba(39, 174, 96, 0.1)';
                 }
@@ -166,8 +167,16 @@
                 if (coordMatch) {
                     const lng = parseFloat(coordMatch[1]);
                     const lat = parseFloat(coordMatch[2]);
+                    const typeMatch = event.data.match(/Type:\s*([^\[]+)\s*\[Gravité:\s*([^\]]+)\]/);
+                    let typeInc = "Inconnu", graviteInc = "Inconnue";
+                    if (typeMatch) {
+                        typeInc = typeMatch[1].trim();
+                        graviteInc = typeMatch[2].trim();
+                    }
+                    const extraHtml = `<span style="color: #666;">Heure:</span> ${timeStr}<br><span style="color: #666;">Type:</span> ${typeInc}<br><span style="color: #666;">Gravité:</span> ${graviteInc}`;
+                    
                     incDiv.title = 'Cliquer pour zoomer sur cet incident';
-                    incDiv.onclick = () => zoomToCoordinates(lat, lng);
+                    incDiv.onclick = () => zoomToCoordinates(lat, lng, "Incident signalé", extraHtml);
                     incDiv.onmouseover = () => incDiv.style.backgroundColor = 'rgba(231, 76, 60, 0.3)';
                     incDiv.onmouseout = () => incDiv.style.backgroundColor = 'rgba(231, 76, 60, 0.1)';
 
@@ -294,8 +303,12 @@
                         const timeStr = new Date(inc.date_creation).toLocaleTimeString();
                         messageDiv.innerHTML = `<span style="color: #e74c3c;">⚠️</span> Incident signalé ! Type: ${inc.type_incident} [Gravité: ${inc.gravite}] à [${inc.longitude}, ${inc.latitude}] <small style="color: #666; float: right;">${timeStr}</small>`;
                         
+                        const typeInc = inc.type_incident || "Inconnu";
+                        const graviteInc = inc.gravite || "Inconnue";
+                        const extraHtml = `<span style="color: #666;">Heure:</span> ${timeStr}<br><span style="color: #666;">Type:</span> ${typeInc}<br><span style="color: #666;">Gravité:</span> ${graviteInc}`;
+                        
                         messageDiv.title = 'Cliquer pour zoomer sur cet incident';
-                        messageDiv.onclick = () => zoomToCoordinates(inc.latitude, inc.longitude);
+                        messageDiv.onclick = () => zoomToCoordinates(inc.latitude, inc.longitude, "Incident signalé", extraHtml);
                         messageDiv.onmouseover = () => messageDiv.style.backgroundColor = 'rgba(231, 76, 60, 0.3)';
                         messageDiv.onmouseout = () => messageDiv.style.backgroundColor = 'rgba(231, 76, 60, 0.1)';
                         
