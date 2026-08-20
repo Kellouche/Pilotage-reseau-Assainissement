@@ -225,6 +225,33 @@
             console.error('Erreur WebSocket:', error);
             syncIndicator.style.background = '#e74c3c';
         };
+
+        // Fetch recent modifications on page load
+        fetch('/api/v1/audit/logs?limit=5')
+            .then(res => res.json())
+            .then(logs => {
+                const changesList = document.getElementById('changes-list');
+                if (logs && logs.length > 0) {
+                    changesList.innerHTML = ''; // Clear 'En attente...'
+                    
+                    // Show them in chronological order
+                    logs.reverse().forEach(log => {
+                        const messageDiv = document.createElement('div');
+                        messageDiv.style.cssText = 'padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.1); font-family: monospace; font-size: 10px; color: #666;';
+                        
+                        const dateStr = new Date(log.timestamp).toLocaleTimeString();
+                        let icon = '🔄';
+                        let typeObj = log.table;
+                        if (log.table === 'regards') { icon = '📍'; typeObj = 'Regard'; }
+                        else if (log.table === 'conduites') { icon = '🛣️'; typeObj = 'Conduite'; }
+                        else if (log.table === 'incidents') { icon = '⚠️'; typeObj = 'Incident'; }
+                        
+                        messageDiv.innerHTML = `<span>${icon}</span> [Historique] ${typeObj} ID:${log.record_id} (${log.operation}) - <span style="color:#999">${dateStr}</span>`;
+                        changesList.appendChild(messageDiv);
+                    });
+                }
+            })
+            .catch(err => console.error('Erreur lors du chargement de l\'historique', err));
     }
 
     function conduitIdFromText(text) {

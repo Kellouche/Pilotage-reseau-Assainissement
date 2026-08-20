@@ -4,7 +4,7 @@ Configure l'application, les routes, le middleware CORS, etc.
 """
 
 import asyncio
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -69,27 +69,16 @@ app = FastAPI(
 )
 
 # Montage des fichiers statiques (JS, CSS, Images)
-# Middleware pour forcer le rechargement des fichiers JS (pas de mise en cache navigateur)
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request as StarletteRequest
-
-class NoCacheJSMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: StarletteRequest, call_next):
-        response = await call_next(request)
-        if request.url.path.startswith("/static/js/") and request.url.path.endswith(".js"):
-            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
-            response.headers["Pragma"] = "no-cache"
-            response.headers["Content-Type"] = "text/javascript; charset=utf-8"
-        return response
-
+# Montage des fichiers statiques (JS, CSS, Images)
 app.mount("/static", StaticFiles(directory="static"), name="static")
-app.add_middleware(NoCacheJSMiddleware)
 
 # CORS
 origins = [
     "http://localhost:5000",
     "http://localhost:3000",
     "http://localhost:19006",
+    "http://localhost:5002",
+    "http://127.0.0.1:5002",
     "*"
 ]
 
@@ -273,7 +262,7 @@ def get_layers(
 from api.websocket import manager
 
 @app.websocket("/ws/sync")
-async def websocket_sync(websocket):
+async def websocket_sync(websocket: WebSocket):
     """WebSocket pour notifications temps réel des modifications."""
     await websocket.accept()
     await manager.connect(websocket)
