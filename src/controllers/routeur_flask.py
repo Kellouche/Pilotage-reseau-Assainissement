@@ -27,7 +27,9 @@ from src.domain.graphe_reseau import (
 from src.domain.detecteur_clusters import (
     tracer_cluster_depuis_exutoire,
     construire_geojson_cluster,
-    calculer_statistiques
+    calculer_statistiques,
+    determiner_nom_bassin,
+    partitionner_bassins_hydrauliques,
 )
 from src.qualite_reseau import QualiteReseau
 
@@ -115,15 +117,26 @@ def get_all_clusters():
     clusters = []
     total_conduites = 0
 
+    # Partition hydraulique : bassins exclusifs sans inclusion
+    exutoires_dict = {e["noeud"]: {"type": "rejet", "nom": e.get("nom", f"Rejet_{i}")}
+                      for i, e in enumerate(exutoires)}
+    bassins_par_exutoire, _, _ = partitionner_bassins_hydrauliques(G, exutoires_dict)
+
     for i, exutoire in enumerate(exutoires):
-        edges = tracer_cluster_depuis_exutoire(
-            G, exutoire["noeud"]
-        )
+        edges = bassins_par_exutoire.get(exutoire["noeud"], set())
 
         if not edges:
             continue
 
-        geojson = construire_geojson_cluster(G, edges)
+        # Déterminer le nom du bassin depuis les données de la zone drainée
+        exutoire_info = {"type": "rejet", "nom": exutoire.get("nom", f"Rejet_{i}")}
+        nom_bassin = determiner_nom_bassin(edges, G, exutoire_info=exutoire_info)
+
+        geojson = construire_geojson_cluster(
+            G, edges,
+            exutoire_info=exutoire_info,
+            nom_bassin=nom_bassin
+        )
         stats = calculer_statistiques(G, edges)
         total_conduites += stats["nb_conduites"]
 

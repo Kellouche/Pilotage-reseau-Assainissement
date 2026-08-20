@@ -12,8 +12,8 @@ les différents prototypes présents dans le dépôt.
 | API FastAPI moderne | `python run_api.py` |
 | API FastAPI sans auto-reload | `python run_server.py` |
 | Serveur Flask historique | `python server.py` |
-| Mobile Expo | `cd mobile` puis `npx expo start` |
-| Mobile Expo web | `cd mobile` puis `npx expo start --web --port 19006` |
+| Mobile Flutter | `cd mobile` puis `flutter run` |
+| Mobile Flutter web | `cd mobile` puis `flutter run -d chrome` |
 
 ### API FastAPI moderne
 
@@ -57,29 +57,32 @@ Remarque :
 - Il doit être conservé temporairement, mais distingué de l'API FastAPI.
 - Le script Windows associé est `launch_server.bat`.
 
-### Application mobile React Native / Expo
+### Application mobile Flutter
 
 Commande :
 
 ```bash
 cd mobile
-npx expo start
+flutter pub get
+flutter run
 ```
 
 Mode web possible :
 
 ```bash
 cd mobile
-npx expo start --web --port 19006
+flutter run -d chrome
 ```
 
 URL web attendue :
 
 ```text
-http://localhost:19006
+```text
+http://localhost:50325 (ou un port défini par Flutter)
+```
 ```
 
-La configuration de l'URL API se fait avec `EXPO_PUBLIC_API_BASE_URL`.
+La configuration de l'URL API se fait via le fichier `.env`.
 Voir [Application mobile](MOBILE.md).
 
 ## Point d'attention actuel
@@ -129,5 +132,5 @@ Mobile web :
 
 ```bash
 cd mobile
-npx expo start --web --port 19006
+flutter run -d chrome
 ```

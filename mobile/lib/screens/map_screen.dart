@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -73,6 +74,8 @@ class _MapScreenState extends State<MapScreen> {
   List<Map<String, dynamic>> localIncidents = [];
   List<Marker> regardMarkers = [];
   List<Polyline> conduitePolylines = [];
+  List<Map<String, dynamic>> _cachedConduites = [];
+  String editableLayer = 'Toutes'; // Toutes, Regards, Conduites
 
   LatLngBounds? currentBounds;
   double currentZoom = 13.0;
@@ -217,6 +220,73 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
+  void _handleMapTap(LatLng point) {
+    if (declaringIncident) {
+      setState(() {
+        tempCoordinate = point;
+        showIncidentForm = true;
+        declaringIncident = false;
+      });
+      return;
+    }
+
+    if (currentZoom < 14 || _cachedConduites.isEmpty || editableLayer == 'Regards') {
+      setState(() => activeObject = null);
+      return;
+    }
+
+    const latMeters = 111320.0;
+    final lngMeters = 111320.0 * math.cos(point.latitude * math.pi / 180.0);
+
+    double minDistance = double.infinity;
+    Map<String, dynamic>? closestConduite;
+
+    for (final conduite in _cachedConduites) {
+      final List<LatLng> points = conduite['points'];
+      for (int i = 0; i < points.length - 1; i++) {
+        final p1 = points[i];
+        final p2 = points[i + 1];
+
+        final x1 = (p1.longitude - point.longitude) * lngMeters;
+        final y1 = (p1.latitude - point.latitude) * latMeters;
+        final x2 = (p2.longitude - point.longitude) * lngMeters;
+        final y2 = (p2.latitude - point.latitude) * latMeters;
+
+        final double dx = x2 - x1;
+        final double dy = y2 - y1;
+        final double lenSq = dx * dx + dy * dy;
+
+        double t = 0;
+        if (lenSq != 0) {
+          t = ((-x1) * dx + (-y1) * dy) / lenSq;
+          t = t.clamp(0.0, 1.0);
+        }
+
+        final double projX = x1 + t * dx;
+        final double projY = y1 + t * dy;
+
+        final double distance = math.sqrt(projX * projX + projY * projY);
+
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestConduite = conduite['properties'];
+        }
+      }
+    }
+
+    // Seuil de détection : 30 mètres
+    if (minDistance < 30.0 && closestConduite != null) {
+      setState(() {
+        activeType = 'conduite';
+        activeObject = closestConduite;
+      });
+    } else {
+      setState(() {
+        activeObject = null;
+      });
+    }
+  }
+
   Future<void> saveInspection(Map<String, dynamic> inspectionData) async {
     try {
       if (networkMode == 'online') {
@@ -244,6 +314,293 @@ class _MapScreenState extends State<MapScreen> {
         );
       }
     }
+  }
+
+  Future<void> _saveEditedObject(Map<String, dynamic> obj) async {
+    final featureId = activeType == 'regard' ? (obj['id'] ?? obj['code']).toString() : (obj['id'] ?? obj['fid']).toString();
+    final changes = {
+      'type': 'update',
+      'layer': activeType == 'regard' ? 'regards' : 'conduites',
+      'feature_id': featureId,
+      'changes': obj,
+    };
+    
+    try {
+      if (networkMode == 'online') {
+        await syncService.pushChanges('mobile-device-001', [changes]);
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Modifications envoyées au serveur')));
+      } else {
+        await storageService.addPendingChange({
+          'type': activeType,
+          'object_id': featureId,
+          ...obj
+        });
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sauvegardé hors-ligne')));
+      }
+      setState(() => activeObject = null);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erreur lors de la sauvegarde')));
+    }
+  }
+
+  Widget _buildObjectEditor() {
+    final obj = activeObject!;
+    final isRegard = activeType == 'regard';
+    final title = isRegard ? 'Regard ${obj['code'] ?? obj['id']}' : 'Conduite ${obj['fid'] ?? obj['id']}';
+    
+    final excludedKeys = ['id', 'fid', 'code', 'geom', 'geom_geojson', 'type', 'gid'];
+    final editableKeys = obj.keys.where((k) => !excludedKeys.contains(k.toLowerCase())).toList();
+
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.6),
+        decoration: const BoxDecoration(
+          color: Color(0xFF1a1a2e),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+          boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 10, offset: Offset(0, -2))],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white70),
+                  onPressed: () => setState(() => activeObject = null),
+                )
+              ],
+            ),
+            const SizedBox(height: 16),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: editableKeys.map((key) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12.0),
+                      child: TextFormField(
+                        initialValue: obj[key]?.toString() ?? '',
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          labelText: key.toUpperCase(),
+                          labelStyle: const TextStyle(color: Colors.white70, fontSize: 12),
+                          enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                        ),
+                        onChanged: (val) {
+                          if (obj[key] is int) {
+                             obj[key] = int.tryParse(val) ?? obj[key];
+                          } else if (obj[key] is double) {
+                             obj[key] = double.tryParse(val) ?? obj[key];
+                          } else {
+                             obj[key] = val;
+                          }
+                        },
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF27ae60),
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () => _saveEditedObject(obj),
+                child: const Text('Sauvegarder les modifications'),
+              ),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildIncidentForm() {
+    String typeIncident = 'Fuite';
+    String gravite = 'Moyenne';
+    String description = '';
+
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: const BoxDecoration(
+          color: Color(0xFF1a1a2e),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+          boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 10, offset: Offset(0, -2))],
+        ),
+        child: StatefulBuilder(
+          builder: (context, setModalState) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Déclarer un incident', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white70),
+                      onPressed: () => setState(() => showIncidentForm = false),
+                    )
+                  ],
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: typeIncident,
+                  dropdownColor: const Color(0xFF16213e),
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(labelText: 'Type d\'incident', labelStyle: TextStyle(color: Colors.white70)),
+                  items: ['Fuite', 'Obstruction', 'Rupture', 'Autre'].map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                  onChanged: (v) => setModalState(() => typeIncident = v!),
+                ),
+                DropdownButtonFormField<String>(
+                  value: gravite,
+                  dropdownColor: const Color(0xFF16213e),
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(labelText: 'Gravité', labelStyle: TextStyle(color: Colors.white70)),
+                  items: ['Faible', 'Moyenne', 'Haute', 'Critique'].map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                  onChanged: (v) => setModalState(() => gravite = v!),
+                ),
+                TextFormField(
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(labelText: 'Description', labelStyle: TextStyle(color: Colors.white70)),
+                  onChanged: (v) => description = v,
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFe74c3c), foregroundColor: Colors.white),
+                    onPressed: () {
+                      final data = {
+                        'type_incident': typeIncident,
+                        'gravite': gravite,
+                        'description': description,
+                        'latitude': tempCoordinate?.latitude,
+                        'longitude': tempCoordinate?.longitude,
+                        'date_signalement': DateTime.now().toIso8601String(),
+                        'statut': 'À traiter'
+                      };
+                      saveIncident(data);
+                    },
+                    child: const Text('Envoyer le signalement'),
+                  ),
+                )
+              ],
+            );
+          }
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProximiteDialog() {
+    final int nbRegards = regardMarkers.length;
+    final int nbConduites = _cachedConduites.length;
+    
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: const BoxDecoration(
+          color: Color(0xFF1a1a2e),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+          boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 10, offset: Offset(0, -2))],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Statistiques de Proximité', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white70),
+                  onPressed: () => setState(() => showProximite = false),
+                )
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Text('Objets visibles à l\'écran :', style: TextStyle(color: Colors.white70, fontSize: 14)),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: const Icon(Icons.circle, color: Color(0xFF8E44AD)),
+              title: const Text('Regards', style: TextStyle(color: Colors.white)),
+              trailing: Text('$nbRegards', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.horizontal_rule, color: Color(0xFF3498db)),
+              title: const Text('Conduites', style: TextStyle(color: Colors.white)),
+              trailing: Text('$nbConduites', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildScannerDialog() {
+    return Positioned(
+      top: 0, bottom: 0, left: 0, right: 0,
+      child: Container(
+        color: Colors.black87,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 250, height: 250,
+              decoration: BoxDecoration(
+                border: Border.all(color: const Color(0xFF27ae60), width: 3),
+                borderRadius: BorderRadius.circular(16)
+              ),
+              child: const Center(
+                child: Icon(Icons.qr_code_scanner, color: Color(0xFF27ae60), size: 100),
+              ),
+            ),
+            const SizedBox(height: 30),
+            const Text('Visez le QR Code du regard', style: TextStyle(color: Colors.white, fontSize: 18)),
+            const SizedBox(height: 30),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF3498db), foregroundColor: Colors.white),
+              onPressed: () {
+                final targets = getScannerTargets();
+                setState(() => showScanner = false);
+                if (targets.isNotEmpty) {
+                  setState(() {
+                    activeType = targets[0]['type'];
+                    activeObject = targets[0]['object'];
+                  });
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Aucun objet proche trouvé pour simuler')));
+                }
+              },
+              child: const Text('Simuler un Scan'),
+            ),
+            TextButton(
+              onPressed: () => setState(() => showScanner = false),
+              child: const Text('Annuler', style: TextStyle(color: Colors.white54)),
+            )
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> saveIncident(Map<String, dynamic> incidentData) async {
@@ -312,15 +669,7 @@ class _MapScreenState extends State<MapScreen> {
             options: MapOptions(
               initialCenter: LatLng(36.15, 1.33),
               initialZoom: 13.0,
-              onTap: (tapPosition, point) {
-                if (declaringIncident) {
-                  setState(() {
-                    tempCoordinate = point;
-                    showIncidentForm = true;
-                    declaringIncident = false;
-                  });
-                }
-              },
+              onTap: (tapPosition, point) => _handleMapTap(point),
               onPositionChanged: _onMapMoved,
             ),
             children: [
@@ -399,6 +748,33 @@ class _MapScreenState extends State<MapScreen> {
                         label: 'Zoomez pour afficher les objets',
                         isActive: false,
                       ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Couche éditable :',
+                      style: TextStyle(color: Colors.white70, fontSize: 11),
+                    ),
+                    DropdownButton<String>(
+                      value: editableLayer,
+                      dropdownColor: const Color(0xFF16213e),
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                      isDense: true,
+                      underline: const SizedBox(),
+                      icon: const Icon(Icons.arrow_drop_down, color: Colors.white70, size: 16),
+                      items: ['Toutes', 'Regards', 'Conduites'].map((String value) {
+                        return DropdownMenuItem<String>(
+                          value: value,
+                          child: Text(value),
+                        );
+                      }).toList(),
+                      onChanged: (String? newValue) {
+                        if (newValue != null) {
+                          setState(() {
+                            editableLayer = newValue;
+                            activeObject = null; // Reset selection on change
+                          });
+                        }
+                      },
+                    ),
                   ],
                 ),
               ),
@@ -443,6 +819,10 @@ class _MapScreenState extends State<MapScreen> {
               ],
             ),
           ),
+          if (activeObject != null) _buildObjectEditor(),
+          if (showScanner) _buildScannerDialog(),
+          if (showProximite) _buildProximiteDialog(),
+          if (showIncidentForm) _buildIncidentForm(),
         ],
       ),
     );
@@ -487,6 +867,7 @@ class _MapScreenState extends State<MapScreen> {
         ),
         child: GestureDetector(
           onTap: () {
+            if (editableLayer == 'Conduites') return;
             setState(() {
               activeType = 'regard';
               activeObject = f['properties'];
@@ -518,6 +899,7 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   List<Polyline> _parseConduitePolylines(Map<String, dynamic> data) {
+    _cachedConduites.clear();
     if (currentZoom < 14) return []; // Too zoomed out, don't freeze UI
     final features = data['couches']?['conduites']?['features'];
     if (features is! List) return [];
@@ -534,6 +916,10 @@ class _MapScreenState extends State<MapScreen> {
         final points = _parseLineString(coords);
         if (points.isNotEmpty) {
           polylines.add(Polyline(points: points, color: const Color(0xFF3498db), strokeWidth: 5.0));
+          _cachedConduites.add({
+            'properties': f['properties'],
+            'points': points,
+          });
         }
       } else if (type == 'MultiLineString') {
         for (final lineCoords in coords) {
@@ -541,6 +927,10 @@ class _MapScreenState extends State<MapScreen> {
           final points = _parseLineString(lineCoords);
           if (points.isNotEmpty) {
             polylines.add(Polyline(points: points, color: const Color(0xFF3498db), strokeWidth: 5.0));
+            _cachedConduites.add({
+              'properties': f['properties'],
+              'points': points,
+            });
           }
         }
       }

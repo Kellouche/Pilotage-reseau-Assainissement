@@ -244,14 +244,17 @@
                     layer.setStyle({ color: '#f1c40f', weight: 8, opacity: 1 });
                     layer.bringToFront();
                 } else {
-                    layer.setStyle({ color: feature.properties.couleur || '#e74c3c', weight: 3, opacity: 0.4 });
+                    layer.setStyle({ color: feature.properties.couleur || '#e74c3c', weight: 2.5, opacity: 0.35 });
                 }
             } else if (feature.properties && feature.properties.type === 'bassin_urbain') {
                 const featureClusterId = feature.properties ? String(feature.properties.cluster_id) : '';
                 if (clusterIdString === null || featureClusterId === clusterIdString) {
-                    layer.setStyle({ fillOpacity: 0.45, weight: 3, color: '#f39c12' });
+                    // Bassin sélectionné : couleur de surbrillance distincte
+                    layer.setStyle({ fillOpacity: 0.55, weight: 4, color: '#f39c12', dashArray: '' });
+                    layer.bringToFront();
                 } else {
-                    layer.setStyle({ fillOpacity: 0.15, weight: 1, color: '#27ae60' });
+                    // Autres bassins : plus transparents
+                    layer.setStyle({ fillOpacity: 0.08, weight: 1, color: '#27ae60', dashArray: '6, 4' });
                 }
             }
         });
@@ -263,6 +266,7 @@
 
         sel.innerHTML = '<option value="">-- Choisir un bassin --</option>';
         state.bassinBounds = {};
+        state.bassinNoms = {};
 
         const resultats = geojsonData.resultats || [];
         const features = geojsonData.features || [];
@@ -280,6 +284,7 @@
             opt.value = cid;
             opt.textContent = nom;
             sel.appendChild(opt);
+            state.bassinNoms[cid] = nom;
         });
 
         clusterLayer.eachLayer(layer => {
@@ -329,14 +334,24 @@
 
         const clusterIdString = String(clusterId);
         let nb = 0;
+        let longueur = 0;
 
         state.activeClusterLayer.eachLayer(layer => {
             const f = layer.feature;
             const featureClusterId = f && f.properties ? f.properties.cluster_id : undefined;
-            if (f && f.geometry && f.geometry.type === 'LineString' && String(featureClusterId) === clusterIdString) nb++;
+            if (f && f.geometry && f.geometry.type === 'LineString' && String(featureClusterId) === clusterIdString) {
+                nb++;
+                const l = f.properties.longueur || 0;
+                longueur += l;
+            }
         });
 
-        infoDiv.innerHTML = `📍 ${nb} tronçon(s) dans ce bassin`;
+        const nom = state.bassinNoms && state.bassinNoms[clusterId] ? state.bassinNoms[clusterId] : `Bassin ${clusterId}`;
+        infoDiv.innerHTML = `
+            <b>${nom}</b><br>
+            📍 ${nb} tronçon(s)<br>
+            📏 ${longueur.toFixed(1)} m
+        `;
     }
 
     function getProgressElements() {

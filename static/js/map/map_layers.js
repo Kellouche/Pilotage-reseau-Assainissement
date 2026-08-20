@@ -82,6 +82,7 @@
             }
 
             state.conduitProperties = [];
+            state.regardProperties = [];
             L.geoJSON(d.couches.conduites, {
                 style: { color: '#3498db', weight: 8 },
                 onEachFeature: (feature, layer) => {
@@ -92,7 +93,7 @@
             }).addTo(state.couches.conduites);
 
             const styles = {
-                regards: { radius: 4, color: '#f1c40f', fillColor: '#f1c40f' },
+                regards: { radius: 4, color: '#2c3e50', fillColor: '#2c3e50' },
                 stations: { radius: 6, color: '#e67e22', fillColor: '#e67e22' },
                 step: { radius: 7, color: '#27ae60', fillColor: '#27ae60' },
                 ouvrages: { radius: 6, color: '#9b59b6', fillColor: '#9b59b6' }
@@ -100,7 +101,14 @@
 
             ['regards', 'stations', 'step', 'ouvrages'].forEach(type => {
                 L.geoJSON(d.couches[type], {
-                    pointToLayer: (feature, latlng) => L.circleMarker(latlng, styles[type])
+                    pointToLayer: (feature, latlng) => L.circleMarker(latlng, styles[type]),
+                    onEachFeature: (feature, layer) => {
+                        if (type === 'regards') {
+                            const index = state.regardProperties.length;
+                            state.regardProperties.push(feature.properties);
+                            layer.bindPopup(regardPopup(feature, index));
+                        }
+                    }
                 }).addTo(state.couches[type]);
             });
 
@@ -127,6 +135,15 @@
             Longueur: ${feature.properties.longueur || 'N/A'} m<br>
             Diamètre: ${feature.properties.diametre || 'N/A'} mm<br>
             <button onclick="editConduit(${index})" style="margin-top: 5px; padding: 5px 10px; background: #3498db; color: white; border: none; border-radius: 3px; cursor: pointer;">Modifier</button>
+        </div>`;
+    }
+
+    function regardPopup(feature, index) {
+        return `<div style="font-family: Arial, sans-serif; font-size: 12px;">
+            <b>Regard ${feature.properties.code || feature.properties.fid || 'N/A'}</b><br>
+            Type: ${feature.properties.type_regard || 'N/A'}<br>
+            Profondeur: ${feature.properties.profondeur || 'N/A'} m<br>
+            <button onclick="editRegard(${index})" style="margin-top: 5px; padding: 5px 10px; background: #3498db; color: white; border: none; border-radius: 3px; cursor: pointer;">Modifier</button>
         </div>`;
     }
 

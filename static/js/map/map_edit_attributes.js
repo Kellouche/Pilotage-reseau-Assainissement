@@ -9,6 +9,10 @@
             openEditModal(state.conduitProperties[index], 'conduite');
         };
 
+        window.editRegard = (index) => {
+            openEditModal(state.regardProperties[index], 'regards');
+        };
+
         document.getElementById('cancel-btn').addEventListener('click', () => {
             document.getElementById('edit-modal').style.display = 'none';
         });

@@ -114,7 +114,7 @@
 
     function initNotifications() {
         const syncIndicator = document.getElementById('sync-indicator');
-        const ws = new WebSocket('ws://localhost:8000/ws/sync');
+        const ws = new WebSocket('ws://localhost:5002/ws/sync');
 
         ws.onmessage = (event) => {
             console.log('=== NOUVELLE NOTIFICATION ===');
@@ -150,6 +150,33 @@
                     messageDiv.onclick = () => zoomToConduit(conduitIdFromText(event.data));
                     messageDiv.onmouseover = () => messageDiv.style.backgroundColor = 'rgba(52, 152, 219, 0.3)';
                     messageDiv.onmouseout = () => messageDiv.style.backgroundColor = 'rgba(52, 152, 219, 0.1)';
+                }
+            } else if (event.data.startsWith('Incident signalé !')) {
+                const coordMatch = event.data.match(/à \[([0-9.-]+),\s*([0-9.-]+)\]/);
+                messageDiv.style.cssText += 'background: rgba(231, 76, 60, 0.1); border-left: 3px solid #e74c3c; padding-left: 8px; color: #000; cursor: pointer;';
+                messageDiv.innerHTML = `<span style="color: #e74c3c;">⚠️</span> ${event.data} <small style="color: #666; float: right;">clic pour zoomer</small>`;
+
+                if (coordMatch) {
+                    const lng = parseFloat(coordMatch[1]);
+                    const lat = parseFloat(coordMatch[2]);
+                    messageDiv.title = 'Cliquer pour zoomer sur cet incident';
+                    messageDiv.onclick = () => zoomToCoordinates(lat, lng);
+                    messageDiv.onmouseover = () => messageDiv.style.backgroundColor = 'rgba(231, 76, 60, 0.3)';
+                    messageDiv.onmouseout = () => messageDiv.style.backgroundColor = 'rgba(231, 76, 60, 0.1)';
+
+                    // Add a persistent marker to the map
+                    if (state.carte) {
+                        const incidentMarker = L.marker([lat, lng], {
+                            icon: L.divIcon({
+                                className: 'incident-marker',
+                                html: '<div style="background-color: #e74c3c; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; box-shadow: 0 0 5px rgba(0,0,0,0.5);">⚠️</div>',
+                                iconSize: [20, 20],
+                                iconAnchor: [10, 10]
+                            })
+                        }).addTo(state.carte);
+                        
+                        incidentMarker.bindPopup(`<b>🚨 Nouvel Incident</b><br>${event.data}`);
+                    }
                 }
             } else if (event.data.includes('Modifications synchronisées')) {
                 messageDiv.style.cssText += 'background: rgba(52, 152, 219, 0.1); border-left: 3px solid #3498db; padding-left: 8px; font-weight: bold; color: #000;';

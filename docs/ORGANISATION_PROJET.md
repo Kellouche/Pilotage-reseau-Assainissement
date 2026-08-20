@@ -103,14 +103,14 @@ Chemin principal : `mobile/`
 
 Rôle :
 
-- application React Native/Expo ;
+- application Flutter ;
 - consultation de carte ;
 - synchronisation ;
 - saisie terrain de base.
 
 Décision recommandée :
 
-- ignorer `mobile/node_modules/` dans Git ;
+- ignorer `mobile/build/` et `mobile/.dart_tool/` dans Git ;
 - stabiliser les endpoints et ports utilisés ;
 - ajouter une documentation mobile dédiée après harmonisation.
 
@@ -199,7 +199,7 @@ Priorité moyenne :
 - Créer `docs/DONNEES.md`.
 - Créer `docs/API.md`.
 - Distinguer officiellement FastAPI et Flask historique.
-- Clarifier la stratégie mobile : React Native seul ou Flutter aussi.
+- Clarifier la stratégie mobile (actuellement sur Flutter).
 
 Priorité basse :
 

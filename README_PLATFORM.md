@@ -13,7 +13,7 @@ Transformer le générateur de fichiers SWMM existant en plateforme temps réel 
 ## 🏗️ Architecture (Zero Budget)
 
 ```
-Mobile App (React Native Expo)
+Mobile App (Flutter)
          ↓ HTTPS
 FastAPI Backend (Python)
          ↓
@@ -27,7 +27,7 @@ Celery Workers ( simulations SWMM asynchrones )
 - PostgreSQL + PostGIS (base de données spatiale)
 - Redis (cache + broker Celery)
 - Celery (tâches asynchrones)
-- React Native Expo (mobile)
+- Flutter (mobile)
 - Leaflet/MapLibre (cartographie)
 
 ## 🚀 Installation & Démarrage
@@ -390,7 +390,7 @@ WantedBy=multi-user.target
 - 🔄 Beta test terrain (1 opérateur)
 
 ### Phase 5 (Semaine 5-6)
-- 📱 App mobile Expo
+- 📱 App mobile Flutter
 - 📊 Dashboard Grafana
 - 📈 POC déployé + démo décideurs
 

@@ -93,21 +93,23 @@ def api_cluster():
         if G is None or len(G.nodes()) == 0:
             return jsonify({"type": "FeatureCollection", "features": []})
 
+        # Importer les fonctions de détection de bassins
+        from src.domain.detecteur_clusters import (
+            trouver_exutoires_physiques,
+            partitionner_bassins_hydrauliques,
+            determiner_nom_bassin,
+        )
+
         # Identifier les exutoires physiques
         exutoires = trouver_exutoires_physiques(G)
         if not exutoires:
             logger.warning("[cluster] Aucun exutoire physique trouvé")
             return jsonify({"type": "FeatureCollection", "features": []})
 
-        # ── Partition BFS multi-sources : bassins exclusifs ──────────────
-        # Chaque conduite est attribuée à UN SEUL bassin (pas de doublon)
-        assignment, nb_orphelines = partitionner_bassins_exclusifs(G, exutoires)
-        
-        # Grouper les arêtes par bassin
-        bassins = {}
-        for (u, v), b_id in assignment.items():
-            if b_id not in bassins: bassins[b_id] = set()
-            bassins[b_id].add((u, v))
+        # ── Partition hydraulique : bassins exclusifs sans inclusion ──────
+        #    Conforme à la littérature : chaque bassin draine vers son exutoire,
+        #    pas de chevauchement, pas d'inclusion, série et parallèle gérés.
+        bassins, nb_orphelines, _ = partitionner_bassins_hydrauliques(G, exutoires)
 
         all_features = []
         for i, (noeud_exutoire, info) in enumerate(exutoires.items()):
@@ -115,18 +117,20 @@ def api_cluster():
             if not edges:
                 continue
 
-            # Calculer le polygone (Convex Hull) du bassin
-            coords = []
-            for u, v in edges: coords.extend([u, v])
+            # Calculer le polygone du bassin à partir des arêtes
             from src.domain.detecteur_clusters import calculer_bassin_polygon
-            bassin_hull = calculer_bassin_polygon(coords)
+            bassin_hull = calculer_bassin_polygon(edges, G=G)
+
+            # Déterminer le nom du bassin depuis les données de la zone drainée
+            nom_bassin = determiner_nom_bassin(edges, G, exutoire_info=info)
 
             cluster_geojson = construire_geojson_cluster(
                 G, edges,
                 bassin_hull=bassin_hull,
                 cluster_id=i + 1,
                 exutoire_node=noeud_exutoire,
-                exutoire_info=info
+                exutoire_info=info,
+                nom_bassin=nom_bassin
             )
 
             if cluster_geojson and "features" in cluster_geojson:
@@ -134,7 +138,7 @@ def api_cluster():
                 for feat in cluster_geojson["features"]:
                     if feat["properties"].get("type") == "bassin_urbain":
                         feat["properties"]["nom"] = (
-                            f"{info.get('nom', f'Bassin {i+1}')} "
+                            f"{nom_bassin} "
                             f"[{info.get('type','?').upper()}]"
                         )
                         feat["properties"]["exutoire_type"] = info.get("type", "")
@@ -146,15 +150,13 @@ def api_cluster():
             conduit_ids = mb.get("conduits", [])
             # Retrouver les arêtes correspondantes dans le graphe
             edges_manual = set()
-            coords_manual = []
             for u, v, attrs in G.edges(data=True):
                 if attrs.get("conduit_id") in conduit_ids or attrs.get("fid") in conduit_ids:
                     edges_manual.add((u, v))
-                    coords_manual.extend([u, v])
-            
+
             if edges_manual:
                 from src.domain.detecteur_clusters import calculer_bassin_polygon
-                hull = calculer_bassin_polygon(coords_manual)
+                hull = calculer_bassin_polygon(edges_manual, G=G)
                 info_ex = mb.get("exutoire") or {"nom": mb.get("nom", "Manuel"), "type": "manuel"}
                 
                 # Réutiliser construire_geojson_cluster

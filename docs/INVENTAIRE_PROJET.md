@@ -47,9 +47,9 @@ Ils ne doivent pas être poussés sans revue.
 
 | Élément | Statut proposé | Décision recommandée |
 |---|---|---|
-| `mobile/` | Actif | Application mobile officielle React Native/Expo de la phase 1. |
+| `mobile/` | Actif | Application mobile officielle Flutter de la phase 1. |
 | `swmm_mobile_flutter/` | Expérimental | Prototype alternatif, à archiver ou confirmer. |
-| `mobile_app.html` | Expérimental | Prototype mobile web autonome, à archiver si React Native est retenu. |
+| `mobile_app.html` | Expérimental | Prototype mobile web autonome, à archiver si Flutter est retenu. |
 | `static/` | À vérifier | Ressources web ajoutées localement, à relier à une interface officielle. |
 | `templates/map.html` | À vérifier | Template utilisé par les changements locaux de `api/main.py`. |
 | `api/websocket.py` | À vérifier | Support WebSocket local, lié aux changements de synchronisation. |
@@ -73,7 +73,7 @@ Ils ne doivent pas être poussés sans revue.
 - Le serveur Flask historique reste disponible sur `5000`.
 - La documentation structurante doit vivre dans `docs/`.
 - Les fichiers de données lourdes et bases locales restent hors Git.
-- La piste mobile officielle de phase 1 est `mobile/` en React Native/Expo.
+- La piste mobile officielle de phase 1 est `mobile/` en Flutter.
 
 ## Prochaines actions
 

@@ -61,7 +61,7 @@ function afficherCouches(d) {
 
     const couleurs = {
         conduites: '#3498db',   // bleu
-        regards: '#f1c40f',     // jaune
+        regards: '#2c3e50',     // gris anthracite
         stations: '#e67e22',    // orange
         step: '#27ae60',        // vert
         ouvrages: '#9b59b6'     // violet

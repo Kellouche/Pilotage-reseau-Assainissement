@@ -1,3 +1,5 @@
+import ast
+import logging
 from functools import lru_cache
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
@@ -5,6 +7,8 @@ from typing import List, Optional, Dict
 
 from api.database import get_db
 from api import schemas, crud
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/clusters", tags=["Clusters"])
 
@@ -149,7 +153,9 @@ def _calculate_clusters(db: Session, persist: bool = True):
         construire_geojson_cluster,
         calculer_statistiques,
         compter_infrastructures,
-        calculer_bassin_depuis_exutoire,
+        calculer_bassin_polygon,
+        determiner_nom_bassin,
+        partitionner_bassins_hydrauliques,
         detecter_composantes_orphelines,
     )
 
@@ -170,14 +176,16 @@ def _calculate_clusters(db: Session, persist: bool = True):
 
     print(f"[cluster] {len(exutoires_physiques)} exutoires, {len(composantes_orphelines)} composantes", flush=True)
 
-    # 3. ── Bassins hydrauliques par exutoire (zone drainée) ────────────
-    print("[cluster] Calcul des bassins drainés par exutoire…", flush=True)
-    bassins_par_exutoire = {}
+    # 3. ── Partition hydraulique : bassins exclusifs sans inclusion ─────
+    #    Conforme à la littérature : chaque bassin draine vers son exutoire,
+    #    pas de chevauchement, pas d'inclusion, série et parallèle gérés.
+    print("[cluster] Partition hydraulique des bassins…", flush=True)
+    bassins_par_exutoire, troncons_orphelines_set, attribution = \
+        partitionner_bassins_hydrauliques(G, exutoires_physiques)
+
     tous_les_troncons_connexes = set()
-    for noeud_exutoire, info in exutoires_physiques.items():
-        bassin = calculer_bassin_depuis_exutoire(G, noeud_exutoire)
-        bassins_par_exutoire[noeud_exutoire] = bassin
-        tous_les_troncons_connexes.update(bassin["edges"])
+    for edges in bassins_par_exutoire.values():
+        tous_les_troncons_connexes.update(edges)
     # ──────────────────────────────────────────────────────────────────
 
     color_map = {
@@ -189,76 +197,98 @@ def _calculate_clusters(db: Session, persist: bool = True):
 
     results = []
 
-    for noeud_exutoire, info in exutoires_physiques.items():
-        bassin = bassins_par_exutoire[noeud_exutoire]
-        edges = bassin["edges"]
+    for i, (noeud_exutoire, info) in enumerate(exutoires_physiques.items()):
+        edges = bassins_par_exutoire.get(noeud_exutoire, set())
         if not edges:
             continue
 
-        stats = bassin["stats"]
-        infrastructures = compter_infrastructures(edges)
+        try:
+            # Déterminer le nom du bassin depuis les données de la zone drainée
+            nom_bassin = determiner_nom_bassin(edges, G, exutoire_info=info)
+            nom_exutoire = info["nom"]
 
-        couleur = color_map.get(info["type"], "#4a90e2")
-        classification = {
-            edge: {"type": f"connecte_{info['type']}", "couleur": couleur}
-            for edge in edges
-        }
-        geojson = construire_geojson_cluster(
-            G,
-            edges,
-            classification,
-            bassin_hull=bassin["polygon"],
-            cluster_id=None,
-            exutoire_node=noeud_exutoire if isinstance(noeud_exutoire, tuple) else ast.literal_eval(noeud_exutoire),
-            exutoire_info=info,
-        )
+            # Calculer les statistiques et le polygone du bassin
+            stats = calculer_statistiques(G, edges)
+            infrastructures = compter_infrastructures(edges)
+            bassin_hull = calculer_bassin_polygon(edges, G=G)
 
-        # Calculer l'ordre topologique des conduites dans ce bassin
-        ordre_topologique = calculer_ordre_topologique(G, edges)
+            couleur = color_map.get(info["type"], "#4a90e2")
+            classification = {
+                edge: {"type": f"connecte_{info['type']}", "couleur": couleur}
+                for edge in edges
+            }
+            geojson = construire_geojson_cluster(
+                G,
+                edges,
+                classification,
+                bassin_hull=bassin_hull,
+                cluster_id=i + 1,
+                exutoire_node=noeud_exutoire if isinstance(noeud_exutoire, tuple) else ast.literal_eval(noeud_exutoire),
+                exutoire_info=info,
+                nom_bassin=nom_bassin,
+            )
 
-        db_stats = {
-            "nb_conduites":    stats["nb_conduites"],
-            "nb_noeuds":       stats["nb_noeuds"],
-            "longueur_totale": stats["longueur_totale_m"],
-            "diametre_min":    stats["diametre_min_m"],
-            "diametre_max":    stats["diametre_max_m"],
-            "diametre_moy":    stats["diametre_moy_m"],
-            "nb_regards":      infrastructures["nb_regards"],
-            "nb_stations":     infrastructures["nb_stations"],
-            "nb_ouvrages":     infrastructures["nb_ouvrages"]
-        }
+            # Calculer l'ordre topologique des conduites dans ce bassin
+            ordre_topologique = calculer_ordre_topologique(G, edges)
 
-        nom_exutoire = info["nom"]
-        cluster = None
+            db_stats = {
+                "nb_conduites":    stats["nb_conduites"],
+                "nb_noeuds":       stats["nb_noeuds"],
+                "longueur_totale": stats["longueur_totale_m"],
+                "diametre_min":    stats["diametre_min_m"],
+                "diametre_max":    stats["diametre_max_m"],
+                "diametre_moy":    stats["diametre_moy_m"],
+                "nb_regards":      infrastructures["nb_regards"],
+                "nb_stations":     infrastructures["nb_stations"],
+                "nb_ouvrages":     infrastructures["nb_ouvrages"]
+            }
 
-        if persist:
-            existing = db.query(crud.Cluster).filter(crud.Cluster.nom == nom_exutoire).first()
+            cluster = None
 
-            if existing:
-                cluster = crud.update_cluster_stats(db, existing.id, db_stats)
-            else:
-                cluster = crud.create_cluster(db, {
-                    "nom": nom_exutoire,
-                    "exutoire_noeud": str(noeud_exutoire),
-                    **db_stats
-                })
+            if persist:
+                # Chercher par nom d'exutoire (compatibilité) ou par nom de bassin
+                existing = db.query(crud.Cluster).filter(
+                    (crud.Cluster.nom == nom_exutoire) |
+                    (crud.Cluster.nom == nom_bassin)
+                ).first()
 
-        results.append({
-            "cluster": cluster,
-            "exutoire": info,
-            "stats": stats,
-            "infrastructures": infrastructures,
-            "geojson": geojson,
-            "troncons": len(edges),
-            "ordre_topologique": ordre_topologique
-        })
+                if existing:
+                    # Mettre à jour le nom si le bassin a été renommé
+                    update_data = {**db_stats}
+                    if existing.nom != nom_bassin:
+                        update_data["nom"] = nom_bassin
+                    cluster = crud.update_cluster_stats(db, existing.id, update_data)
+                else:
+                    cluster = crud.create_cluster(db, {
+                        "nom": nom_bassin,
+                        "exutoire_noeud": str(noeud_exutoire),
+                        **db_stats
+                    })
 
-    # 4. Identifier et classifier les tronçons orphelins
-    troncons_orphelins = set()
+            results.append({
+                "cluster": cluster,
+                "exutoire": info,
+                "stats": stats,
+                "infrastructures": infrastructures,
+                "geojson": geojson,
+                "troncons": len(edges),
+                "ordre_topologique": ordre_topologique
+            })
+        except Exception as e:
+            logger.error(
+                f"[cluster] Erreur traitement bassin {info.get('nom', noeud_exutoire)}: {e}",
+                exc_info=True
+            )
+            # Continuer avec les autres bassins
+            continue
+
+    # 4. Tronçons orphelins (déjà calculés par partitionner_bassins_hydrauliques)
+    #    Compléter avec les composantes orphelines non connectées
+    troncons_orphelins = set(troncons_orphelines_set)
     for comp_noeuds, comp_edges, type_issue in composantes_orphelines:
         troncons_orphelins.update(comp_edges)
 
-    # Enlever les tronçons déjà connectés
+    # Enlever les tronçons déjà connectés à un bassin
     troncons_orphelins -= tous_les_troncons_connexes
 
     # Créer un cluster "Orphelins" pour visualisation

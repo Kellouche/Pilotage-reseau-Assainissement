@@ -5,6 +5,7 @@
         clusterCouche: null,
         activeClusterLayer: null,
         bassinBounds: {},
+        bassinNoms: {},
         lastSyncVersion: 0,
         lastZoomMarker: null,
         totalModifications: 0,
