@@ -155,18 +155,23 @@
                 }
             } else if (event.data.startsWith('Incident signalé !')) {
                 const coordMatch = event.data.match(/à \[([0-9.-]+),\s*([0-9.-]+)\]/);
-                messageDiv.style.cssText += 'background: rgba(231, 76, 60, 0.1); border-left: 3px solid #e74c3c; padding-left: 8px; color: #000; cursor: pointer;';
-                messageDiv.innerHTML = `<span style="color: #e74c3c;">⚠️</span> ${event.data} <small style="color: #666; float: right;">clic pour zoomer</small>`;
+                const incidentsList = document.getElementById('incidents-list');
+                
+                const incDiv = document.createElement('div');
+                incDiv.style.cssText = 'padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.1); font-family: monospace; background: rgba(231, 76, 60, 0.1); border-left: 3px solid #e74c3c; padding-left: 8px; color: #000; cursor: pointer;';
+                
+                const timeStr = new Date().toLocaleTimeString();
+                incDiv.innerHTML = `<span style="color: #e74c3c;">⚠️</span> ${event.data} <small style="color: #666; float: right;">${timeStr}</small>`;
 
                 if (coordMatch) {
                     const lng = parseFloat(coordMatch[1]);
                     const lat = parseFloat(coordMatch[2]);
-                    messageDiv.title = 'Cliquer pour zoomer sur cet incident';
-                    messageDiv.onclick = () => zoomToCoordinates(lat, lng);
-                    messageDiv.onmouseover = () => messageDiv.style.backgroundColor = 'rgba(231, 76, 60, 0.3)';
-                    messageDiv.onmouseout = () => messageDiv.style.backgroundColor = 'rgba(231, 76, 60, 0.1)';
+                    incDiv.title = 'Cliquer pour zoomer sur cet incident';
+                    incDiv.onclick = () => zoomToCoordinates(lat, lng);
+                    incDiv.onmouseover = () => incDiv.style.backgroundColor = 'rgba(231, 76, 60, 0.3)';
+                    incDiv.onmouseout = () => incDiv.style.backgroundColor = 'rgba(231, 76, 60, 0.1)';
 
-                    // Add a persistent marker to the map
+                    // Add a persistent marker to the map if not exists
                     if (state.carte && state.couches && state.couches.incidents) {
                         const incidentMarker = L.circleMarker([lat, lng], {
                             radius: 8,
@@ -184,6 +189,20 @@
                         `);
                     }
                 }
+                
+                if (incidentsList.children.length === 1 && incidentsList.children[0].textContent.includes('Aucun signalement')) {
+                    incidentsList.innerHTML = '';
+                }
+                incidentsList.insertBefore(incDiv, incidentsList.firstChild);
+                
+                const countSpan = document.getElementById('incident-count');
+                countSpan.textContent = parseInt(countSpan.textContent) + 1;
+                
+                syncIndicator.style.background = '#27ae60';
+                setTimeout(() => {
+                    syncIndicator.style.background = '#ccc';
+                }, 2000);
+                return; // Skip adding to changesList
             } else if (event.data.includes('Modifications synchronisées')) {
                 messageDiv.style.cssText += 'background: rgba(52, 152, 219, 0.1); border-left: 3px solid #3498db; padding-left: 8px; font-weight: bold; color: #000;';
                 messageDiv.innerHTML = `<span style="color: #3498db;">🔄</span> ${event.data}`;
@@ -236,6 +255,8 @@
                     
                     // Show them in chronological order
                     logs.reverse().forEach(log => {
+                        if (log.table === 'incidents') return; // Skip incidents, they go to incidents-box
+                        
                         const messageDiv = document.createElement('div');
                         messageDiv.style.cssText = 'padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.1); font-family: monospace; font-size: 10px; color: #666;';
                         
@@ -244,7 +265,6 @@
                         let typeObj = log.table;
                         if (log.table === 'regards') { icon = '📍'; typeObj = 'Regard'; }
                         else if (log.table === 'conduites') { icon = '🛣️'; typeObj = 'Conduite'; }
-                        else if (log.table === 'incidents') { icon = '⚠️'; typeObj = 'Incident'; }
                         
                         messageDiv.innerHTML = `<span>${icon}</span> [Historique] ${typeObj} ID:${log.record_id} (${log.operation}) - <span style="color:#999">${dateStr}</span>`;
                         changesList.appendChild(messageDiv);
@@ -252,6 +272,38 @@
                 }
             })
             .catch(err => console.error('Erreur lors du chargement de l\'historique', err));
+
+        // Fetch recent incidents of the day on page load
+        fetch('/api/v1/terrain/incidents')
+            .then(res => res.json())
+            .then(incidents => {
+                const incidentsList = document.getElementById('incidents-list');
+                const countSpan = document.getElementById('incident-count');
+                
+                const todayStr = new Date().toISOString().split('T')[0];
+                const todaysIncidents = incidents.filter(inc => inc.date_creation && inc.date_creation.startsWith(todayStr));
+                
+                if (todaysIncidents.length > 0) {
+                    incidentsList.innerHTML = '';
+                    countSpan.textContent = todaysIncidents.length;
+                    
+                    todaysIncidents.reverse().forEach(inc => {
+                        const messageDiv = document.createElement('div');
+                        messageDiv.style.cssText = 'padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.1); font-family: monospace; background: rgba(231, 76, 60, 0.1); border-left: 3px solid #e74c3c; padding-left: 8px; color: #000; cursor: pointer; font-size: 11px;';
+                        
+                        const timeStr = new Date(inc.date_creation).toLocaleTimeString();
+                        messageDiv.innerHTML = `<span style="color: #e74c3c;">⚠️</span> Incident signalé ! Type: ${inc.type_incident} [Gravité: ${inc.gravite}] à [${inc.longitude}, ${inc.latitude}] <small style="color: #666; float: right;">${timeStr}</small>`;
+                        
+                        messageDiv.title = 'Cliquer pour zoomer sur cet incident';
+                        messageDiv.onclick = () => zoomToCoordinates(inc.latitude, inc.longitude);
+                        messageDiv.onmouseover = () => messageDiv.style.backgroundColor = 'rgba(231, 76, 60, 0.3)';
+                        messageDiv.onmouseout = () => messageDiv.style.backgroundColor = 'rgba(231, 76, 60, 0.1)';
+                        
+                        incidentsList.appendChild(messageDiv);
+                    });
+                }
+            })
+            .catch(err => console.error('Erreur lors du chargement des incidents', err));
     }
 
     function conduitIdFromText(text) {

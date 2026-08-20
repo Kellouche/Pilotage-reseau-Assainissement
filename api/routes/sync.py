@@ -219,11 +219,13 @@ def push_changes(
                         conduite = crud.get_canalisation_by_fid(db, change.changes.get("fid"))
 
                     if conduite:
-                        # Format avec coordonnées comme pour les regards
-                        from sqlalchemy import func
-                        centroid = db.session.query(func.ST_Centroid(conduite.geom)).scalar()
-                        coord_x = centroid.x if centroid else 0.0
-                        coord_y = centroid.y if centroid else 0.0
+                        import re
+                        wkt = getattr(conduite, "geometry_wkt", "")
+                        coord_x, coord_y = 0.0, 0.0
+                        if wkt:
+                            matches = re.findall(r"([0-9.-]+)\s+([0-9.-]+)", wkt)
+                            if matches:
+                                coord_x, coord_y = float(matches[0][0]), float(matches[0][1])
                         fid = conduite.fid if conduite.fid else f'ID:{conduite.id}'
                         timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
                         message = f"Objet : Conduite {fid} [{coord_x:.6f},{coord_y:.6f}] -- {timestamp}"
