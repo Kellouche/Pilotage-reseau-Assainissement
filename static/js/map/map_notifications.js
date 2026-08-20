@@ -253,7 +253,14 @@
             if (!state.carte || !state.couches || !state.couches[layerName] || !recordId) return;
             
             let found = false;
-            state.couches[layerName].eachLayer(layer => {
+            
+            function checkLayer(layer) {
+                if (found) return;
+                
+                if (layer.eachLayer) {
+                    layer.eachLayer(checkLayer);
+                }
+                
                 if (layer.feature) {
                     const props = layer.feature.properties || {};
                     if (props.id == recordId || 
@@ -277,7 +284,10 @@
                         }
                     }
                 }
-            });
+            }
+            
+            state.couches[layerName].eachLayer(checkLayer);
+            
             if (!found) {
                 console.warn('Object not found on map:', layerName, recordId);
             }
