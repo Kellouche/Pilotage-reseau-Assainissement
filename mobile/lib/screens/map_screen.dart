@@ -343,7 +343,71 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  Widget _buildObjectEditor() {
+  void _showEditDialog(Map<String, dynamic> obj, String title, List<String> editableKeys) {
+    final Map<String, dynamic> tempObj = Map<String, dynamic>.from(obj);
+
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1a1a2e),
+          title: Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: editableKeys.map((key) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12.0),
+                  child: TextFormField(
+                    initialValue: tempObj[key]?.toString() ?? '',
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: key.toUpperCase(),
+                      labelStyle: const TextStyle(color: Colors.white70, fontSize: 12),
+                      enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                    ),
+                    onChanged: (val) {
+                      if (obj[key] is int || tempObj[key] is int) {
+                         tempObj[key] = int.tryParse(val) ?? tempObj[key];
+                      } else if (obj[key] is double || tempObj[key] is double) {
+                         tempObj[key] = double.tryParse(val) ?? tempObj[key];
+                      } else {
+                         tempObj[key] = val;
+                      }
+                    },
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Annuler', style: TextStyle(color: Colors.redAccent)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF27ae60),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                setState(() {
+                  for (final key in editableKeys) {
+                    activeObject![key] = tempObj[key];
+                  }
+                });
+                _saveEditedObject(activeObject!);
+              },
+              child: const Text('Enregistrer'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildObjectSummary() {
     final obj = activeObject!;
     final isRegard = activeType == 'regard';
     final title = isRegard ? 'Regard ${obj['code'] ?? obj['id']}' : 'Conduite ${obj['fid'] ?? obj['id']}';
@@ -351,17 +415,21 @@ class _MapScreenState extends State<MapScreen> {
     final excludedKeys = ['id', 'fid', 'code', 'geom', 'geom_geojson', 'type', 'gid'];
     final editableKeys = obj.keys.where((k) => !excludedKeys.contains(k.toLowerCase())).toList();
 
+    final String summaryInfo = isRegard 
+        ? 'Type: ${obj['type_regard'] ?? 'N/A'}\nProfondeur: ${obj['profondeur'] ?? 'N/A'} m'
+        : 'Diamètre: ${obj['diametre'] ?? 'N/A'} mm\nMatériau: ${obj['materiau'] ?? 'N/A'}';
+
     return Positioned(
-      bottom: 0,
-      left: 0,
-      right: 0,
+      bottom: 20,
+      left: 20,
+      right: 20,
       child: Container(
         padding: const EdgeInsets.all(16),
-        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.6),
-        decoration: const BoxDecoration(
-          color: Color(0xFF1a1a2e),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-          boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 10, offset: Offset(0, -2))],
+        decoration: BoxDecoration(
+          color: const Color(0xFF1a1a2e).withOpacity(0.95),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 10, offset: Offset(0, 4))],
+          border: Border.all(color: Colors.white24)
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -370,54 +438,36 @@ class _MapScreenState extends State<MapScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                Row(
+                  children: [
+                    Icon(isRegard ? Icons.circle : Icons.horizontal_rule, color: isRegard ? const Color(0xFF8E44AD) : const Color(0xFF3498db), size: 20),
+                    const SizedBox(width: 8),
+                    Text(title, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                  ],
+                ),
                 IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white70),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  icon: const Icon(Icons.close, color: Colors.white70, size: 20),
                   onPressed: () => setState(() => activeObject = null),
                 )
               ],
             ),
-            const SizedBox(height: 16),
-            Flexible(
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: editableKeys.map((key) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12.0),
-                      child: TextFormField(
-                        initialValue: obj[key]?.toString() ?? '',
-                        style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          labelText: key.toUpperCase(),
-                          labelStyle: const TextStyle(color: Colors.white70, fontSize: 12),
-                          enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-                        ),
-                        onChanged: (val) {
-                          if (obj[key] is int) {
-                             obj[key] = int.tryParse(val) ?? obj[key];
-                          } else if (obj[key] is double) {
-                             obj[key] = double.tryParse(val) ?? obj[key];
-                          } else {
-                             obj[key] = val;
-                          }
-                        },
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 8),
+            Text(summaryInfo, style: const TextStyle(color: Colors.white70, height: 1.4)),
+            const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton(
+              height: 36,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.edit, size: 16),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF27ae60),
+                  backgroundColor: const Color(0xFF3498db),
                   foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
-                onPressed: () => _saveEditedObject(obj),
-                child: const Text('Sauvegarder les modifications'),
+                onPressed: () => _showEditDialog(obj, title, editableKeys),
+                label: const Text('Modifier'),
               ),
             )
           ],
@@ -819,7 +869,7 @@ class _MapScreenState extends State<MapScreen> {
               ],
             ),
           ),
-          if (activeObject != null) _buildObjectEditor(),
+          if (activeObject != null) _buildObjectSummary(),
           if (showScanner) _buildScannerDialog(),
           if (showProximite) _buildProximiteDialog(),
           if (showIncidentForm) _buildIncidentForm(),
