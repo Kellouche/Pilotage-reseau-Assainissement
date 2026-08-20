@@ -343,8 +343,16 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  void _showEditDialog(Map<String, dynamic> obj, String title, List<String> editableKeys) {
+  void _showEditDialog(Map<String, dynamic> obj, String title, List<Map<String, String>> fields) {
     final Map<String, dynamic> tempObj = Map<String, dynamic>.from(obj);
+
+    dynamic getInitialValue(String key) {
+      if (key == 'nom_voie') return obj['nom_voie'] ?? obj['NOM'] ?? obj['f_nom'] ?? '';
+      if (key == 'longueur') return obj['longueur'] ?? obj['LONGUEUR'] ?? '';
+      if (key == 'diametre') return obj['diametre'] ?? obj['DIAMETRE'] ?? '';
+      if (key == 'materiau') return obj['materiau'] ?? obj['MATERIAU'] ?? '';
+      return obj[key] ?? '';
+    }
 
     showDialog(
       context: context,
@@ -355,14 +363,16 @@ class _MapScreenState extends State<MapScreen> {
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              children: editableKeys.map((key) {
+              children: fields.map((field) {
+                final key = field['key']!;
+                final label = field['label']!;
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 12.0),
                   child: TextFormField(
-                    initialValue: tempObj[key]?.toString() ?? '',
+                    initialValue: getInitialValue(key).toString(),
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
-                      labelText: key.toUpperCase(),
+                      labelText: label,
                       labelStyle: const TextStyle(color: Colors.white70, fontSize: 12),
                       enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
                     ),
@@ -393,8 +403,8 @@ class _MapScreenState extends State<MapScreen> {
               onPressed: () {
                 Navigator.of(dialogContext).pop();
                 setState(() {
-                  for (final key in editableKeys) {
-                    activeObject![key] = tempObj[key];
+                  for (final field in fields) {
+                    activeObject![field['key']!] = tempObj[field['key']!];
                   }
                 });
                 _saveEditedObject(activeObject!);
@@ -412,12 +422,23 @@ class _MapScreenState extends State<MapScreen> {
     final isRegard = activeType == 'regard';
     final title = isRegard ? 'Regard ${obj['code'] ?? obj['id']}' : 'Conduite ${obj['fid'] ?? obj['id']}';
     
-    final excludedKeys = ['id', 'fid', 'code', 'geom', 'geom_geojson', 'type', 'gid'];
-    final editableKeys = obj.keys.where((k) => !excludedKeys.contains(k.toLowerCase())).toList();
+    final List<Map<String, String>> fields = isRegard
+        ? [
+            {'key': 'code', 'label': 'Code'},
+            {'key': 'type_regard', 'label': 'Type'},
+            {'key': 'diametre', 'label': 'Diamètre'},
+            {'key': 'profondeur', 'label': 'Profondeur'},
+          ]
+        : [
+            {'key': 'longueur', 'label': 'Longueur (m)'},
+            {'key': 'diametre', 'label': 'Diamètre (mm)'},
+            {'key': 'materiau', 'label': 'Matériau'},
+            {'key': 'nom_voie', 'label': 'Nom'},
+          ];
 
     final String summaryInfo = isRegard 
         ? 'Type: ${obj['type_regard'] ?? 'N/A'}\nProfondeur: ${obj['profondeur'] ?? 'N/A'} m'
-        : 'Diamètre: ${obj['diametre'] ?? 'N/A'} mm\nMatériau: ${obj['materiau'] ?? 'N/A'}';
+        : 'Diamètre: ${obj['diametre'] ?? obj['DIAMETRE'] ?? 'N/A'} mm\nMatériau: ${obj['materiau'] ?? obj['MATERIAU'] ?? 'N/A'}';
 
     return Positioned(
       bottom: 20,
@@ -466,7 +487,7 @@ class _MapScreenState extends State<MapScreen> {
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
-                onPressed: () => _showEditDialog(obj, title, editableKeys),
+                onPressed: () => _showEditDialog(obj, title, fields),
                 label: const Text('Modifier'),
               ),
             )
