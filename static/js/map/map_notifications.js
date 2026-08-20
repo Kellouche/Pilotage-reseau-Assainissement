@@ -213,14 +213,12 @@
                 }, 2000);
                 return; // Skip adding to changesList
             } else if (event.data.includes('Modifications synchronisées')) {
-                messageDiv.style.cssText += 'background: rgba(52, 152, 219, 0.1); border-left: 3px solid #3498db; padding-left: 8px; font-weight: bold; color: #000;';
-                messageDiv.innerHTML = `<span style="color: #3498db;">🔄</span> ${event.data}`;
-
                 const match = event.data.match(/(\d+) acceptées/);
                 if (match) {
                     state.totalModifications += parseInt(match[1]);
                     document.getElementById('modif-count').textContent = state.totalModifications;
                 }
+                return; // Hide summary message
             } else {
                 messageDiv.textContent = `${new Date().toLocaleTimeString()}: ${event.data}`;
                 messageDiv.style.color = '#000';
@@ -254,6 +252,34 @@
             syncIndicator.style.background = '#e74c3c';
         };
 
+        function zoomToFeature(layerName, recordId) {
+            if (!state.carte || !state.couches || !state.couches[layerName] || !recordId) return;
+            
+            let found = false;
+            state.couches[layerName].eachLayer(layer => {
+                if (layer.feature && layer.feature.properties &&
+                    (layer.feature.properties.id == recordId || layer.feature.properties.code == recordId)) {
+                    
+                    found = true;
+                    if (layer.getBounds) {
+                        state.carte.fitBounds(layer.getBounds(), { padding: [50, 50], maxZoom: 18 });
+                    } else if (layer.getLatLng) {
+                        state.carte.setView(layer.getLatLng(), 18);
+                    }
+                    
+                    // Visual effect
+                    if (layer.setStyle) {
+                        const originalColor = layer.options.color;
+                        layer.setStyle({ color: '#ff0000', weight: 6 });
+                        setTimeout(() => layer.setStyle({ color: originalColor, weight: 3 }), 3000);
+                    }
+                }
+            });
+            if (!found) {
+                console.warn('Object not found on map:', layerName, recordId);
+            }
+        }
+
         // Fetch recent modifications on page load
         fetch('/api/v1/audit/logs?limit=5')
             .then(res => res.json())
@@ -267,7 +293,7 @@
                         if (log.table === 'incidents') return; // Skip incidents, they go to incidents-box
                         
                         const messageDiv = document.createElement('div');
-                        messageDiv.style.cssText = 'padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.1); font-family: monospace; font-size: 10px; color: #666;';
+                        messageDiv.style.cssText = 'padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.1); font-family: monospace; font-size: 10px; color: #666; cursor: pointer;';
                         
                         const dateStr = new Date(log.timestamp).toLocaleTimeString();
                         let icon = '🔄';
@@ -276,6 +302,11 @@
                         else if (log.table === 'conduites') { icon = '🛣️'; typeObj = 'Conduite'; }
                         
                         messageDiv.innerHTML = `<span>${icon}</span> [Historique] ${typeObj} ID:${log.record_id} (${log.operation}) - <span style="color:#999">${dateStr}</span>`;
+                        messageDiv.title = 'Cliquer pour localiser';
+                        messageDiv.onclick = () => zoomToFeature(log.table, log.record_id);
+                        messageDiv.onmouseover = () => messageDiv.style.backgroundColor = 'rgba(0,0,0,0.05)';
+                        messageDiv.onmouseout = () => messageDiv.style.backgroundColor = 'transparent';
+                        
                         changesList.appendChild(messageDiv);
                     });
                 }
