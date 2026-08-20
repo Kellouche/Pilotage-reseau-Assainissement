@@ -17,7 +17,39 @@
             document.getElementById('edit-modal').style.display = 'none';
         });
 
+        document.getElementById('close-btn-header').addEventListener('click', () => {
+            document.getElementById('edit-modal').style.display = 'none';
+        });
+
         document.getElementById('save-btn').addEventListener('click', saveEdit);
+
+        // Logique de glisser-déposer (Drag & Drop) pour la modale
+        const editModal = document.getElementById('edit-modal');
+        const modalHeader = document.getElementById('modal-header');
+        let isDragging = false;
+        let offsetX, offsetY;
+
+        if (modalHeader) {
+            modalHeader.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                offsetX = e.clientX - editModal.getBoundingClientRect().left;
+                offsetY = e.clientY - editModal.getBoundingClientRect().top;
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+            });
+        }
+
+        function onMouseMove(e) {
+            if (!isDragging) return;
+            editModal.style.left = (e.clientX - offsetX) + 'px';
+            editModal.style.top = (e.clientY - offsetY) + 'px';
+        }
+
+        function onMouseUp() {
+            isDragging = false;
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+        }
     }
 
     function openEditModal(properties, type) {

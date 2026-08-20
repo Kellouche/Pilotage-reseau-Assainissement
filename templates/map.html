@@ -304,16 +304,19 @@
 
 
 
-    <!-- Modal d'édition -->
-    <div id="edit-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 3000; justify-content: center; align-items: center;">
-        <div style="background: white; padding: 20px; border-radius: 8px; max-width: 400px; width: 90%; max-height: 80%; overflow-y: auto;">
-            <h3 id="modal-title">Modifier</h3>
-            <form id="edit-form">
+    <!-- Modal d'édition (Flottante) -->
+    <div id="edit-modal" style="display: none; position: fixed; top: 100px; left: 100px; width: 350px; background: white; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); z-index: 3000; overflow: hidden; border: 1px solid #ccc; flex-direction: column;">
+        <div id="modal-header" style="background: #16213e; color: white; padding: 10px 15px; cursor: move; display: flex; justify-content: space-between; align-items: center;">
+            <h3 id="modal-title" style="margin: 0; font-size: 16px;">Modifier</h3>
+            <button type="button" id="close-btn-header" style="background: none; border: none; color: white; cursor: pointer; font-size: 18px; line-height: 1;">&times;</button>
+        </div>
+        <div style="padding: 15px; max-height: 400px; overflow-y: auto;">
+            <form id="edit-form" style="color: #333;">
                 <!-- Champs dynamiques -->
             </form>
             <div style="margin-top: 20px; text-align: right;">
-                <button type="button" id="save-btn" style="background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">Enregistrer</button>
-                <button type="button" id="cancel-btn" style="background: #e74c3c; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin-left: 10px;">Annuler</button>
+                <button type="button" id="save-btn" style="background: #27ae60; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer;">Enregistrer</button>
+                <button type="button" id="cancel-btn" style="background: #e74c3c; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; margin-left: 10px;">Annuler</button>
             </div>
         </div>
     </div>
