@@ -65,8 +65,10 @@ def create_regard(regard: schemas.RegardCreate, user_id: str = "system", db: Ses
         raise HTTPException(status_code=400, detail=str(e))
 
 
+from api.websocket import manager
+
 @router.patch("/regards/{regard_id}", response_model=schemas.RegardResponse)
-def update_regard(
+async def update_regard(
     regard_id: int,
     update: schemas.RegardUpdate,
     user_id: str = "system",
@@ -81,6 +83,10 @@ def update_regard(
     )
     if not updated:
         raise HTTPException(status_code=404, detail="Regard non trouvé")
+        
+    msg = f"Objet : Regard {updated.code or updated.id} modifié par {user_id} [{updated.longitude},{updated.latitude}]"
+    await manager.broadcast(msg)
+    
     return updated.to_dict()
 
 
@@ -142,7 +148,7 @@ def create_conduite(
 
 
 @router.patch("/conduites/{conduite_id}", response_model=schemas.CanalisationResponse)
-def update_conduite(
+async def update_conduite(
     conduite_id: int,
     update: schemas.CanalisationUpdate,
     user_id: str = "system",
@@ -157,6 +163,10 @@ def update_conduite(
     )
     if not updated:
         raise HTTPException(status_code=404, detail="Canalisation non trouvée")
+        
+    msg = f"Objet : Conduite {updated.fid or updated.id} modifiée par {user_id} [0.0,0.0]"
+    await manager.broadcast(msg)
+    
     return updated.to_dict()
 
 
