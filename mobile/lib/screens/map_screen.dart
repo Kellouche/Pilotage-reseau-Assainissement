@@ -8,42 +8,79 @@ import 'package:latlong2/latlong.dart';
 import 'package:swmm_mobile/services/api_service.dart';
 import 'package:swmm_mobile/services/storage_service.dart';
 
-class _LegendItem extends StatelessWidget {
+class _LayerControlItem extends StatelessWidget {
   final String label;
-  final Color? color;
+  final int count;
+  final Color color;
+  final bool isVisible;
+  final bool isEditable;
+  final ValueChanged<bool> onVisibilityChanged;
+  final ValueChanged<bool> onEditableChanged;
   final bool isActive;
 
-  const _LegendItem({
+  const _LayerControlItem({
     required this.label,
-    this.color,
+    required this.count,
+    required this.color,
+    required this.isVisible,
+    required this.isEditable,
+    required this.onVisibilityChanged,
+    required this.onEditableChanged,
     this.isActive = true,
   });
 
   @override
   Widget build(BuildContext context) {
-    final itemColor = isActive ? Colors.white : Colors.white70;
+    final itemColor = (isActive && isVisible) ? Colors.white : Colors.white54;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (color != null)
-            Container(
-              width: 16,
-              height: 16,
-              decoration: BoxDecoration(
-                color: isActive ? color : color!.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: itemColor, width: 1),
-              ),
-            )
-          else
-            Icon(Icons.info_outline, size: 16, color: itemColor),
+          Container(
+            width: 16,
+            height: 16,
+            decoration: BoxDecoration(
+              color: isVisible ? color : color.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: itemColor, width: 1),
+            ),
+          ),
           const SizedBox(width: 8),
-          Text(
-            label,
-            style: TextStyle(color: itemColor, fontSize: 12),
+          SizedBox(
+            width: 85,
+            child: Text(
+              '$label ($count)',
+              style: TextStyle(color: itemColor, fontSize: 12),
+            ),
+          ),
+          // Visibility Toggle
+          GestureDetector(
+            onTap: isActive ? () => onVisibilityChanged(!isVisible) : null,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Icon(
+                isVisible ? Icons.visibility : Icons.visibility_off,
+                size: 18,
+                color: (isActive && isVisible) ? Colors.white : Colors.white30,
+              ),
+            ),
+          ),
+          // Edit Toggle
+          GestureDetector(
+            onTap: isActive ? () {
+              if (!isEditable && !isVisible) onVisibilityChanged(true);
+              onEditableChanged(!isEditable);
+            } : null,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Icon(
+                isEditable ? Icons.edit : Icons.edit_off,
+                size: 18,
+                color: (isActive && isEditable) ? Colors.orangeAccent : Colors.white30,
+              ),
+            ),
           ),
         ],
       ),
@@ -75,7 +112,10 @@ class _MapScreenState extends State<MapScreen> {
   List<Marker> regardMarkers = [];
   List<Polyline> conduitePolylines = [];
   List<Map<String, dynamic>> _cachedConduites = [];
-  String editableLayer = 'Toutes'; // Toutes, Regards, Conduites
+  bool layerRegardsVisible = true;
+  bool layerRegardsEditable = true;
+  bool layerConduitesVisible = true;
+  bool layerConduitesEditable = true;
 
   LatLngBounds? currentBounds;
   double currentZoom = 13.0;
@@ -230,7 +270,7 @@ class _MapScreenState extends State<MapScreen> {
       return;
     }
 
-    if (currentZoom < 14 || _cachedConduites.isEmpty || editableLayer == 'Regards') {
+    if (currentZoom < 14 || _cachedConduites.isEmpty || !layerConduitesEditable || !layerConduitesVisible) {
       setState(() => activeObject = null);
       return;
     }
@@ -750,14 +790,14 @@ class _MapScreenState extends State<MapScreen> {
                 subdomains: const ['a', 'b', 'c'],
               ),
               if (layers != null) ...[
-                if (currentZoom >= 13)
+                if (currentZoom >= 13 && layerRegardsVisible)
                   MarkerLayer(
                     markers: [
                       ...regardMarkers,
                       ..._buildIncidentMarkers(),
                     ],
                   ),
-                if (currentZoom >= 14)
+                if (currentZoom >= 14 && layerConduitesVisible)
                   PolylineLayer(polylines: conduitePolylines),
               ],
             ],
@@ -804,48 +844,55 @@ class _MapScreenState extends State<MapScreen> {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    _LegendItem(
-                      label: 'Regards (${layers?['compteurs']?['regards'] ?? 0})',
-                      color: const Color(0xFF8E44AD),
-                      isActive: currentZoom >= 13,
-                    ),
-                    _LegendItem(
-                      label: 'Conduites (${layers?['compteurs']?['conduites'] ?? 0})',
-                      color: const Color(0xFF3498db),
-                      isActive: currentZoom >= 14,
-                    ),
-                    if (currentZoom < 13)
-                      const _LegendItem(
-                        label: 'Zoomez pour afficher les objets',
-                        isActive: false,
-                      ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'Couche éditable :',
-                      style: TextStyle(color: Colors.white70, fontSize: 11),
-                    ),
-                    DropdownButton<String>(
-                      value: editableLayer,
-                      dropdownColor: const Color(0xFF16213e),
-                      style: const TextStyle(color: Colors.white, fontSize: 12),
-                      isDense: true,
-                      underline: const SizedBox(),
-                      icon: const Icon(Icons.arrow_drop_down, color: Colors.white70, size: 16),
-                      items: ['Toutes', 'Regards', 'Conduites'].map((String value) {
-                        return DropdownMenuItem<String>(
-                          value: value,
-                          child: Text(value),
-                        );
-                      }).toList(),
-                      onChanged: (String? newValue) {
-                        if (newValue != null) {
-                          setState(() {
-                            editableLayer = newValue;
-                            activeObject = null; // Reset selection on change
-                          });
-                        }
+                    _LayerControlItem(
+                      label: 'Regards',
+                      count: layers?['compteurs']?['regards'] ?? 0,
+                      color: const Color(0xFF8E44AD),
+                      isVisible: layerRegardsVisible,
+                      isEditable: layerRegardsEditable,
+                      isActive: currentZoom >= 13,
+                      onVisibilityChanged: (val) {
+                        setState(() {
+                          layerRegardsVisible = val;
+                          if (!val && activeType == 'regard') activeObject = null;
+                        });
+                      },
+                      onEditableChanged: (val) {
+                        setState(() {
+                          layerRegardsEditable = val;
+                          if (!val && activeType == 'regard') activeObject = null;
+                        });
                       },
                     ),
+                    _LayerControlItem(
+                      label: 'Conduites',
+                      count: layers?['compteurs']?['conduites'] ?? 0,
+                      color: const Color(0xFF3498db),
+                      isVisible: layerConduitesVisible,
+                      isEditable: layerConduitesEditable,
+                      isActive: currentZoom >= 14,
+                      onVisibilityChanged: (val) {
+                        setState(() {
+                          layerConduitesVisible = val;
+                          if (!val && activeType == 'conduite') activeObject = null;
+                        });
+                      },
+                      onEditableChanged: (val) {
+                        setState(() {
+                          layerConduitesEditable = val;
+                          if (!val && activeType == 'conduite') activeObject = null;
+                        });
+                      },
+                    ),
+                    if (currentZoom < 13)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 8),
+                        child: Text(
+                          'Zoomez pour afficher les objets',
+                          style: TextStyle(color: Colors.white70, fontSize: 11),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -938,7 +985,7 @@ class _MapScreenState extends State<MapScreen> {
         ),
         child: GestureDetector(
           onTap: () {
-            if (editableLayer == 'Conduites') return;
+            if (!layerRegardsEditable) return;
             setState(() {
               activeType = 'regard';
               activeObject = f['properties'];

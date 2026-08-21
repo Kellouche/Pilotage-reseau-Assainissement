@@ -50,8 +50,11 @@ def create_regard(db: Session, regard_data: Dict[str, Any], user_id: str = None)
     if existing:
         raise ValueError(f"Un regard avec le code '{regard_data['code']}' existe déjà")
 
+    valid_keys = [c.key for c in Regard.__table__.columns]
+    filtered_data = {k: v for k, v in regard_data.items() if k in valid_keys}
+
     regard = Regard(
-        **regard_data,
+        **filtered_data,
         modified_by=user_id
     )
     db.add(regard)
@@ -174,8 +177,11 @@ def create_canalisation(
     if existing:
         raise ValueError(f"Une canalisation avec le fid '{canalisation_data['fid']}' existe déjà")
 
+    valid_keys = [c.key for c in Canalisation.__table__.columns]
+    filtered_data = {k: v for k, v in canalisation_data.items() if k in valid_keys}
+
     canalisation = Canalisation(
-        **canalisation_data,
+        **filtered_data,
         modified_by=user_id
     )
     db.add(canalisation)
