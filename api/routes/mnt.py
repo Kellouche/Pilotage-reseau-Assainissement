@@ -10,14 +10,10 @@ import os
 import logging
 from datetime import datetime
 
-from src.domain.contour_workflow import (
-    harmoniser_crs,
-    determiner_aire_etude,
-    generer_contours,
-    clipper_contours,
-    exporter_contours
+from src.domain.extracteur_contours import (
+    extract_contours_from_dem,
+    clipper_contours
 )
-from src.domain.extracteur_contours import extract_contours_from_dem
 
 logger = logging.getLogger(__name__)
 

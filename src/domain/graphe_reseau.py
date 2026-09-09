@@ -1,294 +1,209 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-Nom Auteur : Dr Abdelhakim Kellouche
-Nom de l'application : Pilotage Réseau d'Assainissement
-Numéro version : 1.0.0
-Date de création : 02-04-2026
-Date de modification : 02-04-2026
-Objectif : Construction du graphe topologique du réseau
-d'assainissement à partir des coordonnées des extrémités
-de canalisations. Les nœuds sont les points de connexion
-(arrondis), les arêtes sont les conduites orientées.
+Module de construction et de fiabilisation topologique du graphe orienté.
+Fichier : src/domain/graphe_reseau.py
 """
 
-import logging
-
-import geopandas as gpd
+from typing import Dict, Any, List
 import networkx as nx
-import pandas as pd
+import geopandas as gpd
+from shapely.geometry import Point, LineString
 
-from src.infrastructure.chargeur_geopackage import (
-    GPKG_PATH, WGS84, TARGET_CRS
-)
+class ConstructeurGrapheReseau:
+    def __init__(self, seuil_pente_min: float = 0.001):
+        self.seuil_pente_min = seuil_pente_min
+        self.anomalies_topologiques: List[Dict[str, Any]] = []
 
-logger = logging.getLogger(__name__)
+    def construire_graphe(
+        self,
+        gdf_noeuds: gpd.GeoDataFrame,
+        gdf_troncons: gpd.GeoDataFrame
+    ) -> nx.DiGraph:
+        G = nx.DiGraph()
+        self.anomalies_topologiques.clear()
 
-PRECISION = 6  # décimales pour arrondir les coordonnées
+        for _, row in gdf_noeuds.iterrows():
+            noeud_id = str(row.get('id', row.get('id_noeud', row.name)))
+            geom = row.geometry if hasattr(row, 'geometry') else None
+            x = geom.x if isinstance(geom, Point) else row.get('x', row.get('COORDX', 0.0))
+            y = geom.y if isinstance(geom, Point) else row.get('y', row.get('COORDY', 0.0))
+            
+            # Extraction cote tampon (COORDZ)
+            z_tampon = row.get('cote_tampon', row.get('z_sol', row.get('COORDZ', None)))
+            
+            # Extraction cote radier : directe ou par soustraction (COORDZ - PROFRADI)
+            z_radier = row.get('cote_radier', row.get('z_radier', None))
+            profradi = row.get('PROFRADI', row.get('profradi', None))
+            if z_radier is None and z_tampon is not None and profradi is not None:
+                try:
+                    z_radier = float(z_tampon) - float(profradi)
+                except ValueError:
+                    pass
+            
+            type_noeud = str(row.get('type', row.get('nature', row.get('TYPERES', 'regard')))).lower()
 
-LAYER_PATTERNS = {
-    "regards":   "Regards",
-    "rejets":    "Rejets",
-    "conduites": "Canalisations",
-    "ouvrages":  "Ouvrages_Speciaux",
-    "stations":  "Station_de_relevage",
-    "step":      "STEP",
-}
-
-
-def _trouver_nom_couche(cle):
-    """Trouve le nom réel de la couche dans le GeoPackage."""
-    import sqlite3
-    connexion = sqlite3.connect(GPKG_PATH)
-    try:
-        tables = connexion.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()
-    finally:
-        connexion.close()
-    patron = LAYER_PATTERNS.get(cle, "")
-    for table in tables:
-        if patron in table[0]:
-            return table[0]
-    return patron
-
-
-def _arrondir(x, y):
-    """Arrondit les coordonnées pour créer un identifiant de nœud."""
-    return (round(x, PRECISION), round(y, PRECISION))
-
-
-def construire_graphe():
-    """Construit le graphe orienté du réseau.
-
-    Les nœuds sont les coordonnées arrondies des extrémités
-    de conduites. Les arêtes sont les conduites orientées
-    amont → aval selon la pente.
-
-    Retourne:
-        G: NetworkX DiGraph
-    """
-    print("[graphe] Chargement des conduites …", flush=True)
-    nom_couche = _trouver_nom_couche("conduites")
-    conduits = gpd.read_file(GPKG_PATH, layer=nom_couche)
-
-    # Reprojeter en WGS84 pour les coordonnées GeoJSON
-    if conduits.crs and conduits.crs != WGS84:
-        conduits_wgs84 = conduits.to_crs(WGS84)
-    else:
-        conduits_wgs84 = conduits
-
-    G = nx.DiGraph()
-
-    nb_vides = 0
-    nb_multilines = 0
-    nb_fusions = 0
-
-    for idx, ligne in conduits_wgs84.iterrows():
-        geom = ligne.geometry
-        if geom is None:
-            nb_vides += 1
-            continue
-
-        segments = []
-        if geom.geom_type == "LineString":
-            segments = [geom]
-        elif geom.geom_type == "MultiLineString":
-            segments = list(geom.geoms)
-            nb_multilines += 1
-        else:
-            nb_vides += 1
-            continue
-
-        for seg in segments:
-            coords = list(seg.coords)
-            if len(coords) < 2:
-                continue
-
-            noeud_amont = _arrondir(coords[0][0], coords[0][1])
-            noeud_aval = _arrondir(coords[-1][0], coords[-1][1])
-
-            if G.has_edge(noeud_amont, noeud_aval):
-                nb_fusions += 1
-
-            try:
-                longueur = float(ligne.get("LINEAIRE", 0) or 0)
-            except (ValueError, TypeError):
-                longueur = 0.0
-
-            try:
-                diametre = float(ligne.get("DIAMETRE", 0) or 0)
-            except (ValueError, TypeError):
-                diametre = 0.0
-
-            geom_wkt = None
-            try:
-                geom_wkt = list(seg.coords)
-            except Exception:
-                geom_wkt = None
-
-            G.add_edge(
-                noeud_amont, noeud_aval,
-                conduit_id=f"C_{idx}",
-                longueur=longueur,
-                diametre=diametre,
-                materiau=str(ligne.get("MATERIAU", "")),
-                idx_origine=idx,
-                geometry_wkt=geom_wkt
+            G.add_node(
+                noeud_id,
+                geometry=geom,
+                x=float(x),
+                y=float(y),
+                z_tampon=float(z_tampon) if z_tampon is not None else None,
+                z_radier=float(z_radier) if z_radier is not None else None,
+                type=type_noeud
             )
 
-    n_noeuds = G.number_of_nodes()
-    n_aretes = G.number_of_edges()
+        for _, row in gdf_troncons.iterrows():
+            troncon_id = str(row.get('id', row.get('id_troncon', row.name)))
+            u_init = str(row.get('noeud_amont', row.get('amont', row.get('ID_AMONT', ''))))
+            v_init = str(row.get('noeud_aval', row.get('aval', row.get('ID_AVAL', ''))))
+            geom = row.geometry if hasattr(row, 'geometry') else None
+            diametre = row.get('diametre', row.get('diametre_mm', row.get('DIAMETRE', 300)))
+            longueur = row.get('longueur', row.get('length', row.get('Longeur', 0.0)))
+            type_conduite = str(row.get('type', row.get('nature', row.get('Fonction_1', 'gravitaire')))).lower()
 
-    print(f"[graphe] Graphe construit : {n_noeuds} nœuds, "
-          f"{n_aretes} arêtes", flush=True)
-    print(f"[graphe] MultiLineString : {nb_multilines}, "
-          f"vides : {nb_vides}, fusions (doublons topologiques) : {nb_fusions}", flush=True)
+            if not u_init or not v_init or u_init not in G or v_init not in G:
+                self.anomalies_topologiques.append({
+                    'troncon_id': troncon_id,
+                    'type': 'noeud_orphelin',
+                    'detail': f"Nœud amont '{u_init}' ou aval '{v_init}' introuvable."
+                })
+                continue
 
+            # Tentative de récupération des radiers des nœuds
+            z_u = G.nodes[u_init].get('z_radier')
+            z_v = G.nodes[v_init].get('z_radier')
+            
+            u_reel, v_reel = u_init, v_init
+            est_inverse = False
+            contre_pente = False
+
+            # Si c'est du refoulement, on force le sens de numérisation (l'eau peut monter)
+            if 'refoulement' in type_conduite or 'pompage' in type_conduite:
+                pass
+            elif z_u is not None and z_v is not None:
+                delta_z = z_u - z_v
+                # L'eau coule du point le plus haut vers le point le plus bas (delta_z > 0).
+                # Si delta_z < 0 (nœud amont plus bas que nœud aval), l'écoulement gravitaire va dans l'autre sens.
+                # On tolère une petite incertitude de 1 cm (0.01 m).
+                if delta_z < -0.01:
+                    u_reel, v_reel = v_init, u_init
+                    est_inverse = True
+                    if geom and isinstance(geom, LineString):
+                        geom = LineString(list(geom.coords)[::-1])
+                elif abs(delta_z) <= 0.01 and longueur > 0:
+                    contre_pente = True
+
+            if longueur <= 0 and geom and isinstance(geom, LineString):
+                longueur = geom.length
+
+            pente = 0.001
+            z_amont_final = G.nodes[u_reel].get('z_radier')
+            z_aval_final = G.nodes[v_reel].get('z_radier')
+            if z_amont_final is not None and z_aval_final is not None and longueur > 0:
+                pente = max((z_amont_final - z_aval_final) / longueur, 0.0001)
+
+            G.add_edge(
+                u_reel,
+                v_reel,
+                key=troncon_id,
+                id=troncon_id,
+                geometry=geom,
+                diametre_mm=float(diametre) if diametre else 300.0,
+                length=float(longueur),
+                pente=pente,
+                type=type_conduite,
+                inverse_automatiquement=est_inverse,
+                est_contre_pente=contre_pente
+            )
+
+        try:
+            cycles = list(nx.simple_cycles(G))
+            if cycles:
+                for c in cycles:
+                    self.anomalies_topologiques.append({
+                        'type': 'boucle_fermee',
+                        'detail': f"Cycle hydraulique fermé sur : {c}"
+                    })
+        except Exception:
+            pass
+
+        G.graph['anomalies_topologiques'] = self.anomalies_topologiques
+        return G
+
+def construire_graphe(chemin_gpkg: str = None) -> nx.DiGraph:
+    """
+    Point d'entrée global. Charge les données depuis le GeoPackage
+    et construit le graphe en utilisant les processeurs de noeuds et conduites.
+    """
+    import geopandas as gpd
+    from src.domain.processeur_noeuds import ProcesseurNoeuds
+    from src.domain.processeur_conduites import ProcesseurConduites
+    
+    chemin_gpkg = chemin_gpkg or r"D:\IA Water Data Analysis\Assainissement\Assainissement_Ville.gpkg"
+    
+    # 1. Charger les couches
+    try:
+        regards_gdf = gpd.read_file(chemin_gpkg, layer="Regards_e3c22000_8bba_45a0_a575_d60bbd4b99d3")
+    except Exception:
+        regards_gdf = gpd.GeoDataFrame()
+        
+    try:
+        rejets_gdf = gpd.read_file(chemin_gpkg, layer="Rejets_3cc8eef2_2241_47a0_ad80_fd59749ab068")
+    except Exception:
+        rejets_gdf = gpd.GeoDataFrame()
+        
+    try:
+        ouvrages_gdf = gpd.read_file(chemin_gpkg, layer="Ouvrages_Speciaux_4162132f_cd17_43bc_835d_2f7b46f2419f")
+    except Exception:
+        ouvrages_gdf = gpd.GeoDataFrame()
+        
+    try:
+        stations_gdf = gpd.read_file(chemin_gpkg, layer="Station_de_relevage_5c8a759c_c2c5_46cb_a2be_8993c368e0c2")
+    except Exception:
+        stations_gdf = gpd.GeoDataFrame()
+        
+    try:
+        step_gdf = gpd.read_file(chemin_gpkg, layer="STEP_d9ded7b2_1693_4298_baf4_6691f781d403")
+    except Exception:
+        step_gdf = gpd.GeoDataFrame()
+        
+    try:
+        canalisations_gdf = gpd.read_file(chemin_gpkg, layer="Canalisations_860f298d_9fd9_40a5_bfa4_f913acc71f2e")
+    except Exception:
+        canalisations_gdf = gpd.GeoDataFrame()
+
+    # 2. Traiter les nœuds
+    proc_noeuds = ProcesseurNoeuds()
+    noeuds_gdf, _ = proc_noeuds.traiter(regards_gdf, rejets_gdf, ouvrages_gdf, stations_gdf, step_gdf)
+    
+    # Si on a pas de noeuds mais on a des regards bruts, on fallback
+    if noeuds_gdf.empty and not regards_gdf.empty:
+        noeuds_gdf = regards_gdf
+    
+    # 3. Construire le graphe
+    constructeur = ConstructeurGrapheReseau()
+    G = constructeur.construire_graphe(noeuds_gdf, canalisations_gdf)
     return G
 
 
-def trouver_exutoires(G):
-    """Associe chaque rejet au nœud aval le plus proche.
-
-    Le rejet est le point de chute du réseau. On cherche
-    le nœud du graphe (extrémité aval de conduite) le plus
-    proche spatiallement.
-    Les nœuds du graphe sont en WGS84 (lon, lat).
-    On les reprojette en UTM pour calculer les distances
-    en mètres.
-    """
-    nom_rejets = _trouver_nom_couche("rejets")
-    rejets = gpd.read_file(GPKG_PATH, layer=nom_rejets)
-    if rejets.crs and rejets.crs != TARGET_CRS:
-        rejets_utm = rejets.to_crs(TARGET_CRS)
-    else:
-        rejets_utm = rejets
-
-    noeuds = list(G.nodes())
-    if not noeuds:
-        print("[graphe] Aucun nœud dans le graphe", flush=True)
+def calculer_ordre_topologique(G: nx.DiGraph, edges: set) -> list:
+    """Calcul l'ordre topologique des conduites d'un sous-bassin."""
+    try:
+        # Créer un sous-graphe avec seulement les arêtes du bassin
+        subG = nx.DiGraph()
+        for edge in edges:
+            subG.add_edge(edge[0], edge[1])
+        
+        # Trouver l'ordre topologique des nœuds
+        nodes_order = list(nx.topological_sort(subG))
+        
+        # Récupérer les identifiants de tronçons dans le bon ordre
+        edge_order = []
+        for u in nodes_order:
+            for v in subG.successors(u):
+                edge_id = G.edges[u, v].get('id', G.edges[u, v].get('key', f"{u}-{v}"))
+                edge_order.append(edge_id)
+        return edge_order
+    except nx.NetworkXUnfeasible:
+        # En cas de cycle (ne devrait pas arriver si le graphe a été nettoyé)
         return []
 
-    # Créer un GeoDataFrame des nœuds en WGS84,
-    # puis reprojeter en UTM pour les distances
-    noeuds_wgs84 = gpd.GeoDataFrame(
-        {"noeud": noeuds},
-        geometry=gpd.points_from_xy(
-            [n[0] for n in noeuds],
-            [n[1] for n in noeuds]
-        ),
-        crs=WGS84
-    ).to_crs(TARGET_CRS)
-
-    seuil = 200  # mètres (UTM)
-    exutoires = []
-
-    for idx, rejet in rejets_utm.iterrows():
-        if rejet.geometry is None:
-            continue
-
-        dists = noeuds_wgs84.geometry.distance(rejet.geometry)
-        pos_min = dists.idxmin()
-        dist_min = dists.loc[pos_min]
-
-        if dist_min < seuil:
-            noeud = noeuds_wgs84.loc[pos_min, "noeud"]
-            nom = str(rejet.get("NOM", f"Rejet_{idx}"))
-            exutoires.append({
-                "noeud": noeud,
-                "nom": nom,
-                "dist": float(dist_min)
-            })
-
-    print(f"[graphe] Exutoires trouvés : {len(exutoires)}",
-          flush=True)
-
-    return exutoires
-
-
-def calculer_ordre_topologique(G, edges):
-    """Calcule l'ordre topologique des conduites dans un bassin.
-
-    Utilise un tri topologique sur le sous-graphe formé par les edges
-    du bassin. Retourne une liste ordonnée de (conduite_id, rang).
-
-    Args:
-        G: graphe NetworkX du réseau complet
-        edges: liste des edge IDs (conduite_id) du bassin
-
-    Returns:
-        list: [(conduite_id, rang), ...] trié par rang croissant
-    """
-    # Construire le sous-graphe du bassin
-    sous_graphe = G.edge_subgraph([
-        (u, v) for u, v, d in G.edges(data=True)
-        if d.get("conduit_id") in edges
-    ]).copy()
-
-    # Vérifier que le sous-graphe est un DAG
-    if not nx.is_directed_acyclic_graph(sous_graphe):
-        # Le graphe contient des cycles, on utilise un tri partiel
-        try:
-            ordre = list(nx.topological_sort(sous_graphe))
-        except nx.NetworkXError:
-            # Fallback : tri par profondeur depuis les exutoires
-            ordre = _tri_par_profondeur(sous_graphe)
-    else:
-        ordre = list(nx.topological_sort(sous_graphe))
-
-    # Construire le mapping edge_id -> rang
-    edge_id_to_node = {}
-    for u, v, d in sous_graphe.edges(data=True):
-        edge_id = d.get("conduit_id")
-        if edge_id is not None:
-            edge_id_to_node[edge_id] = (u, v)
-
-    resultat = []
-    for idx, node in enumerate(ordre):
-        # Trouver l'edge sortant de ce nœud
-        for u, v, d in sous_graphe.out_edges(node, data=True):
-            cid = d.get("conduit_id")
-            if cid and cid not in [r[0] for r in resultat]:
-                resultat.append((cid, idx))
-
-    # Trier par rang
-    resultat.sort(key=lambda x: x[1])
-
-    return resultat
-
-
-def _tri_par_profondeur(G):
-    """Tri de fallback par profondeur depuis les exutoires (nœuds sans sortie)."""
-    # Trouver les exutoires (nœuds avec out_degree == 0)
-    exutoires = [n for n in G.nodes() if G.out_degree(n) == 0]
-
-    if not exutoires:
-        # Pas d'exutoire, tri arbitraire
-        return list(G.nodes())
-
-    # BFS inverse depuis chaque exutoire
-    visites = set()
-    ordre = []
-
-    from collections import deque
-    file = deque(exutoires)
-
-    while file:
-        noeud = file.popleft()
-        if noeud in visites:
-            continue
-        visites.add(noeud)
-        ordre.append(noeud)
-
-        # Ajouter les prédécesseurs
-        for pred in G.predecessors(noeud):
-            if pred not in visites:
-                file.append(pred)
-
-    # Ajouter les nœuds non visités (cycles)
-    for noeud in G.nodes():
-        if noeud not in visites:
-            ordre.append(noeud)
-
-    return ordre

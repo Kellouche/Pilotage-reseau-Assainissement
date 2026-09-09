@@ -60,7 +60,11 @@ class ProcesseurConduites:
                     if geom.geom_type != 'LineString':
                         continue
 
-                    id_conduite = f"C_{compteur_id}"
+                    # Utiliser l'ID d'origine pour cohérence avec le graphe
+                    id_conduite = str(ligne.get('id', ligne.get('id_troncon', ligne.name)))
+                    if ligne.geometry.geom_type == 'MultiLineString':
+                         # Ajouter un suffixe si c'est une composante d'une multiline
+                         id_conduite = f"{id_conduite}_{compteur_id}"
                     compteur_id += 1
 
                     point_depart = geom.coords[0]

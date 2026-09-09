@@ -159,6 +159,18 @@ def get_map():
 
 _LAYERS_CACHE = None
 _GDF_CACHE = None
+import math
+
+def clean_nan(obj):
+    if isinstance(obj, float) and math.isnan(obj):
+        return None
+    elif isinstance(obj, dict):
+        return {k: clean_nan(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [clean_nan(v) for v in obj]
+    elif isinstance(obj, tuple):
+        return tuple(clean_nan(v) for v in obj)
+    return obj
 
 def _has_bounds(ne_lat, ne_lng, sw_lat, sw_lng):
     return None not in (ne_lat, ne_lng, sw_lat, sw_lng)
@@ -183,7 +195,8 @@ def get_layers(
         for key, gdf in _GDF_CACHE.items():
             if not gdf.empty:
                 filtered_gdf = gdf.cx[sw_lng:ne_lng, sw_lat:ne_lat]
-                geojson = filtered_gdf.__geo_interface__
+                import json
+                geojson = json.loads(filtered_gdf.to_json(na="drop"))
                 result["couches"][key] = geojson
                 result["compteurs"][key] = len(geojson.get('features', []))
             else:
@@ -239,7 +252,8 @@ def get_layers(
             else:
                 gdf_to_export = gdf
 
-            geojson = gdf_to_export.__geo_interface__
+            import json
+            geojson = json.loads(gdf_to_export.to_json(na="drop"))
             result["couches"][key] = geojson
             result["compteurs"][key] = len(geojson.get('features', []))
         except Exception as e:
@@ -304,6 +318,19 @@ async def page_carte():
         return HTMLResponse("""
         <h1>Erreur</h1>
         <p>La page de carte opérationnelle n'est pas disponible.</p>
+        <a href="/docs">Retour à la documentation API</a>
+        """, status_code=404)
+
+@app.get("/tunnel", response_class=HTMLResponse)
+async def page_tunnel():
+    """Page du tunnel de workflow en 4 étapes."""
+    try:
+        with open("templates/tunnel.html", "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        return HTMLResponse("""
+        <h1>Erreur</h1>
+        <p>Le template tunnel.html est introuvable.</p>
         <a href="/docs">Retour à la documentation API</a>
         """, status_code=404)
 

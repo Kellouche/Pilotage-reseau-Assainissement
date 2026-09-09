@@ -42,7 +42,7 @@ class _LayerControlItem extends StatelessWidget {
             width: 16,
             height: 16,
             decoration: BoxDecoration(
-              color: isVisible ? color : color.withOpacity(0.2),
+              color: isVisible ? color : color.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(4),
               border: Border.all(color: itemColor, width: 1),
             ),
@@ -111,7 +111,7 @@ class _MapScreenState extends State<MapScreen> {
   List<Map<String, dynamic>> localIncidents = [];
   List<Marker> regardMarkers = [];
   List<Polyline> conduitePolylines = [];
-  List<Map<String, dynamic>> _cachedConduites = [];
+  final List<Map<String, dynamic>> _cachedConduites = [];
   bool layerRegardsVisible = true;
   bool layerRegardsEditable = true;
   bool layerConduitesVisible = true;
@@ -487,7 +487,7 @@ class _MapScreenState extends State<MapScreen> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: const Color(0xFF1a1a2e).withOpacity(0.95),
+          color: const Color(0xFF1a1a2e).withValues(alpha: 0.95),
           borderRadius: BorderRadius.circular(12),
           boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 10, offset: Offset(0, 4))],
           border: Border.all(color: Colors.white24)
@@ -571,7 +571,7 @@ class _MapScreenState extends State<MapScreen> {
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  value: typeIncident,
+                  initialValue: typeIncident,
                   dropdownColor: const Color(0xFF16213e),
                   style: const TextStyle(color: Colors.white),
                   decoration: const InputDecoration(labelText: 'Type d\'incident', labelStyle: TextStyle(color: Colors.white70)),
@@ -579,7 +579,7 @@ class _MapScreenState extends State<MapScreen> {
                   onChanged: (v) => setModalState(() => typeIncident = v!),
                 ),
                 DropdownButtonFormField<String>(
-                  value: gravite,
+                  initialValue: gravite,
                   dropdownColor: const Color(0xFF16213e),
                   style: const TextStyle(color: Colors.white),
                   decoration: const InputDecoration(labelText: 'Gravité', labelStyle: TextStyle(color: Colors.white70)),

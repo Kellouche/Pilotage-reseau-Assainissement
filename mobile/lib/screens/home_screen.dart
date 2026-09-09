@@ -10,7 +10,8 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
+class _HomeScreenState extends State<HomeScreen>
+    with SingleTickerProviderStateMixin {
   String networkMode = 'online';
   String serverStatus = 'checking';
   Map<String, dynamic>? serverInfo;
@@ -24,7 +25,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     )..repeat(reverse: true);
-    
+
     loadSettings();
   }
 
@@ -38,7 +39,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     try {
       final mode = await storageService.getNetworkMode();
       setState(() => networkMode = mode);
-      
+
       final changes = await storageService.getPendingChanges();
       setState(() => pendingCount = changes.length);
 
@@ -56,12 +57,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     final newMode = value ? 'online' : 'offline';
     setState(() => networkMode = newMode);
     await storageService.setNetworkMode(newMode);
-    
+
     if (newMode == 'online') {
       checkServerStatus();
       if (pendingCount > 0) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Synchronisation en arrière-plan démarrée ($pendingCount éléments)...')),
+          SnackBar(
+              content: Text(
+                  'Synchronisation en arrière-plan démarrée ($pendingCount éléments)...')),
         );
         _runBackgroundSync();
       }
@@ -77,25 +80,29 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     try {
       final pendingChanges = await storageService.getPendingChanges();
       if (pendingChanges.isEmpty) return;
-      
-      final formattedChanges = pendingChanges.map((change) => ({
-        'type': change['type'] == 'incident' ? 'create' : 'update',
-        'layer': change['type'] == 'incident'
-            ? 'incidents'
-            : change['type'] == 'inspection'
-                ? 'inspections'
-                : '${change['type']}s',
-        'feature_id': change['object_id'] ?? '0',
-        'changes': change,
-      })).toList();
 
-      final result = await syncService.pushChanges('mobile-device-001', formattedChanges);
+      final formattedChanges = pendingChanges
+          .map((change) => ({
+                'type': change['type'] == 'incident' ? 'create' : 'update',
+                'layer': change['type'] == 'incident'
+                    ? 'incidents'
+                    : change['type'] == 'inspection'
+                        ? 'inspections'
+                        : '${change['type']}s',
+                'feature_id': change['object_id'] ?? '0',
+                'changes': change,
+              }))
+          .toList();
+
+      final result =
+          await syncService.pushChanges('mobile-device-001', formattedChanges);
       await storageService.clearPendingChanges();
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Synchronisation réussie ! (${result['accepted']} envoyés)'),
+            content: Text(
+                'Synchronisation réussie ! (${result['accepted']} envoyés)'),
             backgroundColor: const Color(0xFF10B981),
           ),
         );
@@ -137,10 +144,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Color getStatusColor() {
     if (networkMode == 'offline') return const Color(0xFFF59E0B); // Amber
     switch (serverStatus) {
-      case 'online': return const Color(0xFF10B981); // Emerald
-      case 'offline': return const Color(0xFFEF4444); // Red
-      case 'checking': return const Color(0xFF3B82F6); // Blue
-      default: return const Color(0xFF9CA3AF); // Gray
+      case 'online':
+        return const Color(0xFF10B981); // Emerald
+      case 'offline':
+        return const Color(0xFFEF4444); // Red
+      case 'checking':
+        return const Color(0xFF3B82F6); // Blue
+      default:
+        return const Color(0xFF9CA3AF); // Gray
     }
   }
 
@@ -148,12 +159,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
+        color: Colors.white.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withOpacity(0.2), width: 1.5),
+        border:
+            Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 20,
             offset: const Offset(0, 10),
           )
@@ -200,9 +212,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.2),
+                          color: Colors.blue.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: const Text(
@@ -250,10 +263,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                               Container(
                                 padding: const EdgeInsets.all(10),
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.1),
+                                  color: Colors.white.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                child: const Icon(Icons.wifi_rounded, color: Colors.white, size: 24),
+                                child: const Icon(Icons.wifi_rounded,
+                                    color: Colors.white, size: 24),
                               ),
                               const SizedBox(width: 16),
                               const Text(
@@ -269,10 +283,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                           Switch(
                             value: networkMode == 'online',
                             onChanged: toggleNetworkMode,
-                            activeColor: Colors.white,
+                            activeThumbColor: Colors.white,
                             activeTrackColor: const Color(0xFF10B981),
                             inactiveThumbColor: Colors.white,
-                            inactiveTrackColor: Colors.white.withOpacity(0.3),
+                            inactiveTrackColor:
+                                Colors.white.withValues(alpha: 0.3),
                           ),
                         ],
                       ),
@@ -283,7 +298,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                             : 'Mode hors ligne : Toutes vos observations et incidents sont stockés localement sur cet appareil.',
                         style: TextStyle(
                           fontSize: 14,
-                          color: Colors.white.withOpacity(0.7),
+                          color: Colors.white.withValues(alpha: 0.7),
                           height: 1.4,
                         ),
                       ),
@@ -309,7 +324,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                   shape: BoxShape.circle,
                                   boxShadow: [
                                     BoxShadow(
-                                      color: getStatusColor().withOpacity(_pulseController.value * 0.6),
+                                      color: getStatusColor().withValues(
+                                          alpha: _pulseController.value * 0.6),
                                       blurRadius: 10,
                                       spreadRadius: 2,
                                     )
@@ -330,7 +346,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                           const Spacer(),
                           if (networkMode == 'online')
                             IconButton(
-                              icon: const Icon(Icons.refresh, color: Colors.white70),
+                              icon: const Icon(Icons.refresh,
+                                  color: Colors.white70),
                               onPressed: checkServerStatus,
                               tooltip: 'Actualiser',
                             )
@@ -356,15 +373,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.2),
+                            color: Colors.black.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _buildInfoRow('Base de données', serverInfo!['database'] ?? 'N/A'),
+                              _buildInfoRow('Base de données',
+                                  serverInfo!['database'] ?? 'N/A'),
                               const SizedBox(height: 8),
-                              _buildInfoRow('Cache Graphe', serverInfo!['graph_cache'] ?? 'N/A'),
+                              _buildInfoRow('Cache Graphe',
+                                  serverInfo!['graph_cache'] ?? 'N/A'),
                             ],
                           ),
                         ),
@@ -393,9 +412,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       Expanded(
                         child: _buildActionCard(
                           title: 'Sync',
-                          subtitle: pendingCount > 0 ? '$pendingCount en attente' : 'À jour',
+                          subtitle: pendingCount > 0
+                              ? '$pendingCount en attente'
+                              : 'À jour',
                           icon: Icons.sync_rounded,
-                          color: pendingCount > 0 ? const Color(0xFFF59E0B) : const Color(0xFF10B981),
+                          color: pendingCount > 0
+                              ? const Color(0xFFF59E0B)
+                              : const Color(0xFF10B981),
                           onTap: () => Navigator.pushNamed(context, '/sync'),
                           showBadge: pendingCount > 0,
                         ),
@@ -410,7 +433,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     'Version 1.1.0 • Design Premium',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.white.withOpacity(0.3),
+                      color: Colors.white.withValues(alpha: 0.3),
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -430,11 +453,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       children: [
         Text(
           label,
-          style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 13),
+          style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.6), fontSize: 13),
         ),
         Text(
           value,
-          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+          style: const TextStyle(
+              color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
         ),
       ],
     );
@@ -453,9 +478,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
+          color: Colors.white.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white.withOpacity(0.2), width: 1.5),
+          border: Border.all(
+              color: Colors.white.withValues(alpha: 0.2), width: 1.5),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -466,7 +492,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.2),
+                    color: color.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Icon(icon, color: color, size: 28),
@@ -495,7 +521,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             Text(
               subtitle,
               style: TextStyle(
-                color: Colors.white.withOpacity(0.6),
+                color: Colors.white.withValues(alpha: 0.6),
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
               ),

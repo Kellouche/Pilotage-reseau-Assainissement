@@ -69,6 +69,42 @@ async def analyser_qualite_reseau(force_refresh: bool = False):
         )
 
 
+@router.get("/diagnostic", response_model=Dict[str, Any])
+async def diagnostic_tunnel():
+    """
+    Endpoint allégé pour le tunnel de préparation.
+    Renvoie le résumé des anomalies topologiques.
+    """
+    try:
+        # Forcer la reconstruction pour avoir les anomalies fraîches
+        from api.routes.clusters import _get_graph, _reset_graph_cache
+        _reset_graph_cache()
+        G = _get_graph()
+        if not G:
+            return {"anomalies_count": 0, "orphelins_count": 0, "anomalies": []}
+            
+        anomalies_topologiques = G.graph.get('anomalies_topologiques', [])
+        
+        # Formater pour le frontend
+        formatted_anomalies = []
+        for a in anomalies_topologiques:
+            formatted_anomalies.append({
+                "type": a.get("type", "anomalie"),
+                "troncon_id": a.get("troncon_id", "Inconnu"),
+                "detail": a.get("detail", "")
+            })
+            
+        return {
+            "anomalies_count": len(formatted_anomalies),
+            "orphelins_count": sum(1 for a in formatted_anomalies if a['type'] == 'noeud_orphelin'),
+            "anomalies": formatted_anomalies
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/anomalies/{type_anomalie}", response_model=Dict[str, Any])
 async def get_anomalies_par_type(type_anomalie: str):
     """

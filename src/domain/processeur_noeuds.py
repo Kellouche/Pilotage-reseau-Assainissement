@@ -87,8 +87,11 @@ class ProcesseurNoeuds:
                             and pd.notna(ligne.get(champ_elevation))):
                         elevation = float(ligne[champ_elevation])
 
+                    # Standardiser l'ID avec graphe_reseau
+                    noeud_id = str(ligne.get('id', ligne.get('id_noeud', idx)))
+
                     self.tous_noeuds.append({
-                        'swmm_id': f"{prefixe}_{idx}",
+                        'swmm_id': noeud_id,
                         'x': ligne.geometry.x,
                         'y': ligne.geometry.y,
                         'node_type': type_noeud,

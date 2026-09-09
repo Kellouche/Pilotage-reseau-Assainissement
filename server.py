@@ -59,6 +59,16 @@ def charger_donnees():
 def index():
     return render_template('index.html')
 
+@app.route('/carte')
+def get_carte():
+    """Sert l'interface cartographique de visualisation"""
+    return render_template('carte.html')
+
+@app.route('/tunnel')
+def get_tunnel():
+    """Sert l'interface du tunnel en 4 étapes"""
+    return render_template('tunnel.html')
+
 @app.route('/api/v1/layers')
 def api_layers():
     global _DATA_CACHE
