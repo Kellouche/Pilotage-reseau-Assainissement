@@ -1,11 +1,26 @@
+# Python & Caches
 __pycache__/
 *.pyc
 *.pyo
 .pytest_cache/
 pytest-cache-files-*/
+test-results/
+.coverage
+htmlcov/
 
+# Virtual Environment
+.venv/
+env/
+venv/
+
+# Logs & Temporary files
 *.log
+temp_test.txt
+
+# SWMM files
 *.inp
+*.out
+*.rpt
 network_map.html
 
 *.gpkg
