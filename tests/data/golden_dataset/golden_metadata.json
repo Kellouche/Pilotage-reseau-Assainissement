@@ -1,0 +1,30 @@
+{
+  "dataset_name": "Golden Dataset Référence — SWMM Platform",
+  "version": "1.0",
+  "created_at": "2026-10-28",
+  "crs": "EPSG:32631",
+  "projection": "UTM Zone 31N",
+  "bbox": {
+    "minx": 348925.02,
+    "miny": 3999641.05,
+    "maxx": 350125.02,
+    "maxy": 4000841.05
+  },
+  "inventory": {
+    "nb_canalisations": 379,
+    "nb_regards": 372,
+    "nb_rejets": 2,
+    "longueur_totale_m": 11922.45
+  },
+  "dem": {
+    "width_px": 41,
+    "height_px": 41,
+    "resolution_m": 30.0,
+    "elevation_min_m": 0.0,
+    "elevation_max_m": 234.0
+  },
+  "checksums_sha256": {
+    "golden_network_gpkg": "086db80924d067f5967c513c8696f52a9c90f2e4d9bf72d66571c4f54b525fa3",
+    "golden_dem_tif": "1115c5b769946b43522a03d9be8bb4e8aac0cebfd6887ec6e7eac60112a13aab"
+  }
+}

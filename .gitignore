@@ -24,11 +24,13 @@ temp_test.txt
 network_map.html
 
 *.gpkg
+!tests/data/golden_dataset/*.gpkg
 *.sqlite
 *.sqlite3
 *.db
 *.tif
 *.tiff
+!tests/data/golden_dataset/*.tif
 *.shp
 *.shx
 *.dbf
