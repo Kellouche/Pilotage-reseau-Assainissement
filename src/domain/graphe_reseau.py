@@ -4,14 +4,61 @@ Fichier : src/domain/graphe_reseau.py
 """
 
 from typing import Dict, Any, List
+import math
 import networkx as nx
 import geopandas as gpd
-from shapely.geometry import Point, LineString
+from shapely.geometry import Point, LineString, MultiLineString
+
+
+def _identifiant_reseau(value):
+    """Normalise un identifiant SIG et rejette les valeurs nulles pandas."""
+    if value is None:
+        return None
+    texte = str(value).strip()
+    if not texte or texte.lower() in {'nan', 'none', 'null'}:
+        return None
+    return texte
 
 class ConstructeurGrapheReseau:
-    def __init__(self, seuil_pente_min: float = 0.001):
+    def __init__(self, seuil_pente_min: float = 0.001, tolerance_raccordement: float = 2.0):
         self.seuil_pente_min = seuil_pente_min
+        self.tolerance_raccordement = tolerance_raccordement
         self.anomalies_topologiques: List[Dict[str, Any]] = []
+        self._index_noeuds = {}
+
+    def _construire_index_noeuds(self, G: nx.DiGraph):
+        taille = max(self.tolerance_raccordement, 1e-9)
+        self._index_noeuds = {}
+        for noeud, data in G.nodes(data=True):
+            x, y = data.get('x'), data.get('y')
+            if x is None or y is None:
+                continue
+            cellule = (math.floor(float(x) / taille), math.floor(float(y) / taille))
+            self._index_noeuds.setdefault(cellule, []).append((float(x), float(y), noeud))
+
+    def _noeud_proche(self, point: Point, G: nx.DiGraph):
+        candidats = []
+        taille = max(self.tolerance_raccordement, 1e-9)
+        cellule_x = math.floor(point.x / taille)
+        cellule_y = math.floor(point.y / taille)
+        for delta_x in (-1, 0, 1):
+            for delta_y in (-1, 0, 1):
+                for x, y, noeud in self._index_noeuds.get(
+                    (cellule_x + delta_x, cellule_y + delta_y), []
+                ):
+                    candidats.append((point.distance(Point(x, y)), noeud))
+        if not candidats:
+            return None
+        distance, noeud = min(candidats)
+        return noeud if distance <= self.tolerance_raccordement else None
+
+    @staticmethod
+    def _extremites(geom):
+        if isinstance(geom, LineString) and len(geom.coords) >= 2:
+            return Point(geom.coords[0]), Point(geom.coords[-1])
+        if isinstance(geom, MultiLineString) and geom.geoms:
+            return Point(geom.geoms[0].coords[0]), Point(geom.geoms[-1].coords[-1])
+        return None, None
 
     def construire_graphe(
         self,
@@ -22,13 +69,17 @@ class ConstructeurGrapheReseau:
         self.anomalies_topologiques.clear()
 
         for _, row in gdf_noeuds.iterrows():
-            noeud_id = str(row.get('id', row.get('id_noeud', row.name)))
+            noeud_id = str(row.get(
+                'id', row.get('id_noeud', row.get('swmm_id', row.get('code', row.get('Code', row.get('NOM', row.name)))))
+            ))
             geom = row.geometry if hasattr(row, 'geometry') else None
             x = geom.x if isinstance(geom, Point) else row.get('x', row.get('COORDX', 0.0))
             y = geom.y if isinstance(geom, Point) else row.get('y', row.get('COORDY', 0.0))
             
             # Extraction cote tampon (COORDZ)
-            z_tampon = row.get('cote_tampon', row.get('z_sol', row.get('COORDZ', None)))
+            z_tampon = row.get(
+                'cote_tampon', row.get('z_sol', row.get('COORDZ', row.get('elevation', None)))
+            )
             
             # Extraction cote radier : directe ou par soustraction (COORDZ - PROFRADI)
             z_radier = row.get('cote_radier', row.get('z_radier', None))
@@ -39,7 +90,11 @@ class ConstructeurGrapheReseau:
                 except ValueError:
                     pass
             
-            type_noeud = str(row.get('type', row.get('nature', row.get('TYPERES', 'regard')))).lower()
+            type_noeud = str(row.get(
+                'original_gdf', row.get(
+                    'type', row.get('node_type', row.get('nature', row.get('TYPERES', 'regard')))
+                )
+            )).lower()
 
             G.add_node(
                 noeud_id,
@@ -48,17 +103,43 @@ class ConstructeurGrapheReseau:
                 y=float(y),
                 z_tampon=float(z_tampon) if z_tampon is not None else None,
                 z_radier=float(z_radier) if z_radier is not None else None,
-                type=type_noeud
+                type=type_noeud,
+                nom=row.get('nom', row.get('NOM', row.get('name'))),
+                nom_voie=row.get('nom_voie', row.get('NOMVOIE', row.get('NOM-VOIE'))),
+                commune=row.get('commune', row.get('COMMUNE')),
+                adresse=row.get('adresse', row.get('ADRESSE')),
             )
+
+        self._construire_index_noeuds(G)
 
         for _, row in gdf_troncons.iterrows():
             troncon_id = str(row.get('id', row.get('id_troncon', row.name)))
-            u_init = str(row.get('noeud_amont', row.get('amont', row.get('ID_AMONT', ''))))
-            v_init = str(row.get('noeud_aval', row.get('aval', row.get('ID_AVAL', ''))))
+            u_init = _identifiant_reseau(row.get('noeud_amont', row.get('amont', row.get('ID_AMONT'))))
+            v_init = _identifiant_reseau(row.get('noeud_aval', row.get('aval', row.get('ID_AVAL'))))
             geom = row.geometry if hasattr(row, 'geometry') else None
             diametre = row.get('diametre', row.get('diametre_mm', row.get('DIAMETRE', 300)))
             longueur = row.get('longueur', row.get('length', row.get('Longeur', 0.0)))
             type_conduite = str(row.get('type', row.get('nature', row.get('Fonction_1', 'gravitaire')))).lower()
+
+            point_depart, point_arrivee = self._extremites(geom)
+            if u_init not in G and point_depart is not None:
+                u_snapped = self._noeud_proche(point_depart, G)
+                if u_snapped is not None:
+                    u_init = u_snapped
+                    self.anomalies_topologiques.append({
+                        'troncon_id': troncon_id,
+                        'type': 'raccordement_geometrique',
+                        'detail': f"Extrémité amont raccordée au nœud '{u_snapped}'."
+                    })
+            if v_init not in G and point_arrivee is not None:
+                v_snapped = self._noeud_proche(point_arrivee, G)
+                if v_snapped is not None:
+                    v_init = v_snapped
+                    self.anomalies_topologiques.append({
+                        'troncon_id': troncon_id,
+                        'type': 'raccordement_geometrique',
+                        'detail': f"Extrémité aval raccordée au nœud '{v_snapped}'."
+                    })
 
             if not u_init or not v_init or u_init not in G or v_init not in G:
                 self.anomalies_topologiques.append({
@@ -91,6 +172,17 @@ class ConstructeurGrapheReseau:
                         geom = LineString(list(geom.coords)[::-1])
                 elif abs(delta_z) <= 0.01 and longueur > 0:
                     contre_pente = True
+                    self.anomalies_topologiques.append({
+                        'troncon_id': troncon_id,
+                        'type': 'contre_pente',
+                        'detail': f"Radiers quasi égaux entre '{u_init}' et '{v_init}'."
+                    })
+            elif 'refoulement' not in type_conduite and 'pompage' not in type_conduite:
+                self.anomalies_topologiques.append({
+                    'troncon_id': troncon_id,
+                    'type': 'cote_radier_manquante',
+                    'detail': f"Cote radier manquante pour '{u_init}' ou '{v_init}'."
+                })
 
             if longueur <= 0 and geom and isinstance(geom, LineString):
                 longueur = geom.length
@@ -111,6 +203,7 @@ class ConstructeurGrapheReseau:
                 length=float(longueur),
                 pente=pente,
                 type=type_conduite,
+                nom_voie=row.get('nom_voie', row.get('NOM-VOIE', row.get('NOMVOIE'))),
                 inverse_automatiquement=est_inverse,
                 est_contre_pente=contre_pente
             )
@@ -182,7 +275,23 @@ def construire_graphe(chemin_gpkg: str = None) -> nx.DiGraph:
     # 3. Construire le graphe
     constructeur = ConstructeurGrapheReseau()
     G = constructeur.construire_graphe(noeuds_gdf, canalisations_gdf)
+    
+    # Store CRS for later reprojection to EPSG:4326
+    if not regards_gdf.empty and regards_gdf.crs:
+        G.graph['crs'] = regards_gdf.crs
+    elif not canalisations_gdf.empty and canalisations_gdf.crs:
+        G.graph['crs'] = canalisations_gdf.crs
+        
     return G
+
+
+def trouver_exutoires(G: nx.DiGraph):
+    """Compatibilité Flask : retourne les exutoires sous forme de liste."""
+    from src.domain.detecteur_clusters import trouver_exutoires_physiques
+    return [
+        {'noeud': noeud, 'nom': info.get('nom', str(noeud)), **info}
+        for noeud, info in trouver_exutoires_physiques(G).items()
+    ]
 
 
 def calculer_ordre_topologique(G: nx.DiGraph, edges: set) -> list:

@@ -24,7 +24,8 @@
     "elevation_max_m": 234.0
   },
   "checksums_sha256": {
-    "golden_network_gpkg": "086db80924d067f5967c513c8696f52a9c90f2e4d9bf72d66571c4f54b525fa3",
+    "golden_network_gpkg": "d7f07ec3a18a1ed619072d138a90fbfd6f50c470f090639e42f1dfc652910890",
+    "golden_network_db": "daa86a27b854a914063375a957f102ec070ba6593c5724a1b433931f2002aff5",
     "golden_dem_tif": "1115c5b769946b43522a03d9be8bb4e8aac0cebfd6887ec6e7eac60112a13aab"
   }
 }

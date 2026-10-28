@@ -59,12 +59,15 @@ def build_golden_dataset():
     gdf_regards = gpd.read_file(gpkg_source, layer=regards_layer, bbox=bbox_geom)
     gdf_rejets = gpd.read_file(gpkg_source, layer=rejets_layer, bbox=bbox_geom)
 
-    # Nettoyage des colonnes réservées (ex: 'fid' réservé par le format GeoPackage)
-    for name, df in [("canalisations", gdf_canalisations), ("regards", gdf_regards), ("rejets", gdf_rejets)]:
-        if "fid" in df.columns:
-            df.drop(columns=["fid"], inplace=True)
-        if "FID" in df.columns:
-            df.drop(columns=["FID"], inplace=True)
+    # Sélection stricte des colonnes utiles et propres (élimination des doublons de casse GPKG)
+    cols_canas = [c for c in ["NOM-VOIE", "DIAMETRE", "MATERIAU", "LINEAIRE", "PROF_FE_AM", "PROF_FE_AV", "FONCTIONMT", "ID_AMONT", "ID_AVAL", "geometry"] if c in gdf_canalisations.columns]
+    gdf_canalisations = gdf_canalisations[cols_canas].copy()
+
+    cols_regards = [c for c in ["Code", "NOMVOIE", "COMMUNE", "Profondeur", "DIAMETRES", "TYPERES", "PROFRADI", "HFERMSOL", "geometry"] if c in gdf_regards.columns]
+    gdf_regards = gdf_regards[cols_regards].copy()
+
+    cols_rejets = [c for c in ["NOM", "COMMUNE", "NOMVOIE", "geometry"] if c in gdf_rejets.columns]
+    gdf_rejets = gdf_rejets[cols_rejets].copy()
 
     target_gpkg = output_dir / "golden_network.gpkg"
     if target_gpkg.exists():
@@ -80,8 +83,62 @@ def build_golden_dataset():
     gdf_rejets.to_file(target_gpkg, layer="rejets", driver="GPKG", mode="a")
     print(f"   💾 GeoPackage créé : {target_gpkg} ({target_gpkg.stat().st_size / 1024:.1f} Ko)")
 
-    # 3. Extraction et découpage du MNT raster
-    print("\n🏔️ 2. Découpage du MNT raster (GeoTIFF)...")
+    # 3. Extraction de la base SQLite compacte associée pour les tests rapides
+    print("\n🗄️ 2. Création de la base SQLite compacte golden_network.db...")
+    sqlite_source = root_dir / "swmm_platform.db"
+    target_sqlite = output_dir / "golden_network.db"
+    if target_sqlite.exists():
+        target_sqlite.unlink()
+
+    import sqlite3
+    src_conn = sqlite3.connect(sqlite_source)
+    dst_conn = sqlite3.connect(target_sqlite)
+
+    # Récupérer les schémas
+    for table in ['regards', 'conduites', 'rejets']:
+        sql = src_conn.execute(f"SELECT sql FROM sqlite_master WHERE type='table' AND name='{table}'").fetchone()[0]
+        dst_conn.execute(sql)
+
+    # Regards
+    regards_codes = []
+    for c in gdf_regards['Code'].dropna():
+        try:
+            regards_codes.append(f"{float(c):.1f}")
+            regards_codes.append(str(int(float(c))))
+        except Exception:
+            regards_codes.append(str(c))
+
+    placeholders = ','.join('?' for _ in regards_codes)
+    rows_regards = src_conn.execute(f"SELECT * FROM regards WHERE code IN ({placeholders})", regards_codes).fetchall()
+    cols_regards = [d[0] for d in src_conn.execute("SELECT * FROM regards LIMIT 1").description]
+    dst_conn.executemany(f"INSERT INTO regards VALUES ({','.join('?' for _ in cols_regards)})", rows_regards)
+
+    # Conduites
+    cana_amont = []
+    for a in gdf_canalisations['ID_AMONT'].dropna():
+        try:
+            cana_amont.append(f"{float(a):.1f}")
+            cana_amont.append(str(int(float(a))))
+        except Exception:
+            cana_amont.append(str(a))
+
+    placeholders_am = ','.join('?' for _ in cana_amont)
+    rows_canas = src_conn.execute(f"SELECT * FROM conduites WHERE id_amont IN ({placeholders_am})", cana_amont).fetchall()
+    cols_canas = [d[0] for d in src_conn.execute("SELECT * FROM conduites LIMIT 1").description]
+    dst_conn.executemany(f"INSERT INTO conduites VALUES ({','.join('?' for _ in cols_canas)})", rows_canas)
+
+    # Rejets
+    rows_rejets = src_conn.execute("SELECT * FROM rejets LIMIT 2").fetchall()
+    cols_rejets = [d[0] for d in src_conn.execute("SELECT * FROM rejets LIMIT 1").description]
+    dst_conn.executemany(f"INSERT INTO rejets VALUES ({','.join('?' for _ in cols_rejets)})", rows_rejets)
+
+    dst_conn.commit()
+    src_conn.close()
+    dst_conn.close()
+    print(f"   💾 SQLite créé : {target_sqlite} ({target_sqlite.stat().st_size / 1024:.1f} Ko, {len(rows_canas)} conduites, {len(rows_regards)} regards)")
+
+    # 4. Extraction et découpage du MNT raster
+    print("\n🏔️ 3. Découpage du MNT raster (GeoTIFF)...")
     target_dem = output_dir / "golden_dem.tif"
     bbox_df = gpd.GeoDataFrame(geometry=[bbox_geom], crs="EPSG:32631")
 
@@ -134,6 +191,7 @@ def build_golden_dataset():
         },
         "checksums_sha256": {
             "golden_network_gpkg": compute_file_sha256(target_gpkg),
+            "golden_network_db": compute_file_sha256(target_sqlite),
             "golden_dem_tif": compute_file_sha256(target_dem)
         }
     }

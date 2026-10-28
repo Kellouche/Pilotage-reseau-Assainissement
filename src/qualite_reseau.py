@@ -223,13 +223,13 @@ class QualiteReseau:
 
         with self.SessionLocal() as session:
             result = session.execute(text("SELECT DISTINCT id_amont FROM conduites WHERE id_amont IS NOT NULL"))
-            connexions_amont = {row[0] for row in result.fetchall()}
+            connexions_amont = {str(row[0]).strip() for row in result.fetchall() if row[0] is not None}
 
             result = session.execute(text("SELECT DISTINCT id_aval FROM conduites WHERE id_aval IS NOT NULL"))
-            connexions_aval = {row[0] for row in result.fetchall()}
+            connexions_aval = {str(row[0]).strip() for row in result.fetchall() if row[0] is not None}
 
             result = session.execute(text("SELECT code FROM regards"))
-            codes_regards = {row[0] for row in result.fetchall()}
+            codes_regards = {str(row[0]).strip() for row in result.fetchall() if row[0] is not None}
 
             sql = "SELECT c.id, c.fid, c.id_amont, c.id_aval FROM conduites c"
             params = {}
@@ -242,8 +242,8 @@ class QualiteReseau:
             result = session.execute(text(sql), params if params else {})
 
             for row in result.fetchall():
-                id_amont = row[2]
-                id_aval = row[3]
+                id_amont = str(row[2]).strip() if row[2] is not None else None
+                id_aval = str(row[3]).strip() if row[3] is not None else None
 
                 est_connecte_amont = id_amont and (id_amont in connexions_aval or id_amont in codes_regards)
                 est_connecte_aval = id_aval and (id_aval in connexions_amont or id_aval in codes_regards)
@@ -372,6 +372,28 @@ class QualiteReseau:
                 }
                 anomalies.append(anomalie)
 
+            where_geom = "WHERE (geometry_wkt IS NULL OR geometry_wkt = '')"
+            try:
+                session.execute(text("SELECT geom_json FROM conduites LIMIT 1"))
+                where_geom += " AND (geom_json IS NULL OR geom_json = '')"
+            except Exception:
+                pass
+
+            result = session.execute(text(f"""
+                SELECT 'conduite' as type_element, id, fid as identifiant, NULL as longitude, NULL as latitude
+                FROM conduites
+                {where_geom}
+            """))
+            for row in result.fetchall():
+                anomalies.append({
+                    "type": "geometrie_invalide",
+                    "type_element": row[0],
+                    "id": row[1],
+                    "identifiant": row[2],
+                    "probleme": "géométrie absente",
+                    "severite": "majeure"
+                })
+
             result = session.execute(text("""
                 SELECT 'rejet' as type_element, id, nom as identifiant, longitude, latitude
                 FROM rejets
@@ -493,6 +515,7 @@ class QualiteReseau:
             result = session.execute(text(sql), params if params else {})
 
             conduites = {}
+            conduites_par_amont = {}
             for row in result.fetchall():
                 id_c, fid, id_amont, id_aval, prof_am, prof_av, nom_voie = row
                 conduites[id_c] = {
@@ -503,12 +526,15 @@ class QualiteReseau:
                     'prof_av': float(prof_av),
                     'nom_voie': nom_voie
                 }
+                if id_amont is not None:
+                    conduites_par_amont.setdefault(str(id_amont).strip(), []).append(id_c)
 
             # Pour chaque conduite, vérifier la connexion avec la suivante
             for id_c, c in conduites.items():
                 id_aval = c['id_aval']
-                if id_aval and id_aval in conduites:
-                    c_suivante = conduites[id_aval]
+                ids_suivantes = conduites_par_amont.get(str(id_aval).strip(), []) if id_aval is not None else []
+                for id_suivante in ids_suivantes:
+                    c_suivante = conduites[id_suivante]
                     # Saut de pente = différence entre prof_av de c1 et prof_am de c2
                     saut = abs(c['prof_av'] - c_suivante['prof_am'])
 
@@ -517,7 +543,7 @@ class QualiteReseau:
                             "type": "saut_pente",
                             "id_conduite_amont": id_c,
                             "fid_amont": c['fid'],
-                            "id_conduite_aval": id_aval,
+                            "id_conduite_aval": id_suivante,
                             "fid_aval": c_suivante['fid'],
                             "nom_voie": c['nom_voie'],
                             "prof_aval_amont": c['prof_av'],
@@ -527,7 +553,7 @@ class QualiteReseau:
                             "description": f"Saut de pente de {saut:.2f}m entre conduites {c['fid']} et {c_suivante['fid']}"
                         }
                         # Positionner au point de connexion (regard aval de c1 / amont de c2)
-                        lon, lat = self._get_coords_saut_pente(session, id_c, id_aval)
+                        lon, lat = self._get_coords_saut_pente(session, id_c, id_suivante)
                         if lon is not None and lat is not None:
                             anomalie["longitude"] = lon
                             anomalie["latitude"] = lat

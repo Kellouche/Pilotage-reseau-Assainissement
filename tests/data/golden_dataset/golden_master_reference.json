@@ -1,0 +1,22 @@
+{
+  "version": "1.0",
+  "inventory": {
+    "canalisations": 379,
+    "regards": 372,
+    "rejets": 2,
+    "longueur_totale_m": 11922.45
+  },
+  "anomalies_counts": {
+    "conduites_sans_regards": 376,
+    "troncons_orphelins": 0,
+    "champs_manquants": 0,
+    "geometries_invalides": 376,
+    "pentes_suspectes": 285,
+    "sauts_pente": 86,
+    "incoherences_amont_aval": 138,
+    "incoherence_profondeur_topologie": 0,
+    "chevauchement_geometrique": 0,
+    "doublon_regards": 1,
+    "capacite_debit": 376
+  }
+}

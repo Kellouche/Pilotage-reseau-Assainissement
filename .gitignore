@@ -28,6 +28,7 @@ network_map.html
 *.sqlite
 *.sqlite3
 *.db
+!tests/data/golden_dataset/*.db
 *.tif
 *.tiff
 !tests/data/golden_dataset/*.tif
