@@ -193,6 +193,22 @@ class Job(Base):
 
     organization: Mapped["Organization"] = relationship("Organization", back_populates="jobs")
 
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "org_id": self.org_id,
+            "network_id": self.network_id,
+            "project_id": self.network_id,
+            "job_type": self.job_type,
+            "status": self.status,
+            "progress": self.progress,
+            "message": self.message,
+            "error_message": self.error_message,
+            "result_refs": self.result_refs or {},
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
 
 class AuditLog(Base):
     """Journal d'audit pour traçabilité légale, sécurité et conformité."""
@@ -464,6 +480,25 @@ class Simulation(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, nullable=False)
 
     project: Mapped[Optional["Project"]] = relationship("Project", back_populates="simulations")
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "job_id": self.id,
+            "org_id": self.org_id,
+            "project_id": self.project_id,
+            "cluster_id": (self.summary_kpis or {}).get("cluster_id", 1),
+            "name": self.name,
+            "status": self.status,
+            "scenario_pluie": self.scenario_pluie,
+            "duree_heures": self.duree_heures,
+            "results_s3_key": self.results_s3_key,
+            "summary_kpis": self.summary_kpis or {},
+            "result_summary": self.summary_kpis or {},
+            "execution_time_seconds": self.execution_time_seconds,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "completed_at": self.created_at.isoformat() if self.status == "completed" and self.created_at else None,
+        }
 
     __table_args__ = (
         Index("ix_simulations_org_created", "org_id", "created_at"),

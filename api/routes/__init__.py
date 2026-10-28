@@ -1,2 +1,2 @@
 # API Routes package
-from . import network, clusters, simulations, sync, auth
+from . import network, clusters, simulations, sync, auth, jobs, artifacts

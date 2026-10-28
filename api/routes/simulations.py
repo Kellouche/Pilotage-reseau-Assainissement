@@ -1,14 +1,17 @@
 """
 Routes pour les simulations SWMM.
-Lancement asynchrone, récupération résultats, statuts.
+Lancement asynchrone via Celery, suivi de jobs et récupération des résultats.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Any, Dict
 
 from api.database import get_db
 from api import schemas, crud
+from api.core.security import get_tenant_context_optional, TenantContext
+from api.core.jobs import create_job
+from api.models import Organization
 
 router = APIRouter(prefix="/simulations", tags=["Simulations"])
 
@@ -22,61 +25,115 @@ def list_simulations(
     skip: int = 0,
     limit: int = 100,
     status: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
 ):
     """Liste toutes les simulations (ordre décroissant)."""
-    sims = crud.get_simulations(db=db, skip=skip, limit=limit, status=status)
-    return sims
+    org_id = tenant.org.id if tenant else None
+    sims = crud.get_simulations(db=db, skip=skip, limit=limit, status=status, org_id=org_id)
+    return [s.to_dict() for s in sims]
 
 @router.post("", response_model=schemas.SimulationResponse, status_code=status.HTTP_202_ACCEPTED)
 def launch_simulation(
     simulation: schemas.SimulationCreate,
     user_id: str = "system",
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
 ):
     """
-    Lance une simulation SWMM pour un cluster.
-    Retourne immédiatement avec un job_id pour polling.
+    Lance une simulation SWMM asynchrone pour un cluster (Phase 2.4).
+    Retourne immédiatement avec un job_id pour polling ou WebSocket.
     """
+    org_id = tenant.org.id if tenant else None
+    if not org_id:
+        default_org = db.query(Organization).first()
+        org_id = default_org.id if default_org else "org_default"
+
     # Vérifier cluster existe
-    cluster = crud.get_cluster(db, simulation.cluster_id)
+    cluster = crud.get_cluster(db, simulation.cluster_id, org_id=org_id if tenant else None)
     if not cluster:
         raise HTTPException(status_code=404, detail="Cluster non trouvé")
 
-    # Générer job_id (UUID)
-    import uuid
-    job_id = str(uuid.uuid4())
+    network_id = getattr(cluster, "network_id", None)
+    scenario_pluie = (simulation.parameters or {}).get("scenario_pluie", "pluie_decennale")
+    duree_heures = float((simulation.parameters or {}).get("duree_heures", 24.0))
 
-    # Créer enregistrement simulation
+    # 1. Créer le Job asynchrone
+    job = create_job(
+        db=db,
+        org_id=org_id,
+        job_type="simulation_swmm",
+        network_id=network_id,
+        payload={
+            "cluster_id": simulation.cluster_id,
+            "parameters": simulation.parameters or {},
+            "scenario_pluie": scenario_pluie,
+            "duree_heures": duree_heures,
+        },
+    )
+
+    # 2. Créer l'enregistrement de Simulation
     sim_obj = crud.create_simulation(
         db=db,
         cluster_id=simulation.cluster_id,
-        job_id=job_id,
+        job_id=job.id,
         parameters=simulation.parameters,
-        created_by=user_id
+        created_by=tenant.user.id if (tenant and tenant.user) else user_id,
+        org_id=org_id,
+        project_id=network_id,
+        scenario_pluie=scenario_pluie,
+        duree_heures=duree_heures,
     )
 
-    # TODO: déclencher Celery worker
-    # from workers.swmm_worker import run_simulation_task
-    # run_simulation_task.delay(job_id, simulation.cluster_id, simulation.parameters)
+    # 3. Déclencher la tâche Celery asynchrone
+    try:
+        from workers.tasks.swmm_tasks import run_swmm_simulation_task
+        run_swmm_simulation_task.delay(
+            job_id=job.id,
+            org_id=org_id,
+            network_id=network_id,
+            scenario_pluie=scenario_pluie,
+            duree_heures=duree_heures,
+            parameters={"cluster_id": simulation.cluster_id, **(simulation.parameters or {})},
+        )
+    except Exception:
+        # Fallback synchrone propre si Redis / Celery broker non disponible
+        from workers.tasks.swmm_tasks import run_swmm_simulation_task
+        run_swmm_simulation_task(
+            job_id=job.id,
+            org_id=org_id,
+            network_id=network_id,
+            scenario_pluie=scenario_pluie,
+            duree_heures=duree_heures,
+            parameters={"cluster_id": simulation.cluster_id, **(simulation.parameters or {})},
+        )
 
-    # Pour POC : retourner sans lancer (simulation fictive)
     return sim_obj.to_dict()
 
 
 @router.get("/{simulation_id}", response_model=schemas.SimulationResponse)
-def get_simulation(simulation_id: int, db: Session = Depends(get_db)):
+def get_simulation(
+    simulation_id: str,
+    db: Session = Depends(get_db),
+    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
+):
     """Récupère une simulation par ID."""
-    sim = crud.get_simulation(db, simulation_id)
+    org_id = tenant.org.id if tenant else None
+    sim = crud.get_simulation(db, simulation_id, org_id=org_id)
     if not sim:
         raise HTTPException(status_code=404, detail="Simulation non trouvée")
     return sim.to_dict()
 
 
 @router.get("/job/{job_id}", response_model=schemas.SimulationResponse)
-def get_simulation_by_job(job_id: str, db: Session = Depends(get_db)):
+def get_simulation_by_job(
+    job_id: str,
+    db: Session = Depends(get_db),
+    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
+):
     """Récupère une simulation par job_id (Celery)."""
-    sim = crud.get_simulation_by_job_id(db, job_id)
+    org_id = tenant.org.id if tenant else None
+    sim = crud.get_simulation_by_job_id(db, job_id, org_id=org_id)
     if not sim:
         raise HTTPException(status_code=404, detail="Job non trouvé")
     return sim.to_dict()
@@ -88,23 +145,30 @@ def list_cluster_simulations(
     status: Optional[str] = None,
     skip: int = 0,
     limit: int = 50,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
 ):
     """Liste des simulations d'un cluster."""
+    org_id = tenant.org.id if tenant else None
     sims = crud.get_simulations(
         db=db,
-        cluster_id=cluster_id,
         status=status,
         skip=skip,
-        limit=limit
+        limit=limit,
+        org_id=org_id,
     )
-    return [s.to_dict() for s in sims]
+    return [s.to_dict() for s in sims if (s.summary_kpis or {}).get("cluster_id") == cluster_id]
 
 
 @router.get("/status/{job_id}", response_model=schemas.SimulationStatusResponse)
-def get_simulation_status(job_id: str, db: Session = Depends(get_db)):
-    """Polling du statut d'une simulation (pour mobile)."""
-    sim = crud.get_simulation_by_job_id(db, job_id)
+def get_simulation_status(
+    job_id: str,
+    db: Session = Depends(get_db),
+    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
+):
+    """Polling du statut d'une simulation."""
+    org_id = tenant.org.id if tenant else None
+    sim = crud.get_simulation_by_job_id(db, job_id, org_id=org_id)
     if not sim:
         raise HTTPException(status_code=404, detail="Job non trouvé")
 
@@ -113,26 +177,30 @@ def get_simulation_status(job_id: str, db: Session = Depends(get_db)):
         "status": sim.status
     }
 
-    if sim.status == "COMPLETED":
-        response["result_url"] = f"/api/v1/simulations/job/{job_id}/download"
-    elif sim.status == "FAILED":
-        response["error"] = sim.error_message
+    if sim.status.lower() == "completed":
+        response["result_url"] = f"/api/v1/artifacts/download?key={sim.results_s3_key}"
+    elif sim.status.lower() == "failed":
+        response["error"] = (sim.summary_kpis or {}).get("error", "Simulation failed")
 
     return response
 
 
 @router.delete("/{simulation_id}", status_code=status.HTTP_204_NO_CONTENT)
-def cancel_simulation(simulation_id: int, db: Session = Depends(get_db)):
-    """Annule une simulation en attente (PENDING/RUNNING)."""
-    sim = crud.get_simulation(db, simulation_id)
+def cancel_simulation(
+    simulation_id: str,
+    db: Session = Depends(get_db),
+    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
+):
+    """Annule une simulation en attente (pending/running)."""
+    org_id = tenant.org.id if tenant else None
+    sim = crud.get_simulation(db, simulation_id, org_id=org_id)
     if not sim:
         raise HTTPException(status_code=404, detail="Simulation non trouvée")
 
-    if sim.status not in ["PENDING", "RUNNING"]:
+    if sim.status.lower() not in ["pending", "running"]:
         raise HTTPException(status_code=400, detail="Impossible d'annuler: statut final")
 
-    # TODO: Celery revoke si possible
-    sim.status = "CANCELLED"
+    sim.status = "cancelled"
     db.commit()
 
     return None

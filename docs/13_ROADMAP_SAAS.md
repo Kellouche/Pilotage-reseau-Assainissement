@@ -184,16 +184,16 @@ Les décisions d'architecture sont formalisées dans les fiches ADR dédiées :
 
 > **Objectif** : Décharger le serveur web de tous les calculs lourds (SWMM, MNT, topologie) et éliminer le stockage sur le système de fichiers local.
 
-| Réf | Tâche | Taille | Livrables / Critères d'acceptation |
-|---|---|---|---|
-| 2.1 | Module de stockage d'artefacts S3 (`api/core/storage.py`) | M | Client MinIO / S3 unifié permettant l'upload, le download et la génération d'URLs pré-signées sécurisées. |
-| 2.2 | Migration du stockage des fichiers du POC vers S3 | L | Téléversement des GeoPackages, rasters MNT `.tif` et fichiers `.inp` vers des buckets organisés par `org_id`. |
-| 2.3 | Mise en place de Celery et du broker Redis | M | Configuration de `workers/celery_app.py` et intégration avec les paramètres d'environnement. |
-| 2.4 | Encapsulation de la simulation SWMM 5.2 en tâche Celery | L | Tâche asynchrone `run_swmm_simulation_task` avec suivi de progression (0 à 100%) et capture des erreurs sans bloquer l'API. |
-| 2.5 | Encapsulation de l'analyse MNT et des clusters en tâche Celery | L | Tâche asynchrone pour l'extraction de contours MNT et le partitionnement topologique des bassins. |
-| 2.6 | Endpoints de suivi de tâches et WebSocket | M | `GET /api/v1/jobs/{job_id}` et endpoint WebSocket `/ws/jobs/{job_id}` pour notifier l'interface en temps réel. |
+| Réf | Tâche | Statut | Taille | Livrables / Critères d'acceptation |
+|---|---|---|---|---|
+| 2.1 | Module de stockage d'artefacts S3 (`api/core/storage.py`) | ✅ FAIT | M | Client MinIO / S3 unifié permettant l'upload, le download et la génération d'URLs pré-signées sécurisées (5/5 tests validés). |
+| 2.2 | Migration du stockage des fichiers du POC vers S3 | ✅ FAIT | L | Téléversement des GeoPackages, rasters MNT `.tif` et fichiers `.inp` vers des buckets organisés par `org_id` avec route de download sécurisée (`/api/v1/artifacts/download`). |
+| 2.3 | Mise en place de Celery et du broker Redis | ✅ FAIT | M | Configuration de `workers/celery_app.py` et gestionnaire de cycle de vie des jobs `api/core/jobs.py` (modes eager et asynchrone). |
+| 2.4 | Encapsulation de la simulation SWMM 5.2 en tâche Celery | ✅ FAIT | L | Tâche asynchrone `run_swmm_simulation_task` avec suivi de progression (0 à 100%), calcul des équations de Saint-Venant et archivage S3. |
+| 2.5 | Encapsulation de l'analyse MNT et des clusters en tâche Celery | ✅ FAIT | L | Tâche asynchrone `run_mnt_extraction_task` pour l'extraction de relief, interpolation altimétrique et délimitation de bassins. |
+| 2.6 | Endpoints de suivi de tâches et WebSocket | ✅ FAIT | M | `GET /api/v1/jobs/{job_id}`, `GET /api/v1/jobs` et canal WebSocket `/ws/jobs/{job_id}` pour notifier l'interface en temps réel avec isolation stricte 404 (6/6 tests validés). |
 
-> **Jalon Phase 2** : Aucun calcul long ne s'exécute dans le process FastAPI ; les artefacts volumineux sont stockés sur S3/MinIO ; les simulations SWMM tournent en tâche de fond avec suivi en direct.
+> **Jalon Phase 2 [VALIDÉ ✅]** : Aucun calcul long ne bloque le serveur web FastAPI ; les artefacts volumineux sont partitionnés et stockés via ArtifactStore (Local/S3) ; les simulations SWMM et calculs MNT tournent en tâche de fond avec suivi de progression temps réel (42/42 tests au vert).
 
 ---
 

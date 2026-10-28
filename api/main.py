@@ -16,7 +16,7 @@ from config.settings import APP_NAME, APP_VERSION, APP_DESCRIPTION
 from api.database import init_db, get_db
 from api import schemas, crud
 
-from api.routes import network, simulations, sync, clusters, qualite, corrections, terrain, mnt, audit, auth
+from api.routes import network, simulations, sync, clusters, qualite, corrections, terrain, mnt, audit, auth, jobs, artifacts
 
 # ============================================================
 # LIFESPAN (démarrage/arrêt)
@@ -355,3 +355,11 @@ app.include_router(corrections.router, prefix="/api/v1/corrections", tags=["Corr
 app.include_router(terrain.router, prefix="/api/v1", tags=["Collecte Terrain"])
 app.include_router(mnt.router, prefix="/api/v1", tags=["MNT / DEM"])
 app.include_router(audit.router, prefix="/api/v1", tags=["Traçabilité / Audit"])
+app.include_router(jobs.router, prefix="/api/v1", tags=["Jobs & Tâches Asynchrones"])
+app.include_router(artifacts.router, prefix="/api/v1", tags=["Artefacts & Stockage"])
+
+
+@app.websocket("/ws/jobs/{job_id}")
+async def ws_jobs_alias(websocket: WebSocket, job_id: str):
+    """Alias racine pour le flux WebSocket de suivi des jobs en temps réel."""
+    await jobs.websocket_job_progress(websocket, job_id)

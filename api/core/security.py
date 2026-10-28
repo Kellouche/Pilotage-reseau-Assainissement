@@ -152,6 +152,30 @@ def get_tenant_context(
     return TenantContext(actor=user, org=org, role=target_membership.role, is_api_key=False)
 
 
+def get_tenant_context_optional(
+    request: Request,
+    auth_creds: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer),
+    db: Session = Depends(get_db),
+) -> Optional[TenantContext]:
+    """
+    Variante optionnelle : résout le TenantContext si les identifiants sont fournis,
+    sinon retourne None (permet la transition progressive des endpoints existants).
+    """
+    token: Optional[str] = None
+    if auth_creds and auth_creds.credentials:
+        token = auth_creds.credentials.strip()
+    elif "access_token" in request.cookies:
+        token = request.cookies.get("access_token")
+
+    if not token:
+        return None
+
+    try:
+        return get_tenant_context(request, auth_creds, db)
+    except HTTPException:
+        return None
+
+
 def require_role(min_role: str = "viewer"):
     """
     Générateur de dépendance vérifiant que l'utilisateur possède au moins min_role.

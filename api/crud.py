@@ -416,6 +416,48 @@ def get_simulations(
     return query.order_by(Simulation.created_at.desc()).offset(skip).limit(limit).all()
 
 
+def create_simulation(
+    db: Session,
+    cluster_id: Optional[int] = None,
+    job_id: Optional[str] = None,
+    parameters: Optional[Dict[str, Any]] = None,
+    created_by: Optional[str] = None,
+    org_id: Optional[str] = None,
+    project_id: Optional[str] = None,
+    name: Optional[str] = None,
+    scenario_pluie: str = "pluie_decennale",
+    duree_heures: float = 24.0,
+) -> Simulation:
+    """Crée un enregistrement de simulation."""
+    import uuid
+    sim = Simulation(
+        id=job_id or str(uuid.uuid4()),
+        org_id=org_id,
+        project_id=project_id,
+        name=name or f"Simulation {scenario_pluie}",
+        status="pending",
+        scenario_pluie=scenario_pluie,
+        duree_heures=duree_heures,
+        summary_kpis={"cluster_id": cluster_id, "parameters": parameters or {}},
+    )
+    db.add(sim)
+    db.commit()
+    db.refresh(sim)
+    return sim
+
+
+def get_simulation_by_job_id(
+    db: Session,
+    job_id: str,
+    org_id: Optional[str] = None,
+) -> Optional[Simulation]:
+    """Récupère une simulation par son job_id."""
+    query = db.query(Simulation).filter(Simulation.id == job_id)
+    if org_id:
+        query = query.filter(Simulation.org_id == org_id)
+    return query.first()
+
+
 # ============================================================
 # SYNCHRONISATION DELTA & VERSIONING
 # ============================================================
