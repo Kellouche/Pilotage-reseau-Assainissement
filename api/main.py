@@ -16,7 +16,7 @@ from config.settings import APP_NAME, APP_VERSION, APP_DESCRIPTION
 from api.database import init_db, get_db
 from api import schemas, crud
 
-from api.routes import network, simulations, sync, clusters, qualite, corrections, terrain, mnt, audit
+from api.routes import network, simulations, sync, clusters, qualite, corrections, terrain, mnt, audit, auth
 
 # ============================================================
 # LIFESPAN (démarrage/arrêt)
@@ -24,37 +24,43 @@ from api.routes import network, simulations, sync, clusters, qualite, correction
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Démarrage
-    print("[API] Initialisation de la base de données...")
-    try:
-        init_db()
-        print("[API] Base de données prête")
-    except Exception as e:
-        print(f"[API] ERREUR DB: {e}")
-        print("[API] L'API démarrera sans DB (mode démo)")
+    import sys
+    _is_test = "pytest" in sys.modules or os.getenv("TESTING") == "true" or os.getenv("PYTEST_CURRENT_TEST") is not None
 
-    # Warm-up asynchrone du graphe
-    async def warmup_graph():
+    if not _is_test:
+        # Démarrage
+        print("[API] Initialisation de la base de données...")
         try:
-            from api.routes.clusters import _get_graph
-            await asyncio.to_thread(_get_graph)
-            print("[API] Cache graphe prêt ✓")
+            init_db()
+            print("[API] Base de données prête")
         except Exception as e:
-            print(f"[API] ERREUR warmup graphe: {e}")
+            print(f"[API] ERREUR DB: {e}")
+            print("[API] L'API démarrera sans DB (mode démo)")
 
-    # Warm-up asynchrone des couches GeoJSON
-    async def warmup_layers():
-        try:
-            print("[API] Warm-up du cache des couches GeoJSON...")
-            await asyncio.to_thread(get_layers)
-            print("[API] Cache des couches GeoJSON prêt ✓")
-        except Exception as e:
-            print(f"[API] ERREUR warmup couches: {e}")
+        # Warm-up asynchrone du graphe
+        async def warmup_graph():
+            try:
+                from api.routes.clusters import _get_graph
+                await asyncio.to_thread(_get_graph)
+                print("[API] Cache graphe prêt ✓")
+            except Exception as e:
+                print(f"[API] ERREUR warmup graphe: {e}")
 
-    asyncio.create_task(warmup_graph())
-    asyncio.create_task(warmup_layers())
+        # Warm-up asynchrone des couches GeoJSON
+        async def warmup_layers():
+            try:
+                print("[API] Warm-up du cache des couches GeoJSON...")
+                await asyncio.to_thread(get_layers)
+                print("[API] Cache des couches GeoJSON prêt ✓")
+            except Exception as e:
+                print(f"[API] ERREUR warmup couches: {e}")
+
+        asyncio.create_task(warmup_graph())
+        asyncio.create_task(warmup_layers())
+
     yield
-    print("[API] Arrêt de l'API...")
+    if not _is_test:
+        print("[API] Arrêt de l'API...")
 
 
 # ============================================================
@@ -339,6 +345,7 @@ async def page_tunnel():
 # INCLUSION DES ROUTES
 # ============================================================
 
+app.include_router(auth.router, prefix="/api/v1", tags=["Authentification & Multi-Tenant"])
 app.include_router(network.router, prefix="/api/v1", tags=["Réseau"])
 app.include_router(simulations.router, prefix="/api/v1", tags=["Simulations"])
 app.include_router(sync.router, prefix="/api/v1", tags=["Synchronisation"])

@@ -7,21 +7,32 @@ from pathlib import Path
 import pandas as pd
 from datetime import datetime
 
+import sys
 from src.validateurs.topologie import ValidateurTopologie
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg2://swmm_user:swmm_password_2026@localhost:5010/swmm_platform")
+_is_test = (
+    "pytest" in sys.modules
+    or any("pytest" in arg for arg in sys.argv)
+    or os.getenv("TESTING") == "true"
+    or os.getenv("PYTEST_CURRENT_TEST") is not None
+)
 
-try:
-    engine = create_engine(DATABASE_URL)
-    with engine.connect() as conn:
-        conn.execute(text("SELECT 1"))
-    print("Connexion PostgreSQL etablie")
-    USE_POSTGRESQL = True
-except Exception as e:
-    print(f"PostgreSQL indisponible ({e}), fallback vers SQLite")
-    DATABASE_URL = "sqlite:///swmm_platform.db"
-    engine = create_engine(DATABASE_URL)
+if _is_test or os.getenv("DATABASE_URL", "").startswith("sqlite"):
+    DATABASE_URL = "sqlite:///./swmm_platform.db"
+    engine = create_engine(DATABASE_URL, echo=False, future=True, connect_args={"check_same_thread": False})
     USE_POSTGRESQL = False
+else:
+    DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg2://swmm_user:swmm_password_2026@localhost:5010/swmm_platform")
+    try:
+        engine = create_engine(DATABASE_URL, connect_args={"connect_timeout": 2} if "postgres" in DATABASE_URL else {})
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        print("Connexion PostgreSQL etablie")
+        USE_POSTGRESQL = True
+    except Exception as e:
+        DATABASE_URL = "sqlite:///./swmm_platform.db"
+        engine = create_engine(DATABASE_URL, echo=False, future=True, connect_args={"check_same_thread": False})
+        USE_POSTGRESQL = False
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
