@@ -167,16 +167,16 @@ Les décisions d'architecture sont formalisées dans les fiches ADR dédiées :
 
 > **Objectif** : Introduire les organisations, les utilisateurs, les rôles RBAC et migrer la base SQLite locale vers PostgreSQL/PostGIS avec isolation par `org_id`.
 
-| Réf | Tâche | Taille | Livrables / Critères d'acceptation |
-|---|---|---|---|
-| 1.1 | Schéma de données relationnel & spatial multi-tenant | L | Modèles SQLAlchemy 2.0 / GeoAlchemy2 (`api/models.py`) avec `org_id` universel et contraintes de clés étrangères. |
-| 1.2 | Migrations de base de données Alembic | M | Configuration d'Alembic avec scripts de création initiale du schéma PostgreSQL + PostGIS. |
-| 1.3 | Module d'authentification et gestion des utilisateurs | L | Hachage Argon2id, création d'organisation, inscription, connexion, renouvellement de tokens JWT et sessions cookies. |
-| 1.4 | Dépendances de sécurité et RBAC dans FastAPI | M | `Depends(get_current_tenant_org)`, `Depends(require_role)` protégeant les endpoints contre tout accès non autorisé. |
-| 1.5 | Unification de l'accès aux données (CRUD multi-tenant) | L | Refonte de `api/crud.py` garantissant le filtre systématique `.where(Model.org_id == org_id)`. |
-| 1.6 | Tests de sécurité et d'isolation inter-organisations | M | Tests pytest prouvant qu'une organisation B reçoit un code `404` en tentant d'accéder aux données d'une organisation A. |
+| Réf | Tâche | Statut | Taille | Livrables / Critères d'acceptation |
+|---|---|---|---|---|
+| 1.1 | Schéma de données relationnel & spatial multi-tenant | ✅ FAIT | L | Modèles SQLAlchemy 2.0 / GeoAlchemy2 (`api/models.py`) avec `org_id` universel et contraintes de clés étrangères. |
+| 1.2 | Migrations de base de données Alembic | ✅ FAIT | M | Configuration d'Alembic avec scripts de création initiale du schéma PostgreSQL + PostGIS. |
+| 1.3 | Module d'authentification et gestion des utilisateurs | ✅ FAIT | L | Hachage Argon2id, création d'organisation, inscription, connexion, renouvellement de tokens JWT et sessions cookies. |
+| 1.4 | Dépendances de sécurité et RBAC dans FastAPI | ✅ FAIT | M | `Depends(get_current_tenant_org)`, `Depends(require_role)` protégeant les endpoints contre tout accès non autorisé (stealth 404). |
+| 1.5 | Unification de l'accès aux données (CRUD multi-tenant) | ✅ FAIT | L | Refonte de `api/crud.py` garantissant le filtre systématique `.where(Model.org_id == org_id)`. |
+| 1.6 | Tests de sécurité et d'isolation inter-organisations | ✅ FAIT | M | Tests pytest prouvant qu'une organisation B reçoit un code `404` en tentant d'accéder aux données d'une organisation A (11/11 tests passés). |
 
-> **Jalon Phase 1** : 100% des tables portent un `org_id` ; un utilisateur ne peut voir que les données de son organisation ; l'isolation est prouvée par les tests automatisés.
+> **Jalon Phase 1 [VALIDÉ ✅]** : 100% des tables portent un `org_id` ; un utilisateur ne peut voir que les données de son organisation ; l'isolation stealth 404 est prouvée par les tests automatisés (31/31 tests au vert).
 
 ---
 
