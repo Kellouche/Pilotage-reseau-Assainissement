@@ -18,7 +18,9 @@ PRIORITE_EXUTOIRES_DEFAUT = {
     'ouvrage': 2,
     'deversoir': 2,
     'rejet': 3,
+    'outfall': 3,
     'exutoire': 3,
+    'exutoire_implicite': 8,
     'sortie_graphe': 9
 }
 
@@ -32,26 +34,70 @@ def _iterer_aretes_avec_data(G: nx.Graph):
 
 def trouver_exutoires_physiques(
     G: nx.DiGraph,
-    priorite_map: Optional[Dict[str, int]] = None
+    priorite_map: Optional[Dict[str, int]] = None,
+    inclure_exutoires_implicites: bool = False,
 ) -> Dict[str, Dict[str, Any]]:
     if priorite_map is None:
         priorite_map = PRIORITE_EXUTOIRES_DEFAUT
 
     exutoires = {}
+    exutoires_bruts = []
+    
     for noeud, data in G.nodes(data=True):
         type_noeud = str(data.get('type', '')).lower()
-        out_deg = G.out_degree(noeud)
-
         matched_type = None
         for cle in priorite_map:
-            if cle in type_noeud:
+            if cle in type_noeud and cle not in ['exutoire_implicite', 'sortie_graphe']:
                 matched_type = cle
                 break
 
         if matched_type:
-            exutoires[noeud] = {"type": matched_type, "priorite": priorite_map[matched_type], "nom": str(noeud), **data}
-        elif out_deg == 0 and G.in_degree(noeud) > 0:
-            exutoires[noeud] = {"type": "sortie_graphe", "priorite": priorite_map.get('sortie_graphe', 9), "nom": str(noeud), **data}
+            exutoires_bruts.append((noeud, matched_type, data))
+
+    # Trouver les nœuds connectés pour le snapping
+    noeuds_connectes = [n for n in G.nodes() if G.in_degree(n) > 0 or G.out_degree(n) > 0]
+    
+    for noeud, matched_type, data in exutoires_bruts:
+        if G.in_degree(noeud) == 0 and G.out_degree(noeud) == 0 and noeuds_connectes:
+            x1, y1 = float(data.get('x', 0)), float(data.get('y', 0))
+            meilleur_noeud = noeud
+            dist_min = float('inf')
+            
+            for nc in noeuds_connectes:
+                nc_data = G.nodes[nc]
+                x2, y2 = float(nc_data.get('x', 0)), float(nc_data.get('y', 0))
+                dist = ((x2 - x1)**2 + (y2 - y1)**2)**0.5
+                if dist < dist_min:
+                    dist_min = dist
+                    meilleur_noeud = nc
+            
+            if dist_min <= 1.0:
+                exutoires[meilleur_noeud] = {
+                    **G.nodes[meilleur_noeud],
+                    "type": matched_type,
+                    "priorite": priorite_map[matched_type],
+                    "nom": _texte_valide(data.get('nom')) or _texte_valide(data.get('nom_voie')) or str(noeud)
+                }
+                continue
+
+        nom_exutoire = _texte_valide(data.get('nom')) or _texte_valide(data.get('nom_voie')) or str(noeud)
+        exutoires[noeud] = {
+            **data,
+            "type": matched_type,
+            "priorite": priorite_map[matched_type],
+            "nom": nom_exutoire
+        }
+
+    # 3. Nœuds morts du réseau (sans exutoire officiel) -> exutoires implicites
+    if inclure_exutoires_implicites:
+        for noeud in G.nodes():
+            if G.out_degree(noeud) == 0 and noeud not in exutoires:
+                exutoires[noeud] = {
+                    **G.nodes[noeud],
+                    "type": "exutoire_implicite",
+                    "priorite": priorite_map["exutoire_implicite"],
+                    "nom": str(noeud)
+                }
 
     return exutoires
 
@@ -101,6 +147,58 @@ def partitionner_bassins_hydrauliques(
 
     return bassins_par_exutoire, troncons_orphelins, attribution_noeuds
 
+
+def identifier_exutoires(G: nx.DiGraph) -> List[Tuple[Any, Dict[str, Any]]]:
+    """Retourne les exutoires dans l'ordre hydraulique de priorité."""
+    exutoires = trouver_exutoires_physiques(G)
+    return sorted(exutoires.items(), key=lambda item: item[1].get('priorite', 99))
+
+
+def partitionner_bassins_exclusifs(
+    G: nx.DiGraph,
+    exutoires: Optional[Any] = None,
+) -> Dict[str, Dict[str, Any]]:
+    """Construit des bassins collectés exclusifs, sans double attribution."""
+    if exutoires is None:
+        exutoires_map = trouver_exutoires_physiques(G)
+    elif isinstance(exutoires, dict):
+        exutoires_map = exutoires
+    else:
+        exutoires_map = dict(exutoires)
+
+    bassins, _, attribution = partitionner_bassins_hydrauliques(G, exutoires_map)
+    resultats = {}
+    for exutoire, info in exutoires_map.items():
+        edges = bassins.get(exutoire, set())
+        noeuds = {exutoire}
+        for edge in edges:
+            noeuds.update(edge[:2])
+        valide, motif = bassin_hydraulique_valide(G, exutoire, edges, info)
+        resultats[exutoire] = {
+            'exutoire': exutoire,
+            'nom': info.get('nom', str(exutoire)),
+            'type': info.get('type', 'exutoire'),
+            'priorite': info.get('priorite', 99),
+            'edges': edges,
+            'noeuds': noeuds,
+            'attribution': {n: exutoire for n, owner in attribution.items() if owner == exutoire},
+            'polygon': calculer_bassin_polygon(edges, G),
+            'valide': valide,
+            'motif_invalidation': motif,
+        }
+    return resultats
+
+import math
+
+def safe_float(val: Any, default: float = 0.0) -> float:
+    try:
+        if val is None:
+            return default
+        f = float(val)
+        return default if math.isnan(f) or math.isinf(f) else f
+    except (ValueError, TypeError):
+        return default
+
 def calculer_statistiques(G: nx.DiGraph, edges: Set[Tuple]) -> Dict[str, float]:
     longueur_totale = 0.0
     diametres = []
@@ -114,8 +212,8 @@ def calculer_statistiques(G: nx.DiGraph, edges: Set[Tuple]) -> Dict[str, float]:
         else:
             data = G.edges[u, v]
             
-        longueur_totale += float(data.get('length', data.get('longueur', 0.0)))
-        d = float(data.get('diametre_mm', data.get('diametre', 0.0)))
+        longueur_totale += safe_float(data.get('length', data.get('longueur', 0.0)))
+        d = safe_float(data.get('diametre_mm', data.get('diametre', 0.0)))
         if d > 0: diametres.append(d)
         
     return {
@@ -130,8 +228,123 @@ def calculer_statistiques(G: nx.DiGraph, edges: Set[Tuple]) -> Dict[str, float]:
 def compter_infrastructures(edges: Set[Tuple]) -> Dict[str, int]:
     return {"nb_regards": 0, "nb_stations": 0, "nb_ouvrages": 0}
 
+def _texte_valide(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    texte = str(value).strip()
+    return texte if texte and texte.lower() not in {'none', 'nan', 'inconnu'} else None
+
+
+def _premier_texte(*values: Any) -> Optional[str]:
+    for value in values:
+        texte = _texte_valide(value)
+        if texte:
+            return texte
+    return None
+
+
 def determiner_nom_bassin(edges: Set[Tuple], G: nx.DiGraph, exutoire_info: Dict) -> str:
-    return f"Bassin {exutoire_info.get('nom', 'Inconnu')} [{exutoire_info.get('type', 'exutoire')}]"
+    """Produit un nom métier stable à partir de l'exutoire et des rues."""
+    exutoire = _premier_texte(
+        exutoire_info.get('nom'), exutoire_info.get('adresse'),
+        exutoire_info.get('nom_voie'), exutoire_info.get('commune')
+    ) or 'sans désignation'
+    voies = []
+    for edge in edges:
+        data = G.edges[edge[0], edge[1], edge[2]] if G.is_multigraph() else G.edges[edge[0], edge[1]]
+        voie = _texte_valide(data.get('nom_voie'))
+        if voie and voie not in voies:
+            voies.append(voie)
+    type_exutoire = _premier_texte(exutoire_info.get('type')) or 'exutoire'
+    suffixe_voies = f" — rues: {', '.join(voies[:3])}" if voies else ''
+    return f"Bassin hydraulique — {type_exutoire} {exutoire}{suffixe_voies}"
+
+
+def bassin_hydraulique_valide(
+    G: nx.DiGraph,
+    exutoire: Any,
+    edges: Set[Tuple],
+    exutoire_info: Dict[str, Any],
+) -> Tuple[bool, str]:
+    """Vérifie les prérequis minimum avant création d'un bassin."""
+    if exutoire_info.get('type') == 'exutoire_implicite':
+        return False, "L'exutoire doit être un ouvrage physique identifié."
+    if exutoire not in G or not edges:
+        return False, "Le bassin doit drainer au moins un tronçon vers un exutoire."
+    noeuds = {exutoire}
+    for edge in edges:
+        noeuds.update(edge[:2])
+    if len(noeuds) < 2:
+        return False, "Un bassin ne peut pas être constitué d'un seul point."
+    return True, ''
+
+
+def proposer_raccordement_exutoire(
+    G: nx.DiGraph,
+    exutoire_noeud: Any,
+    distance_max_m: float = 50.0,
+) -> Dict[str, Any]:
+    """Propose un nœud réseau voisin sans modifier le graphe."""
+    if exutoire_noeud not in G:
+        return {'statut': 'introuvable', 'noeud_reseau': None, 'distance_m': None}
+    if G.in_degree(exutoire_noeud) > 0:
+        return {'statut': 'connecte', 'noeud_reseau': exutoire_noeud, 'distance_m': 0.0}
+
+    source = G.nodes[exutoire_noeud]
+    source_geom = source.get('geometry')
+    if not isinstance(source_geom, Point):
+        x, y = source.get('x'), source.get('y')
+        source_geom = Point(float(x), float(y)) if x is not None and y is not None else None
+    if source_geom is None:
+        return {'statut': 'sans_geometrie', 'noeud_reseau': None, 'distance_m': None}
+
+    candidats = []
+    for noeud, data in G.nodes(data=True):
+        if noeud == exutoire_noeud or data.get('geometry') is None:
+            continue
+        if G.in_degree(noeud) == 0 and G.out_degree(noeud) == 0:
+            continue
+        distance = source_geom.distance(data['geometry'])
+        candidats.append((distance, noeud))
+    if not candidats:
+        return {'statut': 'aucun_candidat', 'noeud_reseau': None, 'distance_m': None}
+    distance, noeud = min(candidats)
+    return {
+        'statut': 'propose' if distance <= distance_max_m else 'hors_tolerance',
+        'noeud_reseau': noeud,
+        'distance_m': round(float(distance), 2),
+        'tolerance_m': distance_max_m,
+    }
+
+
+def calculer_polygone_urbain_estime(
+    G: nx.DiGraph,
+    edges: Set[Tuple],
+    noeuds: Optional[Set[Any]] = None,
+    largeur_reseau_m: float = 15.0,
+    marge_urbaine_m: float = 50.0,
+) -> Optional[Polygon]:
+    """Construit une enveloppe urbaine provisoire à partir du réseau amont.
+
+    Cette géométrie est une emprise de travail, pas une délimitation
+    hydrologique : aucun MNT ni parcellaire n'est utilisé ici.
+    """
+    geometries = []
+    points = []
+    for edge in edges:
+        data = G.edges[edge[0], edge[1], edge[2]] if G.is_multigraph() else G.edges[edge[0], edge[1]]
+        geometry = data.get('geometry')
+        if geometry is not None and not geometry.is_empty:
+            geometries.append(geometry.buffer(largeur_reseau_m))
+    for noeud in (noeuds or set()):
+        data = G.nodes.get(noeud, {})
+        geometry = data.get('geometry')
+        if isinstance(geometry, Point):
+            points.append(geometry)
+    if not geometries and not points:
+        return None
+    union = unary_union(geometries + [point.buffer(marge_urbaine_m) for point in points])
+    return union.buffer(5.0).buffer(-5.0)
 
 def calculer_bassin_polygon(edges: Set[Tuple], G: nx.DiGraph, largeur_bande_drainage_m: float = 20.0) -> Optional[Polygon]:
     geometries_a_unir = []
@@ -183,41 +396,85 @@ def construire_geojson_cluster(
     exutoire_info: Dict = None,
     nom_bassin: str = ""
 ) -> Dict[str, Any]:
+    import pyproj
+    from shapely.ops import transform
+    
+    crs_source = G.graph.get('crs')
+    transformer = None
+    if crs_source:
+        try:
+            # Check if it's already 4326, if not create transformer
+            if crs_source.to_epsg() != 4326:
+                transformer = pyproj.Transformer.from_crs(crs_source, "EPSG:4326", always_xy=True).transform
+        except Exception:
+            pass
+
     features = []
     
     if bassin_hull and not bassin_hull.is_empty:
+        geom_export = transform(transformer, bassin_hull) if transformer else bassin_hull
         features.append({
             'type': 'Feature',
             'properties': {
                 'type': 'bassin_urbain',
                 'cluster_id': cluster_id,
                 'nom': nom_bassin,
-                'exutoire_type': exutoire_info.get('type') if exutoire_info else 'inconnu'
+                'exutoire_type': exutoire_info.get('type') if exutoire_info else 'inconnu',
+                'surface_source': exutoire_info.get('surface_source', 'non_precisee') if exutoire_info else 'non_precisee',
+                'raccordement_statut': exutoire_info.get('raccordement', {}).get('statut') if exutoire_info else None,
+                'raccordement_noeud': exutoire_info.get('raccordement', {}).get('noeud_reseau') if exutoire_info else None,
             },
-            'geometry': mapping(bassin_hull)
+            'geometry': mapping(geom_export)
         })
+
+    # Exutoire explicite : un symbole séparé permet de lire immédiatement le
+    # point de sortie du bassin et son type sur la carte.
+    if exutoire_node in G.nodes:
+        noeud_data = G.nodes[exutoire_node]
+        noeud_geom = noeud_data.get('geometry')
+        if not isinstance(noeud_geom, Point):
+            x, y = noeud_data.get('x'), noeud_data.get('y')
+            if x is not None and y is not None:
+                noeud_geom = Point(float(x), float(y))
+        if isinstance(noeud_geom, Point) and not noeud_geom.is_empty:
+            geom_export = transform(transformer, noeud_geom) if transformer else noeud_geom
+            features.append({
+                'type': 'Feature',
+                'properties': {
+                    'type': 'exutoire',
+                    'cluster_id': cluster_id,
+                    'nom': exutoire_info.get('nom', str(exutoire_node)) if exutoire_info else str(exutoire_node),
+                    'exutoire_type': exutoire_info.get('type', 'inconnu') if exutoire_info else 'inconnu',
+                    'sens_ecoulement': 'vers_exutoire',
+                },
+                'geometry': mapping(geom_export)
+            })
         
     for edge in edges:
         u, v = edge[0], edge[1]
         data = G.edges[u, v, edge[2]] if G.is_multigraph() else G.edges[u, v]
         geom = data.get('geometry')
         if geom:
+            geom_export = transform(transformer, geom) if transformer else geom
             features.append({
                 'type': 'Feature',
                 'properties': {
                     'type': 'conduite',
+                    'cluster_id': cluster_id,
                     'u': str(u),
                     'v': str(v),
+                    'longueur': safe_float(data.get('length', data.get('longueur', 0.0))),
+                    'diametre': safe_float(data.get('diametre_mm', data.get('diametre', 0.0))),
                     **classification.get(edge, {})
                 },
-                'geometry': mapping(geom)
+                'geometry': mapping(geom_export)
             })
             
     return {'type': 'FeatureCollection', 'features': features}
 
-def tracer_cluster_depuis_exutoire(G: nx.DiGraph, exutoire_noeud: str) -> Set[Tuple]:
+def tracer_cluster_depuis_exutoire(G: nx.DiGraph, exutoire_noeud: str) -> Dict[str, Any]:
     if exutoire_noeud not in G:
-        return set()
+        return {'edges': set(), 'noeuds': set(), 'longueur_totale_m': 0.0, 'cycles': []}
 
     noeuds_amont = nx.ancestors(G, exutoire_noeud) | {exutoire_noeud}
     edges_cluster = set()
@@ -226,4 +483,15 @@ def tracer_cluster_depuis_exutoire(G: nx.DiGraph, exutoire_noeud: str) -> Set[Tu
         if u in noeuds_amont and v in noeuds_amont:
             edges_cluster.add((u, v, k) if G.is_multigraph() else (u, v))
 
-    return edges_cluster
+    stats = calculer_statistiques(G, edges_cluster)
+    cycles = []
+    try:
+        cycles = [list(nx.find_cycle(G.subgraph(noeuds_amont)))]
+    except nx.NetworkXNoCycle:
+        pass
+    return {
+        'edges': edges_cluster,
+        'noeuds': noeuds_amont,
+        'longueur_totale_m': stats['longueur_totale_m'],
+        'cycles': cycles,
+    }

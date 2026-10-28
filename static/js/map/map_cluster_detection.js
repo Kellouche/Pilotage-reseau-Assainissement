@@ -4,8 +4,10 @@
     const typeColors = {
         step: { color: '#c0392b', fill: '#e74c3c' },
         station: { color: '#1a6fa0', fill: '#3498db' },
+        station_relevage: { color: '#1a6fa0', fill: '#3498db' },
         ouvrage: { color: '#7d3c98', fill: '#9b59b6' },
         rejet: { color: '#d35400', fill: '#e67e22' },
+        exutoire_implicite: { color: '#f39c12', fill: '#f1c40f' },
         manuel: { color: '#27ae60', fill: '#2ecc71' },
         inconnu: { color: '#607d8b', fill: '#90a4ae' }
     };
@@ -13,8 +15,10 @@
     const exutoireColors = {
         step: '#e74c3c',
         station: '#3498db',
+        station_relevage: '#3498db',
         ouvrage: '#9b59b6',
         rejet: '#e67e22',
+        exutoire_implicite: '#f1c40f',
         manuel: '#27ae60',
         inconnu: '#607d8b'
     };
@@ -28,6 +32,7 @@
         station: '🔵 Station',
         ouvrage: '🟣 Ouvrage',
         rejet: '🟠 Rejet',
+        exutoire_implicite: '🟡 Exutoire Implicite',
         manuel: '⚪ Manuel',
         inconnu: '⚪ Exutoire'
     };
@@ -69,8 +74,8 @@
             attachClusterLayer(clusterLayer);
 
             setProgress(progress, 'Mise à jour de la sélection...', 75);
-            const nbBassins = clusterData.clusters_crees || resultats.filter(r => r.cluster || (r.exutoire && r.exutoire.type !== 'inconnu')).length;
-            const nbTroncons = features.filter(f => f.geometry && f.geometry.type === 'LineString').length;
+            const nbBassins = clusterData.clusters_crees || resultats.length;
+            const nbTroncons = clusterData.troncons_connectes || 0;
             const nbOrphelins = clusterData.troncons_orphelins || 0;
 
             setStatus(statusDiv, `Détection terminée !<br><b>${nbBassins}</b> bassins identifiés<br><b>${nbTroncons}</b> tronçons connectés<br><span style="color: #e74c3c;"><b>${nbOrphelins}</b> tronçons orphelins</span>`);
@@ -147,9 +152,10 @@
             return {
                 color: tc.color,
                 fillColor: tc.fill,
-                fillOpacity: 0.25,
-                weight: 2,
-                dashArray: '6, 4'
+                fillOpacity: 0.18,
+                weight: 3,
+                opacity: 0.95,
+                dashArray: '8, 5'
             };
         }
 
@@ -178,7 +184,10 @@
     function bindClusterFeature(feature, layer) {
         if (feature.properties.type === 'bassin_urbain') {
             const typLabel = exutoireLabels[feature.properties.exutoire_type] || exutoireLabels.inconnu;
-            layer.bindTooltip(`<b>${feature.properties.nom || 'Bassin Urbain'}</b><br>${typLabel}`, { sticky: true });
+            const sourceLabel = feature.properties.surface_source === 'empreinte_reseau_estimee'
+                ? '<br><span style="color:#b35b00">⚠ Emprise réseau estimée</span>'
+                : '';
+            layer.bindTooltip(`<b>${feature.properties.nom || 'Bassin Urbain'}</b><br>${typLabel}${sourceLabel}`, { sticky: true });
 
             layer.on('click', function(e) {
                 L.DomEvent.stopPropagation(e);
@@ -200,7 +209,7 @@
         } else if (feature.properties.type === 'exutoire') {
             const typLabel = exutoireLabels[feature.properties.exutoire_type] || exutoireLabels.inconnu;
             layer.bindTooltip(`<b>Exutoire: ${feature.properties.nom}</b><br>${typLabel}`, { sticky: true });
-        } else if (feature.geometry && feature.geometry.type === 'LineString') {
+        } else if (feature.geometry && (feature.geometry.type === 'LineString' || feature.geometry.type === 'MultiLineString')) {
             const p = feature.properties;
             layer.bindTooltip(
                 `<b>Conduite ${p.conduit_id || ''}</b><br>` +
@@ -214,7 +223,15 @@
     }
 
     function attachClusterLayer(clusterLayer) {
+        state.clusterLayersById = {};
         clusterLayer.eachLayer(layer => {
+            const clusterId = layer.feature && layer.feature.properties
+                ? layer.feature.properties.cluster_id
+                : null;
+            if (clusterId !== null && clusterId !== undefined) {
+                const key = String(clusterId);
+                (state.clusterLayersById[key] ||= []).push(layer);
+            }
             if (layer.feature.properties.type === 'bassin_urbain') {
                 layer.addTo(state.couches.bassins);
             } else {
@@ -234,11 +251,37 @@
 
         const clusterIdString = clusterId === null || clusterId === undefined ? null : String(clusterId);
 
+        if (clusterIdString !== null) {
+            (state.highlightedClusterLayers || []).forEach(layer => {
+                const feature = layer.feature;
+                if (!feature) return;
+                if (feature.geometry && (feature.geometry.type === 'LineString' || feature.geometry.type === 'MultiLineString')) {
+                    layer.setStyle({ color: feature.properties.couleur || '#e74c3c', weight: 2.5, opacity: 0.75 });
+                } else if (feature.properties && feature.properties.type === 'bassin_urbain') {
+                    layer.setStyle({ fillOpacity: 0.18, weight: 3, color: '#607d8b', dashArray: '8, 5' });
+                }
+            });
+
+            const selectedLayers = (state.clusterLayersById && state.clusterLayersById[clusterIdString]) || [];
+            selectedLayers.forEach(layer => {
+                const feature = layer.feature;
+                if (feature.geometry && (feature.geometry.type === 'LineString' || feature.geometry.type === 'MultiLineString')) {
+                    layer.setStyle({ color: '#f1c40f', weight: 5, opacity: 1 });
+                    layer.bringToFront();
+                } else if (feature.properties && feature.properties.type === 'bassin_urbain') {
+                    layer.setStyle({ fillOpacity: 0.55, weight: 4, color: '#f39c12', dashArray: '' });
+                    layer.bringToFront();
+                }
+            });
+            state.highlightedClusterLayers = selectedLayers;
+            return;
+        }
+
         geojsonLayer.eachLayer(layer => {
             const feature = layer.feature;
             if (!feature) return;
 
-            if (feature.geometry && feature.geometry.type === 'LineString') {
+            if (feature.geometry && (feature.geometry.type === 'LineString' || feature.geometry.type === 'MultiLineString')) {
                 const featureClusterId = feature.properties ? String(feature.properties.cluster_id) : '';
                 if (clusterIdString === null || featureClusterId === clusterIdString) {
                     layer.setStyle({ color: '#f1c40f', weight: 8, opacity: 1 });
@@ -335,16 +378,25 @@
         const clusterIdString = String(clusterId);
         let nb = 0;
         let longueur = 0;
+        let bassinProperties = null;
 
         state.activeClusterLayer.eachLayer(layer => {
             const f = layer.feature;
             const featureClusterId = f && f.properties ? f.properties.cluster_id : undefined;
-            if (f && f.geometry && f.geometry.type === 'LineString' && String(featureClusterId) === clusterIdString) {
+            if (f && f.geometry && (f.geometry.type === 'LineString' || f.geometry.type === 'MultiLineString') && String(featureClusterId) === clusterIdString) {
                 nb++;
                 const l = f.properties.longueur || 0;
                 longueur += l;
             }
+            if (f && f.properties && f.properties.type === 'bassin_urbain' && String(featureClusterId) === clusterIdString) {
+                bassinProperties = f.properties;
+            }
         });
+
+        if (bassinProperties) {
+            nb = bassinProperties.nb_troncons ?? nb;
+            longueur = bassinProperties.longueur_totale_m ?? longueur;
+        }
 
         const nom = state.bassinNoms && state.bassinNoms[clusterId] ? state.bassinNoms[clusterId] : `Bassin ${clusterId}`;
         infoDiv.innerHTML = `

@@ -37,7 +37,12 @@ class ExtracteurContoursBassin:
 
         # 1. Tampon sur les canalisations réelles
         for edge in edges_cluster:
-            data = edge[-1] if isinstance(edge[-1], dict) else {}
+            if isinstance(edge[-1], dict):
+                data = edge[-1]
+            elif G.is_multigraph():
+                data = G.edges[edge[0], edge[1], edge[2]]
+            else:
+                data = G.edges[edge[0], edge[1]]
             geom = data.get('geometry')
             if geom and isinstance(geom, LineString) and not geom.is_empty:
                 tampons.append(geom.buffer(self.largeur_bande_m, cap_style=1, join_style=1))

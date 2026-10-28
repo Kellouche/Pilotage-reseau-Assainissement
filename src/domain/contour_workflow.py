@@ -84,6 +84,10 @@ class ContourWorkflow:
             'surface_ha': round(poly.area / 10000.0, 2) if poly else 0.0,
             'longueur_m': cluster['longueur_totale_m'],
             'noeuds': cluster['noeuds'],
-            'troncons': [e[3].get('id', '') for e in cluster['edges']],
+            'troncons': [
+                (self.G.edges[e[0], e[1], e[2]].get('id', '') if self.G.is_multigraph()
+                 else self.G.edges[e[0], e[1]].get('id', ''))
+                for e in cluster['edges']
+            ],
             'geojson': poly.__geo_interface__ if poly else None
         }

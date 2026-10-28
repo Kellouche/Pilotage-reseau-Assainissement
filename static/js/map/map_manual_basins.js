@@ -308,5 +308,5 @@
     }
 
     window.initManualBasins = initManualBasins;
-    window.highlightCluster = highlightCluster;
+    window.highlightCluster = window.highlightCluster || function() {};
 })();

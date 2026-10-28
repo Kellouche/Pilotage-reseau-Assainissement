@@ -57,3 +57,23 @@ Cette méthodologie constitue l'étape 0 de toute modélisation sérieuse. Une f
 
 ---
 *Document Méthodologique - Plateforme de Pilotage Réseau d'Assainissement*
+
+## 7. Règles de nomenclature et de création
+
+La plateforme distingue explicitement deux objets :
+
+* **Bassin collecté du réseau** : ensemble de tronçons orientés qui convergent
+  vers un exutoire physique identifié (rejet, déversoir, station ou STEP).
+* **Bassin versant de surface** : zone hydrologique issue d'un MNT/DEM et de
+  surfaces contributives affectées à un nœud d'injection.
+
+Un bassin collecté ne peut donc pas être créé à partir d'un point isolé, d'un
+nœud mort non identifié ou d'un exutoire implicite. Il doit contenir au moins
+un tronçon et son exutoire doit être présent dans le graphe des ouvrages.
+Les sorties sans exutoire physique restent des anomalies ou des composantes
+orphelines à corriger ; elles ne sont pas des bassins hydrauliques valides.
+
+Le nom affiché suit le format :
+`Bassin hydraulique — <type d'exutoire> <nom/adresse> — rues: <voies drainées>`.
+Lorsque l'adresse ou la rue est absente, l'identifiant de l'ouvrage est
+conservé afin de garantir un nom non ambigu et traçable.

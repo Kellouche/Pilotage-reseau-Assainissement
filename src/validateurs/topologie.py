@@ -30,8 +30,8 @@ class ValidateurTopologie:
         SELECT 
             c.id as id_conduite, c.fid as fid_conduite, c.id_amont, c.id_aval,
             c.prof_fe_am, c.prof_fe_av, c.nom_voie,
-            COALESCE(r_aval.profondeur, 0) as prof_noeud_aval,
-            COALESCE(r_amont.profondeur, 0) as prof_noeud_amont
+            r_aval.profondeur as prof_noeud_aval,
+            r_amont.profondeur as prof_noeud_amont
         FROM conduites c
         LEFT JOIN regards r_amont ON CAST(r_amont.code AS TEXT) = CAST(c.id_amont AS TEXT)
         LEFT JOIN regards r_aval ON CAST(r_aval.code AS TEXT) = CAST(c.id_aval AS TEXT)

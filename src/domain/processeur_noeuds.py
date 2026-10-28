@@ -88,7 +88,15 @@ class ProcesseurNoeuds:
                         elevation = float(ligne[champ_elevation])
 
                     # Standardiser l'ID avec graphe_reseau
-                    noeud_id = str(ligne.get('id', ligne.get('id_noeud', idx)))
+                    candidats_id = (
+                        ligne.get('id'), ligne.get('id_noeud'), ligne.get('Code'),
+                        ligne.get('CODE'), ligne.get('CODEPRR'),
+                        ligne.get('IDNAOPAD'), idx
+                    )
+                    noeud_id = str(next(
+                        (value for value in candidats_id if pd.notna(value) and str(value).strip()),
+                        idx
+                    ))
 
                     self.tous_noeuds.append({
                         'swmm_id': noeud_id,
@@ -96,6 +104,10 @@ class ProcesseurNoeuds:
                         'y': ligne.geometry.y,
                         'node_type': type_noeud,
                         'original_gdf': type_original,
+                        'nom': ligne.get('NOM', ligne.get('NOMPRR', ligne.get('Nom'))),
+                        'nom_voie': ligne.get('NOMVOIE', ligne.get('NOM_VOIE', ligne.get('NOM-VOIE'))),
+                        'commune': ligne.get('COMMUNE'),
+                        'adresse': ligne.get('ADRESSE'),
                         'elevation': elevation
                     })
         except Exception as e:

@@ -754,12 +754,17 @@
             couches.bassins.clearLayers();
             
             // Appeler l'API de détection des clusters
-            fetch('/api/v1/cluster')
+            fetch('/api/v1/clusters/recalculate-all?persist=false', { method: 'POST' })
                 .then(response => {
                     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                     return response.json();
                 })
                 .then(clusterData => {
+                    clusterData.features = (clusterData.resultats || []).flatMap(result =>
+                        result.geojson && Array.isArray(result.geojson.features)
+                            ? result.geojson.features
+                            : []
+                    );
                     if (clusterData.features && clusterData.features.length > 0) {
                         const clusterLayer = L.geoJSON(clusterData, {
                             style: (feature) => {
@@ -775,9 +780,10 @@
                                     return {
                                         color:       tc.color,
                                         fillColor:   tc.fill,
-                                        fillOpacity: 0.25,
-                                        weight:      2,
-                                        dashArray:   '6, 4'
+                                        fillOpacity: 0.18,
+                                        weight:      3,
+                                        opacity:     0.95,
+                                        dashArray:   '8, 5'
                                     };
                                 }
                                 // Tronçons (LineString) : couleur issue de la classification
@@ -867,7 +873,7 @@
                         
                         const nbBassins = clusterData.features.filter(f => f.properties.type === 'bassin_urbain').length;
                         const nbTroncons = clusterData.features.filter(f => f.geometry.type === 'LineString').length;
-                        const nbOrphelins = clusterData.nb_orphelines || 0;
+                        const nbOrphelins = clusterData.troncons_orphelins || 0;
                         
                         statusDiv.innerHTML = `Détection terminée !<br><b>${nbBassins}</b> bassins identifiés<br><b>${nbTroncons}</b> tronçons connectés<br><span style="color: #e74c3c;"><b>${nbOrphelins}</b> tronçons orphelins</span>`;
                         
@@ -1004,13 +1010,21 @@
             }
             let nb = 0;
             let longueur = 0;
+            let bassinProperties = null;
             _activeClusterLayer.eachLayer(layer => {
                 const f = layer.feature;
                 if (f && f.geometry.type === 'LineString' && f.properties.cluster_id === clusterId) {
                     nb++;
                     longueur += (f.properties.longueur || 0);
                 }
+                if (f && f.properties && f.properties.type === 'bassin_urbain' && String(f.properties.cluster_id) === String(clusterId)) {
+                    bassinProperties = f.properties;
+                }
             });
+            if (bassinProperties) {
+                nb = bassinProperties.nb_troncons ?? nb;
+                longueur = bassinProperties.longueur_totale_m ?? longueur;
+            }
             const nom = _bassinNoms && _bassinNoms[clusterId] ? _bassinNoms[clusterId] : `Bassin ${clusterId}`;
             infoDiv.innerHTML = `
                 <b>${nom}</b><br>
