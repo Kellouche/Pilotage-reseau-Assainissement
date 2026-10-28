@@ -1,6 +1,11 @@
-# Feuille de route - SWMM Platform POC
+# Feuille de route — SWMM Platform (Historique POC & Transition SaaS)
 
-## Vision
+> ⚠️ **Document de transition** : La feuille de route officielle et complète pour la transformation SaaS industrielle de la plateforme est désormais consignée dans **[13_ROADMAP_SAAS.md](13_ROADMAP_SAAS.md)** (Phases 0 à 7, chiffrage des tâches S/M/L/XL, architecture FastAPI/Celery/PostGIS/S3, quotas et jalons d'acceptation stricts).  
+> Ce document conserve l'historique des premières phases de cadrage du POC initial.
+
+---
+
+## Vision Initiale du POC
 
 Faire évoluer le POC actuel vers une plateforme web/mobile de pilotage du réseau
 d'assainissement, combinant SIG, collecte terrain, synchronisation, contrôle qualité

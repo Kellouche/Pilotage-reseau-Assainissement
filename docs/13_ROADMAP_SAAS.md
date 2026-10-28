@@ -150,14 +150,14 @@ Les décisions d'architecture sont formalisées dans les fiches ADR dédiées :
 
 > **Objectif** : Poser le socle documentaire officiel, sécuriser le dépôt Git et figer les calculs actuels comme référence d'invariance scientifique.
 
-| Réf | Tâche | Taille | Livrables / Critères d'acceptation |
-|---|---|---|---|
-| 0.1 | Établir le corpus documentaire de référence | M | `docs/14_FICHE_PRODUIT_CADRAGE.md`, `docs/14_GLOSSAIRE_ET_GARANTIES.md`, `docs/15_PLANS_TARIFAIRES.md`. |
-| 0.2 | Rédiger l'ensemble des ADRs (0001 à 0008) | M | Fiches ADR complètes dans `docs/adr/`. |
-| 0.3 | Rédiger la feuille de route SaaS détaillée | M | Ce document `docs/13_ROADMAP_SAAS.md`. |
-| 0.4 | Nettoyer et sécuriser le dépôt Git | S | `.gitignore` mis à jour (exclusion de `AST14DEM_*.shp` de 4 Go, des `.db` locaux, des caches). |
-| 0.5 | Créer le jeu de données test certifié (« Golden Dataset ») | M | Extraction d'un réseau échantillon représentatif (1 000 regards et canalisations) avec fichier GeoPackage et MNT associés. |
-| 0.6 | Mettre en place le Golden Master de non-régression | L | Script automatique `tests/test_golden_master.py` qui fige et valide au millimètre les pentes, anomalies et débits initiaux. |
+| Réf | Tâche | Statut | Taille | Livrables / Critères d'acceptation |
+|---|---|---|---|---|
+| 0.1 | Établir le corpus documentaire de référence | ✅ FAIT | M | `docs/14_FICHE_PRODUIT_CADRAGE.md`, `docs/14_GLOSSAIRE_ET_GARANTIES.md`, `docs/15_PLANS_TARIFAIRES.md`. |
+| 0.2 | Rédiger l'ensemble des ADRs (0001 à 0008) | ✅ FAIT | M | Fiches ADR complètes dans `docs/adr/`. |
+| 0.3 | Rédiger la feuille de route SaaS détaillée | ✅ FAIT | M | Ce document `docs/13_ROADMAP_SAAS.md` + `docs/09_ENDPOINTS_DOCUMENTATION.md` + `docs/01_README.md`. |
+| 0.4 | Nettoyer et sécuriser le dépôt Git | ⏳ EN COURS | S | `.gitignore` vérifié/renforcé (exclusion de `AST14DEM_*.shp` de 4 Go, des `.db` locaux, des caches). |
+| 0.5 | Créer le jeu de données test certifié (« Golden Dataset ») | ⏹️ À FAIRE | M | Extraction d'un réseau échantillon représentatif (1 000 regards et canalisations) avec fichier GeoPackage et MNT associés. |
+| 0.6 | Mettre en place le Golden Master de non-régression | ⏹️ À FAIRE | L | Script automatique `tests/test_golden_master.py` qui fige et valide au millimètre les pentes, anomalies et débits initiaux. |
 
 > **Jalon Phase 0** : Le Golden Master est exécuté avec succès en CI ; la documentation stratégique est validée ; le dépôt Git est assaini.
 

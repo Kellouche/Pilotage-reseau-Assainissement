@@ -1,8 +1,20 @@
-# Pilotage Réseau d'Assainissement
+# SWMM Platform — Pilotage & Modélisation Réseau d'Assainissement SaaS
 
-## Documentation projet
+## 📚 Référentiel Documentaire SaaS 2.0 (Officiel)
 
-- [Feuille de route](docs/ROADMAP.md)
+- **[Guide Master SaaS](docs/01_README.md)**
+- **[Feuille de Route SaaS (Phases 0 à 7)](docs/13_ROADMAP_SAAS.md)**
+- **[Fiche Produit & Cadrage Stratégique](docs/14_FICHE_PRODUIT_CADRAGE.md)**
+- **[Glossaire et Garanties Métier (Non-Régression)](docs/14_GLOSSAIRE_ET_GARANTIES.md)**
+- **[Grille Tarifaire & Plans B2B](docs/15_PLANS_TARIFAIRES.md)**
+- **[Documentation Complète des Endpoints API](docs/09_ENDPOINTS_DOCUMENTATION.md)**
+- **[Dossier des Décisions d'Architecture (ADR 0001 à 0008)](docs/adr/)**
+
+---
+
+## Documentation Historique du POC
+
+- [Feuille de route POC](docs/ROADMAP.md)
 - [Organisation du projet](docs/ORGANISATION_PROJET.md)
 - [Inventaire du projet](docs/INVENTAIRE_PROJET.md)
 - [Lancement du projet](docs/LANCEMENT.md)
