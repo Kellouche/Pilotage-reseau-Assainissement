@@ -871,8 +871,8 @@
 
                         _activeClusterLayer = clusterLayer;
                         
-                        const nbBassins = clusterData.features.filter(f => f.properties.type === 'bassin_urbain').length;
-                        const nbTroncons = clusterData.features.filter(f => f.geometry.type === 'LineString').length;
+                        const nbBassins = clusterData.clusters_crees || clusterData.features.filter(f => f.properties && f.properties.type === 'bassin_urbain').length;
+                        const nbTroncons = clusterData.troncons_connectes !== undefined ? clusterData.troncons_connectes : clusterData.features.filter(f => f.geometry && (f.geometry.type === 'LineString' || f.geometry.type === 'MultiLineString')).length;
                         const nbOrphelins = clusterData.troncons_orphelins || 0;
                         
                         statusDiv.innerHTML = `Détection terminée !<br><b>${nbBassins}</b> bassins identifiés<br><b>${nbTroncons}</b> tronçons connectés<br><span style="color: #e74c3c;"><b>${nbOrphelins}</b> tronçons orphelins</span>`;
