@@ -13,7 +13,10 @@ La politique tarifaire de **SWMM Platform SaaS** n'est pas indexée sur des mét
 
 1. **L'Étudiant ou le Chercheur Universitaire** étudie la mécanique des fluides, les équations d'onde de Saint-Venant et les lois de Manning-Strickler. Il manipule de petits sous-réseaux d'apprentissage, n'a aucun regard physique sous la chaussée et ne produit pas d'études réglementaires opposables.
 2. **Le Bureau d'Études (BET) & Ingénieriste Conseil** réalise des schémas directeurs d'assainissement (SDA), des études de zonage pluvial, des calculs de dimensionnement de bassins de rétention et des dossiers d'autorisation loi sur l'eau. Il a besoin d'auditer rapidement des réseaux entiers (jusqu'à 15 000 regards), de croiser la géométrie avec le MNT et de générer des modèles SWMM 5.2 certifiés avec des rapports d'audit prêts pour les comités de pilotage.
-3. **L'Entreprise de Gestion de l'Assainissement ou la Régie Communale** supervise le fonctionnement hydraulique du réseau communal au quotidien. Ses besoins portent sur la modélisation à l'échelle de l'ensemble de la commune, le contrôle continu de conformité (vitesses d'autocurage NP 650, calculs de mise en charge des collecteurs principaux, stations de relevage) et la mutualisation de l'outil entre les ingénieurs et techniciens du service assainissement.
+3. **L'Entreprise de Gestion de l'Assainissement ou la Régie Communale** assure des missions continues d'exploitation, de maintenance préventive et de gestion du service public. Elle opère via un **Système Modulaire** articulé autour d'un **Socle Central SIG & Gestion** et de 3 modules activables selon ses priorités d'exploitation :
+   - **Module A — Réclamations & Application Mobile Flotte** : Saisie géolocalisée terrain des incidents d'usagers (débordements, fuites, affaissements, odeurs, tampons cassés), photos horodatées, fonctionnement 100% hors-ligne (offline-first) et synchronisation bidirectionnelle avec le Cockpit central.
+   - **Module B — Diagnostic Autocurage NP 650 & Curage** : Détection des vitesses d'autocurage (0.6 à 3.0 m/s), ciblage des tronçons à risque d'ensablement et programmation préventive du curage.
+   - **Module C — Modélisation Hydrodynamique SWMM 5.2 & MNT** : Simulation des crues sous pluies d'orage, délimitation des bassins sur MNT et schémas directeurs.
 
 ---
 
@@ -30,19 +33,19 @@ Chaque nouvelle organisation dispose automatiquement à l'inscription d'un accè
 
 ### 2.1 Matrice Comparative des Formules
 
-| Critères & Droits | **1. Académique & Recherche** | **2. Bureau d'Études (BET)** | **3. Entreprises de Gestion & Régies Communales** |
+| Critères & Droits | **1. Académique & Recherche** | **2. Bureau d'Études (BET)** | **3. Système Modulaire — Régies & Entreprises** |
 |---|---|---|---|
 | **Cible professionnelle** | Universités, instituts d'hydraulique, chercheurs, étudiants | Cabinets d'ingénierie, BET hydraulique urbaine, experts VRD | Entreprises de gestion d'assainissement, régies communales, services techniques |
-| **Tarif d'accès** | **0 DZD / mois** (Usage strictement non commercial) | **45 000 DZD / mois** (ou 450 000 DZD / an) | **Sur devis / Convention annuelle d'exploitation** |
-| **Objectif opérationnel** | Enseignement, validation théorique, recherche | Études de dimensionnement, schémas directeurs, récolement | Modélisation globale du réseau communal, contrôle continu autocurage |
-| **Mode de souscription** | Validation sur email universitaire (`.edu`, `.univ`) | Souscription en ligne, Bon de Commande / Devis Proforma | Bon de commande régie / collectivité ou marché de service |
-| **Plafond réseau** | 500 regards max | 15 000 regards par projet | Réseau communal complet |
-| **Diagnostics NP 650 & Autocurage** | Inclus (pédagogique) | Inclus (rapports études) | Inclus (contrôle continu sur tous secteurs) |
-| **Simulations SWMM 5.2** | 1 calcul à la fois (file standard) | 3 calculs simultanés | File prioritaire dédiée |
-| **Découpage Bassins MNT / DEM** | ❌ Non inclus | **Inclus** (Grilles MNT jusqu'à 50 Mo) | **Inclus** (Très haute résolution) |
+| **Tarif d'accès** | **0 DZD / mois** (Usage strictement non commercial) | **45 000 DZD / mois** (ou 450 000 DZD / an) | **Sur convention modulaire annuelle** (selon modules) |
+| **Objectif opérationnel** | Enseignement, validation théorique, recherche | Études de dimensionnement, schémas directeurs, récolement | Exploitation continue, gestion réclamations, maintenance préventive |
+| **Mode de souscription** | Validation sur email universitaire (`.edu`, `.univ`) | Souscription en ligne, Bon de Commande / Devis Proforma | Bon de commande régie / collectivité ou convention d'exploitation |
+| **Socle SIG & Patrimoine** | Inclus (limité) | Inclus (par projet) | **Inclus** (Patrimoine communal complet, gestion d'équipe) |
+| **Application Mobile & Réclamations** | ❌ Non inclus | ❌ Non inclus | **Module A activable** (App Flutter, offline-first, sync Cockpit) |
+| **Diagnostics NP 650 & Autocurage** | Inclus (pédagogique) | Inclus (rapports études) | **Module B activable** (Contrôle continu, plan curage communal) |
+| **Simulations SWMM 5.2 & MNT** | 1 calcul à la fois (file standard) | 3 calculs simultanés | **Module C activable** (File prioritaire dédiée, bassins MNT) |
 | **Export modèle `.inp` SWMM** | Limité (avec filigrane pédagogique) | **Inclus en plein accès** | **Inclus en plein accès** |
-| **Rapports d'Audit & Synthèse** | ❌ Filigrane *"Usage Pédagogique"* | **Inclus** (PDF certifié avec logo du BET) | **Inclus** (Rapports complets de réseau) |
-| **Comptes & Collaborateurs** | 1 compte chercheur individuel | 5 comptes ingénieurs d'études | Comptes pour l'équipe technique de la régie |
+| **Rapports d'Audit & Synthèse** | ❌ Filigrane *"Usage Pédagogique"* | **Inclus** (PDF certifié avec logo du BET) | **Inclus** (Rapports complets de réseau & patrimoine) |
+| **Comptes & Collaborateurs** | 1 compte chercheur individuel | 5 comptes ingénieurs d'études | Comptes pour l'équipe technique et d'exploitation |
 | **Support & Accompagnement** | Communauté & FAQ en ligne | Support technique par email (< 24h ouvrées) | Support technique prioritaire & accompagnement régie |
 
 ---

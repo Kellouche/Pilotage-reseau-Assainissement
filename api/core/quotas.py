@@ -72,7 +72,7 @@ PLAN_PROFILES: Dict[str, Dict[str, Any]] = {
     },
     "exploitation": {
         "code": "exploitation",
-        "name": "Entreprises de Gestion & Régies Communales",
+        "name": "Système Modulaire — Régies & Entreprises de Gestion",
         "max_nodes": None,  # Réseau communal complet
         "trial_days": None,
         "max_concurrent_simulations": 10,
@@ -81,7 +81,7 @@ PLAN_PROFILES: Dict[str, Dict[str, Any]] = {
         "max_members": 15,  # Équipe technique du service assainissement
         # Feature Gating métier Assainissement
         "has_mnt_analysis": True,
-        "has_mobile_access": False,  # Reporté en feuille de route
+        "has_mobile_access": True,  # Application mobile Flutter & synchronisation des réclamations/inspections
         "has_custom_reports": True,
         "retention_days": 365,
     },
@@ -107,7 +107,7 @@ PLAN_ALIASES: Dict[str, str] = {
 
 FEATURE_LABELS: Dict[str, str] = {
     "has_mnt_analysis": "l'analyse morphologique et l'extraction de bassins versants via MNT / DEM",
-    "has_mobile_access": "l'accès à l'application mobile de terrain et la synchronisation des inspections ITV",
+    "has_mobile_access": "l'accès à l'application mobile de terrain et la synchronisation des réclamations & inspections",
     "has_custom_reports": "l'export de rapports d'ingénierie certifiés sans filigrane",
 }
 
