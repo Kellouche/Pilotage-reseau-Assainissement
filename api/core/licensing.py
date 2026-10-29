@@ -2,7 +2,7 @@
 """
 Module api.core.licensing : Gestion du cycle de vie des licences B2B / B2G et validation des bons de commande.
 Conforme à la Roadmap SaaS Phase 3.3 et ADR 0006 (Facturation B2B/B2G Dinars Algériens).
-Adapté aux directions de l'hydraulique, Office National de l'Assainissement (ONA), régies communales et BET.
+Adapté aux services techniques d'assainissement et bureaux d'études (BET).
 
 Auteur : Dr Abdelhakim Kellouche / Antigravity
 Date : Octobre 2026

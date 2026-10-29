@@ -64,9 +64,9 @@ def test_generate_proforma_pdf_validity():
 
     # Test formule exploitation
     pdf_exp = generate_proforma_pdf(
-        org_name="Office National de l'Assainissement (ONA)",
+        org_name="Société d'Assainissement Métropolitaine",
         contact_name="Directeur Exploitation",
-        contact_email="direction@ona.dz",
+        contact_email="direction@assainissement.dz",
         plan="exploitation",
         duration_months=12,
         doc_type="devis",

@@ -140,16 +140,16 @@ class ApiKey(Base):
 
 class PurchaseOrder(Base):
     """
-    Bon de Commande Administratif B2B/B2G & Marché Public (ONA, Régies d'eau, BET).
+    Bon de Commande Administratif B2B/B2G & Marché Public (Entreprises, Régies d'eau, BET).
     Permet la validation des licences SWMM Platform SaaS en Dinar Algérien (DZD) ou Euros (EUR).
     """
     __tablename__ = "purchase_orders"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_gen_uuid)
     org_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), index=True, nullable=False)
-    order_ref: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)  # ex: "BC-2026-ONA-0012"
-    client_type: Mapped[str] = mapped_column(String(50), default="bet", nullable=False)  # ona, seaal, ade, bet, universite, autre
-    entity_name: Mapped[str] = mapped_column(String(150), nullable=False)  # ex: "Office National de l'Assainissement - Zone Centre"
+    order_ref: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)  # ex: "BC-2026-BET-0012"
+    client_type: Mapped[str] = mapped_column(String(50), default="bet", nullable=False)  # bet, entreprise, regie, universite, autre
+    entity_name: Mapped[str] = mapped_column(String(150), nullable=False)  # ex: "Bureau d'Études VRD Hydraulique"
     contact_name: Mapped[str] = mapped_column(String(120), default="", nullable=False)
     contact_email: Mapped[str] = mapped_column(String(255), default="", nullable=False)
     contact_phone: Mapped[str] = mapped_column(String(50), default="", nullable=False)

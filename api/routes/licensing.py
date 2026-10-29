@@ -110,9 +110,9 @@ def list_organization_orders(
 
 @router.post("/order", response_model=PurchaseOrderSummary, status_code=status.HTTP_201_CREATED)
 async def create_purchase_order(
-    order_ref: str = Form(..., description="Référence du Bon de Commande (ex: BC-2026-ONA-01)"),
+    order_ref: str = Form(..., description="Référence du Bon de Commande (ex: BC-2026-BET-01)"),
     entity_name: str = Form(..., description="Raison sociale ou dénomination de l'organisme"),
-    client_type: str = Form("bet", description="bet, ona, regie, universite, etc."),
+    client_type: str = Form("bet", description="bet, entreprise, regie, universite, etc."),
     contact_name: str = Form(""),
     contact_email: str = Form(""),
     contact_phone: str = Form(""),
