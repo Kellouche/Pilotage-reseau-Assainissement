@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inscription — SWMM Platform SaaS</title>
+    <title>Commande & Inscription — SWMM Platform SaaS</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -15,122 +15,197 @@
             align-items: center;
             justify-content: center;
             font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-            padding: 30px 20px;
+            padding: 30px 15px;
             color: #1e293b;
         }
-        .auth-card {
+        .order-card {
             background: #ffffff;
             border-radius: 20px;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            max-width: 580px;
+            max-width: 680px;
             width: 100%;
             overflow: hidden;
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
-        .auth-header {
+        .order-header {
             background: #f8fafc;
             border-bottom: 1px solid #e2e8f0;
-            padding: 28px 25px 20px;
+            padding: 24px 28px 18px;
             text-align: center;
         }
-        .auth-brand-icon {
+        .order-brand-icon {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 56px;
-            height: 56px;
+            width: 52px;
+            height: 52px;
             border-radius: 14px;
             background: linear-gradient(135deg, #0284c7, #0369a1);
             color: #ffffff;
-            font-size: 24px;
+            font-size: 22px;
             margin-bottom: 10px;
             box-shadow: 0 8px 16px rgba(2, 132, 199, 0.35);
         }
-        .auth-body {
-            padding: 25px 30px;
+        .formula-nav {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+            background: #f1f5f9;
+            padding: 5px;
+            border-radius: 12px;
+            margin-top: 14px;
         }
-        .auth-footer {
+        .formula-tab {
+            border: none;
+            background: transparent;
+            padding: 8px 6px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #64748b;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            line-height: 1.2;
+        }
+        .formula-tab:hover {
+            color: #0f172a;
+            background: rgba(255, 255, 255, 0.6);
+        }
+        .formula-tab.active {
+            background: #ffffff;
+            color: #0284c7;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+            font-weight: 700;
+        }
+        .order-body {
+            padding: 24px 28px;
+        }
+        .plan-summary-box {
+            border-radius: 14px;
+            padding: 16px 18px;
+            margin-bottom: 22px;
+            border: 1px solid #e2e8f0;
+            background: #f8fafc;
+            transition: all 0.2s;
+        }
+        .plan-summary-box.demo-theme {
+            border-left: 5px solid #475569;
+        }
+        .plan-summary-box.education-theme {
+            border-left: 5px solid #64748b;
+        }
+        .plan-summary-box.bet-theme {
+            border-left: 5px solid #0284c7;
+            background: #f0f9ff;
+        }
+        .plan-summary-box.exploitation-theme {
+            border-left: 5px solid #10b981;
+            background: #f0fdf4;
+        }
+        .module-check-item {
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 10px 14px;
+            margin-bottom: 8px;
+            background: #ffffff;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .module-check-item:hover {
+            border-color: #10b981;
+            background: #f0fdf4;
+        }
+        .module-check-item input[type="checkbox"]:checked ~ .module-content strong {
+            color: #047857;
+        }
+        .order-footer {
             background: #f8fafc;
             border-top: 1px solid #e2e8f0;
-            padding: 16px 25px;
+            padding: 14px 25px;
             text-align: center;
             font-size: 0.9rem;
         }
-        .btn-auth-primary {
+        .btn-order-primary {
             background: linear-gradient(135deg, #0284c7, #0369a1);
             border: none;
             padding: 12px;
             font-weight: 700;
             font-size: 1rem;
             border-radius: 10px;
+            color: #ffffff;
             transition: all 0.2s ease-in-out;
         }
-        .btn-auth-primary:hover {
+        .btn-order-primary:hover {
             background: linear-gradient(135deg, #0369a1, #075985);
             transform: translateY(-1px);
             box-shadow: 0 6px 16px rgba(2, 132, 199, 0.4);
+            color: #ffffff;
         }
-        .plan-card {
-            border: 2px solid #e2e8f0;
-            border-radius: 12px;
-            padding: 12px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .plan-card:hover {
-            border-color: #0284c7;
-            background: #f0f9ff;
-        }
-        .plan-card input[type="radio"]:checked + div {
-            font-weight: bold;
-            color: #0284c7;
+        @media (max-width: 576px) {
+            .formula-nav {
+                grid-template-columns: repeat(2, 1fr);
+            }
         }
     </style>
 </head>
 <body>
 
-<div class="auth-card">
-    <div class="auth-header">
-        <div class="auth-brand-icon">
+<div class="order-card">
+    <!-- En-tête dynamique -->
+    <div class="order-header">
+        <div class="order-brand-icon" id="planIcon">
             <i class="fas fa-water"></i>
         </div>
-        <h3 class="fw-bold mb-1" style="color: #0f172a;">Créer un compte SWMM Platform</h3>
-        <p class="text-muted small mb-0">Espace ingénierie d'assainissement et modélisation hydraulique</p>
+        <h3 class="fw-bold mb-1" id="orderTitle" style="color: #0f172a;">Souscription SWMM Platform</h3>
+        <p class="text-muted small mb-2" id="orderSubtitle">Plateforme d'audit capacitaire et de modélisation hydraulique</p>
+
+        <!-- Sélecteur à 4 onglets -->
+        <div class="formula-nav" role="tablist">
+            <button type="button" class="formula-tab" onclick="setFormula('demo')" id="tab-demo">
+                <i class="fas fa-bolt d-block mb-1"></i>Essai Démo
+            </button>
+            <button type="button" class="formula-tab" onclick="setFormula('education')" id="tab-education">
+                <i class="fas fa-graduation-cap d-block mb-1"></i>Académique
+            </button>
+            <button type="button" class="formula-tab" onclick="setFormula('bet')" id="tab-bet">
+                <i class="fas fa-drafting-compass d-block mb-1"></i>Bureau d'Études
+            </button>
+            <button type="button" class="formula-tab" onclick="setFormula('exploitation')" id="tab-exploitation">
+                <i class="fas fa-cubes d-block mb-1"></i>Régies & Gestion
+            </button>
+        </div>
     </div>
 
-    <div class="auth-body">
+    <div class="order-body">
         <div id="alertBox" class="alert alert-danger d-none" role="alert">
             <span id="alertMsg"></span>
         </div>
 
+        <!-- Récapitulatif spécifique à la formule sélectionnée -->
+        <div class="plan-summary-box" id="planSummaryBox">
+            <!-- Injecté dynamiquement par JavaScript -->
+        </div>
+
         <form id="registerForm">
+            <!-- Champ caché portant le code du plan actif -->
+            <input type="hidden" id="billingPlan" value="bet">
+
             <div class="row">
                 <div class="col-md-6 mb-3">
-                    <label class="form-label small fw-semibold text-secondary">Nom complet</label>
+                    <label class="form-label small fw-semibold text-secondary">Nom complet du responsable</label>
                     <input type="text" class="form-control" id="fullName" placeholder="Dr Abdelhakim K." required>
                 </div>
                 <div class="col-md-6 mb-3">
-                    <label class="form-label small fw-semibold text-secondary">Adresse email</label>
+                    <label class="form-label small fw-semibold text-secondary" id="emailLabel">Adresse email professionnelle</label>
                     <input type="email" class="form-control" id="email" placeholder="nom@organisation.dz" required>
+                    <div class="form-text small text-muted d-none" id="emailHelpText"></div>
                 </div>
             </div>
 
             <div class="mb-3">
-                <label class="form-label small fw-semibold text-secondary">Nom de votre organisation / BET / Régie</label>
-                <input type="text" class="form-control" id="orgName" placeholder="Bureau d'Études Assainissement & Environnement" required>
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label small fw-semibold text-secondary mb-1">Formule / Plan d'activité</label>
-                <select class="form-select" id="billingPlan" required>
-                    <option value="demo">Version Démo d'Évaluation (14 jours gratuits)</option>
-                    <option value="bet" selected>Bureau d'Études - BET (45 000 DZD / mois ou 450 000 DZD / an)</option>
-                    <option value="exploitation">Système Modulaire — Régies & Entreprises de Gestion (Sur convention)</option>
-                    <option value="education">Académique & Recherche (0 DZD - Gratuit pour universités)</option>
-                </select>
-                <div class="form-text small text-muted">
-                    La formule Académique requiert une adresse email universitaire (.edu, .univ.dz, .ac.uk...).
-                </div>
+                <label class="form-label small fw-semibold text-secondary" id="orgLabel">Nom de votre organisation / Bureau d'études</label>
+                <input type="text" class="form-control" id="orgName" placeholder="Bureau d'Études Assainissement & VRD" required>
             </div>
 
             <div class="mb-3">
@@ -138,14 +213,14 @@
                 <input type="password" class="form-control" id="password" placeholder="••••••••••••" minlength="8" required>
             </div>
 
-            <button type="submit" id="btnSubmit" class="btn btn-primary btn-auth-primary w-100 text-white shadow-sm mt-3 mb-2">
-                <i class="fas fa-user-plus me-2"></i> Créer mon organisation et démarrer
+            <button type="submit" id="btnSubmit" class="btn btn-order-primary w-100 shadow-sm mt-3 mb-2">
+                <i class="fas fa-check-circle me-2"></i> <span id="btnSubmitText">Confirmer ma commande</span>
             </button>
         </form>
     </div>
 
-    <div class="auth-footer text-muted">
-        Vous avez déjà un compte ?
+    <div class="order-footer text-muted">
+        Vous disposez déjà d'un compte ?
         <a href="/login" class="fw-semibold text-primary text-decoration-none">
             Se connecter
         </a>
@@ -153,20 +228,288 @@
 </div>
 
 <script>
-    // Pré-sélection du plan si passé en paramètre URL (?plan=demo, ?plan=bet...)
+    // Configuration détaillée et tarifaire des 4 formules
+    const FORMULAS = {
+        demo: {
+            title: "Activation de votre Essai Démo (14 jours)",
+            subtitle: "Évaluez la plateforme sur vos données réelles sans carte bancaire.",
+            icon: "fas fa-bolt",
+            btnText: "Activer mon essai gratuit (14 jours)",
+            orgLabel: "Nom de votre organisme ou entreprise",
+            orgPlaceholder: "Ex. Bureau d'études ou service technique",
+            emailLabel: "Adresse email professionnelle",
+            emailPlaceholder: "nom@entreprise.com",
+            emailHelp: "",
+            renderSummary: () => `
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="badge bg-dark">Évaluation sans engagement</span>
+                    <span class="h4 fw-bold text-dark mb-0">0 DZD <span class="fs-6 fw-normal text-muted">/ 14 jours</span></span>
+                </div>
+                <p class="small text-muted mb-2">Accès immédiat pour tester l'ensemble des fonctionnalités de base :</p>
+                <ul class="list-unstyled small text-muted mb-0">
+                    <li class="mb-1"><i class="fas fa-check text-success me-2"></i>Réseaux jusqu'à <strong>2 000 regards</strong></li>
+                    <li class="mb-1"><i class="fas fa-check text-success me-2"></i>Contrôle topologique & diagnostic NP 650 complet</li>
+                    <li class="mb-1"><i class="fas fa-check text-success me-2"></i>Simulations hydrodynamiques EPA SWMM 5.2 d'initiation</li>
+                    <li><i class="fas fa-info-circle text-primary me-2"></i>Aucun moyen de paiement requis, sans reconduction automatique.</li>
+                </ul>
+            `
+        },
+        education: {
+            title: "Souscription Formule Académique & Recherche",
+            subtitle: "Formule réservée aux universités, enseignants et étudiants en hydraulique.",
+            icon: "fas fa-graduation-cap",
+            btnText: "Valider mon inscription académique",
+            orgLabel: "Université / Faculté / Laboratoire de recherche",
+            orgPlaceholder: "Ex. Université des Sciences et de la Technologie",
+            emailLabel: "Adresse email universitaire officielle",
+            emailPlaceholder: "prenom.nom@univ-alger.dz",
+            emailHelp: "Un email universitaire valide (.univ.dz, .edu, .ac.uk, polytech...) est exigé.",
+            renderSummary: () => `
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="badge bg-secondary">Usage enseignement & recherche</span>
+                    <span class="h4 fw-bold text-dark mb-0">0 DZD <span class="fs-6 fw-normal text-muted">/ permanent</span></span>
+                </div>
+                <p class="small text-muted mb-2">Accès gratuit strictement non commercial pour les travaux d'études et PFE :</p>
+                <ul class="list-unstyled small text-muted mb-0">
+                    <li class="mb-1"><i class="fas fa-check text-success me-2"></i>Moteur officiel EPA SWMM 5.2 complet (1 calcul simultané)</li>
+                    <li class="mb-1"><i class="fas fa-check text-success me-2"></i>Réseaux d'apprentissage limités à <strong>500 regards</strong></li>
+                    <li class="mb-1"><i class="fas fa-check text-success me-2"></i>Contrôle des pentes et des vitesses d'autocurage (NP 650)</li>
+                    <li><i class="fas fa-exclamation-triangle text-warning me-2"></i>Filigrane pédagogique imposé sur les exports de documents.</li>
+                </ul>
+            `
+        },
+        bet: {
+            title: "Commande Licence Bureau d'Études (BET)",
+            subtitle: "La solution d'ingénierie pour vos schémas directeurs et audits capacitaires.",
+            icon: "fas fa-drafting-compass",
+            btnText: "Confirmer ma commande BET & Recevoir ma proforma",
+            orgLabel: "Raison sociale du Bureau d'Études VRD",
+            orgPlaceholder: "Ex. Cabinet d'Ingénierie & Hydraulique Urbaine",
+            emailLabel: "Adresse email professionnelle",
+            emailPlaceholder: "contact@bet-ingenierie.dz",
+            emailHelp: "",
+            renderSummary: () => `
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div>
+                        <span class="badge bg-primary mb-1">Licence Bureau d'Études VRD</span>
+                        <div class="small text-muted">Engagement annuel ou mensuel</div>
+                    </div>
+                    <div class="text-end">
+                        <div class="h4 fw-bold text-primary mb-0" id="betDisplayPrice">450 000 DZD <span class="fs-6 fw-normal text-muted">/ an</span></div>
+                        <div class="small text-success fw-semibold" id="betPeriodNote">2 mois offerts inclus</div>
+                    </div>
+                </div>
+
+                <div class="p-2 mb-2 rounded bg-white border">
+                    <div class="row g-2 text-start">
+                        <div class="col-6">
+                            <label class="form-check p-2 rounded border bg-light w-100" style="cursor: pointer;">
+                                <input class="form-check-input ms-0 me-2" type="radio" name="betPeriod" id="betAnnual" value="annual" checked onchange="updateBetPrice()">
+                                <span class="small"><strong>Annuel</strong> (450 000 DZD/an)</span>
+                            </label>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-check p-2 rounded border bg-light w-100" style="cursor: pointer;">
+                                <input class="form-check-input ms-0 me-2" type="radio" name="betPeriod" id="betMonthly" value="monthly" onchange="updateBetPrice()">
+                                <span class="small"><strong>Mensuel</strong> (45 000 DZD/mois)</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <ul class="list-unstyled small text-muted mb-2">
+                    <li class="mb-1"><i class="fas fa-check text-primary me-2"></i>Réseaux jusqu'à <strong>15 000 regards</strong> par projet</li>
+                    <li class="mb-1"><i class="fas fa-check text-primary me-2"></i><strong>Rapports certifiés officiels</strong> sans filigrane avec le logo du BET</li>
+                    <li class="mb-1"><i class="fas fa-check text-primary me-2"></i>Audit capacitaire NP 650, MNT raster & 3 calculs SWMM simultanés</li>
+                    <li class="mb-1"><i class="fas fa-check text-primary me-2"></i>Exports complets : Shapefile, GeoPackage, GeoJSON et SWMM .inp</li>
+                </ul>
+
+                <div class="small p-2 bg-light rounded text-muted">
+                    <i class="fas fa-file-invoice text-primary me-1"></i> Facture proforma officielle immédiatement téléchargeable pour bon de commande administratif ou virement bancaire.
+                </div>
+            `
+        },
+        exploitation: {
+            title: "Commande Système Modulaire — Régies & Entreprises",
+            subtitle: "Composez votre solution d'assainissement selon vos missions opérationnelles.",
+            icon: "fas fa-cubes",
+            btnText: "Valider ma sélection modulaire",
+            orgLabel: "Nom de la Régie Communale ou Service Municipal d'Assainissement",
+            orgPlaceholder: "Ex. Régie Communale de l'Assainissement / APC",
+            emailLabel: "Adresse email du service technique",
+            emailPlaceholder: "technique@regie-assainissement.dz",
+            emailHelp: "",
+            renderSummary: () => `
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div>
+                        <span class="badge bg-success mb-1">Système Modulaire • Exploitation</span>
+                        <div class="small text-success fw-bold">Périmètre : Réseau communal complet</div>
+                    </div>
+                    <div class="text-end">
+                        <div class="h4 fw-bold text-success mb-0" id="modulaireTotalPrice">650 000 DZD <span class="fs-6 fw-normal text-muted">/ an</span></div>
+                        <div class="small text-muted" id="modulaireTotalLabel">Pack Intégral (3 modules)</div>
+                    </div>
+                </div>
+
+                <div class="small fw-bold text-dark mb-2">Sélectionnez vos modules opérationnels activables :</div>
+
+                <label class="module-check-item d-flex align-items-start" style="cursor: pointer;">
+                    <input class="form-check-input mt-1 me-2" type="checkbox" id="modA" checked onchange="calcModularTotal()">
+                    <div class="module-content flex-grow-1">
+                        <div class="d-flex justify-content-between">
+                            <strong><i class="fas fa-mobile-alt text-success me-1"></i> Module A — Application mobile de terrain</strong>
+                            <span class="badge bg-light text-dark border">250 000 DZD/an</span>
+                        </div>
+                        <div class="text-muted" style="font-size: 0.76rem;">Visualisation du réseau sur smartphone/tablette, signalement d'incidents (GPS, photos, gravité), fiches d'inspection & mode déconnecté.</div>
+                    </div>
+                </label>
+
+                <label class="module-check-item d-flex align-items-start" style="cursor: pointer;">
+                    <input class="form-check-input mt-1 me-2" type="checkbox" id="modB" checked onchange="calcModularTotal()">
+                    <div class="module-content flex-grow-1">
+                        <div class="d-flex justify-content-between">
+                            <strong><i class="fas fa-tachometer-alt text-success me-1"></i> Module B — Diagnostic NP 650 & Autocurage</strong>
+                            <span class="badge bg-light text-dark border">200 000 DZD/an</span>
+                        </div>
+                        <div class="text-muted" style="font-size: 0.76rem;">Contrôle continu des vitesses d'autocurage (0.6 à 3.0 m/s) et repérage des zones d'ensablement pour planifier les curages.</div>
+                    </div>
+                </label>
+
+                <label class="module-check-item d-flex align-items-start" style="cursor: pointer;">
+                    <input class="form-check-input mt-1 me-2" type="checkbox" id="modC" checked onchange="calcModularTotal()">
+                    <div class="module-content flex-grow-1">
+                        <div class="d-flex justify-content-between">
+                            <strong><i class="fas fa-water text-success me-1"></i> Module C — Modélisation hydraulique SWMM 5.2 & MNT</strong>
+                            <span class="badge bg-light text-dark border">350 000 DZD/an</span>
+                        </div>
+                        <div class="text-muted" style="font-size: 0.76rem;">Simulations Saint-Venant 1D sous pluies de projet et découpage des sous-bassins versants sur MNT.</div>
+                    </div>
+                </label>
+
+                <div class="p-2 mt-2 rounded bg-white border" style="font-size: 0.78rem;">
+                    <label class="form-check mb-0" style="cursor: pointer;">
+                        <input class="form-check-input me-2" type="checkbox" id="chkConvention" onchange="toggleConvention(this.checked)">
+                        <span><strong>Besoin d'une convention personnalisée ?</strong> (Missions spécifiques, déploiement multi-communes ou cahier des charges particulier).</span>
+                    </label>
+                </div>
+            `
+        }
+    };
+
+    let currentPlan = 'bet';
+
+    function setFormula(planKey) {
+        if (!FORMULAS[planKey]) planKey = 'bet';
+        currentPlan = planKey;
+        document.getElementById('billingPlan').value = planKey;
+
+        // Mise à jour des onglets visuels
+        document.querySelectorAll('.formula-tab').forEach(tab => tab.classList.remove('active'));
+        const activeTab = document.getElementById(`tab-${planKey}`);
+        if (activeTab) activeTab.classList.add('active');
+
+        const cfg = FORMULAS[planKey];
+
+        // Mise à jour de l'en-tête
+        document.getElementById('orderTitle').textContent = cfg.title;
+        document.getElementById('orderSubtitle').textContent = cfg.subtitle;
+        document.getElementById('planIcon').innerHTML = `<i class="${cfg.icon}"></i>`;
+        document.getElementById('btnSubmitText').textContent = cfg.btnText;
+
+        // Mise à jour des labels et placeholders du formulaire
+        document.getElementById('orgLabel').textContent = cfg.orgLabel;
+        document.getElementById('orgName').placeholder = cfg.orgPlaceholder;
+        document.getElementById('emailLabel').textContent = cfg.emailLabel;
+        document.getElementById('email').placeholder = cfg.emailPlaceholder;
+
+        const emailHelp = document.getElementById('emailHelpText');
+        if (cfg.emailHelp) {
+            emailHelp.textContent = cfg.emailHelp;
+            emailHelp.classList.remove('d-none');
+        } else {
+            emailHelp.classList.add('d-none');
+        }
+
+        // Mise à jour du récapitulatif
+        const summaryBox = document.getElementById('planSummaryBox');
+        summaryBox.className = `plan-summary-box ${planKey}-theme`;
+        summaryBox.innerHTML = cfg.renderSummary();
+
+        // Réinitialiser les calculs spécifiques si nécessaire
+        if (planKey === 'exploitation') {
+            calcModularTotal();
+        }
+    }
+
+    function updateBetPrice() {
+        const isAnnual = document.getElementById('betAnnual').checked;
+        const priceEl = document.getElementById('betDisplayPrice');
+        const noteEl = document.getElementById('betPeriodNote');
+        if (isAnnual) {
+            priceEl.innerHTML = '450 000 DZD <span class="fs-6 fw-normal text-muted">/ an</span>';
+            noteEl.textContent = '2 mois offerts inclus';
+            noteEl.className = 'small text-success fw-semibold';
+        } else {
+            priceEl.innerHTML = '45 000 DZD <span class="fs-6 fw-normal text-muted">/ mois</span>';
+            noteEl.textContent = 'Facturation mensuelle standard';
+            noteEl.className = 'small text-muted';
+        }
+    }
+
+    function calcModularTotal() {
+        const isConvention = document.getElementById('chkConvention') && document.getElementById('chkConvention').checked;
+        if (isConvention) {
+            document.getElementById('modulaireTotalPrice').innerHTML = 'Sur convention';
+            document.getElementById('modulaireTotalLabel').textContent = 'Cahier des charges spécifique';
+            document.getElementById('btnSubmitText').textContent = 'Demander une convention personnalisée';
+            return;
+        }
+
+        const a = document.getElementById('modA') && document.getElementById('modA').checked;
+        const b = document.getElementById('modB') && document.getElementById('modB').checked;
+        const c = document.getElementById('modC') && document.getElementById('modC').checked;
+
+        const priceEl = document.getElementById('modulaireTotalPrice');
+        const labelEl = document.getElementById('modulaireTotalLabel');
+        const btnText = document.getElementById('btnSubmitText');
+
+        if (a && b && c) {
+            priceEl.innerHTML = '650 000 DZD <span class="fs-6 fw-normal text-muted">/ an</span>';
+            labelEl.textContent = 'Pack Intégral (Remise 150k DZD incluse)';
+            btnText.textContent = 'Valider ma commande Pack Intégral';
+        } else {
+            let total = 0;
+            let count = 0;
+            if (a) { total += 250000; count++; }
+            if (b) { total += 200000; count++; }
+            if (c) { total += 350000; count++; }
+
+            if (count === 0) {
+                priceEl.innerHTML = '0 DZD';
+                labelEl.textContent = 'Aucun module sélectionné';
+                btnText.textContent = 'Sélectionnez au moins un module';
+            } else {
+                priceEl.innerHTML = `${total.toLocaleString('fr-FR')} DZD <span class="fs-6 fw-normal text-muted">/ an</span>`;
+                labelEl.textContent = `${count} module(s) sélectionné(s) à la carte`;
+                btnText.textContent = `Valider ma sélection (${count} module${count > 1 ? 's' : ''})`;
+            }
+        }
+    }
+
+    function toggleConvention(checked) {
+        calcModularTotal();
+    }
+
+    // Initialisation au chargement de la page selon le paramètre URL (?plan=demo, ?plan=bet...)
     window.addEventListener('DOMContentLoaded', () => {
         const urlParams = new URLSearchParams(window.location.search);
         const planParam = urlParams.get('plan');
-        if (planParam) {
-            const selectEl = document.getElementById('billingPlan');
-            const validPlans = ['demo', 'bet', 'exploitation', 'education'];
-            const normalized = planParam.toLowerCase();
-            if (selectEl && validPlans.includes(normalized)) {
-                selectEl.value = normalized;
-            }
-        }
+        const validPlans = ['demo', 'education', 'bet', 'exploitation'];
+        const initialPlan = (planParam && validPlans.includes(planParam.toLowerCase())) ? planParam.toLowerCase() : 'bet';
+        setFormula(initialPlan);
     });
 
+    // Gestion de la soumission du formulaire
     const form = document.getElementById('registerForm');
     const alertBox = document.getElementById('alertBox');
     const alertMsg = document.getElementById('alertMsg');
@@ -175,11 +518,24 @@
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
         alertBox.classList.add('d-none');
-        btnSubmit.disabled = true;
-        btnSubmit.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Création en cours...';
 
         const plan = document.getElementById('billingPlan').value;
         const orgType = plan === 'education' ? 'academique' : (plan === 'exploitation' ? 'regie' : 'bet');
+
+        // Validation frontale pour l'offre académique
+        if (plan === 'education') {
+            const emailVal = document.getElementById('email').value.trim().toLowerCase();
+            const isEdu = emailVal.includes('.edu') || emailVal.includes('.univ') || emailVal.includes('.ac.') || emailVal.includes('polytech');
+            if (!isEdu) {
+                alertMsg.textContent = "L'offre Académique & Recherche requiert une adresse email universitaire (.univ.dz, .edu...). Pour les entreprises privées et BET, veuillez sélectionner l'offre Bureau d'Études.";
+                alertBox.classList.remove('d-none');
+                return;
+            }
+        }
+
+        btnSubmit.disabled = true;
+        const originalBtnText = btnSubmit.innerHTML;
+        btnSubmit.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Traitement de votre commande...';
 
         try {
             const resp = await fetch('/api/v1/auth/register', {
@@ -198,7 +554,7 @@
             const data = await resp.json();
 
             if (!resp.ok) {
-                throw new Error(data.detail || 'Erreur lors de la création du compte');
+                throw new Error(data.detail || 'Erreur lors de la création de la commande');
             }
 
             if (data.access_token) {
@@ -206,14 +562,14 @@
                 document.cookie = `access_token=${data.access_token}; path=/; max-age=604800; SameSite=Lax`;
             }
 
-            // Redirection vers le cockpit
+            // Redirection vers l'espace cartographique
             window.location.href = '/map';
 
         } catch (err) {
             alertMsg.textContent = err.message;
             alertBox.classList.remove('d-none');
             btnSubmit.disabled = false;
-            btnSubmit.innerHTML = '<i class="fas fa-user-plus me-2"></i> Créer mon organisation et démarrer';
+            btnSubmit.innerHTML = originalBtnText;
         }
     });
 </script>
