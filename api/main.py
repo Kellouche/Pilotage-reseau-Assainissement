@@ -4,7 +4,7 @@ Configure l'application, les routes, le middleware CORS, etc.
 """
 
 import asyncio
-from fastapi import FastAPI, Depends, HTTPException, status, WebSocket
+from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -101,8 +101,19 @@ app.add_middleware(
 # ROOT & HEALTH
 # ============================================================
 
-@app.get("/")
-def read_root():
+@app.get("/", response_class=HTMLResponse)
+def read_root(request: Request):
+    """Page d'accueil - Cockpit hydraulique et cartographie Leaflet."""
+    template_path = Path("templates/index.html")
+    if template_path.exists():
+        with open(template_path, "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+    return HTMLResponse("<h1>SWMM Platform</h1><p>Consultez la <a href='/docs'>Documentation API Swagger</a>.</p>")
+
+
+@app.get("/api/info")
+def get_api_info():
+    """Métadonnées JSON de l'application."""
     return {
         "application": APP_NAME,
         "version": APP_VERSION,
@@ -114,8 +125,13 @@ def read_root():
             "rejets": "/api/v1/network/rejets",
             "clusters": "/api/v1/clusters",
             "simulations": "/api/v1/simulations",
+            "jobs": "/api/v1/jobs",
+            "artifacts": "/api/v1/artifacts",
             "sync": "/api/v1/sync",
-            "visualisation": "/map"
+            "visualisation": "/map",
+            "qualite": "/qualite",
+            "carte": "/carte",
+            "tunnel": "/tunnel"
         }
     }
 
