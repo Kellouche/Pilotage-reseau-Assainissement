@@ -124,7 +124,7 @@
         <div class="order-brand-icon">
             <i class="fas fa-water"></i>
         </div>
-        <h4 class="fw-bold mb-1" id="orderTitle" style="color: #0f172a;">Souscription SWMM Platform</h4>
+        <h3 class="fw-bold mb-1" id="orderTitle" style="color: #0f172a;">SWMM Platform</h3>
         <p class="text-muted small mb-3" id="orderSubtitle">Formulaire de commande & création d'organisation</p>
 
         <!-- Bascule Navigation Inscription / Connexion -->
@@ -165,7 +165,7 @@
         </div>
 
         <form id="registerForm">
-            <input type="hidden" id="billingPlan" value="bet">
+            <input type="hidden" id="billingPlan" value="demo">
 
             <div class="row">
                 <div class="col-md-6 mb-3">
@@ -212,8 +212,8 @@
 <script>
     const FORMULAS = {
         demo: {
-            title: "Activation Essai Démo (14 jours)",
-            subtitle: "Évaluation de la plateforme sans carte bancaire",
+            title: "SWMM Platform",
+            subtitle: "Essai Démo (14 jours gratuits sans engagement)",
             btnText: "Activer mon essai gratuit (14 jours)",
             orgLabel: "Nom de votre organisation",
             orgPlaceholder: "Bureau d'études ou service technique",
@@ -231,8 +231,8 @@
             `
         },
         education: {
-            title: "Souscription Académique & Recherche",
-            subtitle: "Accès gratuit pour universités et instituts de recherche",
+            title: "SWMM Platform",
+            subtitle: "Offre Académique & Recherche (Universités et recherche)",
             btnText: "Valider mon inscription académique",
             orgLabel: "Université / Faculté / Laboratoire",
             orgPlaceholder: "Université des Sciences et de la Technologie",
@@ -250,8 +250,8 @@
             `
         },
         bet: {
-            title: "Commande Licence Bureau d'Études (BET)",
-            subtitle: "Facture proforma officielle générée pour bon de commande ou virement",
+            title: "SWMM Platform",
+            subtitle: "Offre Bureau d'Études (BET) — Modélisation et audit capacitaire",
             btnText: "Confirmer ma commande BET",
             orgLabel: "Raison sociale du Bureau d'Études VRD",
             orgPlaceholder: "Cabinet d'Ingénierie & VRD",
@@ -283,8 +283,8 @@
             `
         },
         exploitation: {
-            title: "Commande Système Modulaire — Régies & Entreprises",
-            subtitle: "Sélectionnez vos modules (réseau communal complet)",
+            title: "SWMM Platform",
+            subtitle: "Offre Régies & Entreprises — Système modulaire à la carte",
             btnText: "Valider ma commande modulaire",
             orgLabel: "Nom de la Régie Communale ou Service Municipal",
             orgPlaceholder: "Régie Communale d'Assainissement",
@@ -331,7 +331,7 @@
     };
 
     function setFormula(planKey) {
-        if (!FORMULAS[planKey]) planKey = 'bet';
+        if (!FORMULAS[planKey]) planKey = 'demo';
         document.getElementById('billingPlan').value = planKey;
 
         document.querySelectorAll('.formula-tab').forEach(tab => tab.classList.remove('active'));
@@ -340,7 +340,7 @@
 
         const cfg = FORMULAS[planKey];
 
-        document.getElementById('orderTitle').textContent = cfg.title;
+        document.getElementById('orderTitle').textContent = "SWMM Platform";
         document.getElementById('orderSubtitle').textContent = cfg.subtitle;
         document.getElementById('btnSubmitText').textContent = cfg.btnText;
 
@@ -415,7 +415,7 @@
         const urlParams = new URLSearchParams(window.location.search);
         const planParam = urlParams.get('plan');
         const validPlans = ['demo', 'education', 'bet', 'exploitation'];
-        const initialPlan = (planParam && validPlans.includes(planParam.toLowerCase())) ? planParam.toLowerCase() : 'bet';
+        const initialPlan = (planParam && validPlans.includes(planParam.toLowerCase())) ? planParam.toLowerCase() : 'demo';
         setFormula(initialPlan);
     });
 
