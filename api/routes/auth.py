@@ -8,7 +8,9 @@ Auteur : Dr Abdelhakim Kellouche / Antigravity
 Date : Octobre 2026
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+import os
+import secrets
 import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request, Query
@@ -17,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from api.database import get_db
 from api.models import User, Organization, Membership, ApiKey
+from api.core.mailer import send_activation_email
 from api.core.auth import (
     create_user_with_org,
     check_user_credentials,
@@ -45,6 +48,8 @@ from api.schemas_auth import (
     ApiKeySummary,
     ApiKeyCreatedResponse,
     UserMeResponse,
+    VerifyCodeRequest,
+    ResendCodeRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -115,6 +120,8 @@ def register(
             ),
         )
 
+    code = f"{secrets.randbelow(1000000):06d}"
+
     try:
         user, org, membership = create_user_with_org(
             session=db,
@@ -126,10 +133,16 @@ def register(
             billing_plan=clean_plan,
             org_type=payload.org_type,
             is_active=True,
-            email_verified=True,
+            email_verified=False,
         )
+        user.verification_code = code
+        user.verification_code_expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        db.commit()
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    # Expédition de l'email d'activation (réel ou simulé)
+    send_activation_email(user.email, code, user.full_name)
 
     token_data = {"sub": user.id, "email": user.email, "org_id": org.id, "role": membership.role}
     access_token = create_access_token(token_data)
@@ -147,6 +160,7 @@ def register(
             full_name=user.full_name,
             is_active=user.is_active,
             is_superadmin=user.is_superadmin,
+            email_verified=user.email_verified,
         ),
         organization=OrgSummary(
             id=org.id,
@@ -157,7 +171,111 @@ def register(
             org_type=org.org_type,
             role=membership.role,
         ),
+        requires_verification=True,
+        dev_code=code,
     )
+
+
+@router.post("/verify-email", response_model=TokenResponse)
+def verify_email_code(
+    payload: VerifyCodeRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    """
+    Vérifie le code d'activation à 6 chiffres reçu par e-mail.
+    Active le compte utilisateur et délivre les jetons de session.
+    """
+    clean_email = payload.email.strip().lower()
+    user = db.execute(select(User).where(User.email == clean_email)).scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur introuvable.")
+
+    if not user.email_verified:
+        now = datetime.now(timezone.utc)
+        if not user.verification_code or user.verification_code != payload.code.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Code d'activation incorrect. Veuillez vérifier votre boîte de réception.",
+            )
+        # Note : en sqlite datetime peut être naïf ou conscient, gestion robuste :
+        exp = user.verification_code_expires_at
+        if exp and exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        if exp and exp < now:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Ce code d'activation a expiré. Veuillez demander un nouveau code.",
+            )
+
+        user.email_verified = True
+        user.verification_code = None
+        user.verification_code_expires_at = None
+        db.commit()
+
+    # Récupération de l'organisation
+    memberships = user.memberships
+    if not memberships:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Aucune organisation active rattachée.")
+    primary_membership = memberships[0]
+    org = db.execute(select(Organization).where(Organization.id == primary_membership.org_id)).scalar_one()
+
+    token_data = {"sub": user.id, "email": user.email, "org_id": org.id, "role": primary_membership.role}
+    access_token = create_access_token(token_data)
+    refresh_token = create_refresh_token(token_data)
+    _set_auth_cookies(response, access_token, refresh_token)
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        user=UserSummary(
+            id=user.id,
+            email=user.email,
+            full_name=user.full_name,
+            is_active=user.is_active,
+            is_superadmin=user.is_superadmin,
+            email_verified=user.email_verified,
+        ),
+        organization=OrgSummary(
+            id=org.id,
+            name=org.name,
+            slug=org.slug,
+            billing_plan=org.billing_plan,
+            billing_status=org.billing_status,
+            org_type=org.org_type,
+            role=primary_membership.role,
+        ),
+        requires_verification=False,
+    )
+
+
+@router.post("/resend-code")
+def resend_verification_code(
+    payload: ResendCodeRequest,
+    db: Session = Depends(get_db),
+):
+    """Génère et renvoie un nouveau code d'activation par e-mail."""
+    clean_email = payload.email.strip().lower()
+    user = db.execute(select(User).where(User.email == clean_email)).scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur introuvable.")
+
+    if user.email_verified:
+        return {"status": "already_verified", "message": "Cette adresse email est déjà validée."}
+
+    code = f"{secrets.randbelow(1000000):06d}"
+    user.verification_code = code
+    user.verification_code_expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+    db.commit()
+
+    send_activation_email(user.email, code, user.full_name)
+
+    return {
+        "status": "ok",
+        "message": "Un nouveau code d'activation a été envoyé par email.",
+        "dev_code": code,
+    }
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -204,6 +322,16 @@ def login(
 
     _set_auth_cookies(response, access_token, refresh_token)
 
+    dev_code = None
+    if not user.email_verified:
+        if not user.verification_code:
+            code = f"{secrets.randbelow(1000000):06d}"
+            user.verification_code = code
+            user.verification_code_expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+            db.commit()
+            send_activation_email(user.email, code, user.full_name)
+        dev_code = user.verification_code
+
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
@@ -214,6 +342,7 @@ def login(
             full_name=user.full_name,
             is_active=user.is_active,
             is_superadmin=user.is_superadmin,
+            email_verified=user.email_verified,
         ),
         organization=OrgSummary(
             id=org.id,
@@ -224,6 +353,8 @@ def login(
             org_type=org.org_type,
             role=primary_membership.role,
         ),
+        requires_verification=not user.email_verified,
+        dev_code=dev_code,
     )
 
 

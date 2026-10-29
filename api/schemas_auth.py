@@ -48,6 +48,7 @@ class UserSummary(BaseModel):
     full_name: Optional[str]
     is_active: bool
     is_superadmin: bool
+    email_verified: bool = False
 
 
 class OrgSummary(BaseModel):
@@ -69,6 +70,19 @@ class TokenResponse(BaseModel):
     expires_in: int = 3600
     user: UserSummary
     organization: OrgSummary
+    requires_verification: bool = False
+    dev_code: Optional[str] = None
+
+
+class VerifyCodeRequest(BaseModel):
+    """Requête de vérification du code d'activation reçu par e-mail."""
+    email: str = Field(..., description="Adresse email associée au compte")
+    code: str = Field(..., min_length=4, max_length=10, description="Code d'activation à 6 chiffres")
+
+
+class ResendCodeRequest(BaseModel):
+    """Requête de réexpédition du code d'activation."""
+    email: str = Field(..., description="Adresse email")
 
 
 class RefreshTokenRequest(BaseModel):

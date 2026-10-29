@@ -122,8 +122,17 @@
                 </div>
             </div>
 
+            <div class="mb-3 d-none" id="activationCodeGroup">
+                <label for="activationCode" class="form-label small fw-semibold text-primary">
+                    <i class="fas fa-key me-1"></i> Code d'activation à 6 chiffres
+                </label>
+                <input type="text" class="form-control form-control-lg text-center fw-bold" id="activationCode"
+                       maxlength="6" placeholder="••••••" style="letter-spacing: 6px;">
+                <div class="form-text small text-muted">Saisissez le code reçu par e-mail pour activer votre compte.</div>
+            </div>
+
             <button type="submit" id="btnSubmit" class="btn btn-primary btn-auth-primary w-100 text-white shadow-sm mt-3 mb-2">
-                <i class="fas fa-sign-in-alt me-2"></i> Se connecter
+                <i class="fas fa-sign-in-alt me-2"></i> <span id="btnSubmitText">Se connecter</span>
             </button>
         </form>
     </div>
@@ -171,20 +180,50 @@
         btnSubmit.disabled = true;
         btnSubmit.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Vérification...';
 
+        const emailVal = document.getElementById('email').value.trim();
+        const codeInput = document.getElementById('activationCode');
+        const isVerifying = codeInput && !document.getElementById('activationCodeGroup').classList.contains('d-none');
+
         try {
-            const resp = await fetch('/api/v1/auth/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    email: document.getElementById('email').value.trim(),
-                    password: document.getElementById('password').value
-                })
-            });
+            let data;
+            if (isVerifying && codeInput.value.trim()) {
+                const resp = await fetch('/api/v1/auth/verify-email', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: emailVal,
+                        code: codeInput.value.trim()
+                    })
+                });
+                data = await resp.json();
+                if (!resp.ok) throw new Error(data.detail || "Code d'activation invalide");
+            } else {
+                const resp = await fetch('/api/v1/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: emailVal,
+                        password: document.getElementById('password').value
+                    })
+                });
+                data = await resp.json();
+                if (!resp.ok) throw new Error(data.detail || 'Identifiants invalides');
+            }
 
-            const data = await resp.json();
-
-            if (!resp.ok) {
-                throw new Error(data.detail || 'Identifiants invalides');
+            // Si le compte nécessite la vérification par code
+            if (data.requires_verification) {
+                document.getElementById('activationCodeGroup').classList.remove('d-none');
+                let msg = "Votre adresse e-mail n'a pas encore été validée. Saisissez le code d'activation à 6 chiffres reçu par e-mail.";
+                if (data.dev_code) {
+                    msg += `<br><strong>Simulation locale :</strong> Code <code>${data.dev_code}</code>`;
+                }
+                alertMsg.innerHTML = msg;
+                alertBox.className = "alert alert-warning";
+                alertBox.classList.remove('d-none');
+                btnSubmit.disabled = false;
+                document.getElementById('btnSubmitText').textContent = "Valider le code & Se connecter";
+                setTimeout(() => codeInput.focus(), 150);
+                return;
             }
 
             // Sauvegarder le token
@@ -200,9 +239,10 @@
 
         } catch (err) {
             alertMsg.textContent = err.message;
+            alertBox.className = "alert alert-danger";
             alertBox.classList.remove('d-none');
             btnSubmit.disabled = false;
-            btnSubmit.innerHTML = '<i class="fas fa-sign-in-alt me-2"></i> Se connecter';
+            btnSubmit.innerHTML = '<i class="fas fa-sign-in-alt me-2"></i> <span id="btnSubmitText">Se connecter</span>';
         }
     });
 </script>

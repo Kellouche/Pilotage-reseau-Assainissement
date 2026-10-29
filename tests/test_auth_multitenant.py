@@ -53,12 +53,16 @@ from api.routes.auth import (
     create_new_api_key,
     list_api_keys,
     revoke_api_key,
+    verify_email_code,
+    resend_verification_code,
 )
 from api.schemas_auth import (
     RegisterRequest,
     LoginRequest,
     RefreshTokenRequest,
     ApiKeyCreateRequest,
+    VerifyCodeRequest,
+    ResendCodeRequest,
 )
 
 # Base SQLite en mémoire isolée pour les tests
@@ -414,3 +418,47 @@ def test_quotas_and_feature_gating_logic():
     trial_status = get_trial_status(org_demo)
     assert trial_status["is_trial"] is True
     assert trial_status["total_days"] == 14
+
+
+def test_email_verification_flow(db):
+    """Vérifie la génération et validation du code d'activation par e-mail (Option B)."""
+    resp = Response()
+    reg_payload = RegisterRequest(
+        email="nabil.ingenieur@alger-vrd.dz",
+        password="SecuredPassword2026!",
+        full_name="Nabil Ingénieur",
+        org_name="Cabinet VRD Alger",
+        billing_plan="demo",
+    )
+    reg_resp = register(reg_payload, resp, db)
+    assert reg_resp.requires_verification is True
+    assert reg_resp.dev_code is not None
+    assert len(reg_resp.dev_code) == 6
+
+    user = db.query(User).filter_by(email="nabil.ingenieur@alger-vrd.dz").first()
+    assert user.email_verified is False
+    assert user.verification_code == reg_resp.dev_code
+
+    # 1. Échec avec code erroné
+    bad_code_req = VerifyCodeRequest(email="nabil.ingenieur@alger-vrd.dz", code="000000")
+    with pytest.raises(HTTPException) as exc:
+        verify_email_code(bad_code_req, resp, db)
+    assert exc.value.status_code == status.HTTP_400_BAD_REQUEST
+
+    # 2. Réexpédition d'un nouveau code
+    resend_req = ResendCodeRequest(email="nabil.ingenieur@alger-vrd.dz")
+    resend_resp = resend_verification_code(resend_req, db)
+    assert resend_resp["status"] == "ok"
+    new_code = resend_resp["dev_code"]
+    assert len(new_code) == 6
+
+    # 3. Validation avec le bon code
+    good_code_req = VerifyCodeRequest(email="nabil.ingenieur@alger-vrd.dz", code=new_code)
+    verify_resp = verify_email_code(good_code_req, resp, db)
+    assert verify_resp.requires_verification is False
+    assert verify_resp.access_token is not None
+
+    # L'utilisateur est désormais validé en base
+    db.refresh(user)
+    assert user.email_verified is True
+    assert user.verification_code is None

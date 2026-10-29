@@ -80,4 +80,18 @@ def init_db():
     )
 
     Base.metadata.create_all(bind=engine)
+
+    # Migration douce pour les colonnes de code de vérification (SQLite & PG)
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("ALTER TABLE users ADD COLUMN verification_code VARCHAR(6)"))
+            conn.commit()
+        except Exception:
+            pass
+        try:
+            conn.execute(text("ALTER TABLE users ADD COLUMN verification_code_expires_at TIMESTAMP"))
+            conn.commit()
+        except Exception:
+            pass
+
     print("[DB] Tables initialisées avec succès")

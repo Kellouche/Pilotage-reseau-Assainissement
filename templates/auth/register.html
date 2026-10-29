@@ -159,46 +159,94 @@
             <span id="alertMsg"></span>
         </div>
 
-        <!-- Encart épuré spécifique à la formule sélectionnée -->
-        <div class="summary-box" id="summaryBox">
-            <!-- Injecté dynamiquement par JavaScript -->
+        <!-- Étape 1 : Choix de formule & Informations de compte -->
+        <div id="step-register">
+            <!-- Encart épuré spécifique à la formule sélectionnée -->
+            <div class="summary-box" id="summaryBox">
+                <!-- Injecté dynamiquement par JavaScript -->
+            </div>
+
+            <form id="registerForm">
+                <input type="hidden" id="billingPlan" value="demo">
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label small fw-semibold text-secondary">Nom complet</label>
+                        <input type="text" class="form-control" id="fullName" placeholder="Dr Abdelhakim K." required>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label small fw-semibold text-secondary" id="emailLabel">Adresse email professionnelle</label>
+                        <input type="email" class="form-control" id="email" placeholder="nom@organisation.dz" required>
+                        <div class="form-text small text-muted d-none" id="emailHelpText"></div>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold text-secondary" id="orgLabel">Nom de votre organisation / Bureau d'études</label>
+                    <input type="text" class="form-control" id="orgName" placeholder="Bureau d'Études Assainissement & VRD" required>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label small fw-semibold text-secondary">Mot de passe (8 car. min)</label>
+                        <input type="password" class="form-control" id="password" placeholder="••••••••••••" minlength="8" required>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label small fw-semibold text-secondary">Confirmer le mot de passe</label>
+                        <input type="password" class="form-control" id="password_confirm" placeholder="••••••••••••" minlength="8" required>
+                    </div>
+                </div>
+
+                <button type="submit" id="btnSubmit" class="btn btn-order-primary w-100 shadow-sm mt-2 mb-1">
+                    <i class="fas fa-check-circle me-2"></i> <span id="btnSubmitText">Confirmer ma commande</span>
+                </button>
+            </form>
         </div>
 
-        <form id="registerForm">
-            <input type="hidden" id="billingPlan" value="demo">
-
-            <div class="row">
-                <div class="col-md-6 mb-3">
-                    <label class="form-label small fw-semibold text-secondary">Nom complet</label>
-                    <input type="text" class="form-control" id="fullName" placeholder="Dr Abdelhakim K." required>
-                </div>
-                <div class="col-md-6 mb-3">
-                    <label class="form-label small fw-semibold text-secondary" id="emailLabel">Adresse email professionnelle</label>
-                    <input type="email" class="form-control" id="email" placeholder="nom@organisation.dz" required>
-                    <div class="form-text small text-muted d-none" id="emailHelpText"></div>
-                </div>
-            </div>
-
+        <!-- Étape 2 : Validation du code d'activation envoyé par e-mail (Option B) -->
+        <div id="step-verify" class="d-none text-center py-2">
             <div class="mb-3">
-                <label class="form-label small fw-semibold text-secondary" id="orgLabel">Nom de votre organisation / Bureau d'études</label>
-                <input type="text" class="form-control" id="orgName" placeholder="Bureau d'Études Assainissement & VRD" required>
-            </div>
-
-            <div class="row">
-                <div class="col-md-6 mb-3">
-                    <label class="form-label small fw-semibold text-secondary">Mot de passe (8 car. min)</label>
-                    <input type="password" class="form-control" id="password" placeholder="••••••••••••" minlength="8" required>
-                </div>
-                <div class="col-md-6 mb-3">
-                    <label class="form-label small fw-semibold text-secondary">Confirmer le mot de passe</label>
-                    <input type="password" class="form-control" id="password_confirm" placeholder="••••••••••••" minlength="8" required>
+                <div style="width: 58px; height: 58px; border-radius: 14px; background: rgba(2, 132, 199, 0.1); color: #0284c7; display: inline-flex; align-items: center; justify-content: center; font-size: 26px;">
+                    <i class="fas fa-envelope-open-text"></i>
                 </div>
             </div>
+            <h5 class="fw-bold text-dark mb-1">Vérification de votre adresse e-mail</h5>
+            <p class="text-muted small mb-3">
+                Un code d'activation à 6 chiffres a été envoyé à :<br>
+                <strong id="verify-email-display" class="text-dark">email@domaine.dz</strong>
+            </p>
 
-            <button type="submit" id="btnSubmit" class="btn btn-order-primary w-100 shadow-sm mt-2 mb-1">
-                <i class="fas fa-check-circle me-2"></i> <span id="btnSubmitText">Confirmer ma commande</span>
-            </button>
-        </form>
+            <div id="verifyAlertBox" class="alert alert-danger d-none small py-2" role="alert">
+                <span id="verifyAlertMsg"></span>
+            </div>
+
+            <!-- Boîte de simulation locale pour faciliter les tests sans SMTP -->
+            <div id="devCodeBox" class="alert alert-info d-none small py-2 mb-3 text-start" style="border-left: 4px solid #0284c7;">
+                <i class="fas fa-info-circle me-1 text-primary"></i> <strong>Simulation développement :</strong> Votre code d'activation est <strong id="devCodeDisplay" class="fs-6 text-primary"></strong>
+            </div>
+
+            <form id="verifyForm">
+                <div class="mb-3 text-start">
+                    <label class="form-label small fw-semibold text-secondary">Code d'activation reçu par e-mail</label>
+                    <input type="text" class="form-control form-control-lg text-center fw-bold" id="activationCode"
+                           maxlength="6" placeholder="••••••" style="letter-spacing: 8px; font-size: 1.4rem;" required autofocus>
+                    <div class="form-text small text-muted text-center">Ce code est valable pendant 15 minutes.</div>
+                </div>
+
+                <button type="submit" id="btnVerifySubmit" class="btn btn-order-primary w-100 shadow-sm mb-2">
+                    <i class="fas fa-shield-alt me-2"></i> Activer et accéder à mon espace
+                </button>
+            </form>
+
+            <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top">
+                <button type="button" class="btn btn-link btn-sm text-decoration-none text-secondary p-0" onclick="retourFormulaireInscription()">
+                    <i class="fas fa-arrow-left me-1"></i> Modifier l'email
+                </button>
+                <button type="button" id="btnResend" class="btn btn-link btn-sm text-decoration-none text-primary p-0" onclick="renvoyerCodeActivation()">
+                    <i class="fas fa-redo me-1"></i> Renvoyer un code
+                </button>
+            </div>
+        </div>
     </div>
 
     <div class="order-footer text-muted">
@@ -503,6 +551,28 @@
                 throw new Error(detail);
             }
 
+            currentRegisteredEmail = emailVal;
+
+            if (data.requires_verification) {
+                document.getElementById('step-register').classList.add('d-none');
+                document.getElementById('step-verify').classList.remove('d-none');
+                const formulaNav = document.querySelector('.formula-nav');
+                if (formulaNav) formulaNav.classList.add('d-none');
+                document.getElementById('orderSubtitle').textContent = "Validation de sécurité par code d'activation";
+                document.getElementById('verify-email-display').textContent = emailVal;
+
+                if (data.dev_code) {
+                    document.getElementById('devCodeDisplay').textContent = data.dev_code;
+                    document.getElementById('devCodeBox').classList.remove('d-none');
+                } else {
+                    document.getElementById('devCodeBox').classList.add('d-none');
+                }
+                btnSubmit.disabled = false;
+                btnSubmit.innerHTML = originalBtnText;
+                setTimeout(() => document.getElementById('activationCode').focus(), 150);
+                return;
+            }
+
             if (data.access_token) {
                 localStorage.setItem('swmm_access_token', data.access_token);
                 document.cookie = `access_token=${data.access_token}; path=/; max-age=604800; SameSite=Lax`;
@@ -515,6 +585,93 @@
             alertBox.classList.remove('d-none');
             btnSubmit.disabled = false;
             btnSubmit.innerHTML = originalBtnText;
+        }
+    });
+
+    let currentRegisteredEmail = "";
+
+    window.retourFormulaireInscription = function() {
+        document.getElementById('step-verify').classList.add('d-none');
+        document.getElementById('step-register').classList.remove('d-none');
+        const formulaNav = document.querySelector('.formula-nav');
+        if (formulaNav) formulaNav.classList.remove('d-none');
+        document.getElementById('orderSubtitle').textContent = "Formulaire de commande & création d'organisation";
+    };
+
+    window.renvoyerCodeActivation = async function() {
+        if (!currentRegisteredEmail) return;
+        const btnResend = document.getElementById('btnResend');
+        btnResend.disabled = true;
+        btnResend.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Envoi...';
+
+        try {
+            const resp = await fetch('/api/v1/auth/resend-code', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: currentRegisteredEmail })
+            });
+            const data = await resp.json();
+            if (data.dev_code) {
+                document.getElementById('devCodeDisplay').textContent = data.dev_code;
+                document.getElementById('devCodeBox').classList.remove('d-none');
+            }
+            alert('Un nouveau code d\'activation a été envoyé par e-mail.');
+        } catch (e) {
+            alert('Erreur lors du renvoi : ' + e.message);
+        } finally {
+            btnResend.disabled = false;
+            btnResend.innerHTML = '<i class="fas fa-redo me-1"></i> Renvoyer un code';
+        }
+    };
+
+    const verifyForm = document.getElementById('verifyForm');
+    const verifyAlertBox = document.getElementById('verifyAlertBox');
+    const verifyAlertMsg = document.getElementById('verifyAlertMsg');
+    const btnVerifySubmit = document.getElementById('btnVerifySubmit');
+
+    verifyForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        verifyAlertBox.classList.add('d-none');
+
+        const codeVal = document.getElementById('activationCode').value.trim();
+        if (!codeVal || codeVal.length < 4) {
+            verifyAlertMsg.textContent = "Veuillez saisir le code d'activation reçu.";
+            verifyAlertBox.classList.remove('d-none');
+            return;
+        }
+
+        btnVerifySubmit.disabled = true;
+        const origText = btnVerifySubmit.innerHTML;
+        btnVerifySubmit.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Vérification...';
+
+        try {
+            const resp = await fetch('/api/v1/auth/verify-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: currentRegisteredEmail,
+                    code: codeVal
+                })
+            });
+
+            const data = await resp.json();
+            if (!resp.ok) {
+                throw new Error(data.detail || "Code d'activation invalide ou expiré.");
+            }
+
+            if (data.access_token) {
+                localStorage.setItem('swmm_access_token', data.access_token);
+                document.cookie = `access_token=${data.access_token}; path=/; max-age=604800; SameSite=Lax`;
+            }
+
+            // Redirection immédiate vers le workspace cartographique
+            window.location.href = '/map';
+
+        } catch (err) {
+            verifyAlertMsg.textContent = err.message;
+            verifyAlertBox.classList.remove('d-none');
+            btnVerifySubmit.disabled = false;
+            btnVerifySubmit.innerHTML = origText;
         }
     });
 </script>
