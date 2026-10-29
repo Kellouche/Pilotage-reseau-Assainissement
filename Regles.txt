@@ -56,3 +56,9 @@ et des tests unitaires d'exemple couvrant les éléments clés.
 6. Quand je te dis "Fin de la discussion" tu dois mettre à jour le fichier TODO
 et faire un pousser vers le github à l'adresse suivante :
 https://github.com/Kellouche/Pilotage-reseau-Assainissement
+
+7. Règles de rigueur éditoriale, commerciale et collaboration :
+- Zéro invention / Zéro extrapolation technique : Toute fonctionnalité décrite dans la vitrine, les tarifs ou la documentation doit correspondre strictement à du code implémenté et vérifiable dans le projet. Ne jamais enjoliver ni supposer des caractéristiques inexistantes (ex. : écrire "photos de l'incident" ou "prise de photos sur site", et JAMAIS "photos horodatées").
+- Validation préalable obligatoire : Ne jamais modifier les textes de vitrine, d'offres ou de documentation sans soumettre au préalable les propositions exactes au Dr Abdelhakim Kellouche et obtenir sa validation formelle.
+- Pertinence contextuelle : Bannir le jargon informatique générique ou creux (ex. : "gestion des accès d'équipe") et ne pas présenter des fonctionnalités communes (comme le SIG ou la cartographie) comme étant spécifiques à une offre particulière.
+- Valorisation rigoureuse de l'existant : Identifier, respecter et mettre en valeur tout ce qui a réellement été développé dans le projet (application mobile déconnectée, conformité NP 650, calculs SWMM 5.2, découpage de bassins sur MNT, profils en long, exports d'ingénierie).
