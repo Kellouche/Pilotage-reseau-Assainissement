@@ -124,9 +124,9 @@
                 <label class="form-label small fw-semibold text-secondary mb-1">Formule / Plan d'activité</label>
                 <select class="form-select" id="billingPlan" required>
                     <option value="demo">Version Démo d'Évaluation (14 jours gratuits)</option>
-                    <option value="bet" selected>Bureau d'Études - BET (35 000 DZD / mois)</option>
+                    <option value="bet" selected>Bureau d'Études - BET (45 000 DZD / mois ou 450 000 DZD / an)</option>
                     <option value="exploitation">Régie & Exploitant Assainissement (Sur consultation)</option>
-                    <option value="education">Académique & Recherche (Gratuit pour universités)</option>
+                    <option value="education">Académique & Recherche (0 DZD - Gratuit pour universités)</option>
                 </select>
                 <div class="form-text small text-muted">
                     La formule Académique requiert une adresse email universitaire (.edu, .univ.dz, .ac.uk...).
@@ -153,6 +153,20 @@
 </div>
 
 <script>
+    // Pré-sélection du plan si passé en paramètre URL (?plan=demo, ?plan=bet...)
+    window.addEventListener('DOMContentLoaded', () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const planParam = urlParams.get('plan');
+        if (planParam) {
+            const selectEl = document.getElementById('billingPlan');
+            const validPlans = ['demo', 'bet', 'exploitation', 'education'];
+            const normalized = planParam.toLowerCase();
+            if (selectEl && validPlans.includes(normalized)) {
+                selectEl.value = normalized;
+            }
+        }
+    });
+
     const form = document.getElementById('registerForm');
     const alertBox = document.getElementById('alertBox');
     const alertMsg = document.getElementById('alertMsg');

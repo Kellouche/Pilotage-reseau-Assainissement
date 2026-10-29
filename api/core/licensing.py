@@ -50,8 +50,8 @@ def generate_license_token(plan: str, duration_months: int = 12) -> str:
 def calculate_default_amount_dzd(plan: str, duration_months: int = 12) -> float:
     """
     Calcule le montant indicatif en Dinars Algériens (DZD) selon la grille tarifaire officielle.
-    - BET : 45 000 DZD / mois (remise 10% si convention >= 12 mois)
-    - Exploitation : Tarif de référence conventionnel 180 000 DZD / mois
+    - BET : 45 000 DZD / mois (ou 450 000 DZD / an pour 12 mois, soit 2 mois offerts)
+    - Exploitation : Tarif de référence conventionnel 180 000 DZD / mois (ou convention annuelle)
     - Education : Gratuit (0 DZD)
     """
     canonical = normalize_plan_name(plan)
@@ -59,10 +59,11 @@ def calculate_default_amount_dzd(plan: str, duration_months: int = 12) -> float:
         return 0.0
     elif canonical == "bet":
         monthly_rate = 45000.0
-        total = monthly_rate * duration_months
         if duration_months >= 12:
-            total *= 0.90  # 10% de remise annuelle engagement ferme
-        return round(total, 2)
+            years = duration_months // 12
+            remainder = duration_months % 12
+            return round(years * 450000.0 + remainder * monthly_rate, 2)
+        return round(monthly_rate * duration_months, 2)
     elif canonical == "exploitation":
         monthly_rate = 180000.0
         return round(monthly_rate * duration_months, 2)

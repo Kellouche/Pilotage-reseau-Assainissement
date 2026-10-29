@@ -248,10 +248,10 @@ def generate_proforma_pdf(
     total_ht = monthly_ht * duration_months
     remise_text = ""
     if clean_plan == "bet" and duration_months >= 12:
-        remise_pct = 10
-        remise_amt = total_ht * 0.10
-        total_ht -= remise_amt
-        remise_text = f" (Remise annuelle de {remise_pct}% appliquée pour engagement ferme >= 12 mois)"
+        years = duration_months // 12
+        remainder = duration_months % 12
+        total_ht = (years * 450000.0) + (remainder * monthly_ht)
+        remise_text = " (Tarif préférentiel annuel de 450 000 DA HT / an, soit 2 mois offerts pour engagement 12 mois)"
 
     tva = total_ht * 0.19
     total_ttc = total_ht + tva

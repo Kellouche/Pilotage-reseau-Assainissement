@@ -41,10 +41,11 @@ def db_session():
 
 def test_amount_to_french_words():
     """Vérifie la transcription exacte des montants DZD en toutes lettres."""
+    assert "Quatre cent cinquante mille Dinars Algériens" in amount_to_french_words(450000.0)
     assert "Quatre cent quatre-vingt-six mille Dinars Algériens" in amount_to_french_words(486000.0)
     assert "Zéro Dinars Algériens" in amount_to_french_words(0.0)
-    assert "Dinars Algériens" in amount_to_french_words(35000.50)
-    assert "centimes" in amount_to_french_words(35000.50)
+    assert "Dinars Algériens" in amount_to_french_words(45000.50)
+    assert "centimes" in amount_to_french_words(45000.50)
 
 
 def test_generate_proforma_pdf_validity():
@@ -107,7 +108,7 @@ def test_purchase_order_lifecycle(db_session):
     db_session.commit()
 
     assert order.status == "pending"
-    assert order.amount_dzd == 486000.0  # 45000 * 12 * 0.9 (remise 10%)
+    assert order.amount_dzd == 450000.0  # 450 000 DZD / an (règle officielle : 2 mois offerts pour 12 mois)
     assert order.license_token is None
 
     # Test PDF bon de commande
