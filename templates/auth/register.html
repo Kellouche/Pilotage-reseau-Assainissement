@@ -125,7 +125,17 @@
             <i class="fas fa-water"></i>
         </div>
         <h4 class="fw-bold mb-1" id="orderTitle" style="color: #0f172a;">Souscription SWMM Platform</h4>
-        <p class="text-muted small mb-0" id="orderSubtitle">Formulaire de commande & création d'organisation</p>
+        <p class="text-muted small mb-3" id="orderSubtitle">Formulaire de commande & création d'organisation</p>
+
+        <!-- Bascule Navigation Inscription / Connexion -->
+        <div class="d-flex p-1 rounded-3 bg-white border shadow-sm text-center mb-2">
+            <span class="btn btn-sm btn-primary flex-fill fw-bold py-1">
+                <i class="fas fa-user-plus me-1"></i> Créer un compte & Souscrire
+            </span>
+            <a href="/login" class="btn btn-sm text-secondary flex-fill fw-semibold py-1 text-decoration-none">
+                <i class="fas fa-sign-in-alt me-1"></i> Déjà client ? Se connecter
+            </a>
+        </div>
 
         <!-- Sélecteur à 4 onglets -->
         <div class="formula-nav" role="tablist">
@@ -174,9 +184,15 @@
                 <input type="text" class="form-control" id="orgName" placeholder="Bureau d'Études Assainissement & VRD" required>
             </div>
 
-            <div class="mb-3">
-                <label class="form-label small fw-semibold text-secondary">Mot de passe de sécurité (8 caractères minimum)</label>
-                <input type="password" class="form-control" id="password" placeholder="••••••••••••" minlength="8" required>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label small fw-semibold text-secondary">Mot de passe (8 car. min)</label>
+                    <input type="password" class="form-control" id="password" placeholder="••••••••••••" minlength="8" required>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label small fw-semibold text-secondary">Confirmer le mot de passe</label>
+                    <input type="password" class="form-control" id="password_confirm" placeholder="••••••••••••" minlength="8" required>
+                </div>
             </div>
 
             <button type="submit" id="btnSubmit" class="btn btn-order-primary w-100 shadow-sm mt-2 mb-1">
@@ -408,9 +424,38 @@
     const alertMsg = document.getElementById('alertMsg');
     const btnSubmit = document.getElementById('btnSubmit');
 
+    // Vérification préventive de l'email au défocus
+    const emailInput = document.getElementById('email');
+    emailInput.addEventListener('blur', async () => {
+        const val = emailInput.value.trim().toLowerCase();
+        if (val && val.includes('@') && val.includes('.')) {
+            try {
+                const resp = await fetch(`/api/v1/auth/check-email?email=${encodeURIComponent(val)}`);
+                if (resp.ok) {
+                    const res = await resp.json();
+                    if (res.exists) {
+                        alertMsg.innerHTML = `<i class="fas fa-exclamation-triangle me-1"></i> Cette adresse email est déjà enregistrée. <a href="/login?email=${encodeURIComponent(val)}" class="alert-link fw-bold ms-1">Se connecter directement</a>`;
+                        alertBox.classList.remove('d-none');
+                    }
+                }
+            } catch (e) {
+                // silencieux
+            }
+        }
+    });
+
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
         alertBox.classList.add('d-none');
+
+        const pwd = document.getElementById('password').value;
+        const pwdConfirm = document.getElementById('password_confirm').value;
+
+        if (pwd !== pwdConfirm) {
+            alertMsg.innerHTML = '<i class="fas fa-exclamation-circle me-1"></i> Les mots de passe saisis ne sont pas identiques.';
+            alertBox.classList.remove('d-none');
+            return;
+        }
 
         const plan = document.getElementById('billingPlan').value;
         const orgType = plan === 'education' ? 'academique' : (plan === 'exploitation' ? 'regie' : 'bet');
@@ -430,12 +475,13 @@
         btnSubmit.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Traitement...';
 
         try {
+            const emailVal = document.getElementById('email').value.trim();
             const resp = await fetch('/api/v1/auth/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    email: document.getElementById('email').value.trim(),
-                    password: document.getElementById('password').value,
+                    email: emailVal,
+                    password: pwd,
                     full_name: document.getElementById('fullName').value.trim(),
                     org_name: document.getElementById('orgName').value.trim(),
                     billing_plan: plan,
@@ -446,7 +492,15 @@
             const data = await resp.json();
 
             if (!resp.ok) {
-                throw new Error(data.detail || 'Erreur lors de la création de la commande');
+                const detail = data.detail || 'Erreur lors de la création de la commande';
+                if (detail.includes('existe déjà')) {
+                    alertMsg.innerHTML = `<i class="fas fa-user-check me-1"></i> Un compte existe déjà pour cette adresse email. <a href="/login?email=${encodeURIComponent(emailVal)}" class="alert-link fw-bold ms-1">Cliquez ici pour vous connecter</a>`;
+                    alertBox.classList.remove('d-none');
+                    btnSubmit.disabled = false;
+                    btnSubmit.innerHTML = originalBtnText;
+                    return;
+                }
+                throw new Error(detail);
             }
 
             if (data.access_token) {

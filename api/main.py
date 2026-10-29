@@ -15,7 +15,9 @@ from pathlib import Path
 from typing import Optional
 
 from config.settings import APP_NAME, APP_VERSION, APP_DESCRIPTION
-from api.database import init_db, get_db
+from api.database import init_db, get_db, SessionLocal
+from sqlalchemy.orm import Session
+from api.models import Project
 from api import schemas, crud
 
 from api.routes import network, simulations, sync, clusters, qualite, corrections, terrain, mnt, audit, auth, jobs, artifacts, licensing, admin, organization
@@ -51,9 +53,9 @@ async def lifespan(app: FastAPI):
         # Warm-up asynchrone des couches GeoJSON
         async def warmup_layers():
             try:
-                print("[API] Warm-up du cache des couches GeoJSON...")
-                await asyncio.to_thread(get_layers)
-                print("[API] Cache des couches GeoJSON prêt ✓")
+                demo_path = Path("data/demo_reseau.gpkg")
+                if demo_path.exists():
+                    print("[API] Données de démonstration prêtes ✓")
             except Exception as e:
                 print(f"[API] ERREUR warmup couches: {e}")
 
@@ -270,8 +272,8 @@ def health_check(db=Depends(get_db)):
 # API ENDPOINTS
 # ============================================================
 
-_LAYERS_CACHE = None
-_GDF_CACHE = None
+_LAYERS_CACHE = {}
+_GDF_CACHE = {}
 import math
 
 def clean_nan(obj):
@@ -288,24 +290,82 @@ def clean_nan(obj):
 def _has_bounds(ne_lat, ne_lng, sw_lat, sw_lng):
     return None not in (ne_lat, ne_lng, sw_lat, sw_lng)
 
+def reset_layers_cache():
+    global _LAYERS_CACHE, _GDF_CACHE
+    _LAYERS_CACHE = {}
+    _GDF_CACHE = {}
+
 @app.get("/api/v1/layers")
 def get_layers(
+    request: Request,
     ne_lat: Optional[float] = None,
     ne_lng: Optional[float] = None,
     sw_lat: Optional[float] = None,
     sw_lng: Optional[float] = None,
+    db: Session = Depends(get_db),
 ):
-    """Retourne les données GeoJSON des couches du réseau (avec cache optimisé par index spatial)."""
+    """
+    Retourne les données GeoJSON des couches du réseau pour le projet actif de l'utilisateur.
+    Si aucun fichier de réseau n'est associé au projet, retourne un espace vierge (Option B).
+    """
     global _LAYERS_CACHE, _GDF_CACHE
     has_bounds = _has_bounds(ne_lat, ne_lng, sw_lat, sw_lng)
-    
-    if _LAYERS_CACHE is not None and not has_bounds:
-        return _LAYERS_CACHE
-        
-    if _GDF_CACHE is not None and has_bounds:
-        # Filtrage ultra-rapide via index spatial GeoPandas (.cx)
-        result = {"statut": "ok", "couches": {}, "compteurs": {}}
-        for key, gdf in _GDF_CACHE.items():
+
+    empty_response = {
+        "statut": "ok",
+        "is_empty": True,
+        "project_name": "Nouveau Projet (Espace vierge)",
+        "compteurs": {
+            "conduites": 0, "regards": 0, "stations": 0, "step": 0, "ouvrages": 0, "rejets": 0
+        },
+        "couches": {
+            "conduites": {"type": "FeatureCollection", "features": []},
+            "regards": {"type": "FeatureCollection", "features": []},
+            "stations": {"type": "FeatureCollection", "features": []},
+            "step": {"type": "FeatureCollection", "features": []},
+            "ouvrages": {"type": "FeatureCollection", "features": []},
+            "rejets": {"type": "FeatureCollection", "features": []}
+        }
+    }
+
+    user = None
+    if request and db:
+        user = _get_authenticated_user(request, db)
+
+    # Détermination du fichier GeoPackage pour le projet actif
+    gpkg_target = None
+    project_name = "Nouveau Projet"
+
+    if user and db:
+        primary_membership = user.memberships[0] if user.memberships else None
+        if primary_membership:
+            project = db.query(Project).filter(
+                Project.org_id == primary_membership.org_id,
+                Project.is_archived.is_(False)
+            ).first()
+            if project:
+                project_name = project.name
+                if project.source_gpkg_key:
+                    cand = Path(project.source_gpkg_key)
+                    if cand.exists():
+                        gpkg_target = cand
+
+    # Si aucun réseau n'est chargé pour ce compte/projet -> ESPACE VIERGE (Option B)
+    if not gpkg_target:
+        empty_response["project_name"] = project_name
+        return empty_response
+
+    cache_key = str(gpkg_target)
+
+    if cache_key in _LAYERS_CACHE and not has_bounds:
+        res = dict(_LAYERS_CACHE[cache_key])
+        res["project_name"] = project_name
+        res["is_empty"] = False
+        return res
+
+    if cache_key in _GDF_CACHE and has_bounds:
+        result = {"statut": "ok", "is_empty": False, "project_name": project_name, "couches": {}, "compteurs": {}}
+        for key, gdf in _GDF_CACHE[cache_key].items():
             if not gdf.empty:
                 filtered_gdf = gdf.cx[sw_lng:ne_lng, sw_lat:ne_lat]
                 import json
@@ -317,15 +377,12 @@ def get_layers(
                 result["compteurs"][key] = 0
         return result
 
-    # Construction du cache (première fois)
-    from pathlib import Path
+    # Construction du cache pour ce GeoPackage
     import geopandas as gpd
 
-    GPKG_PATH = Path(r"D:\IA Water Data Analysis\Assainissement\Assainissement_Ville.gpkg")
-    WGS84 = "EPSG:4326"
-
-    result = {"statut": "ok", "couches": {}, "compteurs": {}}
+    result = {"statut": "ok", "is_empty": False, "project_name": project_name, "couches": {}, "compteurs": {}}
     gdf_cache_temp = {}
+    WGS84 = "EPSG:4326"
 
     KEYWORDS = {
         'conduites': 'canalisations',
@@ -337,10 +394,10 @@ def get_layers(
     }
 
     try:
-        layers = gpd.list_layers(GPKG_PATH)['name'].tolist()
+        layers = gpd.list_layers(gpkg_target)['name'].tolist()
     except Exception as e:
-        print(f"[ERROR] Impossible de lister les couches: {e}")
-        return result
+        print(f"[ERROR] Impossible de lister les couches de {gpkg_target}: {e}")
+        return empty_response
 
     for key, motcle in KEYWORDS.items():
         layer_name = next((l for l in layers if motcle.lower() in l.lower()), None)
@@ -351,15 +408,13 @@ def get_layers(
             continue
 
         try:
-            gdf = gpd.read_file(GPKG_PATH, layer=layer_name)
+            gdf = gpd.read_file(gpkg_target, layer=layer_name)
             if gdf.crs and gdf.crs != WGS84:
                 gdf = gpd.GeoDataFrame(gdf, geometry=gdf.geometry.to_crs(WGS84))
-            
-            # Construire explicitement l'index spatial (R-tree) pour de meilleures perfs
+
             _ = gdf.sindex
-            
             gdf_cache_temp[key] = gdf
-            
+
             if has_bounds and not gdf.empty:
                 gdf_to_export = gdf.cx[sw_lng:ne_lng, sw_lat:ne_lat]
             else:
@@ -375,9 +430,9 @@ def get_layers(
             result["compteurs"][key] = 0
             gdf_cache_temp[key] = gpd.GeoDataFrame()
 
-    _GDF_CACHE = gdf_cache_temp
+    _GDF_CACHE[cache_key] = gdf_cache_temp
     if not has_bounds:
-        _LAYERS_CACHE = result
+        _LAYERS_CACHE[cache_key] = result
 
     return result
 

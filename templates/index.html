@@ -267,7 +267,11 @@
                 <span style="font-size: 0.65rem; background: #0284c7; color: white; padding: 2px 6px; border-radius: 4px;">SaaS 5.2</span>
             </a>
             <div style="display: flex; align-items: center; gap: 15px;">
-                <a href="/cockpit" style="color: #38bdf8; font-weight: 600;"><i class="fas fa-map-marked-alt me-1"></i> Cockpit Réseau</a>
+                <a href="/map" style="color: #38bdf8; font-weight: 600;"><i class="fas fa-map-marked-alt me-1"></i> Carte interactive</a>
+                <button id="btn-project-state" onclick="montrerModalProjet(true)" style="background: rgba(2, 132, 199, 0.15); border: 1px solid rgba(2, 132, 199, 0.4); color: #38bdf8; padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                    <i class="fas fa-folder-open"></i>
+                    <span id="topbar-project-label">Projet Réseau</span>
+                </button>
                 <a href="/qualite"><i class="fas fa-check-circle me-1"></i> Diagnostic NP 650</a>
                 <a href="/docs" target="_blank"><i class="fas fa-book me-1"></i> Documentation</a>
                 <a href="/pricing"><i class="fas fa-tags me-1"></i> Offres (DZD)</a>
@@ -740,6 +744,29 @@
                 .then(r => r.json())
                 .then(d => {
                     console.log('Données:', d.compteurs);
+                    if (d.project_name) {
+                        const lbl = document.getElementById('topbar-project-label');
+                        if (lbl) lbl.textContent = d.project_name;
+                    }
+
+                    // Vider les couches précédentes
+                    Object.values(couches).forEach(l => l.clearLayers());
+
+                    const totalObj = d.compteurs ? Object.values(d.compteurs).reduce((a, b) => a + b, 0) : 0;
+                    if (d.is_empty || totalObj === 0) {
+                        montrerChargement(false);
+                        document.getElementById('stat-total').textContent = '0';
+                        document.getElementById('mini-stats').innerHTML = '<span style="color: #f59e0b;"><i class="fas fa-info-circle me-1"></i> Projet vierge (aucun réseau)</span>';
+                        document.getElementById('modal-project-status').textContent = 'Aucun réseau chargé — Espace de travail vierge';
+                        const resetSec = document.getElementById('section-reset-project');
+                        if (resetSec) resetSec.style.display = 'none';
+                        montrerModalProjet(true);
+                        return;
+                    } else {
+                        const resetSec = document.getElementById('section-reset-project');
+                        if (resetSec) resetSec.style.display = 'block';
+                        document.getElementById('modal-project-status').textContent = `Réseau actif : ${d.project_name || 'Chargé'} (${totalObj} éléments)`;
+                    }
                     document.getElementById('stat-total').textContent = d.compteurs.conduites || 0;
                     document.getElementById('mini-stats').innerHTML =
                         'Conduites: ' + (d.compteurs.conduites || 0) +
@@ -1277,6 +1304,93 @@
 
         document.getElementById('save-btn').addEventListener('click', saveEdit);
 
+        
+        // ==========================================
+        // GESTION DU PROJET RÉSEAU & OPTION B
+        // ==========================================
+        window.montrerModalProjet = function(show) {
+            const el = document.getElementById('modal-project');
+            if (el) el.style.display = show ? 'flex' : 'none';
+        };
+
+        window.chargerReseauDemo = async function() {
+            montrerChargement(true);
+            try {
+                const token = localStorage.getItem('swmm_access_token');
+                const headers = { 'Content-Type': 'application/json' };
+                if (token) headers['Authorization'] = `Bearer ${token}`;
+                const resp = await fetch('/api/v1/network/load-demo', { method: 'POST', headers, credentials: 'include' });
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.detail || 'Erreur lors du chargement démo');
+                montrerModalProjet(false);
+                chargerDonneesInitiales();
+            } catch (err) {
+                alert('Erreur : ' + err.message);
+                montrerChargement(false);
+            }
+        };
+
+        window.chargerReseauMaster = async function() {
+            montrerChargement(true);
+            try {
+                const token = localStorage.getItem('swmm_access_token');
+                const headers = { 'Content-Type': 'application/json' };
+                if (token) headers['Authorization'] = `Bearer ${token}`;
+                const resp = await fetch('/api/v1/network/load-master', { method: 'POST', headers, credentials: 'include' });
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.detail || 'Erreur lors du chargement ville');
+                montrerModalProjet(false);
+                chargerDonneesInitiales();
+            } catch (err) {
+                alert('Erreur : ' + err.message);
+                montrerChargement(false);
+            }
+        };
+
+        window.reinitialiserProjetVierge = async function() {
+            if (!confirm('Voulez-vous réinitialiser votre projet et vider le réseau affiché ?')) return;
+            montrerChargement(true);
+            try {
+                const token = localStorage.getItem('swmm_access_token');
+                const headers = { 'Content-Type': 'application/json' };
+                if (token) headers['Authorization'] = `Bearer ${token}`;
+                const resp = await fetch('/api/v1/network/reset', { method: 'POST', headers, credentials: 'include' });
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.detail || 'Erreur lors de la réinitialisation');
+                montrerModalProjet(false);
+                chargerDonneesInitiales();
+            } catch (err) {
+                alert('Erreur : ' + err.message);
+                montrerChargement(false);
+            }
+        };
+
+        window.televerserGpkg = async function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            montrerChargement(true);
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                const token = localStorage.getItem('swmm_access_token');
+                const headers = {};
+                if (token) headers['Authorization'] = `Bearer ${token}`;
+                const resp = await fetch('/api/v1/network/upload', {
+                    method: 'POST',
+                    headers,
+                    credentials: 'include',
+                    body: formData
+                });
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.detail || 'Erreur lors du téléversement');
+                montrerModalProjet(false);
+                chargerDonneesInitiales();
+            } catch (err) {
+                alert('Erreur téléversement : ' + err.message);
+                montrerChargement(false);
+            }
+        };
+
         // ==========================================
         // INITIALISATION BARRE SAAS & SESSION
         // ==========================================
@@ -1297,6 +1411,10 @@
                     if (userEl) userEl.style.display = 'flex';
                     if (orgNameEl) orgNameEl.textContent = `${data.active_organization.name} [${(data.active_organization.billing_plan || 'BET').toUpperCase()}]`;
                     if (userNameEl) userNameEl.innerHTML = `<i class="fas fa-user-circle me-1"></i> ${data.user.full_name || data.user.email}`;
+                    if (data.user && data.user.is_superadmin) {
+                        const supEl = document.getElementById('option-superadmin');
+                        if (supEl) supEl.style.display = 'flex';
+                    }
                     return;
                 }
             } catch (e) {
@@ -1308,6 +1426,99 @@
         window.addEventListener('DOMContentLoaded', initSaaSNavbar);
 
     </script>
+
+    <!-- Modal d'accueil & Gestion de Projet Réseau (Option B) -->
+    <div id="modal-project" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(6px); z-index: 3000; align-items: center; justify-content: center;">
+        <div style="background: #1e293b; color: #f8fafc; border-radius: 16px; width: 90%; max-width: 620px; border: 1px solid rgba(255, 255, 255, 0.15); box-shadow: 0 25px 50px rgba(0, 0, 0, 0.6); overflow: hidden;">
+            <div style="background: #0f172a; padding: 18px 24px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="width: 38px; height: 38px; border-radius: 10px; background: #0284c7; display: flex; align-items: center; justify-content: center; font-size: 18px; color: white;">
+                        <i class="fas fa-project-diagram"></i>
+                    </div>
+                    <div>
+                        <h5 style="margin: 0; font-weight: 700; font-size: 1.05rem;">Espace de Travail Réseau</h5>
+                        <small style="color: #94a3b8;" id="modal-project-status">Aucun réseau chargé (Espace vierge)</small>
+                    </div>
+                </div>
+                <button onclick="montrerModalProjet(false)" style="background: transparent; border: none; color: #94a3b8; font-size: 22px; cursor: pointer; line-height: 1;">&times;</button>
+            </div>
+            <div style="padding: 22px 24px;">
+                <p style="color: #cbd5e1; font-size: 0.92rem; margin-bottom: 18px;">
+                    Bienvenue sur <strong>SWMM Platform</strong>. Pour débuter votre audit hydraulique ou analyse topologique, choisissez une option :
+                </p>
+                <div style="display: grid; gap: 12px;">
+                    <!-- Option 1: Importer -->
+                    <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between;">
+                        <div>
+                            <div style="font-weight: 700; color: #38bdf8; margin-bottom: 2px;">
+                                <i class="fas fa-file-upload me-2"></i> Importer votre réseau SIG
+                            </div>
+                            <div style="font-size: 0.8rem; color: #94a3b8;">
+                                Format GeoPackage (.gpkg) avec vos couches canalisations et regards.
+                            </div>
+                        </div>
+                        <label class="btn btn-sm btn-primary" style="margin: 0; cursor: pointer; background: #0284c7; border: none; font-weight: 600; padding: 7px 14px; border-radius: 8px;">
+                            <i class="fas fa-upload me-1"></i> Importer
+                            <input type="file" id="input-upload-gpkg" accept=".gpkg" style="display: none;" onchange="televerserGpkg(event)">
+                        </label>
+                    </div>
+
+                    <!-- Option 2: Démo -->
+                    <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between;">
+                        <div>
+                            <div style="font-weight: 700; color: #34d399; margin-bottom: 2px;">
+                                <i class="fas fa-flask me-2"></i> Charger le réseau d'exemple Démo
+                            </div>
+                            <div style="font-size: 0.8rem; color: #94a3b8;">
+                                Échantillon témoin préconfiguré (60 canalisations, 80 regards, 1 rejet).
+                            </div>
+                        </div>
+                        <button onclick="chargerReseauDemo()" class="btn btn-sm" style="background: #059669; color: white; border: none; font-weight: 600; padding: 7px 14px; border-radius: 8px; cursor: pointer;">
+                            <i class="fas fa-play me-1"></i> Charger Démo
+                        </button>
+                    </div>
+
+                    <!-- Option 3: Tracé manuel -->
+                    <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between;">
+                        <div>
+                            <div style="font-weight: 700; color: #f59e0b; margin-bottom: 2px;">
+                                <i class="fas fa-draw-polygon me-2"></i> Dessiner manuellement sur la carte
+                            </div>
+                            <div style="font-size: 0.8rem; color: #94a3b8;">
+                                Tracer vos bassins et positionner vos canalisations point par point.
+                            </div>
+                        </div>
+                        <button onclick="montrerModalProjet(false); activerModeEdition('create');" class="btn btn-sm" style="background: #d97706; color: white; border: none; font-weight: 600; padding: 7px 14px; border-radius: 8px; cursor: pointer;">
+                            <i class="fas fa-pencil-alt me-1"></i> Commencer
+                        </button>
+                    </div>
+
+                    <!-- Option SuperAdmin (Projet Réel Ville) -->
+                    <div id="option-superadmin" style="display: none; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 12px; padding: 14px 16px; align-items: center; justify-content: space-between;">
+                        <div>
+                            <div style="font-weight: 700; color: #f87171; margin-bottom: 2px;">
+                                <i class="fas fa-shield-alt me-2"></i> Réseau Ville (Projet Réel Complet)
+                            </div>
+                            <div style="font-size: 0.8rem; color: #fca5a5;">
+                                Réservé à votre session SuperAdmin (11 000+ éléments réels).
+                            </div>
+                        </div>
+                        <button onclick="chargerReseauMaster()" class="btn btn-sm" style="background: #dc2626; color: white; border: none; font-weight: 600; padding: 7px 14px; border-radius: 8px; cursor: pointer;">
+                            <i class="fas fa-database me-1"></i> Charger Ville
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Réinitialisation vers espace vierge -->
+                <div id="section-reset-project" style="margin-top: 16px; text-align: center; display: none;">
+                    <button onclick="reinitialiserProjetVierge()" style="background: transparent; border: 1px solid #64748b; color: #94a3b8; font-size: 0.78rem; padding: 5px 12px; border-radius: 6px; cursor: pointer;">
+                        <i class="fas fa-trash-alt me-1"></i> Réinitialiser vers un espace vierge
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </body>
 
 </html>

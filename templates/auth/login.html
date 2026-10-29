@@ -80,7 +80,17 @@
             <i class="fas fa-water"></i>
         </div>
         <h3 class="fw-bold mb-1" style="color: #0f172a;">SWMM Platform</h3>
-        <p class="text-muted small mb-0">Espace ingénierie d'assainissement et modélisation SWMM 5.2</p>
+        <p class="text-muted small mb-3">Espace ingénierie d'assainissement et modélisation SWMM 5.2</p>
+
+        <!-- Bascule Navigation Connexion / Inscription -->
+        <div class="d-flex p-1 rounded-3 bg-white border shadow-sm text-center">
+            <span class="btn btn-sm btn-primary flex-fill fw-bold py-1">
+                <i class="fas fa-sign-in-alt me-1"></i> Se connecter
+            </span>
+            <a href="/register" class="btn btn-sm text-secondary flex-fill fw-semibold py-1 text-decoration-none">
+                <i class="fas fa-user-plus me-1"></i> Créer un compte
+            </a>
+        </div>
     </div>
 
     <div class="auth-body">
@@ -127,6 +137,19 @@
 </div>
 
 <script>
+    // Récupération éventuelle de l'email depuis l'URL
+    window.addEventListener('DOMContentLoaded', () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const emailParam = urlParams.get('email');
+        if (emailParam) {
+            const emailInput = document.getElementById('email');
+            if (emailInput) {
+                emailInput.value = emailParam;
+                document.getElementById('password').focus();
+            }
+        }
+    });
+
     // Bascule mot de passe
     const passInput = document.getElementById('password');
     const toggleBtn = document.getElementById('togglePassword');

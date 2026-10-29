@@ -11,7 +11,7 @@ Date : Octobre 2026
 from datetime import datetime, timezone
 import logging
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Request, Query
 from sqlalchemy import select, delete
 from sqlalchemy.orm import Session
 
@@ -77,6 +77,19 @@ def _clear_auth_cookies(response: Response):
     """Supprime les cookies de session."""
     response.delete_cookie(key="access_token")
     response.delete_cookie(key="refresh_token")
+
+
+@router.get("/check-email")
+def check_email(
+    email: str = Query(..., description="Adresse email à vérifier"),
+    db: Session = Depends(get_db),
+):
+    """Vérifie si une adresse email est déjà enregistrée en base de données."""
+    clean_email = email.strip().lower()
+    if not clean_email or "@" not in clean_email:
+        return {"exists": False}
+    user = db.execute(select(User).where(User.email == clean_email)).scalar_one_or_none()
+    return {"exists": user is not None}
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)

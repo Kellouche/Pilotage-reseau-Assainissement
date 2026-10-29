@@ -28,6 +28,7 @@ data/*.db
 network_map.html
 
 *.gpkg
+!data/demo_reseau.gpkg
 !tests/data/golden_dataset/*.gpkg
 *.sqlite
 *.sqlite3

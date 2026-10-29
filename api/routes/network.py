@@ -3,12 +3,15 @@ Routes pour la gestion du réseau (regards, canalisations, rejets).
 Endpoints CRUD complets avec validation Pydantic.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import List, Optional
+from pathlib import Path
 
 from api.database import get_db
 from api import schemas, crud
+from api.models import Project
+from api.core.security import get_tenant_context, TenantContext
 
 router = APIRouter(prefix="/network", tags=["Réseau"])
 
@@ -200,3 +203,167 @@ def create_rejet(
     """Crée un nouveau rejet."""
     # TODO: implémenter si besoin
     raise HTTPException(status_code=501, detail="À implémenter")
+
+
+# ============================================================
+# GESTION DES PROJETS & CHARGEMENT DE RÉSEAUX (OPTION B)
+# ============================================================
+
+@router.post("/load-demo")
+def load_demo_network(
+    tenant_ctx: TenantContext = Depends(get_tenant_context),
+    db: Session = Depends(get_db)
+):
+    """Charge le réseau d'exemple Démo (échantillon isolé et sécurisé) pour le projet actif."""
+    demo_path = Path("data/demo_reseau.gpkg")
+    if not demo_path.exists():
+        raise HTTPException(status_code=500, detail="Fichier démo introuvable sur le serveur.")
+
+    project = db.query(Project).filter(
+        Project.org_id == tenant_ctx.org_id,
+        Project.is_archived.is_(False)
+    ).first()
+
+    if not project:
+        project = Project(
+            org_id=tenant_ctx.org_id,
+            name="Projet Démo — Quartier Témoin",
+            description="Échantillon de démonstration préconfiguré.",
+        )
+        db.add(project)
+        db.flush()
+
+    project.name = "Projet Démo — Quartier Témoin"
+    project.source_gpkg_key = str(demo_path)
+    project.nodes_count = 80
+    project.pipes_count = 60
+    project.outfalls_count = 1
+    db.commit()
+
+    return {
+        "status": "ok",
+        "message": "Réseau d'exemple Démo chargé avec succès.",
+        "project": {
+            "id": project.id,
+            "name": project.name,
+            "nodes_count": project.nodes_count,
+            "pipes_count": project.pipes_count,
+        }
+    }
+
+
+@router.post("/load-master")
+def load_master_network(
+    tenant_ctx: TenantContext = Depends(get_tenant_context),
+    db: Session = Depends(get_db)
+):
+    """Charge le réseau complet réel (Réservé au SuperAdmin / Direction de projet)."""
+    user = tenant_ctx.user
+    if not user or not user.is_superadmin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Accès restreint. Seul le SuperAdmin peut charger le réseau réel complet de la ville."
+        )
+
+    master_path = Path(r"D:\IA Water Data Analysis\Assainissement\Assainissement_Ville.gpkg")
+    if not master_path.exists():
+        raise HTTPException(status_code=500, detail="Fichier maître introuvable sur le serveur.")
+
+    project = db.query(Project).filter(
+        Project.org_id == tenant_ctx.org_id,
+        Project.is_archived.is_(False)
+    ).first()
+
+    if not project:
+        project = Project(
+            org_id=tenant_ctx.org_id,
+            name="Réseau Ville (Projet Réel)",
+            description="Réseau complet d'assainissement.",
+        )
+        db.add(project)
+        db.flush()
+
+    project.name = "Réseau Ville (Projet Réel)"
+    project.source_gpkg_key = str(master_path)
+    project.nodes_count = 11000
+    project.pipes_count = 11000
+    db.commit()
+
+    return {
+        "status": "ok",
+        "message": "Réseau réel complet de la ville chargé pour votre session administrateur.",
+        "project": {
+            "id": project.id,
+            "name": project.name,
+        }
+    }
+
+
+@router.post("/reset")
+def reset_project_network(
+    tenant_ctx: TenantContext = Depends(get_tenant_context),
+    db: Session = Depends(get_db)
+):
+    """Réinitialise le projet actif vers un espace vierge (Option B)."""
+    project = db.query(Project).filter(
+        Project.org_id == tenant_ctx.org_id,
+        Project.is_archived.is_(False)
+    ).first()
+
+    if project:
+        project.source_gpkg_key = None
+        project.nodes_count = 0
+        project.pipes_count = 0
+        project.outfalls_count = 0
+        project.name = "Nouveau Projet (Vierge)"
+        db.commit()
+
+    return {"status": "ok", "message": "Projet réinitialisé vers un espace vierge."}
+
+
+@router.post("/upload")
+async def upload_network_gpkg(
+    file: UploadFile = File(...),
+    tenant_ctx: TenantContext = Depends(get_tenant_context),
+    db: Session = Depends(get_db)
+):
+    """Téléverse un fichier GeoPackage (.gpkg) pour le projet actif."""
+    if not file.filename.lower().endswith(".gpkg"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Format non supporté. Veuillez téléverser un fichier .gpkg (GeoPackage)."
+        )
+
+    upload_dir = Path(f"uploads/{tenant_ctx.org_id}")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    target_path = upload_dir / f"network_{file.filename}"
+
+    content = await file.read()
+    with open(target_path, "wb") as f:
+        f.write(content)
+
+    project = db.query(Project).filter(
+        Project.org_id == tenant_ctx.org_id,
+        Project.is_archived.is_(False)
+    ).first()
+
+    if not project:
+        project = Project(
+            org_id=tenant_ctx.org_id,
+            name=file.filename.rsplit(".", 1)[0],
+        )
+        db.add(project)
+        db.flush()
+
+    project.name = file.filename.rsplit(".", 1)[0]
+    project.source_gpkg_key = str(target_path)
+    db.commit()
+
+    return {
+        "status": "ok",
+        "message": f"Fichier {file.filename} téléversé et associé à votre projet avec succès.",
+        "project": {
+            "id": project.id,
+            "name": project.name,
+        }
+    }
