@@ -72,18 +72,18 @@ PLAN_PROFILES: Dict[str, Dict[str, Any]] = {
     },
     "exploitation": {
         "code": "exploitation",
-        "name": "Grands Réseaux / Sur mesure",
-        "max_nodes": None,  # Illimité
+        "name": "Entreprises de Gestion & Régies Communales",
+        "max_nodes": None,  # Réseau communal complet
         "trial_days": None,
         "max_concurrent_simulations": 10,
-        "max_projects": None,  # Illimité
+        "max_projects": None,  # Patrimoine global multi-secteurs
         "max_simulations_per_month": None,  # Illimité
-        "max_members": None,  # Illimité
+        "max_members": None,  # Équipes mixtes bureau & terrain
         # Feature Gating métier Assainissement
         "has_mnt_analysis": True,
-        "has_mobile_access": True,  # Flotte de smartphones terrain illimitée (ITV, curage)
+        "has_mobile_access": True,  # Suivi interventions terrain & fiches d'inspections
         "has_custom_reports": True,
-        "retention_days": 3650,
+        "retention_days": 3650,  # Historique patrimonial permanent (Audit Trail)
     },
 }
 

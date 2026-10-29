@@ -228,11 +228,11 @@ def generate_proforma_pdf(
     # 3. Détail des Prestations
     clean_plan = plan.lower().strip()
     if clean_plan in ("exploitation", "entreprise", "regie"):
-        plan_label = "Abonnement SWMM Platform - Grands Réseaux & Capacités Étendues"
+        plan_label = "Convention SWMM Platform - Entreprises de Gestion & Régies Communales"
         plan_desc = (
-            "Formule sur mesure pour modélisation de réseaux étendus (> 15 000 regards). "
-            "Modélisation dynamique transitoire Saint-Venant 1D, diagnostic autocurage "
-            "NP 650 / Fascicule 70, croisement MNT et simulations SWMM 5.2 avec support dédié."
+            "Convention annuelle d'exploitation pour entreprises de gestion de l'assainissement et régies communales. "
+            "Suivi patrimonial global du réseau communal sans limite de taille, journal des inspections et incidents terrain, "
+            "historique d'audit des interventions (curages, casses), diagnostic autocurage NP 650 et calculs SWMM 5.2."
         )
         monthly_ht = 180000.0
     else:
