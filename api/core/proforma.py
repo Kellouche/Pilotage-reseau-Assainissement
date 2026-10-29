@@ -231,8 +231,8 @@ def generate_proforma_pdf(
         plan_label = "Convention SWMM Platform - Entreprises de Gestion & Régies Communales"
         plan_desc = (
             "Convention annuelle d'exploitation pour entreprises de gestion de l'assainissement et régies communales. "
-            "Suivi patrimonial global du réseau communal sans limite de taille, journal des inspections et incidents terrain, "
-            "historique d'audit des interventions (curages, casses), diagnostic autocurage NP 650 et calculs SWMM 5.2."
+            "Modélisation hydraulique de l'ensemble du réseau communal, diagnostics de conformité et autocurage "
+            "NP 650 / Fascicule 70, découpage des bassins versants sur MNT et simulations complètes SWMM 5.2."
         )
         monthly_ht = 180000.0
     else:

@@ -78,12 +78,12 @@ PLAN_PROFILES: Dict[str, Dict[str, Any]] = {
         "max_concurrent_simulations": 10,
         "max_projects": None,  # Patrimoine global multi-secteurs
         "max_simulations_per_month": None,  # Illimité
-        "max_members": None,  # Équipes mixtes bureau & terrain
+        "max_members": 15,  # Équipe technique du service assainissement
         # Feature Gating métier Assainissement
         "has_mnt_analysis": True,
-        "has_mobile_access": True,  # Suivi interventions terrain & fiches d'inspections
+        "has_mobile_access": False,  # Reporté en feuille de route
         "has_custom_reports": True,
-        "retention_days": 3650,  # Historique patrimonial permanent (Audit Trail)
+        "retention_days": 365,
     },
 }
 
