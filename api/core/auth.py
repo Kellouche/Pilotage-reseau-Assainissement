@@ -23,7 +23,7 @@ import jwt
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from api.models import User, Organization, Membership, ApiKey
+from api.models import User, Organization, Membership, ApiKey, Project
 
 logger = logging.getLogger(__name__)
 
@@ -240,6 +240,14 @@ def create_user_with_org(
         role=role,
     )
     session.add(membership)
+
+    # Provisioning automatique du projet initial hermétique propre à l'organisation
+    initial_project = Project(
+        org_id=org.id,
+        name="Réseau Pilote - Démonstration",
+        description="Espace d'ingénierie et modèle initial préconfiguré pour votre organisation.",
+    )
+    session.add(initial_project)
     session.commit()
 
     logger.info("Utilisateur créé : id=%s email=%s org_id=%s slug=%s role=%s", user.id, user.email, org.id, org.slug, role)

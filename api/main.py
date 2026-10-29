@@ -203,8 +203,12 @@ def page_pricing():
 
 @app.get("/cockpit", response_class=HTMLResponse)
 @app.get("/map", response_class=HTMLResponse)
-def get_cockpit():
-    """Cockpit hydraulique et cartographie interactive Leaflet."""
+def get_cockpit(request: Request, db=Depends(get_db)):
+    """Cockpit hydraulique et cartographie interactive Leaflet (réservé aux membres authentifiés)."""
+    user = _get_authenticated_user(request, db)
+    if not user:
+        return RedirectResponse(url="/login?next=/cockpit", status_code=302)
+
     template_path = Path("templates/index.html")
     if not template_path.exists():
         template_path = Path("templates/map.html")
@@ -404,8 +408,11 @@ async def websocket_sync(websocket: WebSocket):
 # ============================================================
 
 @app.get("/qualite", response_class=HTMLResponse)
-async def page_qualite():
+async def page_qualite(request: Request, db=Depends(get_db)):
     """Page de visualisation de la qualité du réseau."""
+    user = _get_authenticated_user(request, db)
+    if not user:
+        return RedirectResponse(url="/login?next=/qualite", status_code=302)
     try:
         with open("templates/qualite.html", "r", encoding="utf-8") as f:
             return f.read()
@@ -418,8 +425,11 @@ async def page_qualite():
 
 
 @app.get("/carte", response_class=HTMLResponse)
-async def page_carte():
+async def page_carte(request: Request, db=Depends(get_db)):
     """Page de la carte opérationnelle pour visualiser et corriger les anomalies."""
+    user = _get_authenticated_user(request, db)
+    if not user:
+        return RedirectResponse(url="/login?next=/carte", status_code=302)
     try:
         with open("templates/carte.html", "r", encoding="utf-8") as f:
             return f.read()
@@ -431,8 +441,11 @@ async def page_carte():
         """, status_code=404)
 
 @app.get("/tunnel", response_class=HTMLResponse)
-async def page_tunnel():
+async def page_tunnel(request: Request, db=Depends(get_db)):
     """Page du tunnel de workflow en 4 étapes."""
+    user = _get_authenticated_user(request, db)
+    if not user:
+        return RedirectResponse(url="/login?next=/tunnel", status_code=302)
     try:
         with open("templates/tunnel.html", "r", encoding="utf-8") as f:
             return f.read()

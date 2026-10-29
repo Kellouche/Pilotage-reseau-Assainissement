@@ -81,9 +81,37 @@ def test_logout_clears_cookies_and_redirects():
     assert any(b"access_token" in c for c in cookies)
 
 
-def test_cockpit_page():
-    """La page /cockpit doit servir le template index.html avec la topbar SaaS."""
-    resp = get_cockpit()
+def test_cockpit_unauthenticated_redirects_to_login():
+    """Un visiteur non connecté accédant à /cockpit doit être refoulé vers /login."""
+    req = MagicMock(spec=Request)
+    req.cookies = {}
+    req.headers = {}
+    db = MagicMock()
+
+    resp = get_cockpit(req, db)
+    assert isinstance(resp, RedirectResponse)
+    assert resp.status_code == 302
+    assert resp.headers["location"] == "/login?next=/cockpit"
+
+
+def test_cockpit_authenticated_serves_html():
+    """Un membre connecté accédant à /cockpit accède à son espace de travail avec la topbar SaaS."""
+    user = User(
+        id="usr-cockpit-test",
+        email="ingenieur@bet.dz",
+        full_name="Ingénieur VRD",
+        is_active=True,
+    )
+    token = create_access_token({"sub": user.id, "email": user.email, "org_id": "org-test", "role": "engineer"})
+
+    req = MagicMock(spec=Request)
+    req.cookies = {"access_token": token}
+    req.headers = {}
+
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = user
+
+    resp = get_cockpit(req, db)
     assert isinstance(resp, HTMLResponse)
     assert resp.status_code == 200
     content = resp.body.decode("utf-8")
