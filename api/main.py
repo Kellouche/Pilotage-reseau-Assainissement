@@ -8,7 +8,7 @@ import sys
 import asyncio
 from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -103,14 +103,115 @@ app.add_middleware(
 # ROOT & HEALTH
 # ============================================================
 
+# ============================================================
+# AUTH HELPER FOR WEB VIEWS
+# ============================================================
+
+def _get_authenticated_user(request: Request, db):
+    """Extrait l'utilisateur connecté via cookie ou Bearer token (sans lever d'exception)."""
+    token = request.cookies.get("access_token")
+    if not token:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split(" ", 1)[1].strip()
+    if not token:
+        return None
+    try:
+        from api.core.auth import decode_token
+        from api.models import User
+        payload = decode_token(token)
+        if not payload or not payload.get("sub"):
+            return None
+        return db.query(User).filter(User.id == payload["sub"], User.is_active.is_(True)).first()
+    except Exception:
+        return None
+
+
+# ============================================================
+# ROOT, AUTH & MARKETING PAGES
+# ============================================================
+
 @app.get("/", response_class=HTMLResponse)
-def read_root(request: Request):
-    """Page d'accueil - Cockpit hydraulique et cartographie Leaflet."""
+def read_root(request: Request, db=Depends(get_db)):
+    """
+    Page d'accueil : vitrine SaaS publique pour les visiteurs,
+    redirection automatique vers le cockpit /cockpit pour les utilisateurs connectés.
+    """
+    user = _get_authenticated_user(request, db)
+    if user:
+        return RedirectResponse(url="/cockpit", status_code=302)
+
+    landing_path = Path("templates/landing.html")
+    if landing_path.exists():
+        with open(landing_path, "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+
+    index_path = Path("templates/index.html")
+    if index_path.exists():
+        with open(index_path, "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+
+    return HTMLResponse("<h1>SWMM Platform</h1><p>Consultez la <a href='/docs'>Documentation API Swagger</a>.</p>")
+
+
+@app.get("/login", response_class=HTMLResponse)
+def page_login(request: Request, db=Depends(get_db)):
+    """Page de connexion utilisateur."""
+    user = _get_authenticated_user(request, db)
+    if user:
+        return RedirectResponse(url="/cockpit", status_code=302)
+    path = Path("templates/auth/login.html")
+    if path.exists():
+        return HTMLResponse(content=path.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>Page de connexion introuvable</h1>", status_code=404)
+
+
+@app.get("/register", response_class=HTMLResponse)
+def page_register(request: Request, db=Depends(get_db)):
+    """Page d'inscription et de création d'organisation."""
+    user = _get_authenticated_user(request, db)
+    if user:
+        return RedirectResponse(url="/cockpit", status_code=302)
+    path = Path("templates/auth/register.html")
+    if path.exists():
+        return HTMLResponse(content=path.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>Page d'inscription introuvable</h1>", status_code=404)
+
+
+@app.get("/logout")
+def page_logout():
+    """Déconnexion de session et suppression des cookies."""
+    response = RedirectResponse(url="/login", status_code=302)
+    response.delete_cookie(key="access_token", path="/")
+    response.delete_cookie(key="refresh_token", path="/")
+    return response
+
+
+@app.get("/pricing", response_class=HTMLResponse)
+@app.get("/tarifs", response_class=HTMLResponse)
+def page_pricing():
+    """Grille des tarifs et offres en Dinars Algériens (DZD)."""
+    landing_path = Path("templates/landing.html")
+    if landing_path.exists():
+        return HTMLResponse(content=landing_path.read_text(encoding="utf-8"))
+    return RedirectResponse(url="/#tarifs", status_code=302)
+
+
+# ============================================================
+# COCKPIT & PAGES TECHNIQUES
+# ============================================================
+
+@app.get("/cockpit", response_class=HTMLResponse)
+@app.get("/map", response_class=HTMLResponse)
+def get_cockpit():
+    """Cockpit hydraulique et cartographie interactive Leaflet."""
     template_path = Path("templates/index.html")
+    if not template_path.exists():
+        template_path = Path("templates/map.html")
     if template_path.exists():
         with open(template_path, "r", encoding="utf-8") as f:
             return HTMLResponse(content=f.read())
-    return HTMLResponse("<h1>SWMM Platform</h1><p>Consultez la <a href='/docs'>Documentation API Swagger</a>.</p>")
+    return HTMLResponse(content="<h1>Erreur: Template cockpit non trouvé</h1>", status_code=404)
 
 
 @app.get("/api/info")
@@ -159,22 +260,6 @@ def health_check(db=Depends(get_db)):
         "graph_cache": graph_status,
         "api": "ok"
     }
-
-
-# ============================================================
-# PAGES HTML
-# ============================================================
-
-@app.get("/map", response_class=HTMLResponse)
-def get_map():
-    """Interface de visualisation des couches du réseau."""
-    template_path = Path("templates/map.html")
-    if template_path.exists():
-        with open(template_path, "r", encoding="utf-8") as f:
-            html_content = f.read()
-        return HTMLResponse(content=html_content)
-    else:
-        return HTMLResponse(content="<h1>Erreur: Template map.html non trouvé</h1>", status_code=404)
 
 
 # ============================================================

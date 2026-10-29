@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SWMM Platform SaaS — Intelligence et modélisation des réseaux d'assainissement</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --sp-blue-deep: #082f49;
+            --sp-blue-primary: #0284c7;
+            --sp-blue-light: #e0f2fe;
+            --sp-teal: #0d9488;
+            --sp-dark: #0f172a;
+            --sp-gray: #64748b;
+            --sp-bg: #f8fafc;
+        }
+        html {
+            scroll-behavior: smooth;
+        }
+        section[id] {
+            scroll-margin-top: 80px;
+        }
+        body {
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            color: var(--sp-dark);
+            background-color: #ffffff;
+            line-height: 1.6;
+        }
+        .navbar-landing {
+            background-color: #ffffff;
+            border-bottom: 1px solid #f1f5f9;
+            padding: 16px 0;
+        }
+        .brand-logo {
+            font-size: 1.35rem;
+            font-weight: 800;
+            color: var(--sp-blue-deep);
+            display: inline-flex;
+            align-items: center;
+            text-decoration: none;
+        }
+        .brand-logo i {
+            color: var(--sp-blue-primary);
+            margin-right: 8px;
+        }
+        .btn-auth-subtle {
+            font-weight: 600;
+            color: #334155;
+            padding: 8px 18px;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        .btn-auth-subtle:hover {
+            color: var(--sp-blue-primary);
+        }
+        .btn-cta-dark {
+            background-color: #0f172a;
+            color: #ffffff;
+            font-weight: 700;
+            padding: 10px 22px;
+            border-radius: 10px;
+            text-decoration: none;
+            transition: all 0.2s ease-in-out;
+            display: inline-flex;
+            align-items: center;
+        }
+        .btn-cta-dark:hover {
+            background-color: #1e293b;
+            color: #ffffff;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2);
+        }
+        .hero-section {
+            padding: 70px 0 60px;
+            text-align: center;
+            background: radial-gradient(circle at 50% 20%, #f0f9ff 0%, #ffffff 80%);
+        }
+        .pill-badge {
+            display: inline-flex;
+            align-items: center;
+            background-color: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            color: #334155;
+            padding: 6px 16px;
+            border-radius: 9999px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 24px;
+        }
+        .pill-badge i {
+            color: #0284c7;
+            margin-right: 6px;
+        }
+        .hero-title {
+            font-size: 3.2rem;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            color: #0f172a;
+            max-width: 950px;
+            margin: 0 auto 20px;
+            line-height: 1.15;
+        }
+        .hero-title .highlight {
+            color: var(--sp-blue-primary);
+        }
+        .hero-subtitle {
+            font-size: 1.2rem;
+            color: #475569;
+            max-width: 820px;
+            margin: 0 auto 36px;
+            line-height: 1.6;
+        }
+        .trust-proof {
+            font-size: 0.85rem;
+            color: #94a3b8;
+            margin-top: 18px;
+        }
+        .feature-box {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 30px;
+            height: 100%;
+            transition: all 0.2s ease;
+        }
+        .feature-box:hover {
+            border-color: #cbd5e1;
+            transform: translateY(-3px);
+            box-shadow: 0 12px 24px -10px rgba(15, 23, 42, 0.08);
+        }
+        .feature-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 12px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+            margin-bottom: 20px;
+        }
+        .pricing-mini-card {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            padding: 24px;
+            height: 100%;
+            text-align: left;
+        }
+        .pricing-mini-card.featured {
+            border: 2px solid var(--sp-blue-primary);
+            position: relative;
+        }
+        .footer-landing {
+            background-color: #0f172a;
+            color: #94a3b8;
+            padding: 40px 0 30px;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Barre de Navigation Publique -->
+    <header class="navbar-landing sticky-top shadow-sm">
+        <div class="container d-flex justify-content-between align-items-center">
+            <a href="/" class="brand-logo">
+                <i class="fas fa-water"></i> SWMM Platform
+            </a>
+
+            <div class="d-none d-md-flex align-items-center gap-4">
+                <a href="#objectifs" class="text-decoration-none text-secondary fw-semibold small">Fonctionnalités métier</a>
+                <a href="#tarifs" class="text-decoration-none text-secondary fw-semibold small">Tarifs & Offres (DZD)</a>
+                <a href="#securite" class="text-decoration-none text-secondary fw-semibold small">Sécurité & Isolation</a>
+                <a href="/map" class="text-decoration-none text-primary fw-semibold small"><i class="fas fa-map-marked-alt me-1"></i> Cockpit SIG</a>
+            </div>
+
+            <div class="d-flex align-items-center gap-2">
+                <a href="/login" class="btn-auth-subtle">
+                    <i class="fas fa-sign-in-alt me-1"></i> Connexion
+                </a>
+                <a href="/register?plan=demo" class="btn-cta-dark">
+                    Essai démo (14j)
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero-section">
+        <div class="container">
+            <div class="pill-badge">
+                <i class="fas fa-certificate"></i> Conçu pour les Bureaux d'Études VRD, Régies d'Assainissement et Directions de l'Hydraulique
+            </div>
+
+            <h1 class="hero-title">
+                Le diagnostic, pilotage et dimensionnement de vos <span class="highlight">réseaux d'assainissement & pluvial</span>
+            </h1>
+
+            <p class="hero-subtitle">
+                SWMM Platform SaaS transforme vos tracés de collecteurs en modèles hydrodynamiques conformes <strong>EPA SWMM 5.2</strong>,
+                vérifie automatiquement la conformité aux normes <strong>Fascicule 70 & NP 650</strong> (autocurage, pentes, remplissage),
+                délimite vos bassins versants sur MNT et modélise les risques d'inondation. Sans installation logicielle.
+            </p>
+
+            <div class="d-flex justify-content-center gap-3 flex-wrap">
+                <a href="/register?plan=demo" class="btn-cta-dark btn-lg px-4 py-3 fs-6">
+                    Démarrer l'essai démo (14 jours) <i class="fas fa-arrow-right ms-2"></i>
+                </a>
+                <a href="/map" class="btn btn-outline-primary btn-lg px-4 py-3 fw-semibold fs-6">
+                    <i class="fas fa-eye me-2"></i> Explorer le Cockpit SIG
+                </a>
+                <a href="#tarifs" class="btn btn-outline-secondary btn-lg px-4 py-3 fw-semibold fs-6">
+                    <i class="fas fa-tags me-2"></i> Consulter les tarifs (DZD)
+                </a>
+            </div>
+
+            <div class="trust-proof">
+                <i class="fas fa-check-circle text-success me-1"></i> Sans carte bancaire requise
+                <span class="mx-2">•</span>
+                <i class="fas fa-shield-alt text-primary me-1"></i> Espaces multi-tenant 100% isolés
+                <span class="mx-2">•</span>
+                <i class="fas fa-bolt text-warning me-1"></i> Moteur certifié EPA SWMM 5.2 & Saint-Venant
+            </div>
+        </div>
+    </section>
+
+    <!-- Section Bénéfices Métier -->
+    <section id="objectifs" class="py-5 bg-light border-top border-bottom">
+        <div class="container py-4">
+            <div class="text-center mb-5">
+                <span class="text-primary fw-bold text-uppercase small letter-spacing-1">Expertise en assainissement urbain</span>
+                <h2 class="h2 fw-bold text-dark mt-1">Quatre finalités opérationnelles pour vos réseaux</h2>
+                <p class="text-muted" style="max-width: 680px; margin: 0 auto;">
+                    Des algorithmes spécialisés pour garantir la pérennité physique et hydraulique de vos infrastructures d'eaux usées et pluviales.
+                </p>
+            </div>
+
+            <div class="row g-4">
+                <div class="col-md-6 col-lg-3">
+                    <div class="feature-box">
+                        <div class="feature-icon bg-primary bg-opacity-10 text-primary">
+                            <i class="fas fa-tachometer-alt"></i>
+                        </div>
+                        <h5 class="fw-bold text-dark mb-2">Conformité NP 650 & Fascicule 70</h5>
+                        <p class="text-muted small mb-0">
+                            Contrôle rigoureux des critères d'autocurage (vitesses entre <strong>0.6 et 3.0 m/s</strong>), des pentes minimales réglementaires, détection des contre-pentes et validation du taux de remplissage optimal <strong>d/D &le; 0.70</strong>.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="col-md-6 col-lg-3">
+                    <div class="feature-box">
+                        <div class="feature-icon bg-warning bg-opacity-10 text-warning">
+                            <i class="fas fa-cloud-showers-heavy"></i>
+                        </div>
+                        <h5 class="fw-bold text-dark mb-2">Propagation des crues (Saint-Venant)</h5>
+                        <p class="text-muted small mb-0">
+                            Simulation transitoire 1D par les équations complètes de Saint-Venant (moteur officiel EPA SWMM 5.2). Détection en temps réel des débordements (flooding), refoulements et mise en charge sous pluies de projet.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="col-md-6 col-lg-3">
+                    <div class="feature-box">
+                        <div class="feature-icon bg-success bg-opacity-10 text-success">
+                            <i class="fas fa-mountain"></i>
+                        </div>
+                        <h5 class="fw-bold text-dark mb-2">Découpage de bassins sur MNT</h5>
+                        <p class="text-muted small mb-0">
+                            Algorithmes topologiques d'accumulation de flux D8 sur raster d'élévation (GeoTIFF, SRTM, LiDAR). Délimitation automatisée des bassins versants, exutoires et calcul des surfaces drainées.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="col-md-6 col-lg-3">
+                    <div class="feature-box">
+                        <div class="feature-icon bg-info bg-opacity-10 text-info">
+                            <i class="fas fa-file-invoice"></i>
+                        </div>
+                        <h5 class="fw-bold text-dark mb-2">Dossiers d'ingénierie & Profils en long</h5>
+                        <p class="text-muted small mb-0">
+                            Génération automatique de rapports de synthèse contractuels, fiches de collecteurs et profils en long hydrauliques directement exploitables par les maîtres d'ouvrage (DRE, ONA, Ministères).
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Section Formules Métier -->
+    <section id="tarifs" class="py-5">
+        <div class="container py-4">
+            <div class="text-center mb-5">
+                <span class="text-primary fw-bold text-uppercase small">Modèle économique et segmentation</span>
+                <h2 class="h2 fw-bold text-dark mt-1">Des formules adaptées à chaque statut</h2>
+                <p class="text-muted">Des fonctionnalités adaptées aux responsabilités opérationnelles et administratives de chacun.</p>
+            </div>
+
+            <div class="row g-4 justify-content-center">
+                <!-- Académique -->
+                <div class="col-lg-4 col-md-6">
+                    <div class="pricing-mini-card">
+                        <span class="badge bg-secondary mb-2">Éducation & Recherche</span>
+                        <h4 class="fw-bold text-dark mb-1">Académique</h4>
+                        <p class="text-muted small mb-3">Étudiants, universités, chercheurs en hydrologie et assainissement.</p>
+                        <div class="h3 fw-bold text-dark mb-3">0 DZD <span class="fs-6 fw-normal text-muted">/ permanent</span></div>
+                        <ul class="list-unstyled small text-muted mb-4">
+                            <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Moteur EPA SWMM 5.2 complet</li>
+                            <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Réseaux jusqu'à 200 tronçons</li>
+                            <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Export séries temporelles (CSV)</li>
+                            <li class="text-muted"><i class="fas fa-info-circle me-2"></i>Filigrane pédagogique imposé</li>
+                        </ul>
+                        <a href="/register?plan=education" class="btn btn-outline-secondary w-100 fw-semibold">
+                            Choisir l'offre Académique
+                        </a>
+                    </div>
+                </div>
+
+                <!-- BET -->
+                <div class="col-lg-4 col-md-6">
+                    <div class="pricing-mini-card featured">
+                        <span class="badge bg-primary mb-2">Recommandé aux bureaux d'études</span>
+                        <h4 class="fw-bold text-primary mb-1">Bureau d'études (BET)</h4>
+                        <p class="text-muted small mb-3">Bureaux d'études VRD, concepteurs et ingénieurs-conseils.</p>
+                        <div class="h3 fw-bold text-dark mb-3">45 000 DZD <span class="fs-6 fw-normal text-muted">/ mois</span></div>
+                        <ul class="list-unstyled small text-muted mb-4">
+                            <li class="mb-2"><i class="fas fa-check text-primary me-2"></i><strong>Rapports certifiés officiels sans filigrane</strong></li>
+                            <li class="mb-2"><i class="fas fa-check text-primary me-2"></i><strong>Audit NP 650 & Découpage MNT complet</strong></li>
+                            <li class="mb-2"><i class="fas fa-check text-primary me-2"></i>Réseaux jusqu'à 3 000 tronçons</li>
+                            <li class="mb-2"><i class="fas fa-check text-primary me-2"></i>Jusqu'à 5 ingénieurs collaborateurs</li>
+                            <li class="mb-2"><i class="fas fa-check text-primary me-2"></i>Export GeoJSON, Shapefile & SWMM .inp</li>
+                        </ul>
+                        <a href="/register?plan=bet" class="btn-cta-dark w-100 justify-content-center">
+                            Choisir l'offre BET
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Régies -->
+                <div class="col-lg-4 col-md-6">
+                    <div class="pricing-mini-card">
+                        <span class="badge bg-success mb-2">Exploitation Industrielle</span>
+                        <h4 class="fw-bold text-dark mb-1">Régies & Exploitants</h4>
+                        <p class="text-muted small mb-3">Offices nationaux d'assainissement (ONA), régies communales et wilayas.</p>
+                        <div class="h3 fw-bold text-dark mb-3">Sur consultation <span class="fs-6 fw-normal text-muted">/ an</span></div>
+                        <ul class="list-unstyled small text-muted mb-4">
+                            <li class="mb-2"><i class="fas fa-star text-warning me-2"></i><strong>Exclusif : alertes inondations & points noirs</strong></li>
+                            <li class="mb-2"><i class="fas fa-star text-warning me-2"></i><strong>Exclusif : modélisation MNT haute résolution</strong></li>
+                            <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Tronçons, nœuds et bassins illimités</li>
+                            <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Équipes et subdivisions territoriales illimitées</li>
+                            <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Option déploiement On-Premise en Algérie</li>
+                        </ul>
+                        <a href="/register?plan=exploitation" class="btn btn-outline-dark w-100 fw-semibold">
+                            Demander une convention régie
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modalités de Règlement Spécifiques au Marché Local -->
+            <div class="payment-box mt-5 p-4 rounded-3 border bg-white shadow-sm">
+                <div class="row align-items-center">
+                    <div class="col-lg-8">
+                        <h5 class="fw-bold text-dark mb-2">
+                            <i class="fas fa-university text-primary me-2"></i>
+                            Modalités de règlement et procédures administratives en Algérie
+                        </h5>
+                        <p class="text-muted small mb-3">
+                            SWMM Platform SaaS s'aligne rigoureusement sur les circuits comptables et contractuels en vigueur (Dinars Algériens — DZD) :
+                        </p>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-file-signature text-primary fs-5 me-2"></i>
+                                    <span class="small"><strong>Bon de commande</strong><br><span class="text-muted">Marchés publics & régies</span></span>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-money-check-alt text-success fs-5 me-2"></i>
+                                    <span class="small"><strong>Virement bancaire (RIB)</strong><br><span class="text-muted">Comptes bancaires professionnels</span></span>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-receipt text-warning fs-5 me-2"></i>
+                                    <span class="small"><strong>Facture proforma officielle</strong><br><span class="text-muted">Conformité fiscale & comptable</span></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-4 text-lg-end mt-4 mt-lg-0 text-center">
+                        <span class="small text-muted d-block mb-2">Besoin d'une proforma pour votre commission des marchés ?</span>
+                        <a href="/login?next=/pricing" class="btn btn-sm btn-outline-primary fw-semibold">
+                            <i class="fas fa-file-invoice me-1"></i> Demander une facture proforma (PDF)
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Section Sécurité et confidentialité -->
+    <section id="securite" class="py-5 bg-white border-top">
+        <div class="container py-4">
+            <div class="text-center mb-5">
+                <span class="text-primary fw-bold text-uppercase small letter-spacing-1">Confidentialité et protection des données</span>
+                <h2 class="h2 fw-bold text-dark mt-1">Sécurité et isolation stricte de vos modèles</h2>
+                <p class="text-muted" style="max-width: 720px; margin: 0 auto;">
+                    Vos géométries de collecteurs, MNT, pluviogrammes et résultats d'écoulement sont cloisonnés dans un espace privatif hermétique propre à votre organisation.
+                </p>
+            </div>
+
+            <div class="row g-4">
+                <div class="col-md-4">
+                    <div class="feature-box h-100 bg-white shadow-sm p-4 rounded-3 border">
+                        <div class="feature-icon bg-primary bg-opacity-10 text-primary mb-3">
+                            <i class="fas fa-shield-alt"></i>
+                        </div>
+                        <h5 class="fw-bold text-dark mb-2">Espaces multi-tenant hermétiques</h5>
+                        <p class="text-muted small mb-0">
+                            Chaque régie, laboratoire ou bureau d'études dispose d'une étanchéité totale. Tout accès non autorisé ou tentative de croisement inter-organisation est intercepté avec un statut furtif 404.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="feature-box h-100 bg-white shadow-sm p-4 rounded-3 border">
+                        <div class="feature-icon bg-success bg-opacity-10 text-success mb-3">
+                            <i class="fas fa-database"></i>
+                        </div>
+                        <h5 class="fw-bold text-dark mb-2">Propriété exclusive des données</h5>
+                        <p class="text-muted small mb-0">
+                            Vos modélisations restent votre propriété intellectuelle exclusive. Vos données peuvent être sauvegardées sur stockage cloud souverain ou sur vos propres serveurs internes en Algérie.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="feature-box h-100 bg-white shadow-sm p-4 rounded-3 border">
+                        <div class="feature-icon bg-warning bg-opacity-10 text-warning mb-3">
+                            <i class="fas fa-user-lock"></i>
+                        </div>
+                        <h5 class="fw-bold text-dark mb-2">Gestion granulaire des collaborateurs</h5>
+                        <p class="text-muted small mb-0">
+                            Attribuez les rôles adaptés (Directeur, Chef de projet, Ingénieur hydraulique, Observateur). Contrôlez qui peut lancer des simulations SWMM lourdes ou éditer les réseaux.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-5 p-4 rounded-3 bg-light border text-center shadow-sm">
+                <h5 class="fw-bold text-dark mb-2">Besoin d'un déploiement sur vos propres serveurs (On-Premise) ?</h5>
+                <p class="text-muted small mb-3">SWMM Platform s'installe dans l'infrastructure locale de votre régie ou direction pour une autonomie totale.</p>
+                <a href="/register?plan=exploitation" class="btn btn-outline-primary btn-sm fw-semibold">
+                    <i class="fas fa-file-contract me-1"></i> Demander une convention d'exploitation
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer-landing">
+        <div class="container text-center">
+            <div class="mb-3">
+                <a href="/" class="text-white text-decoration-none fw-bold fs-5">
+                    <i class="fas fa-water text-primary me-2"></i>SWMM Platform SaaS
+                </a>
+            </div>
+            <div class="d-flex justify-content-center gap-3 mb-3 flex-wrap">
+                <a href="#objectifs" class="text-white-50 text-decoration-none small">Fonctionnalités métier</a>
+                <span class="text-white-50">•</span>
+                <a href="#tarifs" class="text-white-50 text-decoration-none small">Tarifs et offres (DZD)</a>
+                <span class="text-white-50">•</span>
+                <a href="#securite" class="text-white-50 text-decoration-none small">Sécurité et isolation</a>
+                <span class="text-white-50">•</span>
+                <a href="/map" class="text-white-50 text-decoration-none small">Cockpit SIG</a>
+                <span class="text-white-50">•</span>
+                <a href="/login" class="text-white-50 text-decoration-none small">Connexion</a>
+                <span class="text-white-50">•</span>
+                <a href="/register?plan=demo" class="text-white-50 text-decoration-none small">Essai démo (14j)</a>
+            </div>
+            <p class="small mb-2">Plateforme d'intelligence et de modélisation pour l'assainissement et le drainage des eaux pluviales.</p>
+            <p class="small text-white-50 mb-0">&copy; 2026 SWMM Platform. Tous droits réservés.</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
