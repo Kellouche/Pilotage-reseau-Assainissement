@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inscription — SWMM Platform SaaS</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0a0f1d 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            padding: 30px 20px;
+            color: #1e293b;
+        }
+        .auth-card {
+            background: #ffffff;
+            border-radius: 20px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            max-width: 580px;
+            width: 100%;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .auth-header {
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 28px 25px 20px;
+            text-align: center;
+        }
+        .auth-brand-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 56px;
+            height: 56px;
+            border-radius: 14px;
+            background: linear-gradient(135deg, #0284c7, #0369a1);
+            color: #ffffff;
+            font-size: 24px;
+            margin-bottom: 10px;
+            box-shadow: 0 8px 16px rgba(2, 132, 199, 0.35);
+        }
+        .auth-body {
+            padding: 25px 30px;
+        }
+        .auth-footer {
+            background: #f8fafc;
+            border-top: 1px solid #e2e8f0;
+            padding: 16px 25px;
+            text-align: center;
+            font-size: 0.9rem;
+        }
+        .btn-auth-primary {
+            background: linear-gradient(135deg, #0284c7, #0369a1);
+            border: none;
+            padding: 12px;
+            font-weight: 700;
+            font-size: 1rem;
+            border-radius: 10px;
+            transition: all 0.2s ease-in-out;
+        }
+        .btn-auth-primary:hover {
+            background: linear-gradient(135deg, #0369a1, #075985);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(2, 132, 199, 0.4);
+        }
+        .plan-card {
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .plan-card:hover {
+            border-color: #0284c7;
+            background: #f0f9ff;
+        }
+        .plan-card input[type="radio"]:checked + div {
+            font-weight: bold;
+            color: #0284c7;
+        }
+    </style>
+</head>
+<body>
+
+<div class="auth-card">
+    <div class="auth-header">
+        <div class="auth-brand-icon">
+            <i class="fas fa-water"></i>
+        </div>
+        <h3 class="fw-bold mb-1" style="color: #0f172a;">Créer un compte SWMM Platform</h3>
+        <p class="text-muted small mb-0">Espace ingénierie d'assainissement et modélisation hydraulique</p>
+    </div>
+
+    <div class="auth-body">
+        <div id="alertBox" class="alert alert-danger d-none" role="alert">
+            <span id="alertMsg"></span>
+        </div>
+
+        <form id="registerForm">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label small fw-semibold text-secondary">Nom complet</label>
+                    <input type="text" class="form-control" id="fullName" placeholder="Dr Abdelhakim K." required>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label small fw-semibold text-secondary">Adresse email</label>
+                    <input type="email" class="form-control" id="email" placeholder="nom@organisation.dz" required>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label small fw-semibold text-secondary">Nom de votre organisation / BET / Régie</label>
+                <input type="text" class="form-control" id="orgName" placeholder="Bureau d'Études Assainissement & Environnement" required>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label small fw-semibold text-secondary mb-1">Formule / Plan d'activité</label>
+                <select class="form-select" id="billingPlan" required>
+                    <option value="demo">Version Démo d'Évaluation (14 jours gratuits)</option>
+                    <option value="bet" selected>Bureau d'Études - BET (35 000 DZD / mois)</option>
+                    <option value="exploitation">Régie & Exploitant Assainissement (Sur consultation)</option>
+                    <option value="education">Académique & Recherche (Gratuit pour universités)</option>
+                </select>
+                <div class="form-text small text-muted">
+                    La formule Académique requiert une adresse email universitaire (.edu, .univ.dz, .ac.uk...).
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label small fw-semibold text-secondary">Mot de passe de sécurité (8 caractères minimum)</label>
+                <input type="password" class="form-control" id="password" placeholder="••••••••••••" minlength="8" required>
+            </div>
+
+            <button type="submit" id="btnSubmit" class="btn btn-primary btn-auth-primary w-100 text-white shadow-sm mt-3 mb-2">
+                <i class="fas fa-user-plus me-2"></i> Créer mon organisation et démarrer
+            </button>
+        </form>
+    </div>
+
+    <div class="auth-footer text-muted">
+        Vous avez déjà un compte ?
+        <a href="/login" class="fw-semibold text-primary text-decoration-none">
+            Se connecter
+        </a>
+    </div>
+</div>
+
+<script>
+    const form = document.getElementById('registerForm');
+    const alertBox = document.getElementById('alertBox');
+    const alertMsg = document.getElementById('alertMsg');
+    const btnSubmit = document.getElementById('btnSubmit');
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        alertBox.classList.add('d-none');
+        btnSubmit.disabled = true;
+        btnSubmit.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Création en cours...';
+
+        const plan = document.getElementById('billingPlan').value;
+        const orgType = plan === 'education' ? 'academique' : (plan === 'exploitation' ? 'regie' : 'bet');
+
+        try {
+            const resp = await fetch('/api/v1/auth/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: document.getElementById('email').value.trim(),
+                    password: document.getElementById('password').value,
+                    full_name: document.getElementById('fullName').value.trim(),
+                    org_name: document.getElementById('orgName').value.trim(),
+                    billing_plan: plan,
+                    org_type: orgType
+                })
+            });
+
+            const data = await resp.json();
+
+            if (!resp.ok) {
+                throw new Error(data.detail || 'Erreur lors de la création du compte');
+            }
+
+            if (data.access_token) {
+                localStorage.setItem('swmm_access_token', data.access_token);
+                document.cookie = `access_token=${data.access_token}; path=/; max-age=604800; SameSite=Lax`;
+            }
+
+            // Redirection vers le cockpit
+            window.location.href = '/map';
+
+        } catch (err) {
+            alertMsg.textContent = err.message;
+            alertBox.classList.remove('d-none');
+            btnSubmit.disabled = false;
+            btnSubmit.innerHTML = '<i class="fas fa-user-plus me-2"></i> Créer mon organisation et démarrer';
+        }
+    });
+</script>
+
+</body>
+</html>
