@@ -3,6 +3,8 @@ Point d'entrée principal de l'API FastAPI.
 Configure l'application, les routes, le middleware CORS, etc.
 """
 
+import os
+import sys
 import asyncio
 from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, Request
 from fastapi.middleware.cors import CORSMiddleware

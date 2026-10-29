@@ -73,18 +73,11 @@ def get_db():
 
 def init_db():
     """Crée les tables si elles n'existent pas."""
-    from sqlalchemy import inspect
-    inspector = inspect(engine)
-    existing_tables = inspector.get_table_names()
+    from api.models import (
+        Organization, User, Membership, ApiKey, PurchaseOrder,
+        Project, Regard, Canalisation, Rejet, Cluster, Simulation,
+        Inspection, Incident, Job, AuditLog, UsageCounter
+    )
 
-    from api.models import Regard, Canalisation, Rejet, Cluster, Simulation, AuditLog
-    from api.models_terrain import Inspection, Incident
-
-    required_tables = ['regards', 'conduites', 'rejets', 'clusters', 'simulations', 'inspections', 'incidents']
-    need_create = any(t not in existing_tables for t in required_tables)
-
-    if need_create:
-        Base.metadata.create_all(bind=engine)
-        print("[DB] Tables créées avec succès")
-    else:
-        print("[DB] Tables déjà existantes")
+    Base.metadata.create_all(bind=engine)
+    print("[DB] Tables initialisées avec succès")
