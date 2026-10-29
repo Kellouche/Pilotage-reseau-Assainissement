@@ -33,20 +33,20 @@ Chaque nouvelle organisation dispose automatiquement à l'inscription d'un accè
 
 ### 2.1 Matrice Comparative des Formules
 
-| Critères & Droits | **1. Académique & Recherche** | **2. Bureau d'Études (BET)** | **3. Système Modulaire — Régies & Entreprises** |
-|---|---|---|---|
-| **Cible professionnelle** | Universités, instituts d'hydraulique, chercheurs, étudiants | Cabinets d'ingénierie, BET hydraulique urbaine, experts VRD | Entreprises de gestion d'assainissement, régies communales, services techniques |
-| **Tarif d'accès** | **0 DZD / mois** (Usage strictement non commercial) | **45 000 DZD / mois** (ou 450 000 DZD / an) | **Sur convention modulaire annuelle** (selon modules) |
-| **Objectif opérationnel** | Enseignement, validation théorique, recherche | Audit capacitaire, schémas directeurs, zonage pluvial | Exploitation continue, signalement terrain, diagnostic curage |
-| **Mode de souscription** | Validation sur email universitaire (`.edu`, `.univ`) | Souscription en ligne, Bon de Commande / Devis Proforma | Bon de commande régie / collectivité ou convention d'exploitation |
-| **Périmètre réseau** | 500 regards max | 15 000 regards par projet | Réseau communal complet |
-| **Application Mobile de Terrain** | ❌ Non inclus | ❌ Non inclus | **Module A activable** (App mobile terrain, mode déconnecté, sync serveur) |
-| **Diagnostics NP 650 & Autocurage** | Inclus (pédagogique) | Inclus (rapports études) | **Module B activable** (Contrôle continu, repérage dépôts) |
-| **Simulations SWMM 5.2 & MNT** | 1 calcul à la fois (file standard) | 3 calculs simultanés | **Module C activable** (File prioritaire dédiée, bassins MNT) |
-| **Export modèle `.inp` SWMM** | Limité (avec filigrane pédagogique) | **Inclus en plein accès** | **Inclus en plein accès** |
-| **Rapports d'Audit & Synthèse** | ❌ Filigrane *"Usage Pédagogique"* | **Inclus** (PDF certifié avec logo du BET) | **Inclus** (Rapports complets de réseau) |
-| **Comptes & Collaborateurs** | 1 compte chercheur individuel | 5 comptes ingénieurs d'études | Multi-comptes (service technique et exploitation) |
-| **Support & Accompagnement** | Communauté & FAQ en ligne | Support technique par email (< 24h ouvrées) | Support technique prioritaire & accompagnement régie |
+| Critères & Droits | **0. Essai Démo** | **1. Académique & Recherche** | **2. Bureau d'Études (BET)** | **3. Système Modulaire — Régies & Entreprises** |
+|---|---|---|---|---|
+| **Cible professionnelle** | Évaluation sans engagement | Universités, enseignants, chercheurs, étudiants | Cabinets d'ingénierie, BET VRD, experts hydraulique | Entreprises de gestion, régies communales, services techniques |
+| **Tarif d'accès** | **0 DZD** (14 jours) | **0 DZD / permanent** (Strictement non commercial) | **45 000 DZD / mois** (ou 450 000 DZD / an) | **À la carte par module** (Pack 3 modules à 650 000 DZD/an, ou convention) |
+| **Objectif opérationnel** | Découverte et test sur données réelles | Enseignement, validation théorique, recherche | Audit capacitaire, schémas directeurs, zonage pluvial | Exploitation continue, signalement terrain, diagnostic curage |
+| **Mode de souscription** | Inscription directe sans CB | Validation sur email universitaire (`.edu`, `.univ`) | Souscription en ligne, Bon de Commande / Devis Proforma | Bon de commande régie / collectivité ou convention d'exploitation |
+| **Périmètre réseau** | 2 000 regards max | 500 regards max | 15 000 regards par projet | Réseau communal complet |
+| **Application Mobile de Terrain** | ❌ Non inclus | ❌ Non inclus | ❌ Non inclus | **Module A** (250 000 DZD/an) : App mobile terrain, mode déconnecté, sync serveur |
+| **Diagnostics NP 650 & Autocurage** | Inclus (évaluation) | Inclus (pédagogique) | Inclus (rapports études) | **Module B** (200 000 DZD/an) : Contrôle continu, repérage dépôts |
+| **Simulations SWMM 5.2 & MNT** | 1 calcul SWMM | 1 calcul SWMM | 3 calculs simultanés | **Module C** (350 000 DZD/an) : File prioritaire dédiée, bassins MNT |
+| **Export modèle `.inp` SWMM** | Limité | Limité (avec filigrane pédagogique) | **Inclus en plein accès** | **Inclus en plein accès** |
+| **Rapports d'Audit & Synthèse** | Aperçu en ligne | ❌ Filigrane *"Usage Pédagogique"* | **Inclus** (PDF certifié avec logo du BET) | **Inclus** (Rapports complets de réseau) |
+| **Comptes & Collaborateurs** | 2 comptes test | 1 compte chercheur individuel | 5 comptes ingénieurs d'études | Multi-comptes (service technique et exploitation) |
+| **Support & Accompagnement** | FAQ en ligne | Communauté & FAQ en ligne | Support technique par email (< 24h ouvrées) | Support technique prioritaire & accompagnement régie |
 
 ---
 
