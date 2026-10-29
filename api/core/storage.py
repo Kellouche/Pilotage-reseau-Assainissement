@@ -364,6 +364,10 @@ def get_storage(backend: Optional[str] = None, root_dir: Optional[str] = None) -
     return LocalStore(root_dir=target_root)
 
 
+# Alias de rétro-compatibilité
+get_artifact_store = get_storage
+
+
 # Helpers normalisés pour les artefacts SWMM Platform
 def build_network_gpkg_key(org_id: str, project_id: str, filename: str = "network.gpkg") -> str:
     return ArtifactStore.build_key(org_id, project_id, f"gis/{filename}")

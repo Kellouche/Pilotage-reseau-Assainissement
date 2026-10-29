@@ -18,7 +18,7 @@ from config.settings import APP_NAME, APP_VERSION, APP_DESCRIPTION
 from api.database import init_db, get_db
 from api import schemas, crud
 
-from api.routes import network, simulations, sync, clusters, qualite, corrections, terrain, mnt, audit, auth, jobs, artifacts
+from api.routes import network, simulations, sync, clusters, qualite, corrections, terrain, mnt, audit, auth, jobs, artifacts, licensing, admin, organization
 
 # ============================================================
 # LIFESPAN (démarrage/arrêt)
@@ -460,6 +460,9 @@ app.include_router(mnt.router, prefix="/api/v1", tags=["MNT / DEM"])
 app.include_router(audit.router, prefix="/api/v1", tags=["Traçabilité / Audit"])
 app.include_router(jobs.router, prefix="/api/v1", tags=["Jobs & Tâches Asynchrones"])
 app.include_router(artifacts.router, prefix="/api/v1", tags=["Artefacts & Stockage"])
+app.include_router(licensing.router, prefix="/api/v1", tags=["Licences & Facturation B2B/B2G"])
+app.include_router(admin.router, prefix="/api/v1", tags=["Console Opérateur SuperAdmin"])
+app.include_router(organization.router, prefix="/api/v1", tags=["Gestion d'Organisation & Équipe"])
 
 
 @app.websocket("/ws/jobs/{job_id}")
