@@ -201,16 +201,16 @@ Les décisions d'architecture sont formalisées dans les fiches ADR dédiées :
 
 > **Objectif** : Donner à la plateforme ses capacités commerciales : contrôle des quotas par plan, cycle administratif des bons de commande et cockpit SuperAdmin.
 
-| Réf | Tâche | Taille | Livrables / Critères d'acceptation |
-|---|---|---|---|
-| 3.1 | Moteur de quotas et Feature Gating (`api/core/quotas.py`) | M | Décorateur de validation des plafonds (nombre max de regards, accès MNT, accès mobile) selon le plan de l'organisation. |
-| 3.2 | Générateur de Factures Proforma officielles (PDF) | M | Route `/organization/license/proforma` générant un devis réglementaire téléchargeable en DZD/EUR avec ReportLab. |
-| 3.3 | Dépôt et cycle de validation des Bons de Commande | M | Formulaire de téléversement du Bon de Commande client avec notification à l'opérateur. |
-| 3.4 | Générateur et validateur de clés de licences cryptographiques | M | Format de jeton `SP-LIC-YYYY-XXXX-XXXX` avec validation d'intégrité et date de fin d'abonnement. |
-| 3.5 | Console Opérateur SuperAdmin (`/admin/*`) | L | Tableau de bord réservé aux administrateurs de la plateforme pour superviser les abonnés, approuver les commandes et prolonger les essais. |
-| 3.6 | Gestion de l'équipe d'organisation (`/organization/collaborators`) | M | Invitation de membres d'équipe, attribution des rôles (Ingénieur, Opérateur terrain, Observateur) et révocation. |
+| Réf | Tâche | Statut | Taille | Livrables / Critères d'acceptation |
+|---|---|---|---|---|
+| 3.1 | Moteur de quotas et Feature Gating (`api/core/quotas.py`) | ✅ FAIT | M | Décorateur de validation des plafonds (nombre max de regards, accès MNT, accès mobile) selon le plan de l'organisation. |
+| 3.2 | Générateur de Factures Proforma officielles (PDF) | ✅ FAIT | M | Route `/api/v1/license/proforma` générant un devis réglementaire téléchargeable en DZD avec ReportLab et conversion en toutes lettres. |
+| 3.3 | Dépôt et cycle de validation des Bons de Commande | ✅ FAIT | M | Endpoint `/api/v1/license/order` pour téléversement du Bon de Commande client avec archivage ArtifactStore. |
+| 3.4 | Générateur et validateur de clés de licences cryptographiques | ✅ FAIT | M | Format de jeton `SP-LIC-{PLAN}-{YEAR}-{RANDOM}`, validation d'intégrité, route `/api/v1/license/activate` et calcul d'échéance. |
+| 3.5 | Console Opérateur SuperAdmin (`/api/v1/admin/*`) | ✅ FAIT | L | Endpoints réservés aux super-administrateurs (règle furtive 404) : supervision des abonnés, validation des commandes et prolongation d'essai. |
+| 3.6 | Gestion de l'équipe d'organisation (`/api/v1/organization/collaborators`) | ✅ FAIT | M | Endpoints d'invitation de membres d'équipe, contrôle strict des quotas par plan et révocation. |
 
-> **Jalon Phase 3** : Le parcours complet de souscription administrative (devis $\rightarrow$ bon de commande $\rightarrow$ activation de licence) est opérationnel ; les quotas bloquent les dépassements.
+> **Jalon Phase 3 [VALIDÉ ✅]** : Le parcours complet de souscription administrative (devis / proforma PDF $\rightarrow$ bon de commande $\rightarrow$ approbation SuperAdmin $\rightarrow$ activation de licence `SP-LIC-...`) est opérationnel ; les quotas bloquent les dépassements ; 53/53 tests au vert.
 
 ---
 
