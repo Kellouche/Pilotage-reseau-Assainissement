@@ -5,7 +5,7 @@ import networkx as nx
 from functools import lru_cache
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 
 from api.database import get_db
 from api import schemas, crud
@@ -407,6 +407,55 @@ def _calculate_clusters(db: Session, persist: bool = True):
             # Continuer avec les autres bassins
             continue
 
+    # 3.bis. Intégrer les bassins manuels
+    try:
+        from src.infrastructure.persistance_manuelle import charger_bassins_manuels
+        from src.domain.detecteur_clusters import calculer_bassin_polygon, construire_geojson_cluster
+        manual_bassins = charger_bassins_manuels()
+        for mb in manual_bassins:
+            conduit_ids = set(str(x) for x in mb.get("conduits", []))
+            edges_manual = set()
+            for u, v, attrs in G.edges(data=True):
+                cid = str(attrs.get("conduit_id", ""))
+                fid = str(attrs.get("fid", ""))
+                if cid in conduit_ids or fid in conduit_ids:
+                    edges_manual.add((u, v))
+
+            if edges_manual:
+                hull = calculer_bassin_polygon(edges_manual, G=G)
+                info_ex = mb.get("exutoire") or {"nom": mb.get("nom", "Manuel"), "type": "manuel"}
+                noeud_ex = None
+                if mb.get("exutoire") and isinstance(mb["exutoire"], dict) and mb["exutoire"].get("latlng"):
+                    ll = mb["exutoire"]["latlng"]
+                    if isinstance(ll, dict):
+                        noeud_ex = (ll.get("lng"), ll.get("lat"))
+
+                mb_geojson = construire_geojson_cluster(
+                    G, edges_manual,
+                    bassin_hull=hull,
+                    cluster_id=f"M_{mb.get('id', 1)}",
+                    exutoire_node=noeud_ex,
+                    exutoire_info=info_ex
+                )
+
+                if mb_geojson and "features" in mb_geojson:
+                    for feat in mb_geojson["features"]:
+                        if feat.get("properties", {}).get("type") == "bassin_urbain":
+                            feat["properties"]["nom"] = f"{mb.get('nom', 'Bassin Manuel')} [MANUEL]"
+                            feat["properties"]["exutoire_type"] = info_ex.get("type", "manuel")
+
+                results.append({
+                    "cluster": None,
+                    "exutoire": info_ex,
+                    "stats": {"troncons": len(edges_manual), "longueur_totale_m": 0.0},
+                    "infrastructures": {"conduites": len(edges_manual), "regards": 0},
+                    "geojson": _json_safe(mb_geojson),
+                    "troncons": len(edges_manual),
+                    "ordre_topologique": []
+                })
+    except Exception as e:
+        logger.error(f"[cluster] Erreur intégration bassins manuels: {e}", exc_info=True)
+
     # 4. Compter les tronçons connectés (dans un bassin) vs orphelins
     #    troncons_orphelins a été alimenté dans la boucle ci-dessus avec les
     #    edges des bassins trop petits. On y ajoute les orphelins de la partition.
@@ -480,3 +529,30 @@ def export_cluster_geojson(cluster_id: int, db: Session = Depends(get_db)):
         "cluster_id": cluster_id,
         "nb_conduites": len(edges)
     }
+
+
+# ============================================================
+# BASSINS MANUELS (CRÉATION / SUPPRESSION / LECTURE)
+# ============================================================
+
+@router.post("/manual-basin")
+def save_cluster_manual_basin(data: Dict[str, Any]):
+    """Enregistre un bassin versant manuel tracé par l'utilisateur."""
+    from src.infrastructure.persistance_manuelle import sauvegarder_bassin_manuel
+    return sauvegarder_bassin_manuel(data)
+
+
+@router.delete("/manual-basin/{bassin_id}")
+def delete_cluster_manual_basin(bassin_id: str):
+    """Supprime un bassin versant manuel."""
+    from src.infrastructure.persistance_manuelle import supprimer_bassin_manuel
+    res = supprimer_bassin_manuel(bassin_id)
+    return {"status": "ok" if res else "error"}
+
+
+@router.get("/manual-basin")
+def get_cluster_manual_basins():
+    """Liste tous les bassins versants manuels enregistrés."""
+    from src.infrastructure.persistance_manuelle import charger_bassins_manuels
+    return charger_bassins_manuels()
+

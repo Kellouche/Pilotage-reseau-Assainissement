@@ -478,6 +478,30 @@ app.include_router(admin.router, prefix="/api/v1", tags=["Console Opérateur Sup
 app.include_router(organization.router, prefix="/api/v1", tags=["Gestion d'Organisation & Équipe"])
 
 
+# ============================================================
+# ALIASES BASSINS MANUELS (COMPATIBILITÉ CARTE & COCKPIT)
+# ============================================================
+
+@app.post("/api/v1/manual-basin")
+def api_save_manual_basin_alias(data: dict):
+    from src.infrastructure.persistance_manuelle import sauvegarder_bassin_manuel
+    return sauvegarder_bassin_manuel(data)
+
+
+@app.delete("/api/v1/manual-basin/{bassin_id}")
+def api_delete_manual_basin_alias(bassin_id: str):
+    from src.infrastructure.persistance_manuelle import supprimer_bassin_manuel
+    res = supprimer_bassin_manuel(bassin_id)
+    return {"status": "ok" if res else "error"}
+
+
+@app.get("/api/v1/manual-basin")
+def api_get_manual_basins_alias():
+    from src.infrastructure.persistance_manuelle import charger_bassins_manuels
+    return charger_bassins_manuels()
+
+
+
 @app.websocket("/ws/jobs/{job_id}")
 async def ws_jobs_alias(websocket: WebSocket, job_id: str):
     """Alias racine pour le flux WebSocket de suivi des jobs en temps réel."""

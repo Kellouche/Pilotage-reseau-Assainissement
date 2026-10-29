@@ -277,7 +277,7 @@
                 indicator.className = 'status-indicator status-checking';
                 text.textContent = 'Vérification...';
 
-                const response = await fetch('http://127.0.0.1:5002/health');
+                const response = await fetch('/health');
                 if (response.ok) {
                     indicator.className = 'status-indicator status-online';
                     text.textContent = 'Serveur en ligne';
@@ -299,10 +299,11 @@
             status.textContent = 'Actualisation en cours...';
 
             try {
-                const response = await fetch('http://127.0.0.1:5002/network');
+                const response = await fetch('/api/v1/layers');
                 if (response.ok) {
                     const data = await response.json();
-                    status.textContent = `${data.length} éléments chargés`;
+                    const total = Object.values(data.compteurs || {}).reduce((a, b) => a + b, 0);
+                    status.textContent = `${total} éléments chargés`;
                 } else {
                     throw new Error('Erreur réseau');
                 }
@@ -318,12 +319,12 @@
             status.textContent = 'Détection des bassins...';
 
             try {
-                const response = await fetch('http://127.0.0.1:5002/clusters/detect', {
+                const response = await fetch('/api/v1/clusters/recalculate-all?persist=false', {
                     method: 'POST'
                 });
                 if (response.ok) {
                     const data = await response.json();
-                    status.textContent = `${data.clusters_crees} bassins détectés`;
+                    status.textContent = `${data.clusters_crees || 0} bassins détectés`;
                 } else {
                     throw new Error('Erreur détection');
                 }
@@ -338,7 +339,7 @@
             showSyncStatus('Téléchargement en cours...', true);
 
             try {
-                const response = await fetch('http://127.0.0.1:5002/sync/delta?last_sync=0');
+                const response = await fetch('/api/v1/sync/delta?since_version=0');
                 if (response.ok) {
                     const data = await response.json();
                     showSyncStatus(`Téléchargement terminé (${data.changes.length} changements)`, false);
@@ -357,13 +358,13 @@
 
             try {
                 const changes = [
-                    { type: 'update', layer: 'regard', feature_id: '1', changes: { description: 'Test update' } }
+                    { type: 'update', layer: 'regards', feature_id: '1', changes: { description: 'Test update' } }
                 ];
 
-                const response = await fetch('http://127.0.0.1:5002/sync/push', {
+                const response = await fetch('/api/v1/sync/push', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(changes)
+                    body: JSON.stringify({ device_id: 'mobile-web-pwa', changes: changes })
                 });
 
                 if (response.ok) {

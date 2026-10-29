@@ -17,7 +17,11 @@ venv/
 *.log
 temp_test.txt
 
-# SWMM files
+# Local Data & Overrides
+data/*.json
+data/*.sqlite
+data/*.db
+
 *.inp
 *.out
 *.rpt
