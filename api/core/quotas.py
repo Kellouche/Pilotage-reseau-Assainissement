@@ -81,7 +81,7 @@ PLAN_PROFILES: Dict[str, Dict[str, Any]] = {
         "max_members": 15,  # Équipe technique du service assainissement
         # Feature Gating métier Assainissement
         "has_mnt_analysis": True,
-        "has_mobile_access": True,  # Application mobile Flutter & synchronisation des réclamations/inspections
+        "has_mobile_access": True,  # Application mobile terrain & synchronisation des réclamations/inspections
         "has_custom_reports": True,
         "retention_days": 365,
     },

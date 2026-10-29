@@ -40,7 +40,7 @@ Chaque nouvelle organisation dispose automatiquement à l'inscription d'un accè
 | **Objectif opérationnel** | Enseignement, validation théorique, recherche | Études de dimensionnement, schémas directeurs, récolement | Exploitation continue, gestion réclamations, maintenance préventive |
 | **Mode de souscription** | Validation sur email universitaire (`.edu`, `.univ`) | Souscription en ligne, Bon de Commande / Devis Proforma | Bon de commande régie / collectivité ou convention d'exploitation |
 | **Socle SIG & Patrimoine** | Inclus (limité) | Inclus (par projet) | **Inclus** (Patrimoine communal complet, gestion d'équipe) |
-| **Application Mobile & Réclamations** | ❌ Non inclus | ❌ Non inclus | **Module A activable** (App Flutter, offline-first, sync Cockpit) |
+| **Application Mobile & Réclamations** | ❌ Non inclus | ❌ Non inclus | **Module A activable** (Application mobile terrain, 100% hors-ligne, sync Cockpit) |
 | **Diagnostics NP 650 & Autocurage** | Inclus (pédagogique) | Inclus (rapports études) | **Module B activable** (Contrôle continu, plan curage communal) |
 | **Simulations SWMM 5.2 & MNT** | 1 calcul à la fois (file standard) | 3 calculs simultanés | **Module C activable** (File prioritaire dédiée, bassins MNT) |
 | **Export modèle `.inp` SWMM** | Limité (avec filigrane pédagogique) | **Inclus en plein accès** | **Inclus en plein accès** |
