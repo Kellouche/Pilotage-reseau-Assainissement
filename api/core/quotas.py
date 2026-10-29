@@ -72,7 +72,7 @@ PLAN_PROFILES: Dict[str, Dict[str, Any]] = {
     },
     "exploitation": {
         "code": "exploitation",
-        "name": "Régies & Exploitants Assainissement",
+        "name": "Grands Réseaux / Sur mesure",
         "max_nodes": None,  # Illimité
         "trial_days": None,
         "max_concurrent_simulations": 10,

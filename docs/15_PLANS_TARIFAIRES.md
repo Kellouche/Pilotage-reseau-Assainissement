@@ -13,7 +13,7 @@ La politique tarifaire de **SWMM Platform SaaS** n'est pas indexée sur des mét
 
 1. **L'Étudiant ou le Chercheur Universitaire** étudie la mécanique des fluides, les équations d'onde de Saint-Venant et les lois de Manning-Strickler. Il manipule de petits sous-réseaux d'apprentissage, n'a aucun regard physique sous la chaussée et ne produit pas d'études réglementaires opposables.
 2. **Le Bureau d'Études (BET) & Ingénieriste Conseil** réalise des schémas directeurs d'assainissement (SDA), des études de zonage pluvial, des calculs de dimensionnement de bassins de rétention et des dossiers d'autorisation loi sur l'eau. Il a besoin d'auditer rapidement des réseaux entiers (jusqu'à 15 000 regards), de croiser la géométrie avec le MNT et de générer des modèles SWMM 5.2 certifiés avec des rapports d'audit prêts pour les comités de pilotage.
-3. **L'Exploitant de Réseau, la Régie Municipale ou la Collectivité (ex. SEAAL, ONA, SIAAP, Régies d'eau)** gère un patrimoine d'infrastructures de plusieurs centaines de kilomètres 365j/an. Ses enjeux prioritaires sont la prévention des inondations par temps de pluie, la gestion des surverses, le pilotage des stations de refoulement, et surtout la coordination quotidienne avec les équipes mobiles de terrain (inspections télévisées, débouchages, mise à jour des cotes réelles).
+3. **Les Grands Comptes & Projets d'Envergure** gèrent des réseaux étendus dépassant les capacités standards des bureaux d'études. Leurs enjeux sont la modélisation hydraulique à grande échelle, le dimensionnement des collecteurs structurants et la centralisation des calculs d'assainissement.
 
 ---
 
@@ -30,23 +30,23 @@ Chaque nouvelle organisation dispose automatiquement à l'inscription d'un accè
 
 ### 2.1 Matrice Comparative des Formules
 
-| Critères & Droits | **1. Académique & Recherche** | **2. Bureau d'Études (BET)** | **3. Régies & Exploitants** |
+| Critères & Droits | **1. Académique & Recherche** | **2. Bureau d'Études (BET)** | **3. Grands Réseaux / Sur Devis** |
 |---|---|---|---|
-| **Cible professionnelle** | Universités, instituts d'hydraulique, chercheurs, étudiants | Cabinets d'ingénierie, BET hydraulique urbaine, experts VRD | Régies publiques, gestionnaires délégués, métropoles, EPCI |
-| **Tarif d'accès** | **0 DZD / mois** (Usage strictement non commercial) | **45 000 DZD / mois** (ou 450 000 DZD / an) | **Sur devis / Convention annuelle d'exploitation** |
-| **Équivalent International** | 0 € / an | 3 200 € / an | Sur consultation annuelle |
-| **Mode de souscription** | Validation sur email universitaire (`.edu`, `.univ`) | Souscription en ligne, Bon de Commande / Devis Proforma | Marché public, convention de service ou bon de commande B2G |
-| **Nombre de comptes** | 1 compte chercheur individuel | 5 comptes ingénieurs d'études | Multi-comptes illimité (Bureau & Terrain) |
-| **Projets actifs simultanés** | 3 projets maximum | 25 projets actifs simultanés | Projets et réseaux illimités |
-| **Plafond regards / conduites** | 500 regards max | 15 000 regards par projet | **Illimité** (plusieurs dizaines de milliers d'objets) |
-| **Calculs SWMM simultanés** | 1 calcul à la fois (file standard) | 3 calculs simultanés | **Simulations illimitées** (File prioritaire dédiée) |
-| **Découpage Bassins MNT / DEM** | ❌ Non inclus | **Inclus** (Grilles MNT jusqu'à 50 Mo) | **Inclus en illimité** (Très haute résolution) |
+| **Cible professionnelle** | Universités, instituts d'hydraulique, chercheurs, étudiants | Cabinets d'ingénierie, BET hydraulique urbaine, experts VRD | Gestionnaires de grands réseaux, schémas d'envergure |
+| **Tarif d'accès** | **0 DZD / mois** (Usage strictement non commercial) | **45 000 DZD / mois** (ou 450 000 DZD / an) | **Sur devis personnalisé** |
+| **Équivalent International** | 0 € / an | 3 200 € / an | Sur devis |
+| **Mode de souscription** | Validation sur email universitaire (`.edu`, `.univ`) | Souscription en ligne, Bon de Commande / Devis Proforma | Devis et bon de commande personnalisé |
+| **Nombre de comptes** | 1 compte chercheur individuel | 5 comptes ingénieurs d'études | Nombre de comptes adapté au projet |
+| **Projets actifs simultanés** | 3 projets maximum | 25 projets actifs simultanés | Projets adaptés au besoin |
+| **Plafond regards / conduites** | 500 regards max | 15 000 regards par projet | > 15 000 regards (sur mesure) |
+| **Calculs SWMM simultanés** | 1 calcul à la fois (file standard) | 3 calculs simultanés | File prioritaire dédiée |
+| **Découpage Bassins MNT / DEM** | ❌ Non inclus | **Inclus** (Grilles MNT jusqu'à 50 Mo) | **Inclus** (Très haute résolution) |
 | **Export modèle `.inp` SWMM** | Limité (avec filigrane pédagogique) | **Inclus en plein accès** | **Inclus en plein accès** |
-| **Génération Rapports d'Audit** | ❌ Filigrane *"Usage Pédagogique"* | **Inclus** (PDF certifié avec logo du BET) | **Inclus** (PDF officiel avec armoiries de la ville/régie) |
-| **Accès Application Mobile** | ❌ Exclu | ❌ Option complémentaire | **Inclus en standard** (Flotte de smartphones illimitée) |
-| **Synchronisation Offline Terrain** | ❌ Exclu | ❌ Exclu | **Inclus** (Cache local et réconciliation de conflits) |
-| **Historique & Traçabilité (ITV)**| 7 jours glissants | 90 jours | **Historique patrimonial illimité (Audit Trail)** |
-| **Support & Accompagnement** | Communauté & FAQ en ligne | Support technique par email (< 24h ouvrées) | Support prioritaire dédié, formation terrain & SLA < 4h |
+| **Génération Rapports d'Audit** | ❌ Filigrane *"Usage Pédagogique"* | **Inclus** (PDF certifié avec logo du BET) | **Inclus** (Rapports certifiés complets) |
+| **Accès Application Mobile** | ❌ Exclu | ❌ Option complémentaire | En option selon projet |
+| **Synchronisation Offline Terrain** | ❌ Exclu | ❌ Exclu | En option selon projet |
+| **Historique & Traçabilité**| 7 jours glissants | 90 jours | Historique étendu |
+| **Support & Accompagnement** | Communauté & FAQ en ligne | Support technique par email (< 24h ouvrées) | Support technique prioritaire |
 
 ---
 

@@ -228,11 +228,11 @@ def generate_proforma_pdf(
     # 3. Détail des Prestations
     clean_plan = plan.lower().strip()
     if clean_plan in ("exploitation", "entreprise", "regie"):
-        plan_label = "Abonnement SWMM Platform Régies & Exploitants d'Assainissement (Illimité)"
+        plan_label = "Abonnement SWMM Platform - Grands Réseaux & Capacités Étendues"
         plan_desc = (
-            "Accès illimité pour Office National d'Assainissement (ONA), wilayas et régies communales. "
-            "Modélisation dynamique transitoire Saint-Venant 1D, détection des nœuds inondés, diagnostic autocurage "
-            "NP 650 / Fascicule 70, croisement MNT haute résolution, flotte mobile ITV terrain et alertes temps réel."
+            "Formule sur mesure pour modélisation de réseaux étendus (> 15 000 regards). "
+            "Modélisation dynamique transitoire Saint-Venant 1D, diagnostic autocurage "
+            "NP 650 / Fascicule 70, croisement MNT et simulations SWMM 5.2 avec support dédié."
         )
         monthly_ht = 180000.0
     else:
