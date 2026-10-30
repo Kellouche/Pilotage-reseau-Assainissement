@@ -4,7 +4,7 @@ Nom Auteur : Dr Abdelhakim Kellouche
 Nom de l'application : SWMM Platform SaaS
 Numéro version : 2.1.0
 Date de création : 29-10-2026
-Date de modification : 29-10-2026
+Date de modification : 30-10-2026
 
 Module api.core.mailer : Service d'expédition des e-mails transactionnels et codes d'activation.
 Prend en charge la configuration SMTP standard ou le mode simulation en développement local.
@@ -15,24 +15,32 @@ import smtplib
 import logging
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from typing import Optional
+from typing import Optional, Tuple
+from config.settings import ROOT_DIR
+from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
-# Paramètres SMTP configurables via l'environnement
-SMTP_HOST: Optional[str] = os.getenv("SMTP_HOST")
-SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER: Optional[str] = os.getenv("SMTP_USER")
-SMTP_PASSWORD: Optional[str] = os.getenv("SMTP_PASSWORD")
-SMTP_FROM: str = os.getenv("SMTP_FROM", "activation@swmm-platform.dz")
-SMTP_TLS: bool = os.getenv("SMTP_TLS", "true").lower() == "true"
+
+def _get_smtp_config() -> Tuple[Optional[str], int, Optional[str], Optional[str], str, bool]:
+    """Charge dynamiquement la configuration SMTP depuis les variables d'environnement / .env."""
+    load_dotenv(dotenv_path=ROOT_DIR / ".env", override=False)
+    host = os.getenv("SMTP_HOST")
+    port = int(os.getenv("SMTP_PORT", "587"))
+    user = os.getenv("SMTP_USER")
+    password = os.getenv("SMTP_PASSWORD")
+    sender = os.getenv("SMTP_FROM", user or "activation@swmm-platform.dz")
+    tls = os.getenv("SMTP_TLS", "true").lower() == "true"
+    return host, port, user, password, sender, tls
 
 
 def send_activation_email(to_email: str, code: str, full_name: str = "") -> bool:
     """
     Expédie l'e-mail contenant le code d'activation à 6 chiffres.
-    Si le serveur SMTP n'est pas configuré, bascule gracieusement en mode simulation.
+    Si le serveur SMTP est configuré, envoie le courriel réel.
+    Sinon, bascule en mode simulation locale pour le développement.
     """
+    smtp_host, smtp_port, smtp_user, smtp_password, smtp_from, smtp_tls = _get_smtp_config()
     subject = f"SWMM Platform — Code d'activation : {code}"
 
     # Corps HTML de l'email
@@ -80,37 +88,41 @@ Ce code est valable pendant 15 minutes.
 SWMM Platform SaaS
 """
 
-    # 1. Mode Production avec SMTP actif
-    if SMTP_HOST and SMTP_USER:
+    # 1. Mode Production avec SMTP réel configuré
+    if smtp_host and smtp_user and smtp_password:
         try:
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
-            msg["From"] = SMTP_FROM
+            msg["From"] = smtp_from
             msg["To"] = to_email
 
             msg.attach(MIMEText(text_content, "plain", "utf-8"))
             msg.attach(MIMEText(html_content, "html", "utf-8"))
 
-            server = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10)
-            if SMTP_TLS:
+            logger.info("Tentative d'envoi SMTP à %s via %s:%s...", to_email, smtp_host, smtp_port)
+            server = smtplib.SMTP(smtp_host, smtp_port, timeout=12)
+            if smtp_tls:
                 server.starttls()
-            if SMTP_PASSWORD:
-                server.login(SMTP_USER, SMTP_PASSWORD)
-            server.sendmail(SMTP_FROM, [to_email], msg.as_string())
+            server.login(smtp_user, smtp_password)
+            server.sendmail(smtp_from, [to_email], msg.as_string())
             server.quit()
 
             logger.info("Email d'activation expédié avec succès à %s", to_email)
+            print(f"[MAILER] Email réel expédié avec succès à {to_email}")
             return True
         except Exception as e:
-            logger.error("Erreur lors de l'envoi SMTP à %s : %s", to_email, e)
+            logger.error("Erreur lors de l'envoi SMTP réel à %s : %s", to_email, e)
+            print(f"[MAILER] ERREUR envoi SMTP réel à {to_email}: {e}")
 
-    # 2. Mode Développement / Simulation locale
+    # 2. Mode Développement / Simulation locale (fallback)
     print("\n" + "=" * 60)
     print("📧 [SWMM Platform — Simulation d'envoi d'e-mail]")
     print(f"Destinataire : {to_email}")
     print(f"Objet        : {subject}")
     print(f"Code généré  : {code}")
     print("Durée        : Valable 15 minutes")
+    if not (smtp_host and smtp_user and smtp_password):
+        print("Note         : Serveur SMTP non configuré dans .env. Mode simulation actif.")
     print("=" * 60 + "\n", flush=True)
 
     return True
