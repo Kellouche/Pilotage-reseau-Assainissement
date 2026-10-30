@@ -103,7 +103,8 @@ SWMM Platform SaaS
             server = smtplib.SMTP(smtp_host, smtp_port, timeout=12)
             if smtp_tls:
                 server.starttls()
-            server.login(smtp_user, smtp_password)
+            clean_pwd = smtp_password.replace(" ", "").strip() if smtp_password else ""
+            server.login(smtp_user, clean_pwd)
             server.sendmail(smtp_from, [to_email], msg.as_string())
             server.quit()
 
