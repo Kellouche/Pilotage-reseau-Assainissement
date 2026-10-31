@@ -289,7 +289,7 @@ def login(
     if auth_status in ("not_found", "invalid_password"):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Identifiants incorrects.",
+            detail="Identifiants incorrects. Veuillez vérifier vos accès ou créer un compte si ce n'est pas déjà fait.",
         )
     if auth_status == "inactive":
         raise HTTPException(

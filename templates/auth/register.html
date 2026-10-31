@@ -465,6 +465,15 @@
         const validPlans = ['demo', 'education', 'bet', 'exploitation'];
         const initialPlan = (planParam && validPlans.includes(planParam.toLowerCase())) ? planParam.toLowerCase() : 'demo';
         setFormula(initialPlan);
+
+        const emailParam = urlParams.get('email');
+        if (emailParam) {
+            const emailInp = document.getElementById('email');
+            if (emailInp) {
+                emailInp.value = emailParam;
+                document.getElementById('fullName').focus();
+            }
+        }
     });
 
     const form = document.getElementById('registerForm');

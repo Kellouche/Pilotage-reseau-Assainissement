@@ -422,6 +422,17 @@
                     </div>`,
                     "warning"
                 );
+            } else if (err.message && (err.message.includes('Identifiants') || err.message.includes('compte'))) {
+                showAlert(
+                    `<div class="mb-1"><i class="fas fa-exclamation-circle me-1"></i> ${err.message}</div>
+                    <div class="mt-2 pt-2 border-top border-danger-subtle small">
+                        Pas encore inscrit ?
+                        <a href="/register?email=${encodeURIComponent(emailVal)}" class="alert-link fw-bold ms-1 text-decoration-underline">
+                            <i class="fas fa-user-plus me-1"></i>Créer un compte
+                        </a>
+                    </div>`,
+                    "danger"
+                );
             } else {
                 showAlert(err.message, "danger");
             }
