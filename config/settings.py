@@ -15,7 +15,7 @@ load_dotenv(dotenv_path=ROOT_DIR / ".env")
 
 # Application
 API_HOST = os.getenv("API_HOST", "127.0.0.1")
-API_PORT = int(os.getenv("API_PORT", "5005"))
+API_PORT = int(os.getenv("API_PORT", "5002"))
 API_RELOAD = os.getenv("API_RELOAD", "true").lower() == "true"
 LEGACY_FLASK_PORT = int(os.getenv("LEGACY_FLASK_PORT", "5000"))
 EXPO_WEB_PORT = int(os.getenv("EXPO_WEB_PORT", "19006"))
