@@ -554,6 +554,8 @@
             currentRegisteredEmail = emailVal;
 
             if (data.requires_verification) {
+                localStorage.removeItem('swmm_access_token');
+                document.cookie = "access_token=; path=/; max-age=0";
                 document.getElementById('step-register').classList.add('d-none');
                 document.getElementById('step-verify').classList.remove('d-none');
                 const formulaNav = document.querySelector('.formula-nav');

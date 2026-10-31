@@ -123,6 +123,11 @@ def get_tenant_context(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Utilisateur introuvable ou compte désactivé.",
         )
+    if not user.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Compte non vérifié. Veuillez saisir le code d'activation reçu par e-mail.",
+        )
 
     # Résolution de l'organisation active et du rôle
     memberships = user.memberships

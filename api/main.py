@@ -124,7 +124,10 @@ def _get_authenticated_user(request: Request, db):
         payload = decode_token(token)
         if not payload or not payload.get("sub"):
             return None
-        return db.query(User).filter(User.id == payload["sub"], User.is_active.is_(True)).first()
+        user = db.query(User).filter(User.id == payload["sub"], User.is_active.is_(True)).first()
+        if not user or not user.email_verified:
+            return None
+        return user
     except Exception:
         return None
 

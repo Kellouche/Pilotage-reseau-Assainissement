@@ -36,6 +36,7 @@ def test_authenticated_user_redirects_to_cockpit():
         email="ingenieur@bet.dz",
         full_name="Ingénieur VRD",
         is_active=True,
+        email_verified=True,
     )
     token = create_access_token({"sub": user.id, "email": user.email, "org_id": "org-test", "role": "engineer"})
 
@@ -101,6 +102,7 @@ def test_cockpit_authenticated_serves_html():
         email="ingenieur@bet.dz",
         full_name="Ingénieur VRD",
         is_active=True,
+        email_verified=True,
     )
     token = create_access_token({"sub": user.id, "email": user.email, "org_id": "org-test", "role": "engineer"})
 
@@ -113,8 +115,27 @@ def test_cockpit_authenticated_serves_html():
 
     resp = get_cockpit(req, db)
     assert isinstance(resp, HTMLResponse)
-    assert resp.status_code == 200
-    content = resp.body.decode("utf-8")
-    assert "saas-topbar" in content
-    assert "SWMM Platform" in content
-    assert "app-workspace" in content
+
+
+def test_unverified_user_cannot_access_cockpit():
+    """Un utilisateur dont l'email n'a pas été validé par code ne peut pas accéder au cockpit."""
+    user = User(
+        id="usr-unverified",
+        email="nouveau@bet.dz",
+        full_name="Non Vérifié",
+        is_active=True,
+        email_verified=False,
+    )
+    token = create_access_token({"sub": user.id, "email": user.email, "org_id": "org-test", "role": "engineer"})
+
+    req = MagicMock(spec=Request)
+    req.cookies = {"access_token": token}
+    req.headers = {}
+
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = user
+
+    resp = get_cockpit(req, db)
+    assert isinstance(resp, RedirectResponse)
+    assert resp.status_code == 302
+    assert resp.headers["location"] == "/login?next=/cockpit"

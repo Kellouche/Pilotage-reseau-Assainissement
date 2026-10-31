@@ -144,16 +144,13 @@ def register(
     # Expédition de l'email d'activation (réel ou simulé)
     send_activation_email(user.email, code, user.full_name)
 
-    token_data = {"sub": user.id, "email": user.email, "org_id": org.id, "role": membership.role}
-    access_token = create_access_token(token_data)
-    refresh_token = create_refresh_token(token_data)
-
-    _set_auth_cookies(response, access_token, refresh_token)
+    # NOTE DE SÉCURITÉ : Aucun cookie de session ni jeton valide tant que l'email n'est pas activé
+    _clear_auth_cookies(response)
 
     return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        access_token="",
+        refresh_token="",
+        expires_in=0,
         user=UserSummary(
             id=user.id,
             email=user.email,
@@ -316,22 +313,49 @@ def login(
             detail="Organisation principale introuvable.",
         )
 
-    token_data = {"sub": user.id, "email": user.email, "org_id": org.id, "role": primary_membership.role}
-    access_token = create_access_token(token_data)
-    refresh_token = create_refresh_token(token_data)
-
-    _set_auth_cookies(response, access_token, refresh_token)
-
-    dev_code = None
+    # SÉCURITÉ : Si l'utilisateur n'a pas validé son email, bloquer tout jeton de session et exiger le code
     if not user.email_verified:
         now = datetime.now(timezone.utc)
-        # Générer et expédier systématiquement un nouveau code d'activation frais (valide 15 min)
         code = f"{secrets.randbelow(1000000):06d}"
         user.verification_code = code
         user.verification_code_expires_at = now + timedelta(minutes=15)
         db.commit()
         send_activation_email(user.email, code, user.full_name)
-        dev_code = user.verification_code
+
+        # Détruire tout cookie résiduel dans le navigateur
+        _clear_auth_cookies(response)
+
+        return TokenResponse(
+            access_token="",
+            refresh_token="",
+            expires_in=0,
+            user=UserSummary(
+                id=user.id,
+                email=user.email,
+                full_name=user.full_name,
+                is_active=user.is_active,
+                is_superadmin=user.is_superadmin,
+                email_verified=False,
+            ),
+            organization=OrgSummary(
+                id=org.id,
+                name=org.name,
+                slug=org.slug,
+                billing_plan=org.billing_plan,
+                billing_status=org.billing_status,
+                org_type=org.org_type,
+                role=primary_membership.role,
+            ),
+            requires_verification=True,
+            dev_code=code,
+        )
+
+    # Utilisateur vérifié : émission des jetons de session et cookies sécurisés
+    token_data = {"sub": user.id, "email": user.email, "org_id": org.id, "role": primary_membership.role}
+    access_token = create_access_token(token_data)
+    refresh_token = create_refresh_token(token_data)
+
+    _set_auth_cookies(response, access_token, refresh_token)
 
     return TokenResponse(
         access_token=access_token,
@@ -343,7 +367,7 @@ def login(
             full_name=user.full_name,
             is_active=user.is_active,
             is_superadmin=user.is_superadmin,
-            email_verified=user.email_verified,
+            email_verified=True,
         ),
         organization=OrgSummary(
             id=org.id,
@@ -354,8 +378,8 @@ def login(
             org_type=org.org_type,
             role=primary_membership.role,
         ),
-        requires_verification=not user.email_verified,
-        dev_code=dev_code,
+        requires_verification=False,
+        dev_code=None,
     )
 
 

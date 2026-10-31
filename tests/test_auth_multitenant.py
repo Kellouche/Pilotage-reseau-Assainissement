@@ -177,6 +177,8 @@ def test_register_user_and_org_success(db):
     assert verify_password(user.password_hash, "Password12345!") is True
     assert len(user.memberships) == 1
     assert user.memberships[0].role == "owner"
+    user.email_verified = True
+    db.commit()
 
 
 def test_register_education_requires_academic_email(db):
@@ -202,6 +204,10 @@ def test_register_education_requires_academic_email(db):
     )
     ok_resp = register(good_payload, resp, db)
     assert ok_resp.organization.billing_plan == "education"
+    u_karim = db.query(User).filter_by(email="karim.recherche@usthb.dz").first()
+    if u_karim:
+        u_karim.email_verified = True
+        db.commit()
 
 
 # ============================================================
@@ -503,4 +509,55 @@ def test_expired_code_renewal_on_login(db):
     ok_resp = verify_email_code(ok_verify_req, resp, db)
     assert ok_resp.requires_verification is False
     assert ok_resp.access_token is not None
+
+
+def test_unverified_account_strictly_blocked_until_code_verified(db):
+    """
+    Test de sécurité critique :
+    Garantit qu'un utilisateur non vérifié ne reçoit JAMAIS de jeton d'accès valide ni de cookie,
+    et que toute tentative d'accès aux endpoints protégés est refoulée en 403 tant que le code n'est pas validé.
+    """
+    resp = Response()
+    reg_payload = RegisterRequest(
+        email="securite.test@bet-alger.dz",
+        password="StrictPassword2026!",
+        full_name="Sécurité Test",
+        org_name="Cabinet Sécurisé",
+        billing_plan="demo",
+    )
+    reg_resp = register(reg_payload, resp, db)
+    # Vérification : aucun token valide délivré
+    assert reg_resp.requires_verification is True
+    assert reg_resp.access_token == ""
+    assert reg_resp.refresh_token == ""
+    # Vérification : pas de cookies de session actifs (uniquement suppression/expiration max-age=0)
+    cookies = [h for k, h in resp.raw_headers if k.lower() == b"set-cookie"]
+    assert all(b"max-age=0" in c.lower() for c in cookies)
+
+    # Tentative de connexion par login
+    resp_login = Response()
+    login_resp = login(LoginRequest(email="securite.test@bet-alger.dz", password="StrictPassword2026!"), resp_login, db)
+    assert login_resp.requires_verification is True
+    assert login_resp.access_token == ""
+    assert login_resp.refresh_token == ""
+
+    # Tentative d'accès à l'API protégée avec un token forgé pour cet utilisateur non vérifié
+    user = db.query(User).filter_by(email="securite.test@bet-alger.dz").first()
+    assert user.email_verified is False
+    forged_token = create_access_token({"sub": user.id, "email": user.email, "org_id": "fake_org", "role": "owner"})
+    fake_req = make_request(headers_dict={"Authorization": f"Bearer {forged_token}"})
+    creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=forged_token)
+
+    with pytest.raises(HTTPException) as exc:
+        get_tenant_context(fake_req, creds, db)
+    assert exc.value.status_code == status.HTTP_403_FORBIDDEN
+    assert "non vérifié" in exc.value.detail.lower()
+
+    # Seule la saisie du bon code (le dernier généré par login) active le compte et délivre la session
+    verify_resp = verify_email_code(VerifyCodeRequest(email="securite.test@bet-alger.dz", code=login_resp.dev_code), resp, db)
+    assert verify_resp.requires_verification is False
+    assert len(verify_resp.access_token) > 20
+    db.refresh(user)
+    assert user.email_verified is True
+
 

@@ -337,11 +337,17 @@
         const isVerifying = !activationGroup.classList.contains('d-none');
         const codeVal = codeInput.value.trim();
 
+        if (isVerifying && (!codeVal || codeVal.length < 4)) {
+            showAlert("Veuillez saisir le code d'activation à 6 chiffres reçu par e-mail.", "warning");
+            codeInput.focus();
+            return;
+        }
+
         setSubmitButton(true, isVerifying ? 'verify' : 'login');
 
         try {
             let data;
-            if (isVerifying && codeVal) {
+            if (isVerifying) {
                 // Étape 2 : Vérification du code d'activation
                 const resp = await fetch('/api/v1/auth/verify-email', {
                     method: 'POST',
@@ -369,6 +375,9 @@
 
             // Si le compte requiert la vérification par code
             if (data.requires_verification) {
+                localStorage.removeItem('swmm_access_token');
+                document.cookie = "access_token=; path=/; max-age=0";
+
                 activationGroup.classList.remove('d-none');
                 verifyModeActions.classList.remove('d-none');
 
