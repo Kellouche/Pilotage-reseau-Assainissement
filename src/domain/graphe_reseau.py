@@ -17,6 +17,8 @@ def _identifiant_reseau(value):
     texte = str(value).strip()
     if not texte or texte.lower() in {'nan', 'none', 'null'}:
         return None
+    if texte.endswith('.0'):
+        texte = texte[:-2]
     return texte
 
 class ConstructeurGrapheReseau:
@@ -227,40 +229,73 @@ def construire_graphe(chemin_gpkg: str = None) -> nx.DiGraph:
     Point d'entrée global. Charge les données depuis le GeoPackage
     et construit le graphe en utilisant les processeurs de noeuds et conduites.
     """
+    from pathlib import Path
+    from typing import Optional
     import geopandas as gpd
     from src.domain.processeur_noeuds import ProcesseurNoeuds
     from src.domain.processeur_conduites import ProcesseurConduites
     
-    chemin_gpkg = chemin_gpkg or r"D:\IA Water Data Analysis\Assainissement\Assainissement_Ville.gpkg"
-    
+    if not chemin_gpkg or not Path(chemin_gpkg).exists():
+        default_candidate = r"D:\IA Water Data Analysis\Assainissement\Assainissement_Ville.gpkg"
+        if Path(default_candidate).exists():
+            chemin_gpkg = default_candidate
+        else:
+            demo_cand = Path(__file__).resolve().parents[2] / "data" / "demo_reseau.gpkg"
+            chemin_gpkg = str(demo_cand) if demo_cand.exists() else None
+
+    if not chemin_gpkg or not Path(chemin_gpkg).exists():
+        return nx.DiGraph()
+
+    try:
+        available_layers = gpd.list_layers(chemin_gpkg)['name'].tolist()
+    except Exception:
+        available_layers = []
+
+    def _trouver_couche(mots_cles: list, exclusions: list = None) -> Optional[str]:
+        exclusions = exclusions or []
+        for nom in available_layers:
+            nom_bas = nom.lower()
+            if any(e in nom_bas for e in exclusions):
+                continue
+            if any(m in nom_bas for m in mots_cles):
+                return nom
+        return None
+
+    couche_regards = _trouver_couche(['regard'])
+    couche_rejets = _trouver_couche(['rejet', 'outfall', 'exutoire'])
+    couche_ouvrages = _trouver_couche(['ouvrage'])
+    couche_stations = _trouver_couche(['station', 'pompage', 'relevage'])
+    couche_step = _trouver_couche(['step', 'epuration'])
+    couche_canalisations = _trouver_couche(['canalisat', 'conduit', 'pipe', 'troncon'], exclusions=['désaffect', 'desaffect'])
+
     # 1. Charger les couches
     try:
-        regards_gdf = gpd.read_file(chemin_gpkg, layer="Regards_e3c22000_8bba_45a0_a575_d60bbd4b99d3")
+        regards_gdf = gpd.read_file(chemin_gpkg, layer=couche_regards) if couche_regards else gpd.GeoDataFrame()
     except Exception:
         regards_gdf = gpd.GeoDataFrame()
         
     try:
-        rejets_gdf = gpd.read_file(chemin_gpkg, layer="Rejets_3cc8eef2_2241_47a0_ad80_fd59749ab068")
+        rejets_gdf = gpd.read_file(chemin_gpkg, layer=couche_rejets) if couche_rejets else gpd.GeoDataFrame()
     except Exception:
         rejets_gdf = gpd.GeoDataFrame()
         
     try:
-        ouvrages_gdf = gpd.read_file(chemin_gpkg, layer="Ouvrages_Speciaux_4162132f_cd17_43bc_835d_2f7b46f2419f")
+        ouvrages_gdf = gpd.read_file(chemin_gpkg, layer=couche_ouvrages) if couche_ouvrages else gpd.GeoDataFrame()
     except Exception:
         ouvrages_gdf = gpd.GeoDataFrame()
         
     try:
-        stations_gdf = gpd.read_file(chemin_gpkg, layer="Station_de_relevage_5c8a759c_c2c5_46cb_a2be_8993c368e0c2")
+        stations_gdf = gpd.read_file(chemin_gpkg, layer=couche_stations) if couche_stations else gpd.GeoDataFrame()
     except Exception:
         stations_gdf = gpd.GeoDataFrame()
         
     try:
-        step_gdf = gpd.read_file(chemin_gpkg, layer="STEP_d9ded7b2_1693_4298_baf4_6691f781d403")
+        step_gdf = gpd.read_file(chemin_gpkg, layer=couche_step) if couche_step else gpd.GeoDataFrame()
     except Exception:
         step_gdf = gpd.GeoDataFrame()
         
     try:
-        canalisations_gdf = gpd.read_file(chemin_gpkg, layer="Canalisations_860f298d_9fd9_40a5_bfa4_f913acc71f2e")
+        canalisations_gdf = gpd.read_file(chemin_gpkg, layer=couche_canalisations) if couche_canalisations else gpd.GeoDataFrame()
     except Exception:
         canalisations_gdf = gpd.GeoDataFrame()
 
