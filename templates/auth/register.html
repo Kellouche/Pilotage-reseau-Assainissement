@@ -599,9 +599,14 @@
     };
 
     window.renvoyerCodeActivation = async function() {
+        if (!currentRegisteredEmail) {
+            currentRegisteredEmail = document.getElementById('email').value.trim();
+        }
         if (!currentRegisteredEmail) return;
+
         const btnResend = document.getElementById('btnResend');
         btnResend.disabled = true;
+        const origResendHtml = btnResend.innerHTML;
         btnResend.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Envoi...';
 
         try {
@@ -611,16 +616,37 @@
                 body: JSON.stringify({ email: currentRegisteredEmail })
             });
             const data = await resp.json();
+            if (!resp.ok) {
+                throw new Error(data.detail || "Erreur lors du renvoi.");
+            }
             if (data.dev_code) {
                 document.getElementById('devCodeDisplay').textContent = data.dev_code;
                 document.getElementById('devCodeBox').classList.remove('d-none');
             }
-            alert('Un nouveau code d\'activation a été envoyé par e-mail.');
+            verifyAlertBox.className = "alert alert-success small py-2";
+            verifyAlertMsg.innerHTML = '<i class="fas fa-check-circle me-1"></i> Un nouveau code d\'activation (valable 15 minutes) a été envoyé par e-mail.';
+            verifyAlertBox.classList.remove('d-none');
+            document.getElementById('activationCode').value = '';
+            document.getElementById('activationCode').focus();
+
+            let seconds = 30;
+            btnResend.innerHTML = `<i class="fas fa-check text-success me-1"></i> Envoyé (${seconds}s)`;
+            const timer = setInterval(() => {
+                seconds -= 1;
+                if (seconds <= 0) {
+                    clearInterval(timer);
+                    btnResend.disabled = false;
+                    btnResend.innerHTML = '<i class="fas fa-redo me-1"></i> Renvoyer un code';
+                } else {
+                    btnResend.innerHTML = `<i class="fas fa-hourglass-half me-1"></i> Renvoyer (${seconds}s)`;
+                }
+            }, 1000);
         } catch (e) {
-            alert('Erreur lors du renvoi : ' + e.message);
-        } finally {
+            verifyAlertBox.className = "alert alert-danger small py-2";
+            verifyAlertMsg.textContent = 'Erreur lors du renvoi : ' + e.message;
+            verifyAlertBox.classList.remove('d-none');
             btnResend.disabled = false;
-            btnResend.innerHTML = '<i class="fas fa-redo me-1"></i> Renvoyer un code';
+            btnResend.innerHTML = origResendHtml;
         }
     };
 
@@ -668,7 +694,14 @@
             window.location.href = '/map';
 
         } catch (err) {
-            verifyAlertMsg.textContent = err.message;
+            const isExpired = err.message && err.message.toLowerCase().includes('expiré');
+            if (isExpired) {
+                verifyAlertBox.className = "alert alert-warning small py-2";
+                verifyAlertMsg.innerHTML = `<i class="fas fa-hourglass-end me-1"></i> ${err.message} <button type="button" class="btn btn-sm btn-outline-danger ms-2 py-0 px-2 fw-semibold" onclick="renvoyerCodeActivation()"><i class="fas fa-redo-alt me-1"></i>Renvoyer un nouveau code</button>`;
+            } else {
+                verifyAlertBox.className = "alert alert-danger small py-2";
+                verifyAlertMsg.textContent = err.message;
+            }
             verifyAlertBox.classList.remove('d-none');
             btnVerifySubmit.disabled = false;
             btnVerifySubmit.innerHTML = origText;

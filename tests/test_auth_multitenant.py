@@ -9,7 +9,7 @@ Date : Octobre 2026
 """
 
 import pytest
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -462,3 +462,45 @@ def test_email_verification_flow(db):
     db.refresh(user)
     assert user.email_verified is True
     assert user.verification_code is None
+
+
+def test_expired_code_renewal_on_login(db):
+    """Vérifie qu'un code expiré (> 15 minutes) est automatiquement renouvelé lors de la connexion."""
+    resp = Response()
+    reg_payload = RegisterRequest(
+        email="expert.expiration@alger-vrd.dz",
+        password="SecuredPassword2026!",
+        full_name="Expert Expiration",
+        org_name="Bureau Test Expire",
+        billing_plan="demo",
+    )
+    reg_resp = register(reg_payload, resp, db)
+    old_code = reg_resp.dev_code
+
+    user = db.query(User).filter_by(email="expert.expiration@alger-vrd.dz").first()
+    assert user.email_verified is False
+
+    # Simuler le passage de plus de 15 minutes (code expiré dans le passé)
+    user.verification_code_expires_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+    db.commit()
+
+    # 1. Tentative de validation avec l'ancien code expiré -> Doit échouer avec message clair
+    bad_verify_req = VerifyCodeRequest(email="expert.expiration@alger-vrd.dz", code=old_code)
+    with pytest.raises(HTTPException) as exc:
+        verify_email_code(bad_verify_req, resp, db)
+    assert exc.value.status_code == status.HTTP_400_BAD_REQUEST
+    assert "expiré" in exc.value.detail.lower()
+
+    # 2. Re-connexion par identifiants -> Le système doit régénérer automatiquement un nouveau code valide
+    login_req = LoginRequest(email="expert.expiration@alger-vrd.dz", password="SecuredPassword2026!")
+    login_resp = login(login_req, resp, db)
+    assert login_resp.requires_verification is True
+    assert login_resp.dev_code is not None
+    assert login_resp.dev_code != old_code
+
+    # 3. Validation avec le nouveau code régénéré
+    ok_verify_req = VerifyCodeRequest(email="expert.expiration@alger-vrd.dz", code=login_resp.dev_code)
+    ok_resp = verify_email_code(ok_verify_req, resp, db)
+    assert ok_resp.requires_verification is False
+    assert ok_resp.access_token is not None
+

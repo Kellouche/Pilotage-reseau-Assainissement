@@ -324,10 +324,15 @@ def login(
 
     dev_code = None
     if not user.email_verified:
-        if not user.verification_code:
+        now = datetime.now(timezone.utc)
+        exp = user.verification_code_expires_at
+        if exp and exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        # Si aucun code n'existe ou si le code actuel est expiré (> 15 min), renouveler et renvoyer
+        if not user.verification_code or (exp and exp < now):
             code = f"{secrets.randbelow(1000000):06d}"
             user.verification_code = code
-            user.verification_code_expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+            user.verification_code_expires_at = now + timedelta(minutes=15)
             db.commit()
             send_activation_email(user.email, code, user.full_name)
         dev_code = user.verification_code

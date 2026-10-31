@@ -22,7 +22,7 @@
             background: #ffffff;
             border-radius: 20px;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            max-width: 440px;
+            max-width: 450px;
             width: 100%;
             overflow: hidden;
             border: 1px solid rgba(255, 255, 255, 0.1);
@@ -70,6 +70,25 @@
             transform: translateY(-1px);
             box-shadow: 0 6px 16px rgba(2, 132, 199, 0.4);
         }
+        .activation-box {
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            padding: 16px;
+        }
+        .activation-code-input {
+            letter-spacing: 8px;
+            font-size: 1.4rem;
+            font-weight: 700;
+            text-align: center;
+            background-color: #ffffff;
+            border: 2px solid #0284c7;
+            box-shadow: 0 2px 8px rgba(2, 132, 199, 0.15);
+        }
+        .activation-code-input:focus {
+            border-color: #0369a1;
+            box-shadow: 0 0 0 0.25rem rgba(2, 132, 199, 0.25);
+        }
     </style>
 </head>
 <body>
@@ -107,7 +126,7 @@
                        placeholder="ingenieur@regie-eaux.dz" required autofocus>
             </div>
 
-            <div class="mb-3">
+            <div class="mb-3" id="passwordGroup">
                 <div class="d-flex justify-content-between align-items-center mb-1">
                     <label for="password" class="form-label small fw-semibold text-secondary mb-0">
                         <i class="fas fa-lock me-1"></i> Mot de passe
@@ -122,18 +141,54 @@
                 </div>
             </div>
 
+            <!-- Groupe Code d'activation (affiché si le compte n'est pas encore validé) -->
             <div class="mb-3 d-none" id="activationCodeGroup">
-                <label for="activationCode" class="form-label small fw-semibold text-primary">
-                    <i class="fas fa-key me-1"></i> Code d'activation à 6 chiffres
-                </label>
-                <input type="text" class="form-control form-control-lg text-center fw-bold" id="activationCode"
-                       maxlength="6" placeholder="••••••" style="letter-spacing: 6px;">
-                <div class="form-text small text-muted">Saisissez le code reçu par e-mail pour activer votre compte.</div>
+                <div class="activation-box mb-2">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <label for="activationCode" class="form-label small fw-bold text-primary mb-0">
+                            <i class="fas fa-key me-1"></i> Code d'activation à 6 chiffres
+                        </label>
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 0.72rem;">
+                            <i class="fas fa-clock me-1"></i> Validité 15 min
+                        </span>
+                    </div>
+
+                    <input type="text" class="form-control form-control-lg activation-code-input mb-1" id="activationCode"
+                           maxlength="6" placeholder="••••••" autocomplete="one-time-code">
+                    <div class="form-text small text-muted text-center mb-2">
+                        Saisissez le code reçu par e-mail pour activer votre compte.
+                    </div>
+
+                    <!-- Boîte de simulation locale pour les tests en développement -->
+                    <div id="devCodeBox" class="alert alert-info d-none small py-2 px-3 mb-2 text-start" style="border-left: 4px solid #0284c7;">
+                        <i class="fas fa-info-circle me-1 text-primary"></i> <strong>Simulation développement :</strong> Votre code est <strong id="devCodeDisplay" class="fs-6 text-primary font-monospace"></strong>
+                    </div>
+
+                    <!-- Notification de réexpédition réussie -->
+                    <div id="resendSuccessBox" class="alert alert-success d-none small py-2 px-3 mb-2 text-start" role="alert">
+                        <i class="fas fa-check-circle me-1"></i> <span id="resendSuccessMsg"></span>
+                    </div>
+
+                    <!-- Bouton pour demander un nouveau code d'activation -->
+                    <div class="d-flex justify-content-between align-items-center pt-2 border-top">
+                        <span class="small text-muted">Code expiré ou non reçu ?</span>
+                        <button type="button" id="btnResendCode" class="btn btn-sm btn-outline-primary fw-semibold" onclick="handleResendCode()">
+                            <i class="fas fa-redo-alt me-1"></i> Renvoyer un code
+                        </button>
+                    </div>
+                </div>
             </div>
 
-            <button type="submit" id="btnSubmit" class="btn btn-primary btn-auth-primary w-100 text-white shadow-sm mt-3 mb-2">
+            <button type="submit" id="btnSubmit" class="btn btn-primary btn-auth-primary w-100 text-white shadow-sm mt-2 mb-2">
                 <i class="fas fa-sign-in-alt me-2"></i> <span id="btnSubmitText">Se connecter</span>
             </button>
+
+            <!-- Action pour basculer / modifier identifiants en mode vérification -->
+            <div id="verifyModeActions" class="text-center mt-2 d-none">
+                <button type="button" class="btn btn-link btn-sm text-secondary text-decoration-none p-0" onclick="backToLoginMode()">
+                    <i class="fas fa-arrow-left me-1"></i> Modifier mes identifiants
+                </button>
+            </div>
         </form>
     </div>
 
@@ -159,7 +214,7 @@
         }
     });
 
-    // Bascule mot de passe
+    // Bascule affichage / masquage mot de passe
     const passInput = document.getElementById('password');
     const toggleBtn = document.getElementById('togglePassword');
     toggleBtn.addEventListener('click', () => {
@@ -168,36 +223,138 @@
         toggleBtn.querySelector('i').className = isPass ? 'fas fa-eye-slash text-primary' : 'fas fa-eye text-muted';
     });
 
-    // Soumission du formulaire
     const form = document.getElementById('loginForm');
     const alertBox = document.getElementById('alertBox');
     const alertMsg = document.getElementById('alertMsg');
     const btnSubmit = document.getElementById('btnSubmit');
+    const activationGroup = document.getElementById('activationCodeGroup');
+    const verifyModeActions = document.getElementById('verifyModeActions');
+    const codeInput = document.getElementById('activationCode');
+    const devCodeBox = document.getElementById('devCodeBox');
+    const devCodeDisplay = document.getElementById('devCodeDisplay');
+    const resendSuccessBox = document.getElementById('resendSuccessBox');
+    const resendSuccessMsg = document.getElementById('resendSuccessMsg');
+    const btnResendCode = document.getElementById('btnResendCode');
 
+    // Mise à jour sécurisée du bouton de validation (sans détruire les références DOM)
+    function setSubmitButton(loading, mode = 'login') {
+        btnSubmit.disabled = loading;
+        if (loading) {
+            btnSubmit.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>${mode === 'verify' ? 'Validation du code...' : 'Vérification...'}`;
+        } else if (mode === 'verify') {
+            btnSubmit.innerHTML = '<i class="fas fa-shield-alt me-2"></i> <span id="btnSubmitText">Valider le code & Se connecter</span>';
+        } else {
+            btnSubmit.innerHTML = '<i class="fas fa-sign-in-alt me-2"></i> <span id="btnSubmitText">Se connecter</span>';
+        }
+    }
+
+    // Affichage d'un message d'alerte avec support HTML
+    function showAlert(htmlContent, type = 'danger') {
+        alertBox.className = `alert alert-${type}`;
+        alertMsg.innerHTML = htmlContent;
+        alertBox.classList.remove('d-none');
+    }
+
+    // Retour au mode identifiants standards
+    window.backToLoginMode = function() {
+        activationGroup.classList.add('d-none');
+        verifyModeActions.classList.add('d-none');
+        devCodeBox.classList.add('d-none');
+        resendSuccessBox.classList.add('d-none');
+        alertBox.classList.add('d-none');
+        codeInput.value = '';
+        setSubmitButton(false, 'login');
+        document.getElementById('password').focus();
+    };
+
+    // Gestion du renvoi de code d'activation
+    window.handleResendCode = async function() {
+        const emailVal = document.getElementById('email').value.trim();
+        if (!emailVal) {
+            showAlert("Veuillez saisir votre adresse email.", "danger");
+            document.getElementById('email').focus();
+            return;
+        }
+
+        btnResendCode.disabled = true;
+        const originalBtnHtml = btnResendCode.innerHTML;
+        btnResendCode.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Envoi...';
+
+        try {
+            const resp = await fetch('/api/v1/auth/resend-code', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: emailVal })
+            });
+
+            const data = await resp.json();
+            if (!resp.ok) {
+                throw new Error(data.detail || "Erreur lors du renvoi du code d'activation.");
+            }
+
+            if (data.dev_code) {
+                devCodeDisplay.textContent = data.dev_code;
+                devCodeBox.classList.remove('d-none');
+            }
+
+            resendSuccessMsg.textContent = "Un nouveau code d'activation (valable 15 minutes) vous a été envoyé par e-mail.";
+            resendSuccessBox.classList.remove('d-none');
+
+            // Réinitialiser le champ du code et donner le focus
+            codeInput.value = '';
+            codeInput.focus();
+
+            // Masquer l'erreur précédente s'il y en avait une
+            alertBox.classList.add('d-none');
+
+            // Compte à rebours anti-spam de 30 secondes
+            let seconds = 30;
+            btnResendCode.innerHTML = `<i class="fas fa-check text-success me-1"></i> Envoyé (${seconds}s)`;
+            const countdown = setInterval(() => {
+                seconds -= 1;
+                if (seconds <= 0) {
+                    clearInterval(countdown);
+                    btnResendCode.disabled = false;
+                    btnResendCode.innerHTML = '<i class="fas fa-redo-alt me-1"></i> Renvoyer un code';
+                } else {
+                    btnResendCode.innerHTML = `<i class="fas fa-hourglass-half me-1"></i> Renvoyer (${seconds}s)`;
+                }
+            }, 1000);
+
+        } catch (err) {
+            showAlert(err.message, "danger");
+            btnResendCode.disabled = false;
+            btnResendCode.innerHTML = originalBtnHtml;
+        }
+    };
+
+    // Soumission du formulaire (Connexion ou Validation du code)
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
         alertBox.classList.add('d-none');
-        btnSubmit.disabled = true;
-        btnSubmit.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Vérification...';
 
         const emailVal = document.getElementById('email').value.trim();
-        const codeInput = document.getElementById('activationCode');
-        const isVerifying = codeInput && !document.getElementById('activationCodeGroup').classList.contains('d-none');
+        const isVerifying = !activationGroup.classList.contains('d-none');
+        const codeVal = codeInput.value.trim();
+
+        setSubmitButton(true, isVerifying ? 'verify' : 'login');
 
         try {
             let data;
-            if (isVerifying && codeInput.value.trim()) {
+            if (isVerifying && codeVal) {
+                // Étape 2 : Vérification du code d'activation
                 const resp = await fetch('/api/v1/auth/verify-email', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         email: emailVal,
-                        code: codeInput.value.trim()
+                        code: codeVal
                     })
                 });
                 data = await resp.json();
-                if (!resp.ok) throw new Error(data.detail || "Code d'activation invalide");
+                if (!resp.ok) throw new Error(data.detail || "Code d'activation invalide ou expiré.");
             } else {
+                // Étape 1 : Connexion standard
                 const resp = await fetch('/api/v1/auth/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -210,39 +367,56 @@
                 if (!resp.ok) throw new Error(data.detail || 'Identifiants invalides');
             }
 
-            // Si le compte nécessite la vérification par code
+            // Si le compte requiert la vérification par code
             if (data.requires_verification) {
-                document.getElementById('activationCodeGroup').classList.remove('d-none');
-                let msg = "Votre adresse e-mail n'a pas encore été validée. Saisissez le code d'activation à 6 chiffres reçu par e-mail.";
+                activationGroup.classList.remove('d-none');
+                verifyModeActions.classList.remove('d-none');
+
                 if (data.dev_code) {
-                    msg += `<br><strong>Simulation locale :</strong> Code <code>${data.dev_code}</code>`;
+                    devCodeDisplay.textContent = data.dev_code;
+                    devCodeBox.classList.remove('d-none');
+                } else {
+                    devCodeBox.classList.add('d-none');
                 }
-                alertMsg.innerHTML = msg;
-                alertBox.className = "alert alert-warning";
-                alertBox.classList.remove('d-none');
-                btnSubmit.disabled = false;
-                document.getElementById('btnSubmitText').textContent = "Valider le code & Se connecter";
+
+                showAlert(
+                    "Votre adresse e-mail n'a pas encore été activée. Saisissez le code d'activation à 6 chiffres reçu par e-mail (valable 15 minutes) ou cliquez sur <strong>Renvoyer un code</strong>.",
+                    "warning"
+                );
+
+                setSubmitButton(false, 'verify');
                 setTimeout(() => codeInput.focus(), 150);
                 return;
             }
 
-            // Sauvegarder le token
+            // Sauvegarder les jetons d'accès
             if (data.access_token) {
                 localStorage.setItem('swmm_access_token', data.access_token);
                 document.cookie = `access_token=${data.access_token}; path=/; max-age=604800; SameSite=Lax`;
             }
 
-            // Redirection vers le cockpit
+            // Redirection vers l'espace applicatif
             const params = new URLSearchParams(window.location.search);
             const nextUrl = params.get('next') || '/map';
             window.location.href = nextUrl;
 
         } catch (err) {
-            alertMsg.textContent = err.message;
-            alertBox.className = "alert alert-danger";
-            alertBox.classList.remove('d-none');
-            btnSubmit.disabled = false;
-            btnSubmit.innerHTML = '<i class="fas fa-sign-in-alt me-2"></i> <span id="btnSubmitText">Se connecter</span>';
+            const isExpired = err.message && err.message.toLowerCase().includes('expiré');
+            if (isExpired) {
+                showAlert(
+                    `<div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                        <div><i class="fas fa-hourglass-end text-warning me-1"></i> ${err.message}</div>
+                        <button type="button" class="btn btn-sm btn-primary fw-semibold" onclick="handleResendCode()">
+                            <i class="fas fa-redo-alt me-1"></i> Demander un nouveau code
+                        </button>
+                    </div>`,
+                    "warning"
+                );
+            } else {
+                showAlert(err.message, "danger");
+            }
+
+            setSubmitButton(false, isVerifying ? 'verify' : 'login');
         }
     });
 </script>
