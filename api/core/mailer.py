@@ -91,10 +91,14 @@ SWMM Platform SaaS
     # 1. Mode Production avec SMTP réel configuré
     if smtp_host and smtp_user and smtp_password:
         try:
+            import email.utils
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
-            msg["From"] = smtp_from
+            msg["From"] = f"SWMM Platform <{smtp_from}>" if "<" not in smtp_from else smtp_from
             msg["To"] = to_email
+            msg["Date"] = email.utils.formatdate(localtime=True)
+            msg["Message-ID"] = email.utils.make_msgid(domain="gmail.com")
+            msg["X-Mailer"] = "SWMM Platform SaaS Mailer"
 
             msg.attach(MIMEText(text_content, "plain", "utf-8"))
             msg.attach(MIMEText(html_content, "html", "utf-8"))

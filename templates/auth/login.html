@@ -159,9 +159,9 @@
                         Saisissez le code reçu par e-mail pour activer votre compte.
                     </div>
 
-                    <!-- Boîte de simulation locale pour les tests en développement -->
+                    <!-- Indicateur pour le développement / aide locale -->
                     <div id="devCodeBox" class="alert alert-info d-none small py-2 px-3 mb-2 text-start" style="border-left: 4px solid #0284c7;">
-                        <i class="fas fa-info-circle me-1 text-primary"></i> <strong>Simulation développement :</strong> Votre code est <strong id="devCodeDisplay" class="fs-6 text-primary font-monospace"></strong>
+                        <i class="fas fa-envelope-open-text me-1 text-primary"></i> <strong>E-mail expédié :</strong> Code <strong id="devCodeDisplay" class="fs-6 text-primary font-monospace"></strong> <span class="text-muted small">(copie de secours locale)</span>
                     </div>
 
                     <!-- Notification de réexpédition réussie -->
@@ -297,7 +297,7 @@
                 devCodeBox.classList.remove('d-none');
             }
 
-            resendSuccessMsg.textContent = "Un nouveau code d'activation (valable 15 minutes) vous a été envoyé par e-mail.";
+            resendSuccessMsg.innerHTML = "Un nouveau code d'activation a été envoyé par e-mail !<br><small class='text-muted'>Pensez à vérifier votre boîte de réception ainsi que votre dossier Spams / Courrier indésirable.</small>";
             resendSuccessBox.classList.remove('d-none');
 
             // Réinitialiser le champ du code et donner le focus
@@ -380,7 +380,8 @@
                 }
 
                 showAlert(
-                    "Votre adresse e-mail n'a pas encore été activée. Saisissez le code d'activation à 6 chiffres reçu par e-mail (valable 15 minutes) ou cliquez sur <strong>Renvoyer un code</strong>.",
+                    `<i class="fas fa-envelope me-1"></i> Un code d'activation à 6 chiffres a été envoyé à <strong>${emailVal}</strong> (valable 15 minutes).<br>
+                    <small class="text-muted mt-1 d-block"><i class="fas fa-info-circle me-1"></i> Pensez à vérifier votre boîte de réception ainsi que votre dossier <strong>Spams / Courrier indésirable</strong>.</small>`,
                     "warning"
                 );
 
