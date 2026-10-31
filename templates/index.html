@@ -314,7 +314,8 @@
         <div id="mini-stats">Chargement...</div>
         <div>
             <input type="checkbox" id="f-conduites" checked><label for="f-conduites">Conduites</label><br>
-            <input type="checkbox" id="f-regards"><label for="f-regards">Regards</label><br>
+            <input type="checkbox" id="f-regards" checked><label for="f-regards">Regards</label><br>
+            <input type="checkbox" id="f-rejets" checked><label for="f-rejets">Exutoires / Rejets</label><br>
             <input type="checkbox" id="f-stations" checked><label for="f-stations">Stations</label><br>
             <input type="checkbox" id="f-step" checked><label for="f-step">STEP</label><br>
             <input type="checkbox" id="f-ouvrages" checked><label for="f-ouvrages">Ouvrages</label><br>
@@ -377,7 +378,8 @@
 
         let couches = {
             conduites: L.layerGroup().addTo(carte),
-            regards: L.layerGroup(),
+            regards: L.layerGroup().addTo(carte),
+            rejets: L.layerGroup().addTo(carte),
             stations: L.layerGroup().addTo(carte),
             step: L.layerGroup().addTo(carte),
             ouvrages: L.layerGroup().addTo(carte),
@@ -393,7 +395,7 @@
         // Map clusterId -> bounds du bassin
         let _bassinBounds = {};
 
-        ['conduites', 'regards', 'stations', 'step', 'ouvrages', 'bassins', 'incidents'].forEach(type => {
+        ['conduites', 'regards', 'rejets', 'stations', 'step', 'ouvrages', 'bassins', 'incidents'].forEach(type => {
             const el = document.getElementById('f-' + type);
             if (el) {
                 el.onchange = (e) => {
@@ -771,6 +773,7 @@
                     document.getElementById('mini-stats').innerHTML =
                         'Conduites: ' + (d.compteurs.conduites || 0) +
                         ' | Regards: ' + (d.compteurs.regards || 0) +
+                        ' | Rejets: ' + (d.compteurs.rejets || 0) +
                         ' | Stations: ' + (d.compteurs.stations || 0) +
                         ' | STEP: ' + (d.compteurs.step || 0) +
                         ' | Ouvrages: ' + (d.compteurs.ouvrages || 0);
@@ -786,15 +789,17 @@
                         }
                     }).addTo(couches.conduites);
 
-                    // Points (regards, stations, step, ouvrages)
+                    // Points (regards, rejets, stations, step, ouvrages)
                     const styles = {
-                        regards: { radius: 4, color: '#2c3e50', fillColor: '#2c3e50' },
-                        stations: { radius: 6, color: '#e67e22', fillColor: '#e67e22' },
-                        step: { radius: 7, color: '#27ae60', fillColor: '#27ae60' },
-                        ouvrages: { radius: 6, color: '#9b59b6', fillColor: '#9b59b6' }
+                        regards: { radius: 4, color: '#2c3e50', fillColor: '#2c3e50', fillOpacity: 0.8 },
+                        rejets: { radius: 7, color: '#e74c3c', fillColor: '#e74c3c', fillOpacity: 0.9, weight: 2 },
+                        stations: { radius: 6, color: '#e67e22', fillColor: '#e67e22', fillOpacity: 0.8 },
+                        step: { radius: 7, color: '#27ae60', fillColor: '#27ae60', fillOpacity: 0.8 },
+                        ouvrages: { radius: 6, color: '#9b59b6', fillColor: '#9b59b6', fillOpacity: 0.8 }
                     };
                     window.regardProperties = [];
-                    ['regards', 'stations', 'step', 'ouvrages'].forEach(type => {
+                    ['regards', 'rejets', 'stations', 'step', 'ouvrages'].forEach(type => {
+                        if (!d.couches[type] || !d.couches[type].features) return;
                         L.geoJSON(d.couches[type], {
                             pointToLayer: (feature, latlng) => L.circleMarker(latlng, styles[type]),
                             onEachFeature: (feature, layer) => {
@@ -802,6 +807,13 @@
                                     const index = window.regardProperties.length;
                                     window.regardProperties.push(feature.properties);
                                     layer.bindPopup(regardPopup(feature, index));
+                                } else if (type === 'rejets') {
+                                    layer.bindPopup(`<div style="font-family: Arial, sans-serif; font-size: 13px;">
+                                        <b style="color: #e74c3c;">🌊 Exutoire / Rejet</b><br>
+                                        <b>Nom:</b> ${feature.properties.NOM || feature.properties.nom || feature.id || 'Exutoire'}<br>
+                                        <b>Code:</b> ${feature.properties.CODE || feature.properties.code || '--'}<br>
+                                        <b>Cote TN:</b> ${feature.properties.COTETN || feature.properties.cote_tampon || '--'} m
+                                    </div>`);
                                 }
                             }
                         }).addTo(couches[type]);
@@ -837,12 +849,22 @@
                         })
                         .catch(err => console.error('Erreur chargement incidents:', err));
 
-                    // Ajuster la vue
+                    // Ajuster la vue avec cadrage optimal sur le réseau
                     const bounds = L.latLngBounds([]);
-                    Object.values(couches).forEach(l => l.getLayers().forEach(layer => {
-                        bounds.extend(layer.getBounds ? layer.getBounds() : layer.getLatLng());
-                    }));
-                    if (bounds.isValid()) carte.fitBounds(bounds, { padding: [50, 50] });
+                    ['conduites', 'regards', 'rejets', 'stations', 'step', 'ouvrages'].forEach(type => {
+                        if (couches[type]) {
+                            couches[type].getLayers().forEach(layer => {
+                                if (layer.getBounds) {
+                                    bounds.extend(layer.getBounds());
+                                } else if (layer.getLatLng) {
+                                    bounds.extend(layer.getLatLng());
+                                }
+                            });
+                        }
+                    });
+                    if (bounds.isValid()) {
+                        carte.fitBounds(bounds, { padding: [40, 40], maxZoom: 17 });
+                    }
                     
                     // Masquer l'overlay de chargement une fois les données chargées
                     montrerChargement(false);
@@ -1470,7 +1492,7 @@
                                 <i class="fas fa-flask me-2"></i> Charger le réseau d'exemple Démo
                             </div>
                             <div style="font-size: 0.8rem; color: #94a3b8;">
-                                Échantillon témoin préconfiguré (60 canalisations, 80 regards, 1 rejet).
+                                Échantillon témoin préconfiguré (58 canalisations, 59 regards, 1 rejet).
                             </div>
                         </div>
                         <button onclick="chargerReseauDemo()" class="btn btn-sm" style="background: #059669; color: white; border: none; font-weight: 600; padding: 7px 14px; border-radius: 8px; cursor: pointer;">

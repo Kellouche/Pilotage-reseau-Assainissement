@@ -235,10 +235,21 @@ def load_demo_network(
 
     project.name = "Projet Démo — Quartier Témoin"
     project.source_gpkg_key = str(demo_path)
-    project.nodes_count = 80
-    project.pipes_count = 60
+    project.nodes_count = 59
+    project.pipes_count = 58
     project.outfalls_count = 1
     db.commit()
+
+    try:
+        from api.main import reset_layers_cache
+        reset_layers_cache()
+    except Exception:
+        pass
+    try:
+        from api.routes.clusters import _reset_graph_cache
+        _reset_graph_cache()
+    except Exception:
+        pass
 
     return {
         "status": "ok",
@@ -289,6 +300,17 @@ def load_master_network(
     project.pipes_count = 11000
     db.commit()
 
+    try:
+        from api.main import reset_layers_cache
+        reset_layers_cache()
+    except Exception:
+        pass
+    try:
+        from api.routes.clusters import _reset_graph_cache
+        _reset_graph_cache()
+    except Exception:
+        pass
+
     return {
         "status": "ok",
         "message": "Réseau réel complet de la ville chargé pour votre session administrateur.",
@@ -317,6 +339,17 @@ def reset_project_network(
         project.outfalls_count = 0
         project.name = "Nouveau Projet (Vierge)"
         db.commit()
+
+    try:
+        from api.main import reset_layers_cache
+        reset_layers_cache()
+    except Exception:
+        pass
+    try:
+        from api.routes.clusters import _reset_graph_cache
+        _reset_graph_cache()
+    except Exception:
+        pass
 
     return {"status": "ok", "message": "Projet réinitialisé vers un espace vierge."}
 
@@ -358,6 +391,17 @@ async def upload_network_gpkg(
     project.name = file.filename.rsplit(".", 1)[0]
     project.source_gpkg_key = str(target_path)
     db.commit()
+
+    try:
+        from api.main import reset_layers_cache
+        reset_layers_cache()
+    except Exception:
+        pass
+    try:
+        from api.routes.clusters import _reset_graph_cache
+        _reset_graph_cache()
+    except Exception:
+        pass
 
     return {
         "status": "ok",

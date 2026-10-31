@@ -3,20 +3,47 @@ import logging
 import math
 import networkx as nx
 from functools import lru_cache
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from pathlib import Path
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 
 from api.database import get_db
 from api import schemas, crud
+from api.models import Project
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/clusters", tags=["Clusters"])
 
 # Cache du graphe et état
-_GRAPH_CACHE = None
+_GRAPH_CACHES: Dict[str, nx.DiGraph] = {}
 _GRAPH_STATUS = "pending"  # pending | building | ready | error
+
+
+def _get_current_user_from_request(request: Request, db: Session):
+    """Extrait l'utilisateur authentifié depuis le cookie ou l'en-tête Bearer."""
+    if not request:
+        return None
+    token = request.cookies.get("access_token")
+    if not token:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split(" ", 1)[1]
+    if not token:
+        return None
+    try:
+        from api.core.auth import decode_token
+        from api.models import User
+        payload = decode_token(token)
+        if not payload or not payload.get("sub"):
+            return None
+        user = db.query(User).filter(User.id == payload["sub"], User.is_active.is_(True)).first()
+        if not user or not user.email_verified:
+            return None
+        return user
+    except Exception:
+        return None
 
 
 def _json_safe(value):
@@ -29,27 +56,29 @@ def _json_safe(value):
         return None
     return value
 
-def _get_graph():
-    """Get cached graph, building it once on first call."""
-    global _GRAPH_CACHE, _GRAPH_STATUS
-    if _GRAPH_CACHE is None:
+def _get_graph(chemin_gpkg: Optional[str] = None):
+    """Get cached graph, building it once per GeoPackage path."""
+    global _GRAPH_CACHES, _GRAPH_STATUS
+    cache_key = str(chemin_gpkg) if chemin_gpkg else "default"
+    if cache_key not in _GRAPH_CACHES or _GRAPH_CACHES[cache_key] is None:
         _GRAPH_STATUS = "building"
         try:
             from src.domain.graphe_reseau import construire_graphe
-            print("[clusters] Building graph (first call)...", flush=True)
-            _GRAPH_CACHE = construire_graphe()
+            print(f"[clusters] Building graph for {cache_key}...", flush=True)
+            G = construire_graphe(chemin_gpkg)
+            _GRAPH_CACHES[cache_key] = G
             _GRAPH_STATUS = "ready"
-            print("[clusters] Graph built and cached.", flush=True)
+            print(f"[clusters] Graph built and cached for {cache_key}.", flush=True)
         except Exception as e:
             _GRAPH_STATUS = "error"
             print(f"[clusters] ERROR building graph: {e}", flush=True)
             raise
-    return _GRAPH_CACHE
+    return _GRAPH_CACHES[cache_key]
 
 def _reset_graph_cache():
     """Reset the graph cache."""
-    global _GRAPH_CACHE, _GRAPH_STATUS
-    _GRAPH_CACHE = None
+    global _GRAPH_CACHES, _GRAPH_STATUS
+    _GRAPH_CACHES = {}
     _GRAPH_STATUS = "pending"
 
 def get_graph_status():
@@ -98,6 +127,7 @@ def get_cluster(cluster_id: int, db: Session = Depends(get_db)):
 
 @router.post("/recalculate-all")
 def recalculate_all_clusters(
+    request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     persist: bool = True
@@ -108,7 +138,29 @@ def recalculate_all_clusters(
     Pour les appels GET (interface/rafraîchissement), voir /recalculate-all (GET) qui programme un job en arrière-plan.
     Le paramètre persist=false permet à l'interface carte de recalculer sans écrire en base, évitant les verrous SQLite.
     """
-    return _calculate_clusters_sync(db, persist=persist)
+    user = _get_current_user_from_request(request, db)
+    chemin_gpkg = None
+    if user:
+        primary_membership = user.memberships[0] if user.memberships else None
+        if primary_membership:
+            project = db.query(Project).filter(
+                Project.org_id == primary_membership.org_id,
+                Project.is_archived.is_(False)
+            ).first()
+            if project:
+                if not project.source_gpkg_key:
+                    return {
+                        "statut": "ok",
+                        "message": "Aucun réseau chargé pour ce projet (espace vierge).",
+                        "clusters_crees": 0,
+                        "bassins": [],
+                        "resultats": []
+                    }
+                cand = Path(project.source_gpkg_key)
+                if cand.exists():
+                    chemin_gpkg = str(cand)
+
+    return _calculate_clusters_sync(db, persist=persist, chemin_gpkg=chemin_gpkg)
 
 
 @router.get("/recalculate-all")
@@ -125,30 +177,30 @@ def recalculate_all_clusters_async(background_tasks: BackgroundTasks):
 # Helpers
 from api.database import SessionLocal
 
-def _calculate_clusters_sync(db: Session, persist: bool = True):
+def _calculate_clusters_sync(db: Session, persist: bool = True, chemin_gpkg: Optional[str] = None):
     """Wrapper to run the heavy calculation synchronously using provided DB session."""
     try:
-        return _calculate_clusters(db, persist=persist)
+        return _calculate_clusters(db, persist=persist, chemin_gpkg=chemin_gpkg)
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur calcul clusters: {str(e)}")
 
 
-def _warm_graph_cache():
+def _warm_graph_cache(chemin_gpkg: Optional[str] = None):
     """Warm the graph cache in background."""
-    global _GRAPH_CACHE, _GRAPH_STATUS
-    if _GRAPH_CACHE is None:
-        _GRAPH_STATUS = "building"
-        try:
-            from src.domain.graphe_reseau import construire_graphe
-            print("[clusters] Warming graph cache...", flush=True)
-            _GRAPH_CACHE = construire_graphe()
-            _GRAPH_STATUS = "ready"
-            print("[clusters] Graph cache warmed.", flush=True)
-        except Exception as e:
-            _GRAPH_STATUS = "error"
-            print(f"[clusters] ERROR warming graph cache: {e}", flush=True)
+    global _GRAPH_CACHES, _GRAPH_STATUS
+    try:
+        from src.domain.graphe_reseau import construire_graphe
+        cache_key = str(chemin_gpkg) if chemin_gpkg else "default"
+        print(f"[clusters] Warming graph cache for {cache_key}...", flush=True)
+        G = construire_graphe(chemin_gpkg)
+        _GRAPH_CACHES[cache_key] = G
+        _GRAPH_STATUS = "ready"
+        print(f"[clusters] Graph cache warmed for {cache_key}.", flush=True)
+    except Exception as e:
+        _GRAPH_STATUS = "error"
+        print(f"[clusters] ERROR warming graph cache: {e}", flush=True)
 
 
 def _calculate_clusters_background():
@@ -165,7 +217,7 @@ def _calculate_clusters_background():
         db.close()
 
 
-def _calculate_clusters(db: Session, persist: bool = True):
+def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional[str] = None):
     """Core logic extracted from the original endpoint. Returns the same result structure."""
     from src.domain.graphe_reseau import construire_graphe, calculer_ordre_topologique
     from src.domain.detecteur_clusters import (
@@ -182,9 +234,18 @@ def _calculate_clusters(db: Session, persist: bool = True):
         tracer_cluster_depuis_exutoire,
     )
 
-    # Reconstruire le graphe
-    _reset_graph_cache()
-    G = _get_graph()
+    # Récupérer le graphe (depuis le cache ou construit pour ce gpkg)
+    G = _get_graph(chemin_gpkg)
+
+    if G is None or G.number_of_nodes() == 0:
+        return {
+            "statut": "ok",
+            "message": "Réseau vide",
+            "clusters_crees": 0,
+            "bassins": [],
+            "resultats": [],
+            "stations_diagnostics": []
+        }
 
     # Un réseau hydraulique exploitable pour un traçage amont doit être
     # acyclique. Les cycles issus des données brutes sont isolés et cassés
@@ -225,9 +286,18 @@ def _calculate_clusters(db: Session, persist: bool = True):
     # 1. Exutoires physiques
     print("[cluster] Identification des exutoires physiques…", flush=True)
     exutoires_physiques = trouver_exutoires_physiques(G)
+    if not exutoires_physiques:
+        exutoires_physiques = trouver_exutoires_physiques(G, inclure_exutoires_implicites=True)
 
     if not exutoires_physiques:
-        raise HTTPException(status_code=400, detail="Aucun exutoire physique identifié.")
+        return {
+            "statut": "ok",
+            "message": "Aucun exutoire ou extrémité identifié.",
+            "clusters_crees": 0,
+            "bassins": [],
+            "resultats": [],
+            "stations_diagnostics": []
+        }
 
     # 2. Composantes orphelines (pour information)
     print("[cluster] Détection des tronçons orphelins…", flush=True)
