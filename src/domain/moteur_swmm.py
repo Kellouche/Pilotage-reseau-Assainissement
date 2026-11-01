@@ -18,7 +18,10 @@ from typing import Dict, Any, Optional, Tuple, List
 import geopandas as gpd
 
 from src.domain.hydrologie import GenerateurHydrologie
-from pyswmm import Simulation
+try:
+    from pyswmm import Simulation
+except ImportError:
+    Simulation = None
 
 logger = logging.getLogger("swmm_platform.moteur_swmm")
 
@@ -308,6 +311,13 @@ class MoteurSWMM:
 
         rpt_path = tmp_inp.replace(".inp", ".rpt")
         out_path = tmp_inp.replace(".inp", ".out")
+
+        if Simulation is None:
+            raise RuntimeError(
+                "Le solveur EPA SWMM 5.2 requiert le package 'pyswmm'. "
+                "Veuillez lancer le serveur avec l'environnement virtuel du projet : "
+                ".venv\\Scripts\\python.exe run_server.py (ou run_api.py)."
+            )
 
         try:
             logger.info("Lancement du moteur EPA SWMM 5.2 via pyswmm sur %s", tmp_inp)
