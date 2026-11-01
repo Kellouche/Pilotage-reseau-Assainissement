@@ -6,18 +6,16 @@ Lancement du serveur FastAPI pour la plateforme SWMM POC.
 
 import os
 import sys
-from pathlib import Path
+
+# Prévention des allocations concurrentes OpenBLAS sous Windows
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OMP_NUM_THREADS"] = "1"
+
 import subprocess
-
-# Auto-redirection vers le virtualenv .venv si exécuté avec le Python système global
-venv_python = Path(__file__).parent / ".venv" / "Scripts" / "python.exe"
-if venv_python.exists() and Path(sys.executable).resolve() != venv_python.resolve():
-    print(f"[Launcher] Environnement virtuel (.venv) détecté. Redirection automatique...")
-    sys.exit(subprocess.call([str(venv_python)] + sys.argv))
-
+import time
 import uvicorn
 from config.settings import API_HOST, API_PORT, API_RELOAD
-import time
 
 def kill_process_on_port(port):
     """Cherche et tue le processus écoutant sur le port donné (Windows)."""

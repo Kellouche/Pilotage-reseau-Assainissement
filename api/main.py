@@ -5,6 +5,12 @@ Configure l'application, les routes, le middleware CORS, etc.
 
 import os
 import sys
+
+# Stabilisation mémoire OpenBLAS / OpenMP sur Windows
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+
 import asyncio
 from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, Request
 from fastapi.middleware.cors import CORSMiddleware
