@@ -128,6 +128,7 @@ class SimulationRunRequest(BaseModel):
     duree_heures: Optional[float] = None
     pas_routage_sec: int = 5
     cluster_id: Optional[int] = None
+    pente_moyenne_pct: Optional[float] = 1.0
 
 
 @router.get("/scenarios")
@@ -181,7 +182,8 @@ def run_native_swmm_simulation(
             gpkg_path=gpkg_path,
             scenario_key=payload.scenario_key,
             duree_heures=payload.duree_heures,
-            pas_routage_sec=payload.pas_routage_sec
+            pas_routage_sec=payload.pas_routage_sec,
+            pente_moyenne_pct=payload.pente_moyenne_pct
         )
         _DERNIERE_SIMULATION = resultat
 
@@ -205,6 +207,9 @@ def run_native_swmm_simulation(
             "download_inp_url": "/api/v1/simulations/download/inp",
             "download_rpt_url": "/api/v1/simulations/download/rpt",
         }
+    except ValueError as ve:
+        logger.warning("Arrêt de la simulation SWMM (altimétrie requise) : %s", ve)
+        raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
         logger.exception("Erreur lors de l'exécution de la simulation SWMM : %s", e)
         raise HTTPException(status_code=500, detail=f"Erreur d'exécution SWMM 5.2 : {str(e)}")

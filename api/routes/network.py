@@ -209,6 +209,122 @@ def create_rejet(
 # GESTION DES PROJETS & CHARGEMENT DE RÉSEAUX (OPTION B)
 # ============================================================
 
+AVAILABLE_DATASETS = [
+    {
+        "id": "epa_example1",
+        "title": "EPA Exemple 1 — Drainage de Site",
+        "badge": "EPA Officiel Certifié",
+        "badge_color": "#10b981",
+        "description": "Modèle standard officiel US EPA 5.2. Drainage pluvial avec cotes altimétriques de radier complètes et calcul des débits gravitaires.",
+        "nodes_count": 7,
+        "pipes_count": 6,
+        "gpkg_path": "data/benchmarks/epa_example1_drainage.gpkg",
+        "is_official": True
+    },
+    {
+        "id": "epa_example3",
+        "title": "EPA Exemple 3 — Réseau Unitaire & Surcharges",
+        "badge": "EPA Officiel Certifié",
+        "badge_color": "#10b981",
+        "description": "Modèle de référence EPA pour l'analyse des surcharges, des écoulements sous pression et des déversoirs d'orage.",
+        "nodes_count": 9,
+        "pipes_count": 8,
+        "gpkg_path": "data/benchmarks/epa_example3_combined.gpkg",
+        "is_official": True
+    },
+    {
+        "id": "demo_temoin",
+        "title": "Quartier Témoin (Démo Pratique)",
+        "badge": "Échantillon Démo",
+        "badge_color": "#0284c7",
+        "description": "Quartier urbain de 59 regards et 58 canalisations. Découpage hydrologique en sous-bassins Voronoï.",
+        "nodes_count": 59,
+        "pipes_count": 58,
+        "gpkg_path": "data/demo_reseau.gpkg",
+        "is_official": False
+    },
+    {
+        "id": "ville_complete",
+        "title": "Réseau Réel Ville (Master Métropole)",
+        "badge": "Réseau Réel Complet",
+        "badge_color": "#8b5cf6",
+        "description": "Patrimoine réel complet de la métropole (+11 000 canalisations et regards, STEP, stations de pompage).",
+        "nodes_count": 11000,
+        "pipes_count": 11000,
+        "gpkg_path": r"D:\IA Water Data Analysis\Assainissement\Assainissement_Ville.gpkg",
+        "is_official": False
+    }
+]
+
+
+@router.get("/datasets")
+def list_available_datasets():
+    """Retourne la liste des jeux de données et modèles de référence disponibles."""
+    return {"status": "ok", "datasets": AVAILABLE_DATASETS}
+
+
+@router.post("/load-dataset/{dataset_id}")
+def load_benchmark_dataset(
+    dataset_id: str,
+    tenant_ctx: TenantContext = Depends(get_tenant_context),
+    db: Session = Depends(get_db)
+):
+    """Charge l'un des jeux de données officiels EPA ou de démonstration."""
+    ds = next((d for d in AVAILABLE_DATASETS if d["id"] == dataset_id), None)
+    if not ds:
+        raise HTTPException(status_code=404, detail="Jeu de données introuvable.")
+
+    target_path = Path(ds["gpkg_path"])
+    if not target_path.exists():
+        raise HTTPException(status_code=500, detail=f"Fichier réseau introuvable : {ds['gpkg_path']}")
+
+    if ds["id"] == "ville_complete" and not (tenant_ctx.user and tenant_ctx.user.is_superadmin):
+        raise HTTPException(status_code=403, detail="Seul un SuperAdmin peut charger le réseau réel complet de la ville.")
+
+    project = db.query(Project).filter(
+        Project.org_id == tenant_ctx.org_id,
+        Project.is_archived.is_(False)
+    ).first()
+
+    if not project:
+        project = Project(
+            org_id=tenant_ctx.org_id,
+            name=ds["title"],
+            description=ds["description"],
+        )
+        db.add(project)
+        db.flush()
+
+    project.name = ds["title"]
+    project.source_gpkg_key = str(target_path)
+    project.nodes_count = ds["nodes_count"]
+    project.pipes_count = ds["pipes_count"]
+    db.commit()
+
+    try:
+        from api.main import reset_layers_cache
+        reset_layers_cache()
+    except Exception:
+        pass
+    try:
+        from api.routes.clusters import _reset_graph_cache
+        _reset_graph_cache()
+    except Exception:
+        pass
+
+    return {
+        "status": "ok",
+        "message": f"Jeu de données '{ds['title']}' chargé avec succès.",
+        "project": {
+            "id": project.id,
+            "name": project.name,
+            "badge": ds["badge"],
+            "nodes_count": project.nodes_count,
+            "pipes_count": project.pipes_count
+        }
+    }
+
+
 @router.post("/load-demo")
 def load_demo_network(
     tenant_ctx: TenantContext = Depends(get_tenant_context),

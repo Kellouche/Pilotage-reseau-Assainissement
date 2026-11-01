@@ -29,6 +29,7 @@ network_map.html
 
 *.gpkg
 !data/demo_reseau.gpkg
+!data/benchmarks/*.gpkg
 !tests/data/golden_dataset/*.gpkg
 *.sqlite
 *.sqlite3
@@ -57,6 +58,7 @@ mobile/.expo/
 swmm_mobile_flutter/build/
 
 output/
+exports/
 .playwright-mcp/
 
 # Windows system files

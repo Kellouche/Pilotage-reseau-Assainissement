@@ -22,6 +22,8 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple, List
 import geopandas as gpd
+import pandas as pd
+import networkx as nx
 
 from src.domain.hydrologie import GenerateurHydrologie
 try:
@@ -30,6 +32,16 @@ except ImportError:
     Simulation = None
 
 logger = logging.getLogger("swmm_platform.moteur_swmm")
+
+
+def _clean_node_id(val: Any) -> str:
+    """Normalise proprement un identifiant de nœud sans planter sur les chaînes de caractères."""
+    if val is None or (isinstance(val, float) and pd.isna(val)):
+        return ""
+    txt = str(val).strip()
+    if txt.endswith(".0"):
+        txt = txt[:-2]
+    return txt
 
 
 SCENARIOS_PLUIE = {
@@ -96,6 +108,116 @@ SCENARIOS_PLUIE = {
 }
 
 
+def _resoudre_altimetrie_noeuds(
+    regards: gpd.GeoDataFrame,
+    canalisations: gpd.GeoDataFrame,
+    rejets: Optional[gpd.GeoDataFrame],
+    outfall_code: str,
+    pente_moyenne_pct: Optional[float] = None
+) -> Tuple[Dict[str, float], str]:
+    """
+    Détermine la cote altimétrique (radier) de chaque nœud du réseau.
+    1. Si des cotes réelles valides existent (PROFRADI, COTTN, COORDZ), elles sont utilisées.
+    2. Sinon, si une pente moyenne est fournie par l'utilisateur (ex: 1.0%),
+       calcule les cotes par propagation topologique amont-aval depuis l'exutoire.
+    3. Sinon, lève une exception bloquante pour empêcher une simulation avec pente nulle.
+    """
+    import networkx as nx
+
+    alt_candidates = ["PROFRADI", "COTTN", "COORDZ", "Z", "cote_tampon", "cote_radier"]
+    col_trouvee = None
+    for c in alt_candidates:
+        if c in regards.columns:
+            non_nulls = pd.to_numeric(regards[c], errors="coerce").dropna()
+            if len(non_nulls) >= len(regards) * 0.5:
+                if (non_nulls.max() - non_nulls.min()) > 0.2:
+                    col_trouvee = c
+                    break
+
+    elevations: Dict[str, float] = {}
+
+    if col_trouvee:
+        for idx, r in regards.iterrows():
+            nid = _clean_node_id(r.get("Code")) or str(idx)
+            val = float(r[col_trouvee]) if pd.notna(r[col_trouvee]) else 100.0
+            if col_trouvee in ("COTTN", "cote_tampon"):
+                prof = float(r["Profondeur"]) if ("Profondeur" in r and pd.notna(r["Profondeur"]) and r["Profondeur"] > 0) else 2.0
+                elevations[nid] = round(val - prof, 3)
+            else:
+                elevations[nid] = round(val, 3)
+
+        # Vérifier si des nœuds dans rejets ont aussi une altimétrie
+        if rejets is not None and len(rejets) > 0:
+            for idx, rj in rejets.iterrows():
+                r_id = _clean_node_id(rj.get("Code") or rj.get("CODE") or rj.get("id") or rj.get("NOM")) or f"REJ_{idx+1}"
+                val = None
+                for ac in [col_trouvee, "PROFRADI", "COTTN", "COORDZ", "Z", "COTETN"]:
+                    if ac and ac in rj and pd.notna(rj[ac]):
+                        try:
+                            val = float(rj[ac])
+                            if ac in ("COTTN", "cote_tampon", "COTETN"):
+                                prof = float(rj.get("Profondeur", 2.0)) if ("Profondeur" in rj and pd.notna(rj["Profondeur"]) and rj["Profondeur"] > 0) else 2.0
+                                val = val - prof
+                            break
+                        except (ValueError, TypeError):
+                            continue
+                if val is not None:
+                    elevations[r_id] = round(val, 3)
+                elif r_id == outfall_code and elevations:
+                    elevations[r_id] = round(min(elevations.values()) - 1.0, 3)
+
+        return elevations, f"Données réelles SIG ({col_trouvee})"
+
+    # Pas de données altimétriques valides dans le SIG
+    if pente_moyenne_pct is None or float(pente_moyenne_pct) <= 0:
+        raise ValueError(
+            "Données altimétriques absentes : Le réseau ne contient aucune cote de radier ou altitude valide (Z/COTTN). "
+            "Pour éviter des calculs hydrodynamiques erronés (surcharges artificielles et débits aberrants causés par une pente nulle), "
+            "veuillez renseigner une pente moyenne (%) dans les paramètres de simulation."
+        )
+
+    pente_fraction = float(pente_moyenne_pct) / 100.0
+    outfall_z = 100.0
+
+    G = nx.Graph()
+    for _, pipe in canalisations.iterrows():
+        u = _clean_node_id(pipe.get("ID_AMONT"))
+        v = _clean_node_id(pipe.get("ID_AVAL"))
+        length = float(pipe["Longeur"]) if ("Longeur" in pipe and pipe["Longeur"] > 0) else float(pipe.geometry.length)
+        if u and v:
+            G.add_edge(u, v, weight=max(1.0, length))
+
+    outfall_geom = None
+    for idx, r in regards.iterrows():
+        nid = _clean_node_id(r.get("Code")) or str(idx)
+        if nid == outfall_code:
+            outfall_geom = r.geometry
+            break
+    if outfall_geom is None and rejets is not None and len(rejets) > 0:
+        for idx, rj in rejets.iterrows():
+            r_id = _clean_node_id(rj.get("Code") or rj.get("CODE") or rj.get("id") or rj.get("NOM"))
+            if r_id == outfall_code:
+                outfall_geom = rj.geometry
+                break
+
+    for idx, r in regards.iterrows():
+        nid = _clean_node_id(r.get("Code")) or str(idx)
+        if nid == outfall_code:
+            elevations[nid] = outfall_z
+        else:
+            try:
+                dist = nx.shortest_path_length(G, source=nid, target=outfall_code, weight="weight")
+            except Exception:
+                if outfall_geom:
+                    dist = float(r.geometry.distance(outfall_geom)) * 1.25
+                else:
+                    dist = 100.0
+            elevations[nid] = round(outfall_z + (dist * pente_fraction), 3)
+
+    elevations[outfall_code] = outfall_z
+    return elevations, f"Pente moyenne utilisateur ({pente_moyenne_pct}%)"
+
+
 class MoteurSWMM:
     """
     Orchestrateur de simulation hydrodynamique EPA SWMM 5.2.
@@ -111,7 +233,8 @@ class MoteurSWMM:
         gpkg_path: Path,
         scenario_key: str = "pluie_decennale",
         duree_heures: Optional[float] = None,
-        pas_routage_sec: int = 5
+        pas_routage_sec: int = 5,
+        pente_moyenne_pct: Optional[float] = None
     ) -> Tuple[str, Dict[str, Any]]:
         """
         Génère l'intégralité du contenu textuel conforme au standard EPA SWMM 5.2 .inp.
@@ -134,15 +257,67 @@ class MoteurSWMM:
         canalisations = gpd.read_file(str(gpkg_path), layer=pipe_layer)
         rejets = gpd.read_file(str(gpkg_path), layer=rejet_layer) if rejet_layer else gpd.GeoDataFrame()
 
+        # Recensement des identifiants des regards et rejets
+        noeuds_regards: Dict[str, Any] = {}
+        for idx, r in regards.iterrows():
+            nid = _clean_node_id(r.get("Code")) or str(idx)
+            noeuds_regards[nid] = r
+
+        noeuds_rejets: Dict[str, Any] = {}
+        if len(rejets) > 0:
+            for idx, rj in rejets.iterrows():
+                r_id = _clean_node_id(rj.get("Code") or rj.get("CODE") or rj.get("id") or rj.get("NOM")) or f"REJ_{idx+1}"
+                noeuds_rejets[r_id] = rj
+
+        # Analyse du graphe des canalisations
+        conduit_nodes = set()
+        upstream_nodes = set()
+        downstream_nodes = set()
+        for idx, c in canalisations.iterrows():
+            u = _clean_node_id(c.get("ID_AMONT"))
+            d = _clean_node_id(c.get("ID_AVAL"))
+            if u:
+                conduit_nodes.add(u)
+                upstream_nodes.add(u)
+            if d:
+                conduit_nodes.add(d)
+                downstream_nodes.add(d)
+
         # Détermination de l'exutoire principal (Outfall)
         outfall_code = None
-        if len(rejets) > 0:
+        # Cas 1 : Un nœud aval de canalisation correspond directement à un exutoire dans la couche rejets
+        for d in downstream_nodes:
+            if d in noeuds_rejets:
+                outfall_code = d
+                break
+
+        # Cas 2 : Un point de rejet existe, associer le nœud aval / sink le plus proche
+        if not outfall_code and len(rejets) > 0:
             outfall_geom = rejets.geometry.iloc[0]
-            distances = regards.geometry.distance(outfall_geom)
-            outfall_idx = distances.idxmin()
-            outfall_code = str(int(regards.loc[outfall_idx, "Code"])) if ("Code" in regards and not regards.isna().loc[outfall_idx, "Code"]) else str(outfall_idx)
-        else:
-            outfall_code = str(int(regards.iloc[-1]["Code"])) if ("Code" in regards and not regards.isna().iloc[-1]["Code"]) else str(len(regards) - 1)
+            sinks = downstream_nodes - upstream_nodes
+            best_sink = None
+            min_dist = float("inf")
+            for s in sinks:
+                geom = noeuds_regards[s].geometry if s in noeuds_regards else None
+                if geom:
+                    d_m = geom.distance(outfall_geom)
+                    if d_m < min_dist:
+                        min_dist = d_m
+                        best_sink = s
+            if best_sink:
+                outfall_code = best_sink
+            else:
+                distances = regards.geometry.distance(outfall_geom)
+                outfall_idx = distances.idxmin()
+                outfall_code = _clean_node_id(regards.loc[outfall_idx, "Code"]) if ("Code" in regards and pd.notna(regards.loc[outfall_idx, "Code"])) else str(outfall_idx)
+
+        # Cas 3 : Ni rejet explicite ni correspondance directe, prendre le sink aval
+        if not outfall_code:
+            sinks = downstream_nodes - upstream_nodes
+            if sinks:
+                outfall_code = list(sinks)[0]
+            else:
+                outfall_code = _clean_node_id(regards.iloc[-1]["Code"]) if ("Code" in regards and pd.notna(regards.iloc[-1]["Code"])) else str(len(regards) - 1)
 
         # Génération des sous-bassins versants Voronoï / Thiessen
         sb_gdf = self.gh.generer_sous_bassins(regards, canalisations)
@@ -214,22 +389,36 @@ class MoteurSWMM:
             lines.extend(swmm_sec[sec_name])
             lines.append("")
 
+        # Résolution altimétrique certifiée
+        node_elevs, source_alt = _resoudre_altimetrie_noeuds(regards, canalisations, rejets, outfall_code, pente_moyenne_pct)
+        outfall_elev = node_elevs.get(outfall_code, 100.0)
+
         # Section regards (Junctions)
         lines.append("[JUNCTIONS]")
         lines.append(";;Name           Elevation  MaxDepth   InitDepth  SurDepth   Aponded")
+        noeuds_traites = set()
         for idx, r in regards.iterrows():
-            nid = str(int(r["Code"])) if ("Code" in r and not r.isna()["Code"]) else str(idx)
-            if nid == outfall_code:
+            nid = _clean_node_id(r.get("Code")) or str(idx)
+            if nid == outfall_code or nid in noeuds_traites:
                 continue
             prof = float(r["Profondeur"]) if ("Profondeur" in r and r["Profondeur"] > 0) else 2.0
-            # Cote radier fixée arbitrairement si non fournie (100.0)
-            lines.append(f"{nid:<16} 100.000    {prof:<10.3f} 0.000      0.000      0.000")
+            z_rad = node_elevs.get(nid, 100.0)
+            lines.append(f"{nid:<16} {z_rad:<10.3f} {prof:<10.3f} 0.000      0.000      0.000")
+            noeuds_traites.add(nid)
+
+        # Inclusion des nœuds de canalisations absents de regards
+        for nid in conduit_nodes:
+            if nid == outfall_code or nid in noeuds_traites:
+                continue
+            z_rad = node_elevs.get(nid, 100.0)
+            lines.append(f"{nid:<16} {z_rad:<10.3f} 2.000      0.000      0.000      0.000")
+            noeuds_traites.add(nid)
         lines.append("")
 
         # Section exutoire (Outfalls)
         lines.append("[OUTFALLS]")
         lines.append(";;Name           Elevation  Type       Stage Data       Gated    Route To")
-        lines.append(f"{outfall_code:<16} 95.000     FREE                        NO")
+        lines.append(f"{outfall_code:<16} {outfall_elev:<10.3f} FREE                        NO")
         lines.append("")
 
         # Section conduites (Conduits)
@@ -240,8 +429,8 @@ class MoteurSWMM:
         xsec_lines = []
         for idx, c in canalisations.iterrows():
             cid = f"C_{idx+1}"
-            u_node = str(int(float(c["ID_AMONT"]))) if ("ID_AMONT" in c and c["ID_AMONT"]) else ""
-            d_node = str(int(float(c["ID_AVAL"]))) if ("ID_AVAL" in c and c["ID_AVAL"]) else ""
+            u_node = _clean_node_id(c.get("ID_AMONT"))
+            d_node = _clean_node_id(c.get("ID_AVAL"))
             length = float(c["Longeur"]) if ("Longeur" in c and c["Longeur"] > 0) else float(c.geometry.length)
             length = max(1.0, round(length, 2))
             rough = 0.013  # Manning béton standard
@@ -262,9 +451,19 @@ class MoteurSWMM:
 
         # Section coordonnées géographiques des regards (Coordinates)
         lines.append("[COORDINATES]")
+        coords_traitees = set()
         for idx, r in regards.iterrows():
-            nid = str(int(r["Code"])) if ("Code" in r and not r.isna()["Code"]) else str(idx)
-            lines.append(f"{nid:<16} {r.geometry.x:<18.3f} {r.geometry.y:<18.3f}")
+            nid = _clean_node_id(r.get("Code")) or str(idx)
+            if nid not in coords_traitees:
+                lines.append(f"{nid:<16} {r.geometry.x:<18.3f} {r.geometry.y:<18.3f}")
+                coords_traitees.add(nid)
+
+        if len(rejets) > 0:
+            for idx, rj in rejets.iterrows():
+                r_id = _clean_node_id(rj.get("Code") or rj.get("CODE") or rj.get("id") or rj.get("NOM")) or f"REJ_{idx+1}"
+                if r_id and r_id not in coords_traitees:
+                    lines.append(f"{r_id:<16} {rj.geometry.x:<18.3f} {rj.geometry.y:<18.3f}")
+                    coords_traitees.add(r_id)
         lines.append("")
 
         # Polygones des sous-bassins
@@ -290,6 +489,8 @@ class MoteurSWMM:
             "conduits_count": len(canalisations),
             "outfall_code": outfall_code,
             "total_area_ha": round(float(sb_gdf["area_ha"].sum()), 2),
+            "source_altimetrique": source_alt,
+            "pente_moyenne_pct": pente_moyenne_pct,
         }
 
         return "\n".join(lines), meta
@@ -299,7 +500,8 @@ class MoteurSWMM:
         gpkg_path: Path,
         scenario_key: str = "pluie_decennale",
         duree_heures: Optional[float] = None,
-        pas_routage_sec: int = 5
+        pas_routage_sec: int = 5,
+        pente_moyenne_pct: Optional[float] = None
     ) -> Dict[str, Any]:
         """
         Exécute la simulation complète avec pyswmm et extrait les KPIs hydrauliques.
@@ -308,7 +510,8 @@ class MoteurSWMM:
             gpkg_path=gpkg_path,
             scenario_key=scenario_key,
             duree_heures=duree_heures,
-            pas_routage_sec=pas_routage_sec
+            pas_routage_sec=pas_routage_sec,
+            pente_moyenne_pct=pente_moyenne_pct
         )
 
         with tempfile.NamedTemporaryFile(suffix=".inp", mode="w", delete=False, encoding="utf-8") as f:

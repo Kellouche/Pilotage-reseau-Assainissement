@@ -13,6 +13,7 @@ import os
 import secrets
 import logging
 from typing import List, Optional
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request, Query
 from sqlalchemy import select, delete
 from sqlalchemy.orm import Session
@@ -442,6 +443,61 @@ def logout(response: Response):
     """Déconnecte l'utilisateur et détruit les cookies de session."""
     _clear_auth_cookies(response)
     return {"status": "ok", "message": "Déconnexion réussie."}
+
+
+class ProfileUpdateRequest(BaseModel):
+    full_name: str
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+@router.patch("/profile")
+def update_user_profile(
+    payload: ProfileUpdateRequest,
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: Session = Depends(get_db)
+):
+    """Met à jour les informations du profil utilisateur connecté."""
+    user = ctx.user
+    if not user:
+        raise HTTPException(status_code=401, detail="Non authentifié.")
+    if not payload.full_name or not payload.full_name.strip():
+        raise HTTPException(status_code=400, detail="Le nom complet ne peut pas être vide.")
+    user.full_name = payload.full_name.strip()
+    db.commit()
+    db.refresh(user)
+    return {
+        "status": "ok",
+        "message": "Profil mis à jour avec succès.",
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "full_name": user.full_name
+        }
+    }
+
+
+@router.post("/change-password")
+def change_user_password(
+    payload: PasswordChangeRequest,
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: Session = Depends(get_db)
+):
+    """Permet à l'utilisateur de modifier son mot de passe de connexion."""
+    user = ctx.user
+    if not user:
+        raise HTTPException(status_code=401, detail="Non authentifié.")
+    from api.core.auth import verify_password, hash_password
+    if not verify_password(payload.current_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Le mot de passe actuel renseigné est incorrect.")
+    if len(payload.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Le nouveau mot de passe doit comporter au moins 8 caractères.")
+    user.password_hash = hash_password(payload.new_password)
+    db.commit()
+    return {"status": "ok", "message": "Votre mot de passe a été modifié avec succès."}
 
 
 @router.get("/me", response_model=UserMeResponse)
