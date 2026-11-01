@@ -411,3 +411,79 @@ async def upload_network_gpkg(
             "name": project.name,
         }
     }
+
+
+# ============================================================
+# HYDROLOGIE & SOUS-BASSINS (SWMM SUBCATCHMENTS)
+# ============================================================
+
+@router.get("/subcatchments")
+def get_network_subcatchments(
+    tenant_ctx: TenantContext = Depends(get_tenant_context),
+    db: Session = Depends(get_db)
+):
+    """
+    Génère et retourne les sous-bassins versants élémentaires (Subcatchments)
+    au format GeoJSON pour le réseau actif du projet.
+    """
+    import json
+    from src.domain.hydrologie import GenerateurHydrologie
+    import geopandas as gpd
+
+    project = db.query(Project).filter(
+        Project.org_id == tenant_ctx.org_id,
+        Project.is_archived.is_(False)
+    ).first()
+
+    if not project or not project.source_gpkg_key:
+        return {
+            "type": "FeatureCollection",
+            "features": [],
+            "total_area_ha": 0.0,
+            "subcatchments_count": 0,
+            "message": "Aucun réseau chargé."
+        }
+
+    gpkg_path = Path(project.source_gpkg_key)
+    if not gpkg_path.exists():
+        raise HTTPException(status_code=404, detail="Fichier GeoPackage du réseau introuvable.")
+
+    try:
+        layers = gpd.list_layers(str(gpkg_path))['name'].tolist()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur lecture couches GPKG: {e}")
+
+    regard_layer = next((l for l in layers if 'regard' in l.lower()), None)
+    pipe_layer = next((l for l in layers if any(k in l.lower() for k in ['canalisat', 'conduit', 'pipe', 'troncon']) and 'désaffect' not in l.lower() and 'desaffect' not in l.lower()), None)
+
+    if not regard_layer:
+        return {
+            "type": "FeatureCollection",
+            "features": [],
+            "total_area_ha": 0.0,
+            "subcatchments_count": 0
+        }
+
+    regards_gdf = gpd.read_file(str(gpkg_path), layer=regard_layer)
+    canalisations_gdf = gpd.read_file(str(gpkg_path), layer=pipe_layer) if pipe_layer else gpd.GeoDataFrame()
+
+    gh = GenerateurHydrologie()
+    subcatchments = gh.generer_sous_bassins(regards_gdf, canalisations_gdf)
+
+    if subcatchments.empty:
+        return {
+            "type": "FeatureCollection",
+            "features": [],
+            "total_area_ha": 0.0,
+            "subcatchments_count": 0
+        }
+
+    sub_wgs84 = subcatchments.to_crs("EPSG:4326") if subcatchments.crs != "EPSG:4326" else subcatchments
+    geojson = json.loads(sub_wgs84.to_json(na="drop"))
+    total_area_ha = round(float(subcatchments['area_ha'].sum()), 4)
+
+    return {
+        **geojson,
+        "total_area_ha": total_area_ha,
+        "subcatchments_count": len(subcatchments)
+    }
