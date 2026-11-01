@@ -1451,27 +1451,62 @@
         };
 
         function conduitPopup(feature, index) {
-            return `<div style="font-family: Arial, sans-serif; font-size: 12px; color: #333;">
-                <b>Conduite ${feature.properties.conduit_id || feature.properties.fid}</b><br>
-                Longueur: ${feature.properties.longueur || 'N/A'} m<br>
-                Diamètre: ${feature.properties.diametre || 'N/A'} mm<br>
-                <button onclick="editConduit(${index})" style="margin-top: 5px; padding: 5px 10px; background: #3498db; color: white; border: none; border-radius: 3px; cursor: pointer;">Modifier</button>
+            const p = feature.properties || {};
+            const uNode = p.ID_AMONT || p.id_amont || p.amont || '';
+            const dNode = p.ID_AVAL || p.id_aval || p.aval || '';
+            const cName = (uNode && dNode) ? `${uNode} ➔ ${dNode}` : (p.conduit_id || p.CODE || p.code || `C_${index + 1}`);
+            const rawLong = p.Longeur !== undefined ? p.Longeur : (p.longueur !== undefined ? p.longueur : p.LONGUEUR);
+            const longTxt = (rawLong !== undefined && rawLong !== null && !isNaN(rawLong)) ? `${parseFloat(rawLong).toFixed(1)} m` : 'N/A';
+            const rawDiam = p.DIAMETRE !== undefined ? p.DIAMETRE : (p.diametre !== undefined ? p.diametre : p.DIAM);
+            const diamTxt = (rawDiam !== undefined && rawDiam !== null && !isNaN(rawDiam)) ? `${parseFloat(rawDiam).toFixed(0)} mm` : '600 mm';
+            const mat = p.MATERIAU || p.materiau || 'Béton';
+
+            return `<div style="font-family: inherit; font-size: 12px; color: #1e293b; min-width: 210px; line-height: 1.4;">
+                <div style="font-weight: 800; font-size: 13px; color: #0284c7; margin-bottom: 5px; display: flex; align-items: center; gap: 5px;">
+                    <i class="fas fa-water"></i> Conduite C_${index + 1}
+                </div>
+                <div style="background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 8px; margin-bottom: 8px; font-size: 11px;">
+                    <div><span style="color: #64748b;">Raccordement :</span> <b style="color: #0369a1;">${cName}</b></div>
+                    <div><span style="color: #64748b;">Diamètre :</span> <b>${diamTxt}</b></div>
+                    <div><span style="color: #64748b;">Longueur :</span> <b>${longTxt}</b></div>
+                    <div><span style="color: #64748b;">Matériau :</span> <b>${mat}</b></div>
+                </div>
+                <button onclick="editConduit(${index})" style="width: 100%; padding: 5px 10px; background: #0284c7; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600;">
+                    <i class="fas fa-edit me-1"></i> Modifier la canalisation
+                </button>
             </div>`;
         }
 
         function regardPopup(feature, index) {
-            return `<div style="font-family: Arial, sans-serif; font-size: 12px; color: #333;">
-                <b>Regard ${feature.properties.code || feature.properties.fid || 'N/A'}</b><br>
-                Type: ${feature.properties.type_regard || 'N/A'}<br>
-                Profondeur: ${feature.properties.profondeur || 'N/A'} m<br>
-                <button onclick="editRegard(${index})" style="margin-top: 5px; padding: 5px 10px; background: #3498db; color: white; border: none; border-radius: 3px; cursor: pointer;">Modifier</button>
+            const p = feature.properties || {};
+            const rCode = String(p.Code !== undefined ? p.Code : (p.code !== undefined ? p.code : (p.CODE !== undefined ? p.CODE : (p.id || p.fid || (index !== undefined ? index + 1 : 'N/A')))));
+            const cleanCode = rCode.endsWith('.0') ? rCode.slice(0, -2) : rCode;
+            const prof = p.Profondeur !== undefined ? p.Profondeur : (p.profondeur !== undefined ? p.profondeur : p.PROFONDEUR);
+            const profTxt = (prof !== undefined && prof !== null && prof !== '' && !isNaN(prof)) ? `${parseFloat(prof).toFixed(2)} m` : 'Non renseignée';
+            const ctn = p.COTTN !== undefined ? p.COTTN : (p.cottn !== undefined ? p.cottn : p.cote_tampon);
+            const ctnTxt = (ctn !== undefined && ctn !== null && ctn !== '' && !isNaN(ctn)) ? `${parseFloat(ctn).toFixed(2)} m` : '--';
+            const typeReg = p.TYPERES || p.type_regard || p.type || 'Standard';
+
+            return `<div style="font-family: inherit; font-size: 12px; color: #1e293b; min-width: 210px; line-height: 1.4;">
+                <div style="font-weight: 800; font-size: 13px; color: #0284c7; margin-bottom: 5px; display: flex; align-items: center; gap: 5px;">
+                    <i class="fas fa-bullseye"></i> Regard N° ${cleanCode}
+                </div>
+                <div style="background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 8px; margin-bottom: 8px; font-size: 11px;">
+                    <div><span style="color: #64748b;">Sous-Bassin drainé :</span> <b style="color: #059669;">SB_${cleanCode}</b></div>
+                    <div><span style="color: #64748b;">Cote Tampon (TN) :</span> <b>${ctnTxt}</b></div>
+                    <div><span style="color: #64748b;">Profondeur :</span> <b>${profTxt}</b></div>
+                    <div><span style="color: #64748b;">Type réseau :</span> <b>${typeReg}</b></div>
+                </div>
+                <button onclick="editRegard(${index})" style="width: 100%; padding: 5px 10px; background: #0284c7; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600;">
+                    <i class="fas fa-edit me-1"></i> Modifier l'ouvrage
+                </button>
             </div>`;
         }
 
         function openEditModal(properties, type) {
             currentEditProperties = properties;
             currentEditType = type;
-            currentEditId = properties.conduit_id || properties.fid || properties.id;
+            currentEditId = properties.conduit_id || properties.fid || properties.id || properties.Code || properties.code;
 
             const title = type === 'conduite' ? 'Modifier Conduite' : `Modifier ${type.charAt(0).toUpperCase() + type.slice(1)}`;
             document.getElementById('modal-title').textContent = title;
@@ -1480,15 +1515,15 @@
             form.innerHTML = '';
 
             if (type === 'conduite') {
-                addField(form, 'longueur', 'Longueur (m)', properties.longueur || properties.LONGUEUR || '');
+                addField(form, 'longueur', 'Longueur (m)', properties.longueur || properties.LONGUEUR || properties.Longeur || '');
                 addField(form, 'diametre', 'Diamètre (mm)', properties.diametre || properties.DIAMETRE || '');
                 addField(form, 'materiau', 'Matériau', properties.materiau || properties.MATERIAU || '');
                 addField(form, 'f_nom', 'Nom', properties.f_nom || properties.NOM || '');
             } else if (type === 'regards') {
-                addField(form, 'code', 'Code', properties.code || '');
-                addField(form, 'type_regard', 'Type', properties.type_regard || '');
-                addField(form, 'diametre', 'Diamètre', properties.diametre || '');
-                addField(form, 'profondeur', 'Profondeur', properties.profondeur || '');
+                addField(form, 'code', 'Code Regard', properties.code || properties.Code || properties.CODE || '');
+                addField(form, 'type_regard', 'Type', properties.type_regard || properties.TYPERES || '');
+                addField(form, 'diametre', 'Diamètre', properties.diametre || properties.DIAMETRES || '');
+                addField(form, 'profondeur', 'Profondeur', properties.profondeur || properties.Profondeur || '');
             } else {
                 addField(form, 'nom', 'Nom', properties.nom || '');
                 addField(form, 'type', 'Type', properties.type || '');
@@ -1872,10 +1907,10 @@
                             const tooltipHtml = `
                                 <div style="font-family: inherit; font-size: 12px; line-height: 1.4;">
                                     <div style="font-weight: 800; color: #059669; margin-bottom: 3px; display: flex; align-items: center; gap: 5px;">
-                                        <i class="fas fa-draw-polygon"></i> ${sId}
+                                        <i class="fas fa-draw-polygon"></i> Sous-Bassin ${sId}
                                     </div>
+                                    <div style="margin-bottom: 3px;"><span style="color: #64748b;">Exutoire récepteur :</span> <b>Regard N° ${outNode}</b></div>
                                     <div>Surface drainée : <b>${aHa} ha</b> (${aM2} m²)</div>
-                                    <div>Exutoire (Regard) : <b>${outNode}</b></div>
                                     <div>Imperméabilisation : <b>${imp} %</b></div>
                                     <div>Pente moyenne : <b>${slope} %</b></div>
                                 </div>

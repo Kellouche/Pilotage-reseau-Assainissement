@@ -48,6 +48,28 @@ Où :
 * $k = 4.0\text{ h}^{-1}$ : Constante de décroissance.
 * Temps de ressuyage complet : $7.0\text{ jours}$.
 
+### 2.3 Système de Codification & Numérotation des Entités (Regards, SB, Tronçons)
+
+Pour garantir une interopérabilité sans faille entre le SIG patrimonial de la ville, le modèle mathématique EPA SWMM 5.2 et les équipes d'exploitation terrain, la codification repose sur des règles strictes :
+
+1. **Regards de visite (Junctions dans SWMM)** :
+   * **Règle** : Les nœuds conservent **exactement leur identifiant patrimonial SIG d'origine** (attribut `Code`, ex. `2653`, `2654`, `6033`, etc.).
+   * **Justification d'ingénierie** : Une renumérotation arbitraire (1, 2, 3...) briserait le lien avec les plans de récolement et les fiches d'inspection télévisée (ITV). L'exploitant intervenant sur la chaussée doit retrouver immédiatement le regard physique n° 2653.
+
+2. **Sous-bassins versants élémentaires (Subcatchments dans SWMM)** :
+   * **Règle** : Chaque sous-bassin porte le préfixe normalisé `SB_` suivi du code du regard qui constitue son exutoire :
+     $$\text{ID}_{\text{Subcatchment}} = \text{"SB\_"} + \text{Code}_{\text{Regard}}$$
+   * **Exemple** : Le sous-bassin versant drainant vers le regard `2653` est nommé **`SB_2653`** avec `Outlet = 2653`.
+   * **Signification de `SB`** : Acronyme universel pour **Sub-Basin / SubCatchment** imposé par la nomenclature EPA SWMM.
+   * **Avantage** : En inspectant n'importe quel polygone vert sur la carte ou dans le rapport `.rpt`, l'ingénieur identifie instantanément l'ouvrage récepteur sans avoir à chercher de table de correspondance.
+
+3. **Canalisations (Conduits dans SWMM)** :
+   * **Règle dans le fichier .inp** : Codification indexée `C_1`, `C_2`, ..., `C_58`.
+   * **Règle dans l'interface et les popups** : Affichage prioritaire du parcours topologique amont-aval : **`ID_AMONT ➔ ID_AVAL`** (ex. `2674 ➔ 2673`), avec diamètre ($mm$) et longueur ($m$).
+
+4. **Exutoire principal (Outfall dans SWMM)** :
+   * Identifié par le code du regard le plus proche géographiquement du point de rejet vers le milieu récepteur.
+
 ---
 
 ## 3. Scénarios Pluviométriques de Sollicitation
