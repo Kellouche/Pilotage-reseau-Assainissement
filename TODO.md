@@ -60,6 +60,17 @@
 - [ ] Capture GPS + photo anomalies
 - [ ] Mode orientation flèche débit
 
+### Phase 7bis — Moteur Hydrodynamique EPA SWMM 5.2 Réel
+
+- [ ] Générateur hydrologique de surface Voronoï/Thiessen (`[SUBCATCHMENTS]`, `%Imperv`, Horton)
+- [ ] Hyétogrammes de pluie de projet Montana / Chicago (`[RAINGAGES]`, `[TIMESERIES]`)
+- [ ] Sollicitations de temps sec (`[DWF]`) avec patterns horaires journaliers
+- [ ] Traduction des singularités (`[WEIRS]`, `[PUMPS]`, `[STORAGE]`, `[OUTFALLS]`)
+- [ ] Intégration du moteur natif compilé `pyswmm` (Saint-Venant 1D / `DYNWAVE`)
+- [ ] Parser binaire `.out` pour extraction des chroniques temporelles ($Q(t), y(t), V(t)$)
+- [ ] Time Slider temporel et animation de l'onde de crue sur la carte Leaflet
+- [ ] Profil en long hydraulique dynamique animé avec ligne piézométrique
+
 ---
 
 ## À faire — Architecture

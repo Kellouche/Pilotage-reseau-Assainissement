@@ -16,14 +16,15 @@
 5. [Phase 0 — Assainissement, documentation & Golden Master de référence](#phase-0--assainissement-documentation--golden-master-de-référence)
 6. [Phase 1 — Authentification, multi-tenant et persistance PostgreSQL/PostGIS](#phase-1--authentification-multi-tenant-et-persistance-postgresqlpostgis)
 7. [Phase 2 — Simulations asynchrones Celery/Redis et stockage d'artefacts S3/MinIO](#phase-2--simulations-asynchrones-celeryredis-et-stockage-dartefacts-s3minio)
-8. [Phase 3 — Produit SaaS : plans, feature gating, console opérateur et licences B2B](#phase-3--produit-saas-plans-feature-gating-console-opérateur-et-licences-b2b)
-9. [Phase 4 — Passerelle mobile et synchronisation terrain déconnectée](#phase-4--passerelle-mobile-et-synchronisation-terrain-déconnectée)
-10. [Phase 5 — API publique et interopérabilité SIG (QGIS / GeoJSON)](#phase-5--api-publique-et-interopérabilité-sig-qgis--geojson)
-11. [Phase 6 — Frontend unifié, cartographie Leaflet et cockpit d'exploitation](#phase-6--frontend-unifié-cartographie-leaflet-et-cockpit-dexploitation)
-12. [Phase 7 — Sécurité continue, industrialisation Docker et conformité](#phase-7--sécurité-continue-industrialisation-docker-et-conformité)
-13. [Planning synthétique et jalons MVP](#planning-synthétique-et-jalons-mvp)
-14. [Risques majeurs et mitigations](#risques-majeurs-et-mitigations)
-15. [Indicateurs de succès (KPIs)](#indicateurs-de-succès-kpis)
+8. [Phase 2bis — Moteur Hydrodynamique & Hydrologique EPA SWMM 5.2 Natif](#phase-2bis--moteur-hydrodynamique--hydrologique-epa-swmm-52-natif)
+9. [Phase 3 — Produit SaaS : plans, feature gating, console opérateur et licences B2B](#phase-3--produit-saas-plans-feature-gating-console-opérateur-et-licences-b2b)
+10. [Phase 4 — Passerelle mobile et synchronisation terrain déconnectée](#phase-4--passerelle-mobile-et-synchronisation-terrain-déconnectée)
+11. [Phase 5 — API publique et interopérabilité SIG (QGIS / GeoJSON)](#phase-5--api-publique-et-interopérabilité-sig-qgis--geojson)
+12. [Phase 6 — Frontend unifié, cartographie Leaflet et cockpit d'exploitation](#phase-6--frontend-unifié-cartographie-leaflet-et-cockpit-dexploitation)
+13. [Phase 7 — Sécurité continue, industrialisation Docker et conformité](#phase-7--sécurité-continue-industrialisation-docker-et-conformité)
+14. [Planning synthétique et jalons MVP](#planning-synthétique-et-jalons-mvp)
+15. [Risques majeurs et mitigations](#risques-majeurs-et-mitigations)
+16. [Indicateurs de succès (KPIs)](#indicateurs-de-succès-kpis)
 - [Annexe A — Inventaire des routes à cloisonner](#annexe-a--inventaire-des-routes-à-cloisonner)
 - [Annexe B — Artefacts de projet et destination cible S3](#annexe-b--artefacts-de-projet-et-destination-cible-s3)
 - [Annexe C — Définition des quotas par plan](#annexe-c--définition-des-quotas-par-plan)
@@ -194,6 +195,23 @@ Les décisions d'architecture sont formalisées dans les fiches ADR dédiées :
 | 2.6 | Endpoints de suivi de tâches et WebSocket | ✅ FAIT | M | `GET /api/v1/jobs/{job_id}`, `GET /api/v1/jobs` et canal WebSocket `/ws/jobs/{job_id}` pour notifier l'interface en temps réel avec isolation stricte 404 (6/6 tests validés). |
 
 > **Jalon Phase 2 [VALIDÉ ✅]** : Aucun calcul long ne bloque le serveur web FastAPI ; les artefacts volumineux sont partitionnés et stockés via ArtifactStore (Local/S3) ; les simulations SWMM et calculs MNT tournent en tâche de fond avec suivi de progression temps réel (42/42 tests au vert).
+
+---
+
+### Phase 2bis — Moteur Hydrodynamique & Hydrologique EPA SWMM 5.2 Natif
+
+> **Objectif** : Passer du template simplifié à l'exécution hydrodynamique complète (Saint-Venant 1D) avec couplage pluie-débit réel, infiltration, singularités d'ouvrages et extraction des résultats temporels.
+
+| Réf | Tâche | Statut | Taille | Livrables / Critères d'acceptation |
+|---|---|---|---|---|
+| 2bis.1 | Générateur hydrologique de surface (`[SUBCATCHMENTS]`, `[SUBAREAS]`, `[INFILTRATION]`) | ⏳ PRÉVU | M | Découpage Voronoï/Thiessen borné au bassin urbain, attribution automatique aux regards (`Outlet`), calcul surface, largeur $W$, pente MNT, $\%Imperv$ et infiltration Horton ($f_0, f_c, k$). |
+| 2bis.2 | Générateur de sollicitations pluvieuses et temps sec (`[RAINGAGES]`, `[TIMESERIES]`, `[DWF]`) | ⏳ PRÉVU | M | Hyétogrammes de Chicago / lois de Montana locales ($T=2, 10, 50\text{ ans}$), ingestion de pluies réelles 5 min, et dotations d'eaux usées avec patterns journaliers. |
+| 2bis.3 | Modélisation des singularités hydrauliques (`[WEIRS]`, `[PUMPS]`, `[STORAGE]`, `[OUTFALLS]`) | ⏳ PRÉVU | M | Traduction dans le `.inp` des déversoirs d'orage, pompes avec courbes caractéristiques $Q(H)$, bâches de stockage et conditions limites d'exutoires (`FREE`, `GATED`, `STAGE`). |
+| 2bis.4 | Intégration du moteur natif EPA SWMM 5.2 via `pyswmm` | ⏳ PRÉVU | L | Résolution hydrodynamique complète (`DYNWAVE`, Saint-Venant 1D) via bindings C embarqués sans dépendance binaire externe, gestion des mises en charge et surcharges (`ALLOW_PONDING`). |
+| 2bis.5 | Décodeur des résultats binaires `.out` et extraction chronologique | ⏳ PRÉVU | M | Extraction des séries temporelles ($Q(t), y(t), V(t)$), identification des nœuds inondés ($V_{\text{flood}}$ en $\text{m}^3$), durées de submersion et bilan de continuité massique ($< 1\,\%$). |
+| 2bis.6 | Cockpit temporel Leaflet & Profils en long dynamiques animés | ⏳ PRÉVU | L | Curseur temporel (Time Slider $0\text{ h} \rightarrow 24\text{ h}$), coloration dynamique des taux de charge ($y/D$), hydrogrammes interactifs Chart.js et profil en long animé avec ligne de charge piézométrique. |
+
+> **Jalon Phase 2bis [CRITÈRE D'ACCEPTATION]** : Une pluie décennale simulée sur le réseau démo ou sur un réseau importé produit des hydrogrammes non nuls, quantifie les volumes de débordement exacts aux regards saturés, valide la conservation de masse ($< 1\,\%$) et s'anime fluidement sur le Time Slider de la carte.
 
 ---
 

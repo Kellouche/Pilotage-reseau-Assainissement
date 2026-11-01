@@ -124,24 +124,37 @@ Livrable :
 
 - Synchronisation auditée et robuste.
 
-## Phase 6 - Simulations SWMM
+## Phase 6 - Simulations SWMM 5.2 Dynamiques
 
-Objectif : passer de la préparation des simulations à l'exécution hydraulique réelle.
+Objectif : passer du simple squelette d'export à l'exécution hydrodynamique complète (Saint-Venant 1D) alimentée par une hydrologie réelle.
 
 Fonctionnalités :
 
-- Génération automatique de fichier `.inp` par bassin.
-- Lancement de simulation SWMM.
-- File de jobs avec statut : pending, running, completed, failed.
-- Lecture des résultats : surcharge, débordement, vitesse, tirant d'eau, conduites critiques.
-- Scénarios de pluie : faible, intense, décennale, centennale, personnalisée.
-- Comparaison avant/après modification.
-- Cartographie des résultats.
-- Rapport PDF par bassin ou scénario.
+- **Couplage Hydrologique Pluie-Débit** :
+  - Découpage automatique des sous-bassins élémentaires (`[SUBCATCHMENTS]`) par polygones de Voronoï/Thiessen bornés au bassin urbain.
+  - Attribution automatique au regard d'injection (`Outlet`), calcul de la surface, de la largeur équivalente $W$ et de la pente MNT.
+  - Modélisation de l'infiltration de surface selon la loi de Horton ($f_0, f_c, k$) et coefficients d'imperméabilisation ($\%Imperv$).
+- **Sollicitations Météorologiques & Eaux Usées** :
+  - Générateur d'hyétogrammes synthétiques (`[RAINGAGES]`, `[TIMESERIES]`) via lois de Montana locales ($T = 2, 10, 50\text{ ans}$) et averses de Chicago.
+  - Ingestion de chroniques de pluie réelles au pas de 5 min.
+  - Débits de temps sec (`[DWF]`) avec coefficients horaires journaliers de pointe.
+- **Ouvrages Spéciaux et Singularités** :
+  - Modélisation des déversoirs d'orage (`[WEIRS]`), pompes de relevage (`[PUMPS]`), bâches de stockage (`[STORAGE]`) et conditions d'exutoires noyés ou libres (`[OUTFALLS]`).
+- **Moteur d'Exécution Natif** :
+  - Intégration de `pyswmm` (solveur C officiel EPA SWMM 5.2 embarqué, sans dépendance à un exécutable externe).
+  - Résolution des équations complètes de Saint-Venant en onde dynamique (`DYNWAVE`), gestion des mises en charge sous pression et surcharges en surface (`ALLOW_PONDING YES`).
+- **Décodage Temporel & Visualisation Cockpit** :
+  - Décodeur binaire du fichier `.out` extrayant les séries temporelles complètes ($Q(t), y(t), V(t)$).
+  - Curseur temporel (Time Slider $0\text{ h} \rightarrow 24\text{ h}$) animant l'onde de crue sur la carte Leaflet.
+  - Coloration dynamique selon le taux de charge ($y/D$) et clignotement des regards inondés.
+  - Hydrogrammes interactifs au clic (Chart.js) et profils en long hydrauliques animés avec ligne de charge piézométrique.
+- **Rapports d'Ingénierie** :
+  - Calcul automatique des volumes inondés ($V_{\text{flood}}$ en $\text{m}^3$), durées de submersion et bilan de continuité massique ($< 1\,\%$).
+  - Export du rapport de simulation certifié en PDF/CSV.
 
 Livrable :
 
-- Moteur d'aide à la décision hydraulique.
+- Moteur d'aide à la décision hydraulique temps réel certifié EPA SWMM 5.2.
 
 ## Phase 7 - Tableau de bord décisionnel
 

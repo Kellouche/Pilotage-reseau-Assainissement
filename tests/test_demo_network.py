@@ -68,3 +68,4 @@ def test_load_demo_and_detect_clusters():
     first_bassin = cdata["resultats"][0]
     assert first_bassin["nb_troncons"] == 58
     assert first_bassin["nb_noeuds"] == 59
+
