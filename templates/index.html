@@ -684,12 +684,21 @@
             if (legEl) L.DomEvent.disableClickPropagation(legEl);
         }, 500);
 
-        // Fonction pour afficher/masquer l'overlay de chargement
+        // Fonction pour afficher/masquer l'overlay de chargement avec timeout de sécurité
         function montrerChargement(afficher) {
             const overlay = document.getElementById('loading-overlay');
+            if (!overlay) return;
             if (afficher) {
                 overlay.style.display = 'flex';
+                if (window._loadingSafetyTimer) clearTimeout(window._loadingSafetyTimer);
+                window._loadingSafetyTimer = setTimeout(() => {
+                    if (overlay && overlay.style.display === 'flex') {
+                        overlay.style.display = 'none';
+                        console.warn('Timeout de sécurité : overlay de chargement masqué automatiquement.');
+                    }
+                }, 7000);
             } else {
+                if (window._loadingSafetyTimer) clearTimeout(window._loadingSafetyTimer);
                 overlay.style.display = 'none';
             }
         }
@@ -1982,8 +1991,6 @@
                 console.warn('Session anonyme:', e);
             }
             if (loadingEl) loadingEl.style.display = 'none';
-            if (guestEl) guestEl.style.display = 'flex';
-        }
             if (guestEl) guestEl.style.display = 'flex';
         }
         window.addEventListener('DOMContentLoaded', initSaaSNavbar);
