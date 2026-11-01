@@ -17,12 +17,14 @@ _is_test = (
     or os.getenv("PYTEST_CURRENT_TEST") is not None
 )
 
-# Fallback SQLite local par défaut en test ou si PG non disponible
+# Bases de données SQLite locales : isolation stricte entre tests et développement
 SQLITE_URL = "sqlite:///./swmm_platform.db"
+TEST_SQLITE_URL = "sqlite:///./test_swmm_platform.db"
 
 if _is_test:
+    # Les tests automatiques utilisent exclusivement la base de test éphémère
     engine = create_engine(
-        SQLITE_URL,
+        TEST_SQLITE_URL,
         echo=False,
         future=True,
         connect_args={"check_same_thread": False}

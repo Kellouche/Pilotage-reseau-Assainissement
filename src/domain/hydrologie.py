@@ -219,3 +219,4 @@ class GenerateurHydrologie:
                     sections["POLYGONS"].append(f"{sb_id:<16} {x:<18.3f} {y:<18.3f}")
 
         return sections
+

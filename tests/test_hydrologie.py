@@ -110,3 +110,4 @@ def test_endpoint_subcatchments_with_demo():
     assert props["area_ha"] > 0
     assert props["f0"] == 75.0
     assert props["fc"] == 10.0
+
