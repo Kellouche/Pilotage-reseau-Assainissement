@@ -7,6 +7,11 @@ spatiale (Voronoï / Thiessen), calcule les paramètres physiques (surface, impe
 largeur hydraulique, pente, infiltration selon Horton) et formate les sections SWMM .inp.
 """
 
+import os
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+
 from typing import Dict, Any, List, Optional
 import math
 import geopandas as gpd

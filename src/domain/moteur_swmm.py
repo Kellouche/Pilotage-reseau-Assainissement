@@ -10,6 +10,12 @@ via pyswmm (Dynamic Wave DYNWAVE), et analyse certifiée des résultats hydrauli
 """
 
 import os
+# Stabilisation critique de la mémoire OpenBLAS / NumPy sous Windows
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 import re
 import tempfile
 import logging

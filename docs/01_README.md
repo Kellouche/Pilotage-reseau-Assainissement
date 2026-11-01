@@ -116,6 +116,7 @@ L'ensemble des documents méthodologiques, architecturaux et stratégiques est c
   - [Glossaire et Garanties Métier (Spécial Non-Informaticien)](14_GLOSSAIRE_ET_GARANTIES.md)
   - [Grille Tarifaire & Définition Métier des Plans](15_PLANS_TARIFAIRES.md)
 - **Architecture & Décisions :**
+  - [Méthodologie & Architecture de Simulation EPA SWMM 5.2](16_METHODOLOGIE_SIMULATION_SWMM.md)
   - [Feuille de Route Complète SaaS (Phases 0 à 7)](13_ROADMAP_SAAS.md)
   - [Documentation Complète des Endpoints API](09_ENDPOINTS_DOCUMENTATION.md)
   - [ADR 0001 — Authentification FastAPI, Argon2id & JWT](adr/0001-authentification-fastapi-argon2-jwt.md)

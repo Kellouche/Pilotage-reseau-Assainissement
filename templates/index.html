@@ -1953,8 +1953,20 @@
                     pas_routage_sec: pasRoutage
                 })
             })
-            .then(r => {
-                if (!r.ok) return r.json().then(e => { throw new Error(e.detail || 'Erreur simulation'); });
+            .then(async r => {
+                if (!r.ok) {
+                    let errMsg = `Erreur ${r.status}`;
+                    try {
+                        const errData = await r.json();
+                        errMsg = errData.detail || errData.message || errMsg;
+                    } catch (_) {
+                        try {
+                            const errText = await r.text();
+                            if (errText) errMsg = errText;
+                        } catch (__) {}
+                    }
+                    throw new Error(errMsg);
+                }
                 return r.json();
             })
             .then(data => {

@@ -87,6 +87,8 @@ L'API de SWMM Platform SaaS expose une architecture RESTful moderne sous le pré
 | `GET` | `/api/v1/networks/{network_id}/nodes` | Récupération des regards/nœuds au format GeoJSON optimisé avec pagination. | `bbox`, `type`, `limit`, `offset` | `200 OK (GeoJSON)` |
 | `GET` | `/api/v1/networks/{network_id}/conduits` | Récupération des conduites/collecteurs au format GeoJSON avec attributs hydrauliques. | `bbox`, `diametre_min`, `limit` | `200 OK (GeoJSON)` |
 | `GET` | `/api/v1/networks/{network_id}/stats` | Statistiques globales : linéaire total (km), répartition par diamètre et matériau. | — | `200 OK` |
+| `GET` | `/api/v1/network/subcatchments` | Découpage et extraction des 59 sous-bassins versants Voronoï au format GeoJSON avec surfaces ($ha$), imperméabilisation, pente et regard exutoire. | — | `200 OK (GeoJSON)` |
+| `POST` | `/api/v1/network/load-demo` | Chargement instantané de l'échantillon réseau témoin (58 conduites, 59 regards, 1 rejet). | — | `200 OK` |
 
 ---
 
@@ -137,7 +139,19 @@ L'API de SWMM Platform SaaS expose une architecture RESTful moderne sous le pré
 ## 9. Simulations Hydrauliques EPA SWMM 5.2 & Jobs Asynchrones
 
 *Préfixes : `/api/v1/simulations` et `/api/v1/jobs`*  
-*Protection : `Depends(get_current_tenant_org)`.*
+*Protection : `Depends(get_tenant_context_optional)` / session active.*
+
+### 9.1 Endpoints du Solveur SWMM 5.2 Natif (DYNWAVE) :
+
+| Méthode | Endpoint | Description | Paramètres / Corps | Statut Succès |
+|---|---|---|---|---|
+| `GET` | `/api/v1/simulations/scenarios` | Liste des scénarios pluviométriques prédéfinis (Montana / Chicago, durées, solver DYNWAVE). | — | `200 OK` |
+| `POST` | `/api/v1/simulations/run` | Exécution de la simulation hydrodynamique native EPA SWMM 5.2 avec Saint-Venant 1D, découpage Voronoï et infiltration Horton. | `scenario_key: str`, `duree_heures: float`, `pas_routage_sec: int` | `200 OK (Synthèse & Cartographies)` |
+| `GET` | `/api/v1/simulations/latest` | Récupération immédiate des résultats et couches thématiques de la dernière simulation (persistance sans recalcul). | — | `200 OK` |
+| `GET` | `/api/v1/simulations/download/inp` | Téléchargement direct du fichier source modèle `.INP` assemblé pour la dernière simulation. | — | `200 OK (INP)` |
+| `GET` | `/api/v1/simulations/download/rpt` | Téléchargement officiel du rapport de calcul complet `.RPT` certifié EPA SWMM. | — | `200 OK (RPT)` |
+
+### 9.2 Endpoints des Tâches Asynchrones & Historique :
 
 | Méthode | Endpoint | Description | Paramètres / Corps | Statut Succès |
 |---|---|---|---|---|
