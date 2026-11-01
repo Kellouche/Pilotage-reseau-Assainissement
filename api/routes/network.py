@@ -11,7 +11,7 @@ from pathlib import Path
 from api.database import get_db
 from api import schemas, crud
 from api.models import Project
-from api.core.security import get_tenant_context, TenantContext
+from api.core.security import get_tenant_context, get_tenant_context_optional, TenantContext
 
 router = APIRouter(prefix="/network", tags=["Réseau"])
 
@@ -419,7 +419,7 @@ async def upload_network_gpkg(
 
 @router.get("/subcatchments")
 def get_network_subcatchments(
-    tenant_ctx: TenantContext = Depends(get_tenant_context),
+    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context_optional),
     db: Session = Depends(get_db)
 ):
     """
@@ -430,23 +430,35 @@ def get_network_subcatchments(
     from src.domain.hydrologie import GenerateurHydrologie
     import geopandas as gpd
 
-    project = db.query(Project).filter(
-        Project.org_id == tenant_ctx.org_id,
-        Project.is_archived.is_(False)
-    ).first()
+    gpkg_path = None
+    if tenant_ctx and tenant_ctx.org_id:
+        project = db.query(Project).filter(
+            Project.org_id == tenant_ctx.org_id,
+            Project.is_archived.is_(False)
+        ).first()
+        if project and project.source_gpkg_key and Path(project.source_gpkg_key).exists():
+            gpkg_path = Path(project.source_gpkg_key)
+        else:
+            return {
+                "type": "FeatureCollection",
+                "features": [],
+                "total_area_ha": 0.0,
+                "subcatchments_count": 0,
+                "message": "Aucun réseau chargé pour ce projet."
+            }
+    else:
+        cand = Path("data/demo_reseau.gpkg")
+        if cand.exists():
+            gpkg_path = cand
 
-    if not project or not project.source_gpkg_key:
+    if not gpkg_path.exists():
         return {
             "type": "FeatureCollection",
             "features": [],
             "total_area_ha": 0.0,
             "subcatchments_count": 0,
-            "message": "Aucun réseau chargé."
+            "message": "Aucun fichier GeoPackage disponible."
         }
-
-    gpkg_path = Path(project.source_gpkg_key)
-    if not gpkg_path.exists():
-        raise HTTPException(status_code=404, detail="Fichier GeoPackage du réseau introuvable.")
 
     try:
         layers = gpd.list_layers(str(gpkg_path))['name'].tolist()

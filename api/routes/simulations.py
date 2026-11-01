@@ -111,6 +111,172 @@ def launch_simulation(
     return sim_obj.to_dict()
 
 
+# ============================================================
+# MOTEUR EPA SWMM 5.2 NATIF & CONFIGURATION (Phase 2bis)
+# Placé AVANT /{simulation_id} pour éviter les conflits de routage Starlette
+# ============================================================
+
+from pathlib import Path
+from fastapi.responses import PlainTextResponse
+from pydantic import BaseModel
+from src.domain.moteur_swmm import MoteurSWMM, SCENARIOS_PLUIE
+
+_DERNIERE_SIMULATION: Dict[str, Any] = {}
+
+class SimulationRunRequest(BaseModel):
+    scenario_key: str = "pluie_decennale"
+    duree_heures: Optional[float] = None
+    pas_routage_sec: int = 5
+    cluster_id: Optional[int] = None
+
+
+@router.get("/scenarios")
+def get_simulation_scenarios():
+    """Retourne les scénarios de pluie et de sollicitation disponibles."""
+    return {
+        "scenarios": [
+            {
+                "key": k,
+                "nom": v["nom"],
+                "duree_heures": v["duree_heures"],
+                "description": v["description"]
+            }
+            for k, v in SCENARIOS_PLUIE.items()
+        ],
+        "default_scenario": "pluie_decennale",
+        "solver": "EPA SWMM 5.2 Dynamic Wave (DYNWAVE)",
+        "infiltration_method": "Horton (f0=75 mm/h, fc=10 mm/h, k=4.0 1/h)",
+    }
+
+
+@router.post("/run")
+def run_native_swmm_simulation(
+    payload: SimulationRunRequest,
+    db: Session = Depends(get_db),
+    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
+):
+    """
+    Exécute la simulation hydrodynamique EPA SWMM 5.2 native pour le réseau actif.
+    Calcule le ruissellement Voronoï, l'infiltration Horton et les équations de Saint-Venant 1D.
+    """
+    global _DERNIERE_SIMULATION
+    from api.models import Project
+
+    # 1. Identifier le fichier réseau GeoPackage du projet actif
+    gpkg_path = Path("data/demo_reseau.gpkg")
+    if tenant and tenant.org_id:
+        proj = db.query(Project).filter(
+            Project.org_id == tenant.org_id,
+            Project.is_archived.is_(False)
+        ).first()
+        if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
+            gpkg_path = Path(proj.source_gpkg_key)
+
+    if not gpkg_path.exists():
+        raise HTTPException(status_code=404, detail="Réseau hydraulique introuvable pour ce projet.")
+
+    moteur = MoteurSWMM()
+    try:
+        resultat = moteur.executer_simulation(
+            gpkg_path=gpkg_path,
+            scenario_key=payload.scenario_key,
+            duree_heures=payload.duree_heures,
+            pas_routage_sec=payload.pas_routage_sec
+        )
+        _DERNIERE_SIMULATION = resultat
+
+        return {
+            "status": "success",
+            "message": "Simulation hydrodynamique SWMM 5.2 exécutée avec succès.",
+            "meta": resultat.get("meta", {}),
+            "kpis": {
+                "routing_continuity_error_pct": resultat.get("routing_continuity_error_pct"),
+                "runoff_continuity_error_pct": resultat.get("runoff_continuity_error_pct"),
+                "total_precipitation_mm": resultat.get("total_precipitation_mm"),
+                "total_outflow_m3": resultat.get("total_outflow_m3"),
+                "peak_outflow_m3s": resultat.get("peak_outflow_m3s"),
+                "flooded_nodes_count": resultat.get("flooded_nodes_count"),
+                "surcharged_nodes_count": resultat.get("surcharged_nodes_count", 0),
+                "flooded_nodes": resultat.get("flooded_nodes", [])[:15],
+                "compliance_continuity": resultat.get("compliance_continuity", True),
+            },
+            "node_results": resultat.get("node_results", {}),
+            "conduit_results": resultat.get("conduit_results", {}),
+            "download_inp_url": "/api/v1/simulations/download/inp",
+            "download_rpt_url": "/api/v1/simulations/download/rpt",
+        }
+    except Exception as e:
+        logger.exception("Erreur lors de l'exécution de la simulation SWMM : %s", e)
+        raise HTTPException(status_code=500, detail=f"Erreur d'exécution SWMM 5.2 : {str(e)}")
+
+
+@router.get("/latest")
+def get_latest_simulation():
+    """
+    Retourne les résultats et cartographies thématiques de la dernière simulation exécutée.
+    Permet à l'utilisateur de ré-afficher les résultats sans devoir recalculer.
+    """
+    global _DERNIERE_SIMULATION
+    if not _DERNIERE_SIMULATION or "node_results" not in _DERNIERE_SIMULATION:
+        try:
+            moteur = MoteurSWMM()
+            _DERNIERE_SIMULATION = moteur.executer_simulation(Path("data/demo_reseau.gpkg"))
+        except Exception:
+            return {"status": "none", "message": "Aucune simulation enregistrée."}
+
+    resultat = _DERNIERE_SIMULATION
+    return {
+        "status": "success",
+        "meta": resultat.get("meta", {}),
+        "kpis": {
+            "routing_continuity_error_pct": resultat.get("routing_continuity_error_pct"),
+            "runoff_continuity_error_pct": resultat.get("runoff_continuity_error_pct"),
+            "total_precipitation_mm": resultat.get("total_precipitation_mm"),
+            "total_outflow_m3": resultat.get("total_outflow_m3"),
+            "peak_outflow_m3s": resultat.get("peak_outflow_m3s"),
+            "flooded_nodes_count": resultat.get("flooded_nodes_count", 0),
+            "surcharged_nodes_count": resultat.get("surcharged_nodes_count", 0),
+            "flooded_nodes": resultat.get("flooded_nodes", [])[:15],
+            "compliance_continuity": resultat.get("compliance_continuity", True),
+        },
+        "node_results": resultat.get("node_results", {}),
+        "conduit_results": resultat.get("conduit_results", {}),
+        "download_inp_url": "/api/v1/simulations/download/inp",
+        "download_rpt_url": "/api/v1/simulations/download/rpt",
+    }
+
+
+
+@router.get("/download/inp")
+def download_latest_inp():
+    """Télécharge le fichier d'entrée (.inp) généré pour la dernière simulation."""
+    content = _DERNIERE_SIMULATION.get("inp_content")
+    if not content:
+        raise HTTPException(status_code=404, detail="Aucun fichier de modèle disponible. Veuillez d'abord exécuter une simulation.")
+    return PlainTextResponse(
+        content,
+        media_type="text/plain",
+        headers={"Content-Disposition": "attachment; filename=modele_swmm_52.inp"}
+    )
+
+
+@router.get("/download/rpt")
+def download_latest_rpt():
+    """Télécharge le rapport officiel (.rpt) généré par la dernière simulation."""
+    content = _DERNIERE_SIMULATION.get("rpt_content")
+    if not content:
+        raise HTTPException(status_code=404, detail="Aucun rapport de simulation disponible. Veuillez d'abord exécuter une simulation.")
+    return PlainTextResponse(
+        content,
+        media_type="text/plain",
+        headers={"Content-Disposition": "attachment; filename=rapport_swmm_52.rpt"}
+    )
+
+
+# ============================================================
+# ROUTES PARAMÉTRÉES /{simulation_id} (Placées à la fin)
+# ============================================================
+
 @router.get("/{simulation_id}", response_model=schemas.SimulationResponse)
 def get_simulation(
     simulation_id: str,
@@ -204,3 +370,5 @@ def cancel_simulation(
     db.commit()
 
     return None
+
+

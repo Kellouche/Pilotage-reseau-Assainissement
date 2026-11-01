@@ -67,11 +67,105 @@
         }
 
         #sidebar {
-            width: 280px;
-            background: #16213e;
+            width: 320px;
+            background: #0f172a;
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
             padding: 16px;
             overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
         }
+
+        .sidebar-section {
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            padding: 12px 14px;
+        }
+
+        .section-title {
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #94a3b8;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            padding-bottom: 6px;
+        }
+
+        .layer-list {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+        }
+
+        .layer-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.84rem;
+            color: #cbd5e1;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .layer-item:hover {
+            color: #f8fafc;
+        }
+
+        .layer-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 2px;
+            display: inline-block;
+            flex-shrink: 0;
+        }
+
+        .badge-pill {
+            font-size: 0.68rem;
+            background: rgba(16, 185, 129, 0.2);
+            color: #34d399;
+            padding: 2px 7px;
+            border-radius: 9999px;
+            font-weight: 700;
+        }
+
+        .cluster-button-primary {
+            background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35);
+            transition: all 0.2s;
+        }
+        .cluster-button-primary:hover {
+            filter: brightness(1.1);
+            transform: translateY(-1px);
+        }
+
+        .cluster-button-outline {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #e2e8f0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .cluster-button-outline:hover {
+            background: rgba(255, 255, 255, 0.12);
+            color: white;
+        }
+
+        .text-sky { color: #38bdf8; }
+        .text-emerald { color: #34d399; }
+        .text-amber { color: #fbbf24; }
+        .text-rose { color: #f43f5e; }
 
         #map {
             flex: 1;
@@ -80,13 +174,13 @@
         .cluster-button {
             display: block;
             width: 100%;
-            padding: 12px;
-            margin-top: 20px;
+            padding: 10px;
+            margin-top: 10px;
             background: #27ae60;
             color: white;
             border: none;
-            border-radius: 4px;
-            font-size: 16px;
+            border-radius: 6px;
+            font-size: 14px;
             cursor: pointer;
         }
         
@@ -100,11 +194,12 @@
         }
         
         #cluster-status {
-            margin-top: 10px;
-            font-size: 0.9em;
-            background: #0f3460;
+            margin-top: 8px;
+            font-size: 0.82em;
+            background: rgba(15, 52, 96, 0.6);
             padding: 8px;
-            border-radius: 4px;
+            border-radius: 6px;
+            border: 1px solid rgba(255,255,255,0.08);
         }
 
         /* Barre d'outils d'édition hydraulique */
@@ -309,27 +404,116 @@
     </div>
     
     <div id="sidebar">
-        <h2>SWMM Platform</h2>
-        <div id="stat-total" style="display:none;">--</div>
-        <div id="mini-stats">Chargement...</div>
-        <div>
-            <input type="checkbox" id="f-conduites" checked><label for="f-conduites">Conduites</label><br>
-            <input type="checkbox" id="f-regards" checked><label for="f-regards">Regards</label><br>
-            <input type="checkbox" id="f-rejets" checked><label for="f-rejets">Exutoires / Rejets</label><br>
-            <input type="checkbox" id="f-stations" checked><label for="f-stations">Stations</label><br>
-            <input type="checkbox" id="f-step" checked><label for="f-step">STEP</label><br>
-            <input type="checkbox" id="f-ouvrages" checked><label for="f-ouvrages">Ouvrages</label><br>
-            <hr style="border: 0.5px solid #eee; margin: 10px 0;">
-            <input type="checkbox" id="f-bassins" disabled><label id="label-bassins" for="f-bassins" style="color: #999;"><b>Bassins Versants</b></label>
+        <!-- En-tête Sidebar -->
+        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;">
+            <div style="font-weight: 800; font-size: 0.95rem; color: #f8fafc; display: flex; align-items: center; gap: 8px;">
+                <i class="fas fa-layer-group" style="color: #38bdf8;"></i> Panneau d'Ingénierie
+            </div>
+            <div id="mini-stats" style="font-size: 0.72rem; color: #94a3b8; background: rgba(255,255,255,0.06); padding: 2px 8px; border-radius: 4px;">Chargement...</div>
         </div>
-        <button class="cluster-button" id="detect-cluster-btn">Détecter les bassins urbains</button>
-        <div id="cluster-status"></div>
+        <div id="stat-total" style="display:none;">--</div>
 
-        <!-- Liste déroulante des bassins (visible après détection) -->
-        <div id="bassin-section">
-            <label for="bassin-select">🗺 Sélectionner un bassin</label>
-            <select id="bassin-select"></select>
-            <div id="bassin-info"></div>
+        <!-- ============================================== -->
+        <!-- VOLET 1 : DONNÉES SIG & RÉSEAU PHYSIQUE       -->
+        <!-- ============================================== -->
+        <div class="sidebar-section">
+            <div class="section-title">
+                <span><i class="fas fa-network-wired text-sky me-1"></i> 1. Réseau Physique</span>
+            </div>
+            <div class="layer-list">
+                <label class="layer-item"><input type="checkbox" id="f-conduites" checked> <span class="layer-indicator" style="background: #38bdf8;"></span> Conduites</label>
+                <label class="layer-item"><input type="checkbox" id="f-regards" checked> <span class="layer-indicator" style="background: #e2e8f0; border-radius: 50%;"></span> Regards de visite</label>
+                <label class="layer-item"><input type="checkbox" id="f-rejets" checked> <span class="layer-indicator" style="background: #ef4444; border-radius: 50%;"></span> Exutoires / Rejets</label>
+                <label class="layer-item"><input type="checkbox" id="f-stations" checked> <span class="layer-indicator" style="background: #f59e0b;"></span> Stations de pompage</label>
+                <label class="layer-item"><input type="checkbox" id="f-step" checked> <span class="layer-indicator" style="background: #10b981;"></span> Station d'épuration (STEP)</label>
+                <label class="layer-item"><input type="checkbox" id="f-ouvrages" checked> <span class="layer-indicator" style="background: #a855f7;"></span> Ouvrages spéciaux</label>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- VOLET 2 : HYDROLOGIE & SECTORISATION SURFACES -->
+        <!-- ============================================== -->
+        <div class="sidebar-section">
+            <div class="section-title">
+                <span><i class="fas fa-draw-polygon text-emerald me-1"></i> 2. Hydrologie &amp; Surfaces</span>
+                <span id="badge-subcatchments-count" class="badge-pill">59 SB</span>
+            </div>
+            <!-- Checkbox Sous-bassins versants Voronoï (Point 1) -->
+            <div class="layer-list" style="margin-bottom: 10px;">
+                <label class="layer-item" style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 6px; padding: 6px 10px;">
+                    <input type="checkbox" id="f-subcatchments" checked onchange="basculerCoucheSousBassins(this.checked)">
+                    <span class="layer-indicator" style="background: #10b981;"></span>
+                    <span style="font-weight: 600; color: #34d399;">Sous-Bassins (Voronoï)</span>
+                </label>
+                <div id="subcatchments-legend" style="font-size: 0.72rem; color: #94a3b8; padding-left: 26px; line-height: 1.3;">
+                    Surfaces drainées élémentaires &bull; Horton ($f_0=75, f_c=10$).
+                </div>
+            </div>
+
+            <!-- Détection et sélection des bassins urbains -->
+            <button class="cluster-button-outline" id="detect-cluster-btn" style="width: 100%; margin-top: 4px; padding: 7px; font-size: 0.8rem;">
+                <i class="fas fa-sitemap me-1"></i> Partitionner bassins urbains
+            </button>
+            <div id="cluster-status" style="display: none;"></div>
+
+            <div id="bassin-section" style="display: none; margin-top: 8px;">
+                <label for="bassin-select" style="font-size: 0.75rem; color: #cbd5e1; margin-bottom: 4px; display: block;">🗺 Bassin sélectionné :</label>
+                <select id="bassin-select" style="width: 100%; font-size: 0.82rem; padding: 6px; background: #0f172a; color: #f8fafc; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;"></select>
+                <div id="bassin-info"></div>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- VOLET 3 : SIMULATION HYDRODYNAMIQUE SWMM 5.2   -->
+        <!-- ============================================== -->
+        <div class="sidebar-section">
+            <div class="section-title">
+                <span><i class="fas fa-bolt text-amber me-1"></i> 3. Simulation SWMM 5.2</span>
+            </div>
+            <button class="cluster-button-primary" id="btn-open-sim-modal" onclick="ouvrirModalSimulation()" style="width: 100%; padding: 10px; font-weight: 700; font-size: 0.88rem; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                <i class="fas fa-play"></i> Configurer &amp; Simuler
+            </button>
+            <small style="display: block; margin-top: 6px; font-size: 0.7rem; color: #64748b; line-height: 1.3;">
+                Résolution Saint-Venant 1D (DYNWAVE), Montana / Chicago.
+            </small>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- VOLET 4 : RÉSULTATS & COUCHES THÉMATIQUES     -->
+        <!-- ============================================== -->
+        <div class="sidebar-section" id="section-results-sidebar" style="display: none;">
+            <div class="section-title">
+                <span><i class="fas fa-chart-line text-rose me-1"></i> 4. Résultats &amp; Surcharges</span>
+                <span id="badge-last-run" class="badge-pill" style="background: rgba(2, 132, 199, 0.2); color: #38bdf8;">Prêt</span>
+            </div>
+
+            <!-- Couches de résultats sur la carte (Point 2) -->
+            <div class="layer-list" style="margin-bottom: 10px;">
+                <label class="layer-item">
+                    <input type="checkbox" id="f-res-regards" checked onchange="basculerCoucheResultatsRegards(this.checked)">
+                    <span class="layer-indicator" style="background: #ef4444; border-radius: 50%;"></span>
+                    <span>Surcharges Regards (Débordements)</span>
+                </label>
+                <label class="layer-item">
+                    <input type="checkbox" id="f-res-conduites" checked onchange="basculerCoucheResultatsConduites(this.checked)">
+                    <span class="layer-indicator" style="background: #f59e0b;"></span>
+                    <span>Taux de Charge Conduites ($Q/Q_{max}$)</span>
+                </label>
+            </div>
+
+            <!-- Légende thématique des conduites -->
+            <div style="background: rgba(0,0,0,0.25); border-radius: 6px; padding: 8px; margin-bottom: 10px; font-size: 0.72rem; line-height: 1.4;">
+                <div style="font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">Taux de Charge $Q/Q_{max}$ :</div>
+                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 2px;"><span style="display:inline-block; width:14px; height:4px; background:#10b981; border-radius:2px;"></span> &lt; 50% (Sain)</div>
+                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 2px;"><span style="display:inline-block; width:14px; height:4px; background:#facc15; border-radius:2px;"></span> 50 - 80% (Modéré)</div>
+                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 2px;"><span style="display:inline-block; width:14px; height:4px; background:#f97316; border-radius:2px;"></span> 80 - 100% (Critique)</div>
+                <div style="display: flex; align-items: center; gap: 6px;"><span style="display:inline-block; width:14px; height:4px; background:#ef4444; border-radius:2px;"></span> &gt; 100% (Sous pression)</div>
+            </div>
+
+            <!-- Consultation permanente (Point 3) -->
+            <button class="cluster-button-outline" onclick="ouvrirModalSimulation()" style="width: 100%; padding: 8px; font-size: 0.82rem; font-weight: 600;">
+                <i class="fas fa-file-invoice me-1"></i> Synthèse KPIs &amp; Téléchargements
+            </button>
         </div>
     </div>
     <!-- Barre d'outils d'édition (déplacée hors de map) -->
@@ -384,7 +568,10 @@
             step: L.layerGroup().addTo(carte),
             ouvrages: L.layerGroup().addTo(carte),
             bassins: L.layerGroup(),
-            incidents: L.layerGroup().addTo(carte)
+            incidents: L.layerGroup().addTo(carte),
+            subcatchments: L.layerGroup().addTo(carte),
+            res_conduites: L.layerGroup().addTo(carte),
+            res_regards: L.layerGroup().addTo(carte)
         };
 
         // Couche pour les clusters détectés
@@ -746,6 +933,7 @@
                 .then(r => r.json())
                 .then(d => {
                     console.log('Données:', d.compteurs);
+                    window._rawNetworkData = d;
                     if (d.project_name) {
                         const lbl = document.getElementById('topbar-project-label');
                         if (lbl) lbl.textContent = d.project_name;
@@ -866,6 +1054,16 @@
                         carte.fitBounds(bounds, { padding: [40, 40], maxZoom: 17 });
                     }
                     
+                    // 1. Charger immédiatement la sectorisation Voronoï (Point 1)
+                    if (typeof chargerEtAfficherSousBassins === 'function') {
+                        chargerEtAfficherSousBassins();
+                    }
+
+                    // 2. Charger et afficher la dernière simulation persistée (Point 3)
+                    if (typeof chargerDerniereSimulation === 'function') {
+                        chargerDerniereSimulation();
+                    }
+
                     // Masquer l'overlay de chargement une fois les données chargées
                     montrerChargement(false);
                 })
@@ -1447,6 +1645,334 @@
         }
         window.addEventListener('DOMContentLoaded', initSaaSNavbar);
 
+        // ==========================================
+        // GESTION COUCHES THÉMATIQUES (POINTS 1 & 2)
+        // ==========================================
+        window.basculerCoucheSousBassins = function(checked) {
+            if (checked) couches.subcatchments.addTo(carte);
+            else carte.removeLayer(couches.subcatchments);
+        };
+
+        window.basculerCoucheResultatsRegards = function(checked) {
+            if (checked) couches.res_regards.addTo(carte);
+            else carte.removeLayer(couches.res_regards);
+        };
+
+        window.basculerCoucheResultatsConduites = function(checked) {
+            if (checked) {
+                couches.res_conduites.addTo(carte);
+                if (carte.hasLayer(couches.conduites)) {
+                    carte.removeLayer(couches.conduites);
+                    const el = document.getElementById('f-conduites');
+                    if (el) el.checked = false;
+                }
+            } else {
+                carte.removeLayer(couches.res_conduites);
+                if (!carte.hasLayer(couches.conduites)) {
+                    couches.conduites.addTo(carte);
+                    const el = document.getElementById('f-conduites');
+                    if (el) el.checked = true;
+                }
+            }
+        };
+
+        // ==========================================
+        // POINT 1 : SECTORISATION SURFACES VORONOÏ
+        // ==========================================
+        window.chargerEtAfficherSousBassins = function() {
+            const token = localStorage.getItem('swmm_access_token');
+            const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+            fetch('/api/v1/network/subcatchments', { headers, credentials: 'include' })
+                .then(r => r.json())
+                .then(fc => {
+                    couches.subcatchments.clearLayers();
+                    if (!fc || !fc.features || fc.features.length === 0) {
+                        return;
+                    }
+                    
+                    const count = fc.subcatchments_count || fc.features.length;
+                    const totArea = (fc.total_area_ha || 0).toFixed(2);
+                    const badge = document.getElementById('badge-subcatchments-count');
+                    if (badge) badge.innerText = `${count} SB (${totArea} ha)`;
+                    const legend = document.getElementById('subcatchments-legend');
+                    if (legend) legend.innerHTML = `Surface drainée : <b>${totArea} ha</b> sur <b>${count} sous-bassins</b> (Horton).`;
+
+                    L.geoJSON(fc, {
+                        style: {
+                            color: '#059669',
+                            weight: 1.5,
+                            opacity: 0.85,
+                            fillColor: '#10b981',
+                            fillOpacity: 0.18,
+                            dashArray: '4, 4'
+                        },
+                        onEachFeature: (feature, layer) => {
+                            const p = feature.properties || {};
+                            const sId = p.subcatchment_id || p.id || 'SB';
+                            const aHa = (p.area_ha || 0).toFixed(3);
+                            const aM2 = (p.area_m2 || 0).toFixed(0);
+                            const outNode = p.outlet || '--';
+                            const imp = (p.imperv_pct || 70).toFixed(0);
+                            const slope = (p.slope_pct || 0.5).toFixed(1);
+
+                            const tooltipHtml = `
+                                <div style="font-family: inherit; font-size: 12px; line-height: 1.4;">
+                                    <div style="font-weight: 800; color: #059669; margin-bottom: 3px; display: flex; align-items: center; gap: 5px;">
+                                        <i class="fas fa-draw-polygon"></i> ${sId}
+                                    </div>
+                                    <div>Surface drainée : <b>${aHa} ha</b> (${aM2} m²)</div>
+                                    <div>Exutoire (Regard) : <b>${outNode}</b></div>
+                                    <div>Imperméabilisation : <b>${imp} %</b></div>
+                                    <div>Pente moyenne : <b>${slope} %</b></div>
+                                </div>
+                            `;
+                            layer.bindTooltip(tooltipHtml, { sticky: true, opacity: 0.95 });
+                            
+                            layer.on('mouseover', function() {
+                                layer.setStyle({ fillOpacity: 0.38, weight: 2.5, color: '#10b981' });
+                            });
+                            layer.on('mouseout', function() {
+                                layer.setStyle({ fillOpacity: 0.18, weight: 1.5, color: '#059669' });
+                            });
+                        }
+                    }).addTo(couches.subcatchments);
+                })
+                .catch(err => console.warn('Erreur chargement sous-bassins:', err));
+        };
+
+        // ==========================================
+        // POINTS 2 & 3 : COUCHES RÉSULTATS SWMM 5.2
+        // ==========================================
+        window.afficherResultatsSimulation = function(data) {
+            if (!data || !data.conduit_results || !data.node_results) return;
+
+            // Afficher le panneau Résultats & Surcharges dans la sidebar
+            const resSec = document.getElementById('section-results-sidebar');
+            if (resSec) resSec.style.display = 'block';
+
+            const badgeLast = document.getElementById('badge-last-run');
+            if (badgeLast) {
+                badgeLast.innerText = 'Calculé (SWMM 5.2)';
+                badgeLast.style.background = 'rgba(16, 185, 129, 0.2)';
+                badgeLast.style.color = '#34d399';
+            }
+
+            // Nettoyer les couches de résultats existantes
+            couches.res_conduites.clearLayers();
+            couches.res_regards.clearLayers();
+
+            const cRes = data.conduit_results;
+            const nRes = data.node_results;
+
+            // 1. Conduites : coloration dynamique selon taux de charge Q/Qmax & remplissage
+            if (window._rawNetworkData && window._rawNetworkData.couches && window._rawNetworkData.couches.conduites) {
+                const pipesGeo = window._rawNetworkData.couches.conduites;
+                L.geoJSON(pipesGeo, {
+                    style: (feature) => {
+                        const idx = pipesGeo.features.indexOf(feature);
+                        const cid = `C_${idx + 1}`;
+                        const r = cRes[cid];
+                        const col = r ? r.color : '#10b981';
+                        const w = (r && r.status !== 'normal') ? 5 : 3.5;
+                        return {
+                            color: col,
+                            weight: w,
+                            opacity: 0.95
+                        };
+                    },
+                    onEachFeature: (feature, layer) => {
+                        const idx = pipesGeo.features.indexOf(feature);
+                        const cid = `C_${idx + 1}`;
+                        const r = cRes[cid];
+                        const p = feature.properties || {};
+                        const diam = p.DIAMETRE || p.diametre || 600;
+
+                        if (r) {
+                            const qPct = (r.flow_ratio * 100).toFixed(0);
+                            const dPct = (r.depth_ratio * 100).toFixed(0);
+                            const popupHtml = `
+                                <div style="font-family: inherit; font-size: 12px; min-width: 220px;">
+                                    <div style="font-weight: 800; font-size: 13px; color: ${r.color}; margin-bottom: 6px;">
+                                        <i class="fas fa-water me-1"></i> Conduite ${cid} — ${r.label}
+                                    </div>
+                                    <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+                                        <tr><td style="color:#64748b; padding:2px 0;">Taux de charge Q/Qmax :</td><td style="font-weight:700; text-align:right; color:${r.color};">${qPct} %</td></tr>
+                                        <tr><td style="color:#64748b; padding:2px 0;">Remplissage H/D :</td><td style="font-weight:700; text-align:right;">${dPct} %</td></tr>
+                                        <tr><td style="color:#64748b; padding:2px 0;">Débit de pointe :</td><td style="font-weight:700; text-align:right;">${(r.max_flow_cms || 0).toFixed(3)} m³/s</td></tr>
+                                        <tr><td style="color:#64748b; padding:2px 0;">Vitesse maximale :</td><td style="font-weight:700; text-align:right;">${(r.max_velocity_ms || 0).toFixed(2)} m/s</td></tr>
+                                        <tr><td style="color:#64748b; padding:2px 0;">Diamètre :</td><td style="font-weight:700; text-align:right;">${diam} mm</td></tr>
+                                    </table>
+                                </div>
+                            `;
+                            layer.bindPopup(popupHtml);
+                            layer.bindTooltip(`<b>${cid}</b> : Q/Qmax = <b>${qPct}%</b> (${r.label})`, { sticky: true });
+                        }
+                    }
+                }).addTo(couches.res_conduites);
+
+                // Basculer la visualisation : désactiver le calque physique brut pour mettre en avant les couleurs SWMM
+                if (carte.hasLayer(couches.conduites)) {
+                    carte.removeLayer(couches.conduites);
+                    const el = document.getElementById('f-conduites');
+                    if (el) el.checked = false;
+                }
+            }
+
+            // 2. Regards : surcharges hydrauliques (orange) et débordements en surface (rouge)
+            if (window._rawNetworkData && window._rawNetworkData.couches && window._rawNetworkData.couches.regards) {
+                const nodesGeo = window._rawNetworkData.couches.regards;
+                L.geoJSON(nodesGeo, {
+                    filter: (feature) => {
+                        const p = feature.properties || {};
+                        const nid = String(p.Code || p.code || p.CODE || p.id || '');
+                        const r = nRes[nid];
+                        return r && (r.status === 'flooded' || r.status === 'surcharged');
+                    },
+                    pointToLayer: (feature, latlng) => {
+                        const p = feature.properties || {};
+                        const nid = String(p.Code || p.code || p.CODE || p.id || '');
+                        const r = nRes[nid];
+                        const isFlooded = (r && r.status === 'flooded');
+
+                        return L.circleMarker(latlng, {
+                            radius: isFlooded ? 9 : 7,
+                            color: isFlooded ? '#991b1b' : '#c2410c',
+                            fillColor: isFlooded ? '#ef4444' : '#f97316',
+                            weight: 2,
+                            opacity: 1,
+                            fillOpacity: 0.9
+                        });
+                    },
+                    onEachFeature: (feature, layer) => {
+                        const p = feature.properties || {};
+                        const nid = String(p.Code || p.code || p.CODE || p.id || '');
+                        const r = nRes[nid];
+                        if (!r) return;
+
+                        const isFlooded = (r.status === 'flooded');
+                        const headerColor = isFlooded ? '#ef4444' : '#f97316';
+                        const title = isFlooded ? '🚨 DÉBORDEMENT EN SURFACE (INONDATION)' : '⚠️ MISE EN CHARGE HYDRAULIQUE';
+
+                        const popupHtml = `
+                            <div style="font-family: inherit; font-size: 12px; min-width: 220px;">
+                                <div style="font-weight: 800; font-size: 13px; color: ${headerColor}; margin-bottom: 6px;">
+                                    ${title}
+                                </div>
+                                <div style="margin-bottom: 4px;">Regard de visite : <b>${nid}</b></div>
+                                <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+                                    <tr><td style="color:#64748b; padding:2px 0;">Mise en charge :</td><td style="font-weight:700; text-align:right;">${(r.hours_surcharged || 0).toFixed(2)} h</td></tr>
+                                    ${isFlooded ? `
+                                        <tr><td style="color:#64748b; padding:2px 0;">Durée débordement :</td><td style="font-weight:700; text-align:right; color:#ef4444;">${(r.hours_flooded || 0).toFixed(2)} h</td></tr>
+                                        <tr><td style="color:#64748b; padding:2px 0;">Débit de crête débordé :</td><td style="font-weight:700; text-align:right; color:#ef4444;">${(r.peak_flood_flow_cms || 0).toFixed(3)} m³/s</td></tr>
+                                        <tr><td style="color:#64748b; padding:2px 0;">Volume total inondé :</td><td style="font-weight:700; text-align:right; color:#ef4444;">${(r.flood_volume_m3 || 0).toFixed(1)} m³</td></tr>
+                                    ` : ''}
+                                </table>
+                            </div>
+                        `;
+                        layer.bindPopup(popupHtml);
+                        layer.bindTooltip(`<b>${isFlooded ? '🚨 Débordement' : '⚠️ Surcharge'} : ${nid}</b>`, { sticky: true });
+                    }
+                }).addTo(couches.res_regards);
+            }
+
+            // 3. Mettre à jour les indicateurs KPIs dans la modale
+            if (data.kpis) {
+                const k = data.kpis;
+                const errVal = k.routing_continuity_error_pct || 0;
+                const contEl = document.getElementById('kpi-continuity');
+                if (contEl) contEl.innerText = (errVal > 0 ? '+' : '') + errVal.toFixed(2) + ' %';
+                const peakEl = document.getElementById('kpi-peak-outflow');
+                if (peakEl) peakEl.innerText = (k.peak_outflow_m3s || 0).toFixed(3) + ' m³/s';
+                const floodEl = document.getElementById('kpi-flooded-count');
+                if (floodEl) floodEl.innerText = `${k.flooded_nodes_count || 0} (${k.surcharged_nodes_count || 0} en charge)`;
+                const sbEl = document.getElementById('kpi-subcatchments');
+                if (sbEl) sbEl.innerText = (data.meta && data.meta.subcatchments_count) ? data.meta.subcatchments_count : 59;
+            }
+
+            const resultsCard = document.getElementById('sim-results-card');
+            if (resultsCard) resultsCard.style.display = 'block';
+        };
+
+        // ==========================================
+        // POINT 3 : PERSISTANCE & RE-AFFICHAGE SANS RECALCUL
+        // ==========================================
+        window.chargerDerniereSimulation = function() {
+            const token = localStorage.getItem('swmm_access_token');
+            const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+            fetch('/api/v1/simulations/latest', { headers, credentials: 'include' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data && data.status === 'success' && data.conduit_results) {
+                        afficherResultatsSimulation(data);
+                    }
+                })
+                .catch(e => console.warn('Simulation précédente indisponible:', e));
+        };
+
+        // ==========================================
+        // MODALE DE SIMULATION & DÉCLENCHEMENT SWMM
+        // ==========================================
+        window.ouvrirModalSimulation = function() {
+            const m = document.getElementById('modal-simulation');
+            if (m) m.style.display = 'flex';
+        };
+
+        window.fermerModalSimulation = function() {
+            const m = document.getElementById('modal-simulation');
+            if (m) m.style.display = 'none';
+        };
+
+        window.declencherSimulationSWMM = function() {
+            const scen = document.getElementById('sim-select-scenario').value;
+            const duree = parseFloat(document.getElementById('sim-select-duree').value);
+            const pasRoutage = parseInt(document.getElementById('sim-select-step').value);
+
+            const btn = document.getElementById('btn-run-sim-action');
+            const statusDiv = document.getElementById('sim-status-message');
+            const resultsCard = document.getElementById('sim-results-card');
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-circle-notch fa-spin me-2"></i> Calcul Saint-Venant en cours...';
+            statusDiv.style.display = 'block';
+            statusDiv.innerHTML = '⚡ <b>Résolution hydrodynamique EPA SWMM 5.2 en cours...</b><br><small style="color: #94a3b8;">Génération .inp &bull; Équations 1D DYNWAVE &bull; Infiltration Horton</small>';
+            resultsCard.style.display = 'none';
+
+            const token = localStorage.getItem('swmm_access_token');
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            fetch('/api/v1/simulations/run', {
+                method: 'POST',
+                headers: headers,
+                credentials: 'include',
+                body: JSON.stringify({
+                    scenario_key: scen,
+                    duree_heures: duree,
+                    pas_routage_sec: pasRoutage
+                })
+            })
+            .then(r => {
+                if (!r.ok) return r.json().then(e => { throw new Error(e.detail || 'Erreur simulation'); });
+                return r.json();
+            })
+            .then(data => {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-redo me-2"></i> Relancer la simulation';
+                statusDiv.style.display = 'none';
+                
+                // Mettre à jour et afficher les couches thématiques Leaflet
+                afficherResultatsSimulation(data);
+            })
+            .catch(err => {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-play me-2"></i> Lancer la Simulation SWMM 5.2';
+                statusDiv.style.display = 'block';
+                statusDiv.innerHTML = `<span style="color: #ef4444;"><i class="fas fa-exclamation-triangle me-1"></i> Erreur : ${err.message}</span>`;
+            });
+        };
+
     </script>
 
     <!-- Modal d'accueil & Gestion de Projet Réseau (Option B) -->
@@ -1536,6 +2062,122 @@
                     <button onclick="reinitialiserProjetVierge()" style="background: transparent; border: 1px solid #64748b; color: #94a3b8; font-size: 0.78rem; padding: 5px 12px; border-radius: 6px; cursor: pointer;">
                         <i class="fas fa-trash-alt me-1"></i> Réinitialiser vers un espace vierge
                     </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Configuration & Exécution SWMM 5.2 -->
+    <div id="modal-simulation" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(6px); z-index: 3000; align-items: center; justify-content: center;">
+        <div style="background: #1e293b; color: #f8fafc; border-radius: 16px; width: 92%; max-width: 680px; max-height: 90vh; display: flex; flex-direction: column; border: 1px solid rgba(255, 255, 255, 0.15); box-shadow: 0 25px 50px rgba(0, 0, 0, 0.6); overflow: hidden;">
+            <!-- Entête -->
+            <div style="background: #0f172a; padding: 18px 24px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="width: 38px; height: 38px; border-radius: 10px; background: linear-gradient(135deg, #0284c7, #0369a1); display: flex; align-items: center; justify-content: center; font-size: 18px; color: white;">
+                        <i class="fas fa-bolt"></i>
+                    </div>
+                    <div>
+                        <h5 style="margin: 0; font-weight: 700; font-size: 1.05rem;">Simulation Hydrodynamique EPA SWMM 5.2</h5>
+                        <small style="color: #94a3b8;">Résolution Saint-Venant 1D (DYNWAVE) &amp; Hydrologie Horton</small>
+                    </div>
+                </div>
+                <button onclick="fermerModalSimulation()" style="background: transparent; border: none; color: #94a3b8; font-size: 24px; cursor: pointer; line-height: 1;">&times;</button>
+            </div>
+
+            <!-- Corps scrollable -->
+            <div style="padding: 22px 24px; overflow-y: auto; flex: 1;">
+                <!-- Choix Scénario -->
+                <div style="margin-bottom: 16px;">
+                    <label style="font-size: 0.82rem; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 6px;">
+                        <i class="fas fa-cloud-showers-heavy me-1" style="color: #38bdf8;"></i> Scénario Pluviométrique
+                    </label>
+                    <select id="sim-select-scenario" style="width: 100%; padding: 10px 12px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #f8fafc; font-size: 0.88rem;">
+                        <option value="pluie_decennale">🌧 Pluie Décennale (T = 10 ans) — Montana / Chicago (Pic 92 mm/h)</option>
+                        <option value="pluie_cinquantennale">⛈ Pluie Cinquantennale (T = 50 ans) — Crise Majeure (Pic 145 mm/h)</option>
+                        <option value="pluie_orage_2h">⚡ Orage d'Été Brutal (2h — Pic 110 mm/h)</option>
+                        <option value="temps_sec_pur">☀️ Temps Sec Pur (Étiage / Eaux Usées sans pluie)</option>
+                    </select>
+                </div>
+
+                <!-- Paramètres en grille -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px;">
+                    <div>
+                        <label style="font-size: 0.82rem; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 6px;">
+                            <i class="fas fa-clock me-1" style="color: #38bdf8;"></i> Durée de Calcul
+                        </label>
+                        <select id="sim-select-duree" style="width: 100%; padding: 10px 12px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #f8fafc; font-size: 0.88rem;">
+                            <option value="4.0" selected>4 heures (Événement &amp; Ressuyage)</option>
+                            <option value="2.0">2 heures (Court)</option>
+                            <option value="6.0">6 heures</option>
+                            <option value="12.0">12 heures</option>
+                            <option value="24.0">24 heures (Cycle journalier complet)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size: 0.82rem; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 6px;">
+                            <i class="fas fa-tachometer-alt me-1" style="color: #38bdf8;"></i> Pas de Routage (DYNWAVE)
+                        </label>
+                        <select id="sim-select-step" style="width: 100%; padding: 10px 12px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #f8fafc; font-size: 0.88rem;">
+                            <option value="5" selected>5 secondes (Stabilité optimale Saint-Venant)</option>
+                            <option value="1">1 seconde (Haute précision)</option>
+                            <option value="10">10 secondes (Rapide)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Résumé du modèle -->
+                <div style="background: rgba(2, 132, 199, 0.08); border: 1px solid rgba(2, 132, 199, 0.25); border-radius: 10px; padding: 12px 16px; margin-bottom: 20px; font-size: 0.82rem; color: #94a3b8; line-height: 1.5;">
+                    <strong style="color: #38bdf8;">Configuration appliquée :</strong> Résolution complète Saint-Venant 1D (Dynamic Wave) &bull; Découpage surfacique en <b>59 sous-bassins versants Voronoï</b> &bull; Infiltration d'eau selon <b>Horton</b> ($f_0=75, f_c=10\text{ mm/h}$) &bull; Unités métriques CMS.
+                </div>
+
+                <!-- Bouton d'action -->
+                <button id="btn-run-sim-action" onclick="declencherSimulationSWMM()" style="width: 100%; padding: 12px; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: white; border: none; border-radius: 10px; font-weight: 700; font-size: 0.95rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4);">
+                    <i class="fas fa-play"></i> Lancer la Simulation SWMM 5.2
+                </button>
+
+                <!-- Zone d'état / progression -->
+                <div id="sim-status-message" style="display: none; margin-top: 16px; padding: 12px; background: rgba(255,255,255,0.05); border-radius: 8px; text-align: center; font-size: 0.85rem;"></div>
+
+                <!-- Zone de résultats (affichée après calcul) -->
+                <div id="sim-results-card" style="display: none; margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 18px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                        <span style="font-weight: 700; color: #34d399; font-size: 0.95rem;">
+                            <i class="fas fa-check-circle me-1"></i> Synthèse Hydrodynamique (Solveur EPA)
+                        </span>
+                        <span style="font-size: 0.75rem; background: rgba(52, 211, 153, 0.15); color: #34d399; padding: 2px 8px; border-radius: 4px; font-weight: 600;">
+                            CONFORME
+                        </span>
+                    </div>
+
+                    <!-- Cartouches KPIs -->
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px;">
+                        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; text-align: center;">
+                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">Bilan Continuité</div>
+                            <div id="kpi-continuity" style="font-size: 1.05rem; font-weight: 800; color: #38bdf8;">--</div>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; text-align: center;">
+                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">Pointe Exutoire</div>
+                            <div id="kpi-peak-outflow" style="font-size: 1.05rem; font-weight: 800; color: #34d399;">--</div>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; text-align: center;">
+                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">Regards en Charge</div>
+                            <div id="kpi-flooded-count" style="font-size: 1.05rem; font-weight: 800; color: #f87171;">--</div>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; text-align: center;">
+                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">Sous-Bassins</div>
+                            <div id="kpi-subcatchments" style="font-size: 1.05rem; font-weight: 800; color: #facc15;">--</div>
+                        </div>
+                    </div>
+
+                    <!-- Téléchargements d'artefacts certifiés -->
+                    <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                        <a id="btn-download-inp" href="/api/v1/simulations/download/inp" target="_blank" style="padding: 6px 12px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); color: #e2e8f0; border-radius: 6px; font-size: 0.78rem; text-decoration: none; display: flex; align-items: center; gap: 6px;">
+                            <i class="fas fa-file-code"></i> Fichier .INP
+                        </a>
+                        <a id="btn-download-rpt" href="/api/v1/simulations/download/rpt" target="_blank" style="padding: 6px 12px; background: rgba(2, 132, 199, 0.2); border: 1px solid #0284c7; color: #38bdf8; border-radius: 6px; font-size: 0.78rem; text-decoration: none; display: flex; align-items: center; gap: 6px;">
+                            <i class="fas fa-file-alt"></i> Rapport .RPT
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
