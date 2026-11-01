@@ -422,6 +422,7 @@
             </div>
             <div class="layer-list">
                 <label class="layer-item"><input type="checkbox" id="f-conduites" checked> <span class="layer-indicator" style="background: #38bdf8;"></span> Conduites</label>
+                <label class="layer-item"><input type="checkbox" id="f-sens-ecoulement" onchange="basculerSensEcoulement(this.checked)"> <span class="layer-indicator" style="background: transparent; color: #38bdf8; font-weight: bold; font-size: 11px; display: inline-flex; align-items: center; justify-content: center;">➤</span> Sens d'écoulement</label>
                 <label class="layer-item"><input type="checkbox" id="f-regards" checked> <span class="layer-indicator" style="background: #e2e8f0; border-radius: 50%;"></span> Regards de visite</label>
                 <label class="layer-item"><input type="checkbox" id="f-rejets" checked> <span class="layer-indicator" style="background: #ef4444; border-radius: 50%;"></span> Exutoires / Rejets</label>
                 <label class="layer-item"><input type="checkbox" id="f-stations" checked> <span class="layer-indicator" style="background: #f59e0b;"></span> Stations de pompage</label>
@@ -499,6 +500,11 @@
                     <span class="layer-indicator" style="background: #f59e0b;"></span>
                     <span>Taux de Charge Conduites ($Q/Q_{max}$)</span>
                 </label>
+                <label class="layer-item">
+                    <input type="checkbox" id="f-res-sens-ecoulement" onchange="basculerSensEcoulement(this.checked)">
+                    <span class="layer-indicator" style="background: transparent; color: #38bdf8; font-weight: bold; font-size: 11px; display: inline-flex; align-items: center; justify-content: center;">➤</span>
+                    <span>Sens d'écoulement (Amont ➔ Aval)</span>
+                </label>
             </div>
 
             <!-- Légende thématique des conduites -->
@@ -571,7 +577,8 @@
             incidents: L.layerGroup().addTo(carte),
             subcatchments: L.layerGroup().addTo(carte),
             res_conduites: L.layerGroup().addTo(carte),
-            res_regards: L.layerGroup().addTo(carte)
+            res_regards: L.layerGroup().addTo(carte),
+            sens_ecoulement: L.layerGroup()
         };
 
         // Couche pour les clusters détectés
@@ -591,6 +598,65 @@
                 };
             }
         });
+
+        // ==========================================
+        // LÉGENDE INTERACTIVE CARTE SWMM 5.2 (POINT 1)
+        // ==========================================
+        let simulationLegendControl = L.control({ position: 'bottomright' });
+
+        simulationLegendControl.onAdd = function(map) {
+            const div = L.DomUtil.create('div', 'sim-legend-container');
+            div.id = 'sim-floating-legend';
+            div.innerHTML = `
+                <div style="background: rgba(15, 23, 42, 0.92); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 10px; padding: 10px 14px; color: #f8fafc; font-family: inherit; font-size: 11px; width: 235px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+                    <div style="display: flex; align-items: center; justify-content: space-between; font-weight: 800; font-size: 11.5px; color: #38bdf8; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; margin-bottom: 8px;">
+                        <span><i class="fas fa-layer-group me-1"></i> Légende SWMM 5.2</span>
+                        <button onclick="basculerAffichageLegende(event)" id="btn-toggle-legend" style="background: transparent; border: none; color: #94a3b8; cursor: pointer; font-size: 12px; font-weight: bold; padding: 0 4px;" title="Réduire / Agrandir">—</button>
+                    </div>
+                    <div id="sim-legend-body">
+                        <!-- Taux de charge conduites -->
+                        <div style="font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">Charge Conduites (Q / Qmax) :</div>
+                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 2px;"><span style="display:inline-block; width:14px; height:4px; background:#10b981; border-radius:2px;"></span> &lt; 50% (Sain / Libre)</div>
+                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 2px;"><span style="display:inline-block; width:14px; height:4px; background:#facc15; border-radius:2px;"></span> 50 - 80% (Modéré)</div>
+                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 2px;"><span style="display:inline-block; width:14px; height:4px; background:#f97316; border-radius:2px;"></span> 80 - 100% (Critique)</div>
+                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 8px;"><span style="display:inline-block; width:14px; height:4px; background:#ef4444; border-radius:2px;"></span> &gt; 100% (Sous pression)</div>
+
+                        <!-- Comportement des Regards -->
+                        <div style="font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">Regards de Visite :</div>
+                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 2px;"><span style="display:inline-block; width:10px; height:10px; background:#f97316; border-radius:50%; border:1px solid #c2410c;"></span> Surcharge (dans cheminée)</div>
+                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 8px;"><span style="display:inline-block; width:12px; height:12px; background:#ef4444; border-radius:50%; border:2px solid #991b1b;"></span> Débordement (au sol)</div>
+
+                        <!-- Hydrologie & Sens d'écoulement -->
+                        <div style="font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">Hydrologie &amp; Écoulement :</div>
+                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 2px;"><span style="display:inline-block; width:14px; height:10px; background:rgba(16,185,129,0.25); border:1px dashed #059669; border-radius:2px;"></span> Sous-Bassin Voronoï (ha)</div>
+                        <div style="display: flex; align-items: center; gap: 7px;"><span style="color:#38bdf8; font-weight:bold; font-size:12px;">➤</span> Sens d'écoulement (Amont ➔ Aval)</div>
+                    </div>
+                </div>
+            `;
+            return div;
+        };
+
+        simulationLegendControl.addTo(carte);
+
+        window.basculerAffichageLegende = function(e) {
+            if (e) e.stopPropagation();
+            const body = document.getElementById('sim-legend-body');
+            const btn = document.getElementById('btn-toggle-legend');
+            if (body && btn) {
+                if (body.style.display === 'none') {
+                    body.style.display = 'block';
+                    btn.innerText = '—';
+                } else {
+                    body.style.display = 'none';
+                    btn.innerText = '+';
+                }
+            }
+        };
+
+        setTimeout(() => {
+            const legEl = document.getElementById('sim-floating-legend');
+            if (legEl) L.DomEvent.disableClickPropagation(legEl);
+        }, 500);
 
         // Fonction pour afficher/masquer l'overlay de chargement
         function montrerChargement(afficher) {
@@ -1674,6 +1740,93 @@
                     if (el) el.checked = true;
                 }
             }
+        };
+
+        // ==========================================
+        // POINT 3 : SENS D'ÉCOULEMENT DISCRET (AMONT ➔ AVAL)
+        // ==========================================
+        window.basculerSensEcoulement = function(checked) {
+            const el1 = document.getElementById('f-sens-ecoulement');
+            const el2 = document.getElementById('f-res-sens-ecoulement');
+            if (el1) el1.checked = checked;
+            if (el2) el2.checked = checked;
+
+            if (checked) {
+                if (couches.sens_ecoulement.getLayers().length === 0) {
+                    genererFlechesSensEcoulement();
+                }
+                couches.sens_ecoulement.addTo(carte);
+            } else {
+                carte.removeLayer(couches.sens_ecoulement);
+            }
+        };
+
+        window.genererFlechesSensEcoulement = function() {
+            couches.sens_ecoulement.clearLayers();
+            if (!window._rawNetworkData || !window._rawNetworkData.couches || !window._rawNetworkData.couches.conduites) return;
+
+            // Indexer les coordonnées exactes des regards pour orientation infaillible Amont -> Aval
+            const nodeCoords = {};
+            if (window._rawNetworkData.couches.regards && window._rawNetworkData.couches.regards.features) {
+                window._rawNetworkData.couches.regards.features.forEach(f => {
+                    const p = f.properties || {};
+                    const nid = String(p.Code || p.code || p.CODE || p.id || '');
+                    if (nid && f.geometry && f.geometry.coordinates) {
+                        nodeCoords[nid] = f.geometry.coordinates;
+                    }
+                });
+            }
+
+            const conduitsGeo = window._rawNetworkData.couches.conduites;
+            conduitsGeo.features.forEach((feat, idx) => {
+                const geom = feat.geometry;
+                if (!geom) return;
+
+                let lineCoords = [];
+                if (geom.type === 'LineString') {
+                    lineCoords = geom.coordinates;
+                } else if (geom.type === 'MultiLineString' && geom.coordinates.length > 0) {
+                    lineCoords = geom.coordinates[0];
+                }
+                if (!lineCoords || lineCoords.length < 2) return;
+
+                const pProps = feat.properties || {};
+                const uId = String(pProps.ID_AMONT || pProps.id_amont || '');
+                const dId = String(pProps.ID_AVAL || pProps.id_aval || '');
+
+                let pAmont = null, pAval = null;
+                if (uId && dId && nodeCoords[uId] && nodeCoords[dId]) {
+                    pAmont = nodeCoords[uId];
+                    pAval = nodeCoords[dId];
+                } else {
+                    pAmont = lineCoords[0];
+                    pAval = lineCoords[lineCoords.length - 1];
+                }
+
+                // Point milieu le long de la conduite
+                const midIdx = Math.floor(lineCoords.length / 2);
+                const midPt = lineCoords[midIdx];
+                const midLat = midPt[1];
+                const midLng = midPt[0];
+
+                // Calcul du cap (bearing) trigonométrique Amont -> Aval
+                const dy = pAval[1] - pAmont[1];
+                const dx = (pAval[0] - pAmont[0]) * Math.cos(midLat * Math.PI / 180);
+                const angleDeg = Math.atan2(-dy, dx) * 180 / Math.PI;
+
+                const arrowIcon = L.divIcon({
+                    className: 'flow-arrow-marker',
+                    html: `<div style="transform: rotate(${angleDeg.toFixed(1)}deg); font-size: 13px; font-weight: 900; color: #38bdf8; text-shadow: 0 0 4px rgba(0,0,0,0.9); opacity: 0.85; pointer-events: none; user-select: none;">➤</div>`,
+                    iconSize: [16, 16],
+                    iconAnchor: [8, 8]
+                });
+
+                const marker = L.marker([midLat, midLng], {
+                    icon: arrowIcon,
+                    interactive: false
+                });
+                couches.sens_ecoulement.addLayer(marker);
+            });
         };
 
         // ==========================================

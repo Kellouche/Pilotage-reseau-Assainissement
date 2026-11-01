@@ -140,3 +140,4 @@ os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 ```
 Cette variable doit impérativement être déclarée avant tout import de `geopandas`, `scipy` ou `numpy`.
+
