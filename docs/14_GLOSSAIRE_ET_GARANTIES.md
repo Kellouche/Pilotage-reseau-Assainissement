@@ -76,6 +76,11 @@ Toute modification apportée à un réseau (que ce soit depuis l'interface web o
 - **MNT / DEM (Modèle Numérique de Terrain)** : Grille raster représentant l'altitude du sol naturel à l'échelle d'un territoire, indispensable pour tracer les crêtes de bassins versants réels et anticiper les trajectoires de ruissellement.
 - **Cluster hydraulique** : Regroupement topologique connexe de canalisations et regards s'écoulant vers un même point bas ou exutoire.
 - **Rejet / Exutoire (Outfall)** : Point terminal du réseau d'assainissement où les eaux sont déversées dans un cours d'eau, un milieu récepteur ou envoyées vers une station d'épuration (STEP).
+- **Ligne Piézométrique (HGL - Hydraulic Grade Line)** : Niveau théorique que l'eau atteindrait dans un tube ouvert verticalement relié à la canalisation. Elle mesure la charge hydraulique totale (pression + altitude).
+- **Mise en charge / Surcharge (Node Surcharge)** : Phénomène où la ligne piézométrique dépasse le sommet (génératrice supérieure) de la conduite et remonte dans la cheminée du regard. L'écoulement passe sous pression mais reste strictement confiné sous terre sans inonder la voirie.
+- **Débordement / Inondation (Node Flooding)** : Phénomène où la ligne piézométrique dépasse la cote du terrain naturel (cote tampon). L'eau jaillit hors du regard et submerge la chaussée ou les propriétés riveraines.
+- **Laminage de crue (Amortissement hydrodynamique)** : Réduction du débit de pointe d'une crue en transitant dans le réseau grâce au stockage temporaire du volume d'eau dans les ouvrages souterrains amont, ce qui étale l'hydrogramme vers l'aval.
+- **Sens d'écoulement vectoriel** : Direction de cheminement gravitaire de l'eau calculée d'amont en aval selon le graphe topologique et les altitudes de radier.
 
 ### 3.2 Termes Informatiques de la Transformation SaaS
 - **SaaS (Software as a Service)** : Logiciel accessible en ligne via un simple navigateur internet, sans aucune installation locale sur votre ordinateur. Les mises à jour et les sauvegardes sont automatiques et gérées sur le serveur.
