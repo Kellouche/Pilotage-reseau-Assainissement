@@ -2159,6 +2159,129 @@
             if (m) m.style.display = 'none';
         };
 
+        };
+
+        // ==========================================
+        // VALIDATION DU BUFFER VORONOÏ (35, 45, 60M)
+        // ==========================================
+        window.validerChoixBuffer = function(bufferM) {
+            const token = localStorage.getItem('swmm_access_token');
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            fetch('/api/v1/simulations/validate-buffer', {
+                method: 'POST',
+                headers: headers,
+                credentials: 'include',
+                body: JSON.stringify({ buffer_m: parseFloat(bufferM) })
+            })
+            .then(r => r.json())
+            .then(res => {
+                window._activeBufferM = parseFloat(bufferM);
+                if (window._dernierResultatSimulation && window._dernierResultatSimulation.buffer_sensitivity) {
+                    afficherAnalyseSensibiliteBuffer(window._dernierResultatSimulation.buffer_sensitivity, window._activeBufferM);
+                }
+                const bEl = document.getElementById('buffer-badge-recommande');
+                if (bEl) {
+                    bEl.innerHTML = `✅ Choix Actif Validé : ${bufferM} m`;
+                    bEl.style.background = 'rgba(16, 185, 129, 0.25)';
+                    bEl.style.color = '#34d399';
+                }
+                alert(`✅ Choix validé avec succès !\nLe buffer de ${bufferM} mètres est maintenant enregistré comme configuration de référence pour ce projet.`);
+            })
+            .catch(e => {
+                console.error("Erreur validation buffer:", e);
+                window._activeBufferM = parseFloat(bufferM);
+                if (window._dernierResultatSimulation && window._dernierResultatSimulation.buffer_sensitivity) {
+                    afficherAnalyseSensibiliteBuffer(window._dernierResultatSimulation.buffer_sensitivity, window._activeBufferM);
+                }
+            });
+        };
+
+        window.afficherAnalyseSensibiliteBuffer = function(bufferSens, validatedVal) {
+            const grid = document.getElementById('sim-buffer-tiles-grid');
+            if (!grid) return;
+            if (!bufferSens || !bufferSens.curve || bufferSens.curve.length === 0) {
+                grid.innerHTML = '<div style="grid-column: 1/-1; color: #94a3b8; font-size: 0.8rem; text-align: center; padding: 10px;">Calcul de sensibilité automatique actif lors de la simulation.</div>';
+                return;
+            }
+
+            const currentVal = validatedVal || bufferSens.active_buffer_m || window._activeBufferM || 35.0;
+            const curve = bufferSens.curve;
+
+            let html = '';
+            curve.forEach(c => {
+                const isRec = c.is_recommended || (Math.round(c.buffer_m) === 45);
+                const isSelected = (Math.round(c.buffer_m) === Math.round(currentVal));
+                const borderColor = isSelected ? '#10b981' : (isRec ? 'rgba(56, 189, 248, 0.5)' : 'rgba(255,255,255,0.1)');
+                const bg = isSelected ? 'rgba(16, 185, 129, 0.12)' : (isRec ? 'rgba(56, 189, 248, 0.08)' : 'rgba(255,255,255,0.03)');
+
+                html += `
+                    <div style="background: ${bg}; border: 1.5px solid ${borderColor}; border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; justify-content: space-between; position: relative; transition: all 0.2s;">
+                        ${isRec ? `<span style="position: absolute; top: -8px; right: 8px; font-size: 0.65rem; background: #0284c7; color: white; padding: 1px 7px; border-radius: 4px; font-weight: 700; box-shadow: 0 2px 6px rgba(0,0,0,0.3);">POINT INFLEXION</span>` : ''}
+                        <div>
+                            <div style="font-size: 0.84rem; font-weight: 800; color: ${isSelected ? '#34d399' : (isRec ? '#38bdf8' : '#e2e8f0')}; margin-bottom: 2px;">
+                                Buffer ${Math.round(c.buffer_m)} m ${isSelected ? '✅' : ''}
+                            </div>
+                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 6px;">
+                                ${c.buffer_m === 35 ? 'Voirie stricte' : (c.buffer_m === 45 ? 'Îlots comblés (Optimal)' : 'Périphérie élargie')}
+                            </div>
+                            <div style="font-size: 1.05rem; font-weight: 800; color: #f8fafc; margin-bottom: 2px;">
+                                ${c.surface_ha} ha
+                                ${c.gain_pct > 0 ? `<small style="font-size: 0.72rem; color: #34d399; font-weight: 700; margin-left: 4px;">+${c.gain_pct}%</small>` : ''}
+                            </div>
+                            <div style="font-size: 0.74rem; color: #cbd5e1;">
+                                Pointe : <b style="color: ${isRec ? '#38bdf8' : '#f8fafc'};">${c.peak_flow_m3s} m³/s</b>
+                            </div>
+                        </div>
+                        <button onclick="validerChoixBuffer(${c.buffer_m})" style="width: 100%; margin-top: 10px; padding: 7px; font-size: 0.75rem; font-weight: 700; border-radius: 6px; cursor: pointer; border: none; background: ${isSelected ? '#10b981' : (isRec ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'rgba(255,255,255,0.08)')}; color: white; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                            ${isSelected ? '<i class="fas fa-check"></i> Choix Actif' : (isRec ? '⭐ Valider 45m' : `Valider ${Math.round(c.buffer_m)}m`)}
+                        </button>
+                    </div>
+                `;
+            });
+
+            grid.innerHTML = html;
+
+            // Ajustement dynamique de la barre relative
+            if (curve.length >= 3) {
+                const s35 = curve[0].surface_ha || 1;
+                const s45 = curve[1].surface_ha || 1;
+                const s60 = curve[2].surface_ha || 1;
+                const b35 = document.getElementById('bar-buffer-35');
+                const b45 = document.getElementById('bar-buffer-45');
+                const b60 = document.getElementById('bar-buffer-60');
+                if (b35 && b45 && b60) {
+                    b35.style.width = Math.min(Math.round((s35 / s60) * 100), 55) + '%';
+                    b45.style.width = Math.max(Math.round(((s45 - s35) / s60) * 100), 20) + '%';
+                    b60.style.width = Math.max(Math.round(((s60 - s45) / s60) * 100), 15) + '%';
+                }
+            }
+        };
+
+        // ==========================================
+        // GESTION DES ONGLETS DU COCKPIT MULTI-AGENTS
+        // ==========================================
+        window.changerOngletAgent = function(ongletId) {
+            document.querySelectorAll('.agent-tab-pane').forEach(el => el.style.display = 'none');
+            document.querySelectorAll('.agent-tab-btn').forEach(btn => {
+                btn.style.background = 'rgba(255,255,255,0.05)';
+                btn.style.borderColor = 'rgba(255,255,255,0.12)';
+                btn.style.color = '#94a3b8';
+            });
+            const pane = document.getElementById('pane-' + ongletId);
+            if (pane) pane.style.display = 'block';
+            const activeBtn = document.getElementById('btn-tab-' + ongletId);
+            if (activeBtn) {
+                activeBtn.style.background = 'rgba(168, 85, 247, 0.2)';
+                activeBtn.style.borderColor = '#a855f7';
+                activeBtn.style.color = '#f8fafc';
+            }
+        };
+
+        // ==========================================
+        // INTERPRÉTATION EXPERTE & MULTI-AGENTS IA
+        // ==========================================
         window.genererRapportInterpretation = function(simData) {
             const container = document.getElementById('interpretation-modal-body');
             if (!container || !simData) return;
@@ -2167,6 +2290,14 @@
             const cRes = simData.conduit_results || {};
             const nRes = simData.node_results || {};
             const meta = simData.meta || {};
+            const agents = simData.agents_expertise || {};
+            const bufferSens = simData.buffer_sensitivity || {};
+
+            const diag = agents.diagnostic_causal || {};
+            const gc = agents.prescriptions_genie_civil || {};
+            const lid = agents.solutions_hydrologie_durable || {};
+            const risk = agents.matrice_risques || {};
+            const synth = agents.synthese_executive || {};
 
             const contError = Math.abs(k.routing_continuity_error_pct || 0);
             const surchargedNodes = k.surcharged_nodes_count || 0;
@@ -2177,169 +2308,322 @@
             let nbNormal = 0;
             let nbVigilance = 0;
             let nbSurcharge = 0;
-            let nbErosion = 0;
-            let nbAutocurageFaible = 0;
-            let topTension = [];
-
             for (const [cid, c] of Object.entries(cRes)) {
                 const ratio = c.flow_ratio || 0;
-                const vel = c.max_velocity_ms || 0;
                 if (ratio > 1.0) nbSurcharge++;
                 else if (ratio >= 0.75) nbVigilance++;
                 else nbNormal++;
-
-                if (vel > 4.0) nbErosion++;
-                if (vel < 0.6 && ratio > 0.05) nbAutocurageFaible++;
-
-                topTension.push({ cid, ratio, vel, q: c.max_flow_cms || 0, label: c.label || '', color: c.color || '#38bdf8' });
             }
 
-            topTension.sort((a, b) => b.ratio - a.ratio);
-            const top3 = topTension.slice(0, 3);
-
-            let statutGlobal = "Réseau Performant & Écoulement Fluide";
-            let couleurStatut = "#10b981";
-            let iconeStatut = "fa-check-circle";
-            let avisSynthese = "L'ensemble des collecteurs absorbe l'événement pluvial en surface libre gravitaire sans débordement sur la chaussée.";
-
-            if (floodedNodes > 0) {
-                statutGlobal = "Surcharge Critique & Inondation de Surface";
-                couleurStatut = "#ef4444";
-                iconeStatut = "fa-exclamation-triangle";
-                avisSynthese = `Débordement en surface détecté sur <b>${floodedNodes} regard(s)</b> de visite. Les débits de pointe dépassent la capacité d'évacuation maximale du réseau aval.`;
-            } else if (surchargedNodes > 0 || nbSurcharge > 0) {
-                statutGlobal = "Mise en Charge Hydraulique Sous Pression";
-                couleurStatut = "#f59e0b";
-                iconeStatut = "fa-exclamation-circle";
-                avisSynthese = `Aucun débordement en surface, mais <b>${surchargedNodes} regard(s)</b> et <b>${nbSurcharge} canalisation(s)</b> travaillent en charge sous pression temporaire.`;
-            }
-
-            let qualiteContinuite = "Excellente (Conforme EPA SWMM)";
-            let couleurContinuite = "#10b981";
-            let explicationContinuite = "Erreur de masse inférieure à 1.0%. Le schéma Saint-Venant 1D Dynamic Wave converge avec une précision optimale sans instabilité numérique.";
-            if (contError >= 5.0) {
-                qualiteContinuite = "Avertissement (Bilan de masse perfectible)";
-                couleurContinuite = "#ef4444";
-                explicationContinuite = "Erreur supérieure à 5%. Il est recommandé d'abaisser le pas de routage à 1 ou 2 secondes pour éliminer les micro-oscillations.";
-            } else if (contError >= 1.0) {
-                qualiteContinuite = "Bonne (Conforme standard)";
-                couleurContinuite = "#38bdf8";
-                explicationContinuite = "Erreur comprise entre 1% et 5%, conforme aux recommandations de l'EPA pour les réseaux maillés.";
-            }
+            const verdict = synth.verdict || (floodedNodes > 0 ? "VULNÉRABILITÉ ÉLEVÉE — DÉBORDEMENTS DÉTECTÉS" : (surchargedNodes > 0 ? "MISE EN CHARGE HYDRAULIQUE" : "RÉSEAU CONFORME & ÉCOULEMENT FLUIDE"));
+            const verdictCouleur = synth.couleur || (floodedNodes > 0 ? "#ef4444" : (surchargedNodes > 0 ? "#f59e0b" : "#10b981"));
 
             let html = `
-                <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid ${couleurStatut}44; border-left: 5px solid ${couleurStatut}; border-radius: 12px; padding: 16px 20px; margin-bottom: 20px;">
-                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                        <span style="font-size: 1.05rem; font-weight: 800; color: ${couleurStatut}; display: flex; align-items: center; gap: 8px;">
-                            <i class="fas ${iconeStatut}"></i> ${statutGlobal}
+                <!-- Barre supérieure synthétique -->
+                <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid ${verdictCouleur}55; border-left: 6px solid ${verdictCouleur}; border-radius: 12px; padding: 14px 18px; margin-bottom: 16px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                        <span style="font-size: 1.05rem; font-weight: 800; color: ${verdictCouleur}; display: flex; align-items: center; gap: 8px;">
+                            <i class="fas fa-brain"></i> ${verdict}
                         </span>
-                        <span style="font-size: 0.75rem; background: ${couleurStatut}22; color: ${couleurStatut}; border: 1px solid ${couleurStatut}55; padding: 3px 10px; border-radius: 20px; font-weight: 700;">
-                            ${meta.scenario_key ? meta.scenario_key.toUpperCase() : 'SWMM 5.2'}
+                        <span style="font-size: 0.75rem; background: ${verdictCouleur}22; color: ${verdictCouleur}; border: 1px solid ${verdictCouleur}55; padding: 3px 10px; border-radius: 20px; font-weight: 700;">
+                            ${meta.cluster_nom ? meta.cluster_nom : 'Réseau Complet'} &bull; ${meta.scenario ? meta.scenario : 'SWMM 5.2'}
                         </span>
                     </div>
-                    <p style="margin: 0; color: #cbd5e1; font-size: 0.88rem; line-height: 1.5;">${avisSynthese}</p>
+                    <p style="margin: 0; color: #cbd5e1; font-size: 0.86rem; line-height: 1.45;">
+                        ${synth.recommandation_cle || "Analyse automatisée par l'équipe de 5 agents d'expertise : identification des causes racines, calculs de dimensionnement génie civil et solutions alternatives."}
+                    </p>
                 </div>
 
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
-                    <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px;">
-                        <div style="font-weight: 700; font-size: 0.85rem; color: #38bdf8; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
-                            <i class="fas fa-calculator"></i> 1. Convergence &amp; Continuité Saint-Venant
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                            <span style="font-size: 0.82rem; color: #94a3b8;">Erreur de bilan :</span>
-                            <span style="font-size: 0.95rem; font-weight: 800; color: ${couleurContinuite};">${(k.routing_continuity_error_pct || 0).toFixed(2)} %</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                            <span style="font-size: 0.82rem; color: #94a3b8;">Fiabilité du solveur :</span>
-                            <span style="font-size: 0.82rem; font-weight: 700; color: #e2e8f0;">${qualiteContinuite}</span>
-                        </div>
-                        <p style="font-size: 0.78rem; color: #94a3b8; line-height: 1.4; margin: 0; margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px;">
-                            ${explicationContinuite}
-                        </p>
-                    </div>
-
-                    <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px;">
-                        <div style="font-weight: 700; font-size: 0.85rem; color: #f87171; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
-                            <i class="fas fa-water"></i> 2. Regards &amp; Risque Submersion
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                            <span style="font-size: 0.82rem; color: #94a3b8;">Regards en charge :</span>
-                            <span style="font-size: 0.95rem; font-weight: 800; color: ${surchargedNodes > 0 ? '#f59e0b' : '#34d399'};">${surchargedNodes}</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                            <span style="font-size: 0.82rem; color: #94a3b8;">Regards avec débordement :</span>
-                            <span style="font-size: 0.95rem; font-weight: 800; color: ${floodedNodes > 0 ? '#ef4444' : '#34d399'};">${floodedNodes}</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-size: 0.82rem; color: #94a3b8;">Débit de crête exutoire :</span>
-                            <span style="font-size: 0.95rem; font-weight: 800; color: #38bdf8;">${peakOutflow} m³/s</span>
-                        </div>
-                    </div>
+                <!-- Barre de navigation des 6 onglets Agents IA -->
+                <div style="display: flex; gap: 6px; overflow-x: auto; margin-bottom: 16px; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+                    <button id="btn-tab-agent-diag" onclick="changerOngletAgent('agent-diag')" class="agent-tab-btn" style="padding: 7px 12px; font-size: 0.78rem; font-weight: 700; border-radius: 8px; cursor: pointer; border: 1px solid #a855f7; background: rgba(168, 85, 247, 0.2); color: #f8fafc; white-space: nowrap; display: flex; align-items: center; gap: 6px;">
+                        <i class="fas fa-search-plus"></i> 1. Diagnostic Causal
+                    </button>
+                    <button id="btn-tab-agent-gc" onclick="changerOngletAgent('agent-gc')" class="agent-tab-btn" style="padding: 7px 12px; font-size: 0.78rem; font-weight: 700; border-radius: 8px; cursor: pointer; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.05); color: #94a3b8; white-space: nowrap; display: flex; align-items: center; gap: 6px;">
+                        <i class="fas fa-drafting-compass"></i> 2. Génie Civil &amp; DN
+                    </button>
+                    <button id="btn-tab-agent-lid" onclick="changerOngletAgent('agent-lid')" class="agent-tab-btn" style="padding: 7px 12px; font-size: 0.78rem; font-weight: 700; border-radius: 8px; cursor: pointer; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.05); color: #94a3b8; white-space: nowrap; display: flex; align-items: center; gap: 6px;">
+                        <i class="fas fa-leaf"></i> 3. Rétention LID / SFN
+                    </button>
+                    <button id="btn-tab-agent-risk" onclick="changerOngletAgent('agent-risk')" class="agent-tab-btn" style="padding: 7px 12px; font-size: 0.78rem; font-weight: 700; border-radius: 8px; cursor: pointer; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.05); color: #94a3b8; white-space: nowrap; display: flex; align-items: center; gap: 6px;">
+                        <i class="fas fa-exclamation-triangle"></i> 4. Priorisation Risques
+                    </button>
+                    <button id="btn-tab-agent-synth" onclick="changerOngletAgent('agent-synth')" class="agent-tab-btn" style="padding: 7px 12px; font-size: 0.78rem; font-weight: 700; border-radius: 8px; cursor: pointer; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.05); color: #94a3b8; white-space: nowrap; display: flex; align-items: center; gap: 6px;">
+                        <i class="fas fa-file-contract"></i> 5. Note Exécutive
+                    </button>
+                    <button id="btn-tab-agent-buffer" onclick="changerOngletAgent('agent-buffer')" class="agent-tab-btn" style="padding: 7px 12px; font-size: 0.78rem; font-weight: 700; border-radius: 8px; cursor: pointer; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.05); color: #94a3b8; white-space: nowrap; display: flex; align-items: center; gap: 6px;">
+                        <i class="fas fa-chart-line"></i> 6. Courbe Buffer
+                    </button>
                 </div>
 
-                <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px; margin-bottom: 20px;">
-                    <div style="font-weight: 700; font-size: 0.85rem; color: #fbbf24; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">
-                        <i class="fas fa-network-wired"></i> 3. Répartition du Taux de Charge des Canalisations (Q/Qmax)
-                    </div>
-                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px;">
-                        <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 8px; padding: 10px; text-align: center;">
-                            <div style="font-size: 0.75rem; color: #34d399; font-weight: 600;">Normal (&lt; 75%)</div>
-                            <div style="font-size: 1.15rem; font-weight: 800; color: #34d399;">${nbNormal}</div>
-                            <div style="font-size: 0.7rem; color: #94a3b8;">Écoulement libre</div>
+                <!-- CONTENU DE L'ONGLET 1 : DIAGNOSTIC CAUSAL -->
+                <div id="pane-agent-diag" class="agent-tab-pane" style="display: block;">
+                    <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px; margin-bottom: 14px;">
+                        <div style="font-weight: 700; font-size: 0.88rem; color: #38bdf8; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+                            <i class="fas fa-microscope"></i> Identification des Causes Racines &amp; Anomalies Hydrauliques
                         </div>
-                        <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 8px; padding: 10px; text-align: center;">
-                            <div style="font-size: 0.75rem; color: #fbbf24; font-weight: 600;">Vigilance (75-100%)</div>
-                            <div style="font-size: 1.15rem; font-weight: 800; color: #fbbf24;">${nbVigilance}</div>
-                            <div style="font-size: 0.7rem; color: #94a3b8;">Proche saturation</div>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px;">
+                            <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 8px; padding: 10px; text-align: center;">
+                                <div style="font-size: 0.72rem; color: #f87171;">Regards Submergés</div>
+                                <div style="font-size: 1.25rem; font-weight: 800; color: #f87171;">${floodedNodes}</div>
+                            </div>
+                            <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 8px; padding: 10px; text-align: center;">
+                                <div style="font-size: 0.72rem; color: #fbbf24;">Conduites en Charge</div>
+                                <div style="font-size: 1.25rem; font-weight: 800; color: #fbbf24;">${nbSurcharge}</div>
+                            </div>
+                            <div style="background: rgba(2, 132, 199, 0.1); border: 1px solid rgba(2, 132, 199, 0.25); border-radius: 8px; padding: 10px; text-align: center;">
+                                <div style="font-size: 0.72rem; color: #38bdf8;">Étranglements Détectés</div>
+                                <div style="font-size: 1.25rem; font-weight: 800; color: #38bdf8;">${diag.nb_goulots || 0}</div>
+                            </div>
                         </div>
-                        <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 8px; padding: 10px; text-align: center;">
-                            <div style="font-size: 0.75rem; color: #f87171; font-weight: 600;">Surchargé (&gt; 100%)</div>
-                            <div style="font-size: 1.15rem; font-weight: 800; color: #f87171;">${nbSurcharge}</div>
-                            <div style="font-size: 0.7rem; color: #94a3b8;">Mise en pression</div>
-                        </div>
-                    </div>
 
-                    ${top3.length > 0 ? `
-                        <div style="font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 8px;">
-                            Tronçons les plus sollicités hydrauliquement :
-                        </div>
-                        <div style="display: grid; gap: 6px;">
-                            ${top3.map(t => `
-                                <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem;">
-                                    <div>
-                                        <strong style="color: ${t.color};">${t.cid}</strong>
-                                        <span style="color: #94a3b8; font-size: 0.75rem; margin-left: 6px;">(${t.label})</span>
+                        ${(diag.bottlenecks && diag.bottlenecks.length > 0) ? `
+                            <div style="font-size: 0.8rem; font-weight: 700; color: #facc15; margin-bottom: 6px;">
+                                <i class="fas fa-exclamation-circle me-1"></i> Goulots d'Étranglement Géométriques Détectés :
+                            </div>
+                            <div style="display: grid; gap: 6px; margin-bottom: 12px;">
+                                ${diag.bottlenecks.map(b => `
+                                    <div style="background: rgba(250, 204, 21, 0.08); border: 1px solid rgba(250, 204, 21, 0.25); border-radius: 6px; padding: 8px 12px; font-size: 0.8rem; color: #f8fafc;">
+                                        ${b.description}
                                     </div>
-                                    <div style="display: flex; gap: 14px; align-items: center;">
-                                        <span>Q/Qmax: <b style="color: ${t.color};">${(t.ratio * 100).toFixed(0)}%</b></span>
-                                        <span style="color: #94a3b8;">Vmax: <b>${t.vel.toFixed(2)} m/s</b></span>
-                                        <span style="color: #94a3b8;">Qmax: <b>${t.q.toFixed(3)} m³/s</b></span>
+                                `).join('')}
+                            </div>
+                        ` : ''}
+
+                        ${(diag.flooded_nodes && diag.flooded_nodes.length > 0) ? `
+                            <div style="font-size: 0.8rem; font-weight: 700; color: #f87171; margin-bottom: 6px;">
+                                <i class="fas fa-water me-1"></i> Regards de Visite en Débordement Critique :
+                            </div>
+                            <div style="display: grid; gap: 6px;">
+                                ${diag.flooded_nodes.map(fn => `
+                                    <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 6px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem;">
+                                        <div>
+                                            <strong style="color: #ef4444;">Regard ${fn.node_id}</strong>
+                                            <span style="color: #94a3b8; font-size: 0.72rem; margin-left: 6px;">Inondation chaussée</span>
+                                        </div>
+                                        <div style="display: flex; gap: 12px; color: #cbd5e1;">
+                                            <span>Durée : <b>${fn.hours_flooded} h</b></span>
+                                            <span>Volume : <b style="color: #ef4444;">${fn.flood_volume_m3} m³</b></span>
+                                            <span>Pointe : <b>${fn.peak_flow_cms} m³/s</b></span>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : '<div style="color: #34d399; font-size: 0.82rem;"><i class="fas fa-check-circle me-1"></i> Aucun débordement en surface constaté sur les regards.</div>'}
+                    </div>
+                </div>
+
+                <!-- CONTENU DE L'ONGLET 2 : GÉNIE CIVIL & DIMENSIONNEMENT -->
+                <div id="pane-agent-gc" class="agent-tab-pane" style="display: none;">
+                    <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px; margin-bottom: 14px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <div style="font-weight: 700; font-size: 0.88rem; color: #34d399; display: flex; align-items: center; gap: 6px;">
+                                <i class="fas fa-ruler-combined"></i> Prescriptions de Recalibrage (Formule de Manning-Strickler)
+                            </div>
+                            <span style="font-size: 0.74rem; color: #94a3b8;">
+                                Budget Estimé : <b style="color: #34d399;">${(gc.cout_global_estime_dzd || 0).toLocaleString()} DZD</b>
+                            </span>
+                        </div>
+                        <p style="font-size: 0.78rem; color: #94a3b8; margin: 0 0 12px 0; line-height: 1.4;">
+                            Diamètres cibles calculés pour garantir un taux de remplissage maximal de 80% ($Q/Q_{\\text{cap}} \\le 0.8$) lors de l'événement pluvial de pointe :
+                        </p>
+
+                        ${(gc.prescriptions && gc.prescriptions.length > 0) ? `
+                            <table style="width: 100%; border-collapse: collapse; font-size: 0.78rem; color: #cbd5e1;">
+                                <thead>
+                                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.12); color: #94a3b8; text-align: left;">
+                                        <th style="padding: 6px 4px;">Tronçon</th>
+                                        <th style="padding: 6px 4px;">Actuel</th>
+                                        <th style="padding: 6px 4px;">Prescrit</th>
+                                        <th style="padding: 6px 4px;">Gain Capacité</th>
+                                        <th style="padding: 6px 4px;">Matériau</th>
+                                        <th style="padding: 6px 4px; text-align: right;">Coût Est.</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${gc.prescriptions.map(p => `
+                                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                                            <td style="padding: 6px 4px; font-weight: 700; color: #38bdf8;">${p.cid}</td>
+                                            <td style="padding: 6px 4px; color: #f87171;">Ø${p.diam_actuel_mm} mm</td>
+                                            <td style="padding: 6px 4px; font-weight: 800; color: #34d399;">Ø${p.diam_prescrit_mm} mm</td>
+                                            <td style="padding: 6px 4px; color: #34d399;">+${p.gain_capacite_pct}%</td>
+                                            <td style="padding: 6px 4px; color: #cbd5e1;">${p.materiau}</td>
+                                            <td style="padding: 6px 4px; text-align: right; font-weight: 700;">${p.cout_estime_dzd.toLocaleString()} DZD</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        ` : '<div style="color: #34d399; font-size: 0.82rem;"><i class="fas fa-check me-1"></i> Aucune conduite ne requiert de recalibrage de diamètre pour cet événement.</div>'}
+                    </div>
+                </div>
+
+                <!-- CONTENU DE L'ONGLET 3 : HYDROLOGIE DURABLE & RÉTENTION -->
+                <div id="pane-agent-lid" class="agent-tab-pane" style="display: none;">
+                    <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px; margin-bottom: 14px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <div style="font-weight: 700; font-size: 0.88rem; color: #10b981; display: flex; align-items: center; gap: 6px;">
+                                <i class="fas fa-tint"></i> Solutions Fondées sur la Nature &amp; Écrêtement de Crue
+                            </div>
+                            <span style="font-size: 0.74rem; background: rgba(16, 185, 129, 0.15); color: #34d399; padding: 2px 8px; border-radius: 4px; font-weight: 700;">
+                                Tampon Requis : ${lid.volume_tampon_requis_m3 || 500} m³
+                            </span>
+                        </div>
+                        <p style="font-size: 0.78rem; color: #94a3b8; margin: 0 0 12px 0; line-height: 1.4;">
+                            Alternatives écologiques et durables évitant le « tout-tuyau » et la surcharge des collecteurs avals :
+                        </p>
+
+                        <div style="display: grid; gap: 10px;">
+                            ${(lid.solutions || []).map(s => `
+                                <div style="background: rgba(16, 185, 129, 0.06); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 8px; padding: 10px 14px;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                        <span style="font-weight: 800; font-size: 0.85rem; color: #34d399;">${s.solution}</span>
+                                        <span style="font-size: 0.72rem; color: #38bdf8; font-weight: 700;">Abattement : ${s.reduction_debit_pointe_estimee}</span>
+                                    </div>
+                                    <div style="font-size: 0.78rem; color: #cbd5e1; margin-bottom: 4px;">${s.type}</div>
+                                    <div style="font-size: 0.72rem; color: #94a3b8;">
+                                        💡 <b>Bénéfice :</b> ${s.avantage}
                                     </div>
                                 </div>
                             `).join('')}
                         </div>
-                    ` : ''}
+                    </div>
                 </div>
 
-                <div style="background: rgba(168, 85, 247, 0.08); border: 1px solid rgba(168, 85, 247, 0.25); border-radius: 12px; padding: 16px;">
-                    <div style="font-weight: 700; font-size: 0.88rem; color: #c084fc; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
-                        <i class="fas fa-lightbulb"></i> 4. Préconisations Techniques de l'Ingénieur
+                <!-- CONTENU DE L'ONGLET 4 : PRIORISATION DES RISQUES (P1, P2, P3) -->
+                <div id="pane-agent-risk" class="agent-tab-pane" style="display: none;">
+                    <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px; margin-bottom: 14px;">
+                        <div style="font-weight: 700; font-size: 0.88rem; color: #f59e0b; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+                            <i class="fas fa-layer-group"></i> Matrice de Hiérarchisation des Travaux &amp; Investissements
+                        </div>
+
+                        <!-- Priorité 1 : Critique -->
+                        <div style="margin-bottom: 12px;">
+                            <div style="font-size: 0.78rem; font-weight: 800; color: #ef4444; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                                <span style="background: #ef4444; color: white; padding: 1px 6px; border-radius: 4px; font-size: 0.68rem;">P1</span>
+                                Priorité 1 — Urgence Critique (Submersion Voirie &amp; Habitations)
+                            </div>
+                            ${(risk.actions_priorisees && risk.actions_priorisees.P1 && risk.actions_priorisees.P1.length > 0) ? `
+                                <div style="display: grid; gap: 6px;">
+                                    ${risk.actions_priorisees.P1.map(a => `
+                                        <div style="background: rgba(239, 68, 68, 0.08); border-left: 3px solid #ef4444; padding: 8px 12px; font-size: 0.78rem; color: #cbd5e1; border-radius: 4px;">
+                                            <strong style="color: #f87171;">${a.cible}</strong> : ${a.probleme} ➔ <i style="color: #f8fafc;">${a.action}</i>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : '<div style="font-size: 0.75rem; color: #34d399; padding: 4px 0;"><i class="fas fa-check-circle me-1"></i> Aucune action P1 requise.</div>'}
+                        </div>
+
+                        <!-- Priorité 2 : Majeur -->
+                        <div style="margin-bottom: 12px;">
+                            <div style="font-size: 0.78rem; font-weight: 800; color: #f59e0b; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                                <span style="background: #f59e0b; color: white; padding: 1px 6px; border-radius: 4px; font-size: 0.68rem;">P2</span>
+                                Priorité 2 — Alerte Majeure (Mise en Charge Continue sans Inondation)
+                            </div>
+                            ${(risk.actions_priorisees && risk.actions_priorisees.P2 && risk.actions_priorisees.P2.length > 0) ? `
+                                <div style="display: grid; gap: 6px;">
+                                    ${risk.actions_priorisees.P2.map(a => `
+                                        <div style="background: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; padding: 8px 12px; font-size: 0.78rem; color: #cbd5e1; border-radius: 4px;">
+                                            <strong style="color: #fbbf24;">${a.cible}</strong> : ${a.probleme} ➔ <i style="color: #f8fafc;">${a.action}</i>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : '<div style="font-size: 0.75rem; color: #34d399; padding: 4px 0;"><i class="fas fa-check-circle me-1"></i> Aucune action P2 requise.</div>'}
+                        </div>
+
+                        <!-- Priorité 3 : Maintenance -->
+                        <div>
+                            <div style="font-size: 0.78rem; font-weight: 800; color: #38bdf8; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                                <span style="background: #0284c7; color: white; padding: 1px 6px; border-radius: 4px; font-size: 0.68rem;">P3</span>
+                                Priorité 3 — Maintenance Préventive (Auto-curage / Pentes)
+                            </div>
+                            ${(risk.actions_priorisees && risk.actions_priorisees.P3 && risk.actions_priorisees.P3.length > 0) ? `
+                                <div style="display: grid; gap: 6px;">
+                                    ${risk.actions_priorisees.P3.map(a => `
+                                        <div style="background: rgba(2, 132, 199, 0.08); border-left: 3px solid #0284c7; padding: 8px 12px; font-size: 0.78rem; color: #cbd5e1; border-radius: 4px;">
+                                            <strong style="color: #38bdf8;">${a.cible}</strong> : ${a.probleme} ➔ <i style="color: #f8fafc;">${a.action}</i>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : '<div style="font-size: 0.75rem; color: #34d399; padding: 4px 0;"><i class="fas fa-check-circle me-1"></i> Auto-curage satisfaisant sur l\'ensemble du linéaire.</div>'}
+                        </div>
                     </div>
-                    <ul style="margin: 0; padding-left: 18px; font-size: 0.82rem; color: #cbd5e1; line-height: 1.6;">
-                        ${floodedNodes > 0 ? `
-                            <li><strong>Recalibrage des conduites avals :</strong> Augmenter le diamètre nominal sur les tronçons affichant Q/Qmax &gt; 100% pour résorber les surpressions.</li>
-                            <li><strong>Ouvrage de rétention tampon :</strong> Implanter un bassin d'orage ou des noues d'infiltration en amont des regards débordants pour écrêter l'hydrogramme de crue.</li>
-                        ` : `
-                            <li><strong>Capacité satisfaisante :</strong> Le dimensionnement actuel garantit l'évacuation des débits de la pluie sélectionnée sans risque de submersion de voirie.</li>
-                        `}
-                        ${nbAutocurageFaible > 0 ? `
-                            <li><strong>Auto-curage limite :</strong> ${nbAutocurageFaible} tronçon(s) présentent des vitesses faibles (&lt; 0.6 m/s), induisant un risque de décantation et d'ensablement à long terme.</li>
+                </div>
+
+                <!-- CONTENU DE L'ONGLET 5 : NOTE EXÉCUTIVE STRATÉGIQUE -->
+                <div id="pane-agent-synth" class="agent-tab-pane" style="display: none;">
+                    <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px; margin-bottom: 14px;">
+                        <div style="font-weight: 700; font-size: 0.92rem; color: #c084fc; margin-bottom: 8px;">
+                            <i class="fas fa-file-alt me-1"></i> Note d'Orientation Stratégique pour la Direction
+                        </div>
+                        <div style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 14px;">
+                            Périmètre : <b>${synth.perimetre || 'Réseau Complet'}</b> &bull; Événement : <b>${synth.scenario || 'Pluie Décennale'}</b>
+                        </div>
+
+                        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; font-size: 0.82rem; color: #cbd5e1; line-height: 1.55;">
+                            ${synth.recommandation_cle || "Analyse globale satisfaisante."}
+                        </div>
+
+                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; font-size: 0.78rem;">
+                            <div style="background: rgba(255,255,255,0.02); padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.06);">
+                                <span style="color: #94a3b8;">Débit de crête exutoire :</span>
+                                <b style="color: #38bdf8; float: right;">${peakOutflow} m³/s</b>
+                            </div>
+                            <div style="background: rgba(255,255,255,0.02); padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.06);">
+                                <span style="color: #94a3b8;">Volume total ruisselé :</span>
+                                <b style="color: #f8fafc; float: right;">${(k.total_outflow_m3 || 0).toLocaleString()} m³</b>
+                            </div>
+                            <div style="background: rgba(255,255,255,0.02); padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.06);">
+                                <span style="color: #94a3b8;">Enveloppe Travaux GC :</span>
+                                <b style="color: #34d399; float: right;">${(gc.cout_global_estime_dzd || 0).toLocaleString()} DZD</b>
+                            </div>
+                            <div style="background: rgba(255,255,255,0.02); padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.06);">
+                                <span style="color: #94a3b8;">Rétention Alternative Cible :</span>
+                                <b style="color: #a855f7; float: right;">${lid.volume_tampon_requis_m3 || 0} m³</b>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CONTENU DE L'ONGLET 6 : SENSIBILITÉ DU BUFFER (35, 45, 60M) -->
+                <div id="pane-agent-buffer" class="agent-tab-pane" style="display: none;">
+                    <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <div style="font-weight: 700; font-size: 0.88rem; color: #38bdf8;">
+                                <i class="fas fa-chart-line me-1"></i> Évaluation de la Représentativité de la Surface Drainée
+                            </div>
+                            <span style="font-size: 0.72rem; color: #34d399; background: rgba(16, 185, 129, 0.15); padding: 2px 8px; border-radius: 4px; font-weight: 700;">
+                                ⭐ Choix Optimal : 45 m
+                            </span>
+                        </div>
+                        <p style="font-size: 0.78rem; color: #94a3b8; margin: 0 0 14px 0; line-height: 1.45;">
+                            ${bufferSens.conclusion_technique || "Le rayon de 45 mètres constitue le coude d'inflexion optimal : il capture l'intégralité des toitures et cours d'îlots urbains sans surévaluer les surfaces naturelles."}
+                        </p>
+
+                        ${(bufferSens.curve && bufferSens.curve.length > 0) ? `
+                            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px;">
+                                ${bufferSens.curve.map(c => {
+                                    const isRec = c.is_recommended || (Math.round(c.buffer_m) === 45);
+                                    const isSel = (Math.round(c.buffer_m) === Math.round(window._activeBufferM || bufferSens.active_buffer_m || 35));
+                                    return `
+                                        <div style="background: ${isSel ? 'rgba(16, 185, 129, 0.12)' : (isRec ? 'rgba(56, 189, 248, 0.08)' : 'rgba(255,255,255,0.03)')}; border: 1.5px solid ${isSel ? '#10b981' : (isRec ? '#0284c7' : 'rgba(255,255,255,0.1)')}; border-radius: 8px; padding: 10px; text-align: center;">
+                                            <div style="font-weight: 800; font-size: 0.84rem; color: ${isSel ? '#34d399' : (isRec ? '#38bdf8' : '#e2e8f0')};">
+                                                Buffer ${Math.round(c.buffer_m)} m ${isSel ? '✅' : ''}
+                                            </div>
+                                            <div style="font-size: 1.1rem; font-weight: 800; color: #f8fafc; margin: 4px 0;">
+                                                ${c.surface_ha} ha
+                                            </div>
+                                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 8px;">
+                                                Débit : <b>${c.peak_flow_m3s} m³/s</b>
+                                            </div>
+                                            <button onclick="validerChoixBuffer(${c.buffer_m})" style="width: 100%; padding: 5px; font-size: 0.72rem; font-weight: 700; border-radius: 4px; border: none; cursor: pointer; background: ${isSel ? '#10b981' : (isRec ? '#0284c7' : 'rgba(255,255,255,0.1)')}; color: white;">
+                                                ${isSel ? '✅ Actif' : (isRec ? '⭐ Valider 45m' : `Valider ${Math.round(c.buffer_m)}m`)}
+                                            </button>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
                         ` : ''}
-                        ${nbErosion > 0 ? `
-                            <li><strong>Risque d'affouillement :</strong> ${nbErosion} tronçon(s) présentent des vitesses élevées (&gt; 4.0 m/s), nécessitant des tuyaux résistant à l'abrasion ou des regards de chute.</li>
-                        ` : ''}
-                        <li><strong>Gestion durable :</strong> Favoriser la déconnexion des eaux pluviales à la source (toitures végétalisées, tranchées filtrantes) pour limiter l'apport au réseau collectif.</li>
-                    </ul>
+                    </div>
                 </div>
             `;
 
@@ -3166,6 +3450,11 @@
                 resultsCard.style.display = 'block';
             }
 
+            // Afficher l'analyse de sensibilité du buffer Voronoï
+            if (data.buffer_sensitivity && typeof afficherAnalyseSensibiliteBuffer === 'function') {
+                afficherAnalyseSensibiliteBuffer(data.buffer_sensitivity, window._activeBufferM);
+            }
+
             // Mettre à jour l'ensemble de l'IHM latérale pour refléter la zone simulée
             mettreAJourIHMZoneSimulee(data);
 
@@ -3393,7 +3682,8 @@
                     duree_heures: duree,
                     pas_routage_sec: pasRoutage,
                     pente_moyenne_pct: penteVal,
-                    cluster_id: clusterId
+                    cluster_id: clusterId,
+                    buffer_m: window._activeBufferM || 35.0
                 })
             })
             .then(async r => {
@@ -3759,6 +4049,43 @@
                         </div>
                     </div>
 
+                    <!-- Analyse de Sensibilité du Buffer Voronoï (Arrière-Plan : 35m, 45m, 60m) -->
+                    <div id="sim-buffer-sensitivity-block" style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 12px; padding: 14px 16px; margin-bottom: 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <div style="font-size: 0.86rem; font-weight: 700; color: #38bdf8; display: flex; align-items: center; gap: 7px;">
+                                <i class="fas fa-chart-line"></i> Analyse de Sensibilité du Buffer Voronoï (Scénarios 35m, 45m, 60m)
+                            </div>
+                            <span id="buffer-badge-recommande" style="font-size: 0.72rem; background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.35); padding: 2px 8px; border-radius: 4px; font-weight: 700;">
+                                ⭐ Inflexion Optimale : 45 m
+                            </span>
+                        </div>
+                        <p style="font-size: 0.78rem; color: #94a3b8; margin: 0 0 12px 0; line-height: 1.4;">
+                            Calcul automatique en arrière-plan comparant l'impact du rayon de découpage sur la surface drainée et le débit de pointe. Cliquez sur un scénario pour valider le choix définitif :
+                        </p>
+                        
+                        <!-- Tuiles comparatives des 3 scénarios -->
+                        <div id="sim-buffer-tiles-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px;">
+                            <!-- Injecté dynamiquement par afficherAnalyseSensibiliteBuffer -->
+                        </div>
+
+                        <!-- Barre de progression relative de la surface -->
+                        <div style="background: rgba(255,255,255,0.06); border-radius: 6px; height: 7px; overflow: hidden; display: flex; margin-bottom: 6px;">
+                            <div id="bar-buffer-35" style="width: 33.3%; background: #0284c7; height: 100%;" title="Buffer 35m"></div>
+                            <div id="bar-buffer-45" style="width: 33.3%; background: #10b981; height: 100%;" title="Buffer 45m (Optimal)"></div>
+                            <div id="bar-buffer-60" style="width: 33.4%; background: #f59e0b; height: 100%;" title="Buffer 60m"></div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-size: 0.7rem; color: #64748b;">
+                            <span>35 m (Voirie stricte)</span>
+                            <span style="color: #34d399; font-weight: 700;">45 m (Cœurs d'îlots comblés)</span>
+                            <span>60 m (Élargi)</span>
+                        </div>
+                    </div>
+
+                    <!-- Bouton d'accès direct à l'interprétation experte des Agents IA -->
+                    <button onclick="fermerModalSimulation(); ouvrirModalInterpretation();" style="width: 100%; margin-bottom: 14px; padding: 12px 18px; background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%); color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 0.92rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 9px; box-shadow: 0 4px 14px rgba(168, 85, 247, 0.4); transition: transform 0.15s;" onmouseover="this.style.transform='scale(1.01)'" onmouseout="this.style.transform='scale(1)'">
+                        <i class="fas fa-brain"></i> Consulter l'Interprétation des Agents IA &amp; Prescriptions Travaux
+                    </button>
+
                     <!-- Téléchargements d'artefacts certifiés -->
                     <div style="display: flex; gap: 10px; justify-content: flex-end;">
                         <a id="btn-download-inp" href="/api/v1/simulations/download/inp" target="_blank" style="padding: 6px 12px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); color: #e2e8f0; border-radius: 6px; font-size: 0.78rem; text-decoration: none; display: flex; align-items: center; gap: 6px;">
@@ -3780,7 +4107,7 @@
 
     <!-- Modal d'Interprétation Experte des Résultats SWMM 5.2 -->
     <div id="modal-interpretation" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(6px); z-index: 3000; align-items: center; justify-content: center;">
-        <div style="background: #1e293b; color: #f8fafc; border-radius: 16px; width: 92%; max-width: 760px; max-height: 90vh; display: flex; flex-direction: column; border: 1px solid rgba(255, 255, 255, 0.15); box-shadow: 0 25px 50px rgba(0, 0, 0, 0.6); overflow: hidden;">
+        <div style="background: #1e293b; color: #f8fafc; border-radius: 16px; width: 94%; max-width: 880px; max-height: 90vh; display: flex; flex-direction: column; border: 1px solid rgba(255, 255, 255, 0.15); box-shadow: 0 25px 50px rgba(0, 0, 0, 0.6); overflow: hidden;">
             <!-- Entête -->
             <div style="background: #0f172a; padding: 18px 24px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); display: flex; justify-content: space-between; align-items: center;">
                 <div style="display: flex; align-items: center; gap: 12px;">

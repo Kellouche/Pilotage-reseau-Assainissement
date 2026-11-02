@@ -135,6 +135,11 @@ class SimulationRunRequest(BaseModel):
     pas_routage_sec: int = 5
     cluster_id: Optional[int] = None
     pente_moyenne_pct: Optional[float] = 1.0
+    buffer_m: Optional[float] = 35.0
+
+
+class ValidateBufferRequest(BaseModel):
+    buffer_m: float = 45.0
 
 
 @router.get("/scenarios")
@@ -199,7 +204,8 @@ def run_native_swmm_simulation(
             duree_heures=payload.duree_heures,
             pas_routage_sec=payload.pas_routage_sec,
             pente_moyenne_pct=payload.pente_moyenne_pct,
-            cluster_id=payload.cluster_id
+            cluster_id=payload.cluster_id,
+            tampon_buffer_m=payload.buffer_m
         )
         resultat["source_gpkg"] = str(gpkg_path.resolve())
         _DERNIERE_SIMULATION = resultat
@@ -219,6 +225,8 @@ def run_native_swmm_simulation(
                 "flooded_nodes": resultat.get("flooded_nodes", [])[:15],
                 "compliance_continuity": resultat.get("compliance_continuity", True),
             },
+            "buffer_sensitivity": resultat.get("buffer_sensitivity", {}),
+            "agents_expertise": resultat.get("agents_expertise", {}),
             "node_results": resultat.get("node_results", {}),
             "conduit_results": resultat.get("conduit_results", {}),
             "download_inp_url": "/api/v1/simulations/download/inp",
@@ -282,10 +290,63 @@ def get_latest_simulation(
             "flooded_nodes": resultat.get("flooded_nodes", [])[:15],
             "compliance_continuity": resultat.get("compliance_continuity", True),
         },
+        "buffer_sensitivity": resultat.get("buffer_sensitivity", {}),
+        "agents_expertise": resultat.get("agents_expertise", {}),
         "node_results": resultat.get("node_results", {}),
         "conduit_results": resultat.get("conduit_results", {}),
         "download_inp_url": "/api/v1/simulations/download/inp",
         "download_rpt_url": "/api/v1/simulations/download/rpt",
+    }
+
+
+@router.post("/validate-buffer")
+def validate_simulation_buffer(
+    payload: ValidateBufferRequest,
+    db: Session = Depends(get_db),
+    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional)
+):
+    """
+    Valide et enregistre le choix du buffer Voronoï (ex. 35m, 45m ou 60m)
+    retenu par l'utilisateur suite à l'analyse de sensibilité.
+    """
+    global _DERNIERE_SIMULATION
+    if _DERNIERE_SIMULATION:
+        if "buffer_sensitivity" in _DERNIERE_SIMULATION and _DERNIERE_SIMULATION["buffer_sensitivity"]:
+            _DERNIERE_SIMULATION["buffer_sensitivity"]["active_buffer_m"] = payload.buffer_m
+        if "meta" in _DERNIERE_SIMULATION:
+            _DERNIERE_SIMULATION["meta"]["buffer_m"] = payload.buffer_m
+
+    return {
+        "status": "success",
+        "validated_buffer_m": payload.buffer_m,
+        "message": f"Buffer Voronoï {payload.buffer_m}m validé avec succès comme référence du projet."
+    }
+
+
+@router.get("/agents/interpretation")
+def get_agents_interpretation():
+    """
+    Retourne le diagnostic causal complet et les prescriptions de l'équipe
+    multi-agents d'expertise pour la dernière simulation.
+    """
+    global _DERNIERE_SIMULATION
+    if not _DERNIERE_SIMULATION or "agents_expertise" not in _DERNIERE_SIMULATION:
+        raise HTTPException(
+            status_code=404,
+            detail="Aucune simulation active disponible pour l'équipe multi-agents. Veuillez lancer une simulation."
+        )
+    return {
+        "status": "success",
+        "agents_expertise": _DERNIERE_SIMULATION.get("agents_expertise", {}),
+        "buffer_sensitivity": _DERNIERE_SIMULATION.get("buffer_sensitivity", {}),
+        "meta": _DERNIERE_SIMULATION.get("meta", {}),
+        "kpis": {
+            "routing_continuity_error_pct": _DERNIERE_SIMULATION.get("routing_continuity_error_pct"),
+            "peak_outflow_m3s": _DERNIERE_SIMULATION.get("peak_outflow_m3s"),
+            "total_outflow_m3": _DERNIERE_SIMULATION.get("total_outflow_m3"),
+            "flooded_nodes_count": _DERNIERE_SIMULATION.get("flooded_nodes_count", 0),
+            "surcharged_nodes_count": _DERNIERE_SIMULATION.get("surcharged_nodes_count", 0),
+        }
     }
 
 
