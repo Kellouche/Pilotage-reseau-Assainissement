@@ -51,18 +51,24 @@ if __name__ == "__main__":
     def no_capture():
         yield
 
-    config = uvicorn.Config(
-        "api.main:app",
-        host=API_HOST,
-        port=API_PORT,
-        reload=False,
-        log_level="info",
-        access_log=True
-    )
-    server = uvicorn.Server(config)
-    server.capture_signals = no_capture
-
-    try:
-        server.run()
-    except KeyboardInterrupt:
-        print("\n[INFO] Serveur arrêté proprement par l'utilisateur.")
+    while True:
+        try:
+            config = uvicorn.Config(
+                "api.main:app",
+                host=API_HOST,
+                port=API_PORT,
+                reload=False,
+                log_level="info",
+                access_log=True
+            )
+            server = uvicorn.Server(config)
+            server.capture_signals = no_capture
+            server.run()
+            break
+        except KeyboardInterrupt:
+            print("\n[INFO] Serveur arrêté proprement par l'utilisateur.")
+            break
+        except Exception as e:
+            print(f"\n[WARN] Relance du serveur suite à incident: {e}")
+            kill_process_on_port(API_PORT)
+            time.sleep(1)
