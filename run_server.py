@@ -40,20 +40,29 @@ if __name__ == "__main__":
     kill_process_on_port(API_PORT)
 
     print("=" * 60)
-    print("Démarrage SWMM Platform POC - API Server")
+    print("Démarrage SWMM Platform POC - API Server (Mode Résilient)")
     print(f"  URL: http://{API_HOST}:{API_PORT}")
     print(f"  Docs: http://{API_HOST}:{API_PORT}/docs")
     print("  Appuyez sur Ctrl+C pour arrêter")
     print("=" * 60)
-    
+
+    import contextlib
+    @contextlib.contextmanager
+    def no_capture():
+        yield
+
+    config = uvicorn.Config(
+        "api.main:app",
+        host=API_HOST,
+        port=API_PORT,
+        reload=False,
+        log_level="info",
+        access_log=True
+    )
+    server = uvicorn.Server(config)
+    server.capture_signals = no_capture
+
     try:
-        uvicorn.run(
-            "api.main:app",
-            host=API_HOST,
-            port=API_PORT,
-            reload=False,
-            log_level="info",
-            access_log=True
-        )
+        server.run()
     except KeyboardInterrupt:
-        print("\n[INFO] Serveur arrêté proprement par l'utilisateur (Ctrl+C).")
+        print("\n[INFO] Serveur arrêté proprement par l'utilisateur.")
