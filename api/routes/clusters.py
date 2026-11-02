@@ -75,10 +75,20 @@ def _get_graph(chemin_gpkg: Optional[str] = None):
             raise
     return _GRAPH_CACHES[cache_key]
 
+_CLUSTERS_CACHE = {}
+
+
+def _get_clusters_disk_cache_path(chemin_gpkg: Optional[str]) -> Optional[Path]:
+    if not chemin_gpkg:
+        return None
+    return Path(chemin_gpkg).with_suffix(".clusters_cache.json")
+
+
 def _reset_graph_cache():
-    """Reset the graph cache."""
-    global _GRAPH_CACHES, _GRAPH_STATUS
+    """Reset the graph cache and clusters cache."""
+    global _GRAPH_CACHES, _GRAPH_STATUS, _CLUSTERS_CACHE
     _GRAPH_CACHES = {}
+    _CLUSTERS_CACHE = {}
     _GRAPH_STATUS = "pending"
 
 def get_graph_status():
@@ -233,6 +243,27 @@ def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional
         detecter_composantes_orphelines,
         tracer_cluster_depuis_exutoire,
     )
+
+    global _CLUSTERS_CACHE
+    cache_key = str(chemin_gpkg) if chemin_gpkg else "default"
+
+    if not persist:
+        if cache_key in _CLUSTERS_CACHE:
+            print(f"[clusters] Cache mémoire hit pour {cache_key}", flush=True)
+            return _CLUSTERS_CACHE[cache_key]
+
+        disk_path = _get_clusters_disk_cache_path(chemin_gpkg)
+        if disk_path and disk_path.exists():
+            try:
+                gpkg_p = Path(chemin_gpkg)
+                if disk_path.stat().st_mtime >= gpkg_p.stat().st_mtime:
+                    print(f"[clusters] Cache disque hit pour {cache_key}", flush=True)
+                    with open(disk_path, "r", encoding="utf-8") as f:
+                        cached_res = json.load(f)
+                    _CLUSTERS_CACHE[cache_key] = cached_res
+                    return cached_res
+            except Exception as e:
+                print(f"[clusters] Erreur lecture cache disque: {e}", flush=True)
 
     # Récupérer le graphe (depuis le cache ou construit pour ce gpkg)
     G = _get_graph(chemin_gpkg)
@@ -547,7 +578,7 @@ def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional
     nb_connectes = len(troncons_connectes)
     nb_orphelins = total_edges - nb_connectes
 
-    return {
+    final_res = {
         "status": "success",
         "exutoires_physiques": len(exutoires_physiques),
         "cycles_neutralises": len(cycles_casses),
@@ -561,6 +592,20 @@ def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional
         "stations_diagnostics": stations_diagnostics,
         "resultats": results
     }
+
+    if not persist:
+        _CLUSTERS_CACHE[cache_key] = final_res
+        disk_path = _get_clusters_disk_cache_path(chemin_gpkg)
+        if disk_path:
+            try:
+                import json
+                with open(disk_path, "w", encoding="utf-8") as f:
+                    json.dump(final_res, f, ensure_ascii=False)
+                print(f"[clusters] Cache disque sauvegardé: {disk_path}", flush=True)
+            except Exception as e:
+                print(f"[clusters] Erreur écriture cache disque: {e}", flush=True)
+
+    return final_res
 
 
 @router.post("/{cluster_id}/recalculate")

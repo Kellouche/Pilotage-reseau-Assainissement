@@ -536,7 +536,7 @@
         <div class="sidebar-section">
             <div class="section-title">
                 <span><i class="fas fa-draw-polygon text-emerald me-1"></i> 2. Hydrologie &amp; Surfaces</span>
-                <span id="badge-subcatchments-count" class="badge-pill">59 SB</span>
+                <span id="badge-subcatchments-count" class="badge-pill">-- SB</span>
             </div>
             <!-- Checkbox Sous-bassins versants Voronoï (Point 1) -->
             <div class="layer-list" style="margin-bottom: 10px;">
@@ -546,18 +546,18 @@
                     <span style="font-weight: 600; color: #34d399;">Sous-Bassins (Voronoï)</span>
                 </label>
                 <div id="subcatchments-legend" style="font-size: 0.72rem; color: #94a3b8; padding-left: 26px; line-height: 1.3;">
-                    Surfaces drainées élémentaires &bull; Horton ($f_0=75, f_c=10$).
+                    Surfaces d'apport élémentaires par regard (Horton $f_0=75, f_c=10$).
                 </div>
             </div>
 
             <!-- Détection et sélection des bassins urbains -->
             <button class="cluster-button-outline" id="detect-cluster-btn" style="width: 100%; margin-top: 4px; padding: 7px; font-size: 0.8rem;">
-                <i class="fas fa-sitemap me-1"></i> Partitionner bassins urbains
+                <i class="fas fa-sitemap me-1"></i> Partitionner bassins versants (Exutoires)
             </button>
             <div id="cluster-status" style="display: none;"></div>
 
             <div id="bassin-section" style="display: none; margin-top: 8px;">
-                <label for="bassin-select" style="font-size: 0.75rem; color: #cbd5e1; margin-bottom: 4px; display: block;">🗺 Bassin sélectionné :</label>
+                <label for="bassin-select" style="font-size: 0.75rem; color: #cbd5e1; margin-bottom: 4px; display: block;">🗺 Bassin versant sélectionné :</label>
                 <select id="bassin-select" style="width: 100%; font-size: 0.82rem; padding: 6px; background: #0f172a; color: #f8fafc; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;"></select>
                 <div id="bassin-info"></div>
             </div>
@@ -1283,8 +1283,9 @@
             
             // Désactiver le bouton pendant le traitement
             btn.disabled = true;
-            btn.textContent = 'Détection en cours...';
-            statusDiv.textContent = 'Recherche des bassins hydrauliques...';
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Partitionnement...';
+            statusDiv.style.display = 'block';
+            statusDiv.innerHTML = '<span style="color:#38bdf8;"><i class="fas fa-spinner fa-spin me-1"></i> Partitionnement topologique des bassins versants (79 exutoires)...</span>';
             
             // Effacer les anciens clusters
             clusterCouche.clearLayers();
@@ -1412,7 +1413,17 @@
                         const nbTroncons = clusterData.troncons_connectes !== undefined ? clusterData.troncons_connectes : clusterData.features.filter(f => f.geometry && (f.geometry.type === 'LineString' || f.geometry.type === 'MultiLineString')).length;
                         const nbOrphelins = clusterData.troncons_orphelins || 0;
                         
-                        statusDiv.innerHTML = `Détection terminée !<br><b>${nbBassins}</b> bassins identifiés<br><b>${nbTroncons}</b> tronçons connectés<br><span style="color: #e74c3c;"><b>${nbOrphelins}</b> tronçons orphelins</span>`;
+                        statusDiv.innerHTML = `
+                            <div style="margin-top: 6px; padding: 6px 8px; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 6px; font-size: 0.75rem;">
+                                <div style="color: #38bdf8; font-weight: 600; margin-bottom: 3px;"><i class="fas fa-check-circle me-1"></i> Partitionnement terminé</div>
+                                <div style="color: #f8fafc;"><b>${nbBassins}</b> bassins versants d'exutoires</div>
+                                <div style="color: #cbd5e1;"><b>${nbTroncons}</b> tronçons reliés aux exutoires</div>
+                                ${nbOrphelins > 0 ? `<div style="color: #f87171;"><b>${nbOrphelins}</b> tronçons orphelins (déconnectés)</div>` : ''}
+                                <div style="color: #94a3b8; font-size: 0.7rem; margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 4px;">
+                                    💡 <em>Chaque couleur représente les conduites drainant vers un exutoire (graphe topologique, pas une simulation hydraulique).</em>
+                                </div>
+                            </div>
+                        `;
                         
                         // Construire le menu déroulant des bassins
                         peuplerDropdownBassins(clusterData, clusterLayer);
@@ -1440,7 +1451,7 @@
                 })
                 .finally(() => {
                     btn.disabled = false;
-                    btn.textContent = 'Détecter les bassins urbains';
+                    btn.innerHTML = '<i class="fas fa-sitemap me-1"></i> Partitionner bassins versants (Exutoires)';
                 });
         });
 
