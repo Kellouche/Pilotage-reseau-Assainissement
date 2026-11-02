@@ -58,6 +58,14 @@
             letter-spacing: 0.05em;
         }
 
+        /* Légende interactive SWMM 5.2 : Masquée par défaut, n'apparaît que suite à une simulation */
+        #sim-floating-legend {
+            display: none !important;
+        }
+        #sim-floating-legend.active-legend {
+            display: block !important;
+        }
+
         #app-workspace {
             flex: 1;
             display: flex;
@@ -357,11 +365,11 @@
     <header id="saas-topbar">
         <!-- Section Gauche : Logo & Sélecteur de Contexte Réseau -->
         <div style="display: flex; align-items: center; gap: 14px;">
-            <a href="/" class="nav-brand-title">
+            <div class="nav-brand-title" style="cursor: default; user-select: none;">
                 <i class="fas fa-water" style="color: #38bdf8;"></i>
                 <span>SWMM Platform</span>
                 <span style="font-size: 0.62rem; background: rgba(56, 189, 248, 0.18); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.35); padding: 1px 6px; border-radius: 4px; font-weight: 700;">5.2</span>
-            </a>
+            </div>
 
             <div style="width: 1px; height: 20px; background: rgba(255, 255, 255, 0.15);"></div>
 
@@ -1855,15 +1863,7 @@
                 alert("Aucun résultat de simulation disponible pour ce réseau. Veuillez d'abord lancer une simulation.");
                 return;
             }
-            if (couches.res_conduites && !carte.hasLayer(couches.res_conduites)) {
-                couches.res_conduites.addTo(carte);
-            }
-            if (couches.res_regards && !carte.hasLayer(couches.res_regards)) {
-                couches.res_regards.addTo(carte);
-            }
-            const leg = document.getElementById('sim-floating-legend');
-            if (leg) leg.style.display = 'block';
-
+            afficherResultatsSimulation(window._dernierResultatSimulation);
             ouvrirModalSimulation();
         };
 
@@ -2480,7 +2480,10 @@
 
             // Afficher la légende interactive sur la carte uniquement suite à la simulation
             const leg = document.getElementById('sim-floating-legend');
-            if (leg) leg.style.display = 'block';
+            if (leg) {
+                leg.classList.add('active-legend');
+                leg.style.display = 'block';
+            }
 
             // Nettoyer les couches de résultats existantes
             couches.res_conduites.clearLayers();
@@ -2643,7 +2646,10 @@
 
             // Masquer la légende flottante de simulation
             const leg = document.getElementById('sim-floating-legend');
-            if (leg) leg.style.display = 'none';
+            if (leg) {
+                leg.classList.remove('active-legend');
+                leg.style.display = 'none';
+            }
 
             // Masquer la carte de résultats et réinitialiser les KPIs
             const resCard = document.getElementById('sim-results-card');
@@ -2678,7 +2684,12 @@
                 .then(r => r.json())
                 .then(data => {
                     if (data && data.status === 'success' && data.conduit_results && Object.keys(data.conduit_results).length > 0) {
-                        afficherResultatsSimulation(data);
+                        window._dernierResultatSimulation = data;
+                        if (typeof activerActionsSimulation === 'function') {
+                            activerActionsSimulation(true);
+                        }
+                        // Note : Ne pas forcer l'affichage de la légende ni écraser le tracé SIG physique à l'ouverture de la page.
+                        // La légende et les calques Q/Qmax s'affichent uniquement lorsque l'utilisateur simule ou clique sur 'Afficher les résultats'.
                     } else {
                         reinitialiserAffichageSimulation();
                     }

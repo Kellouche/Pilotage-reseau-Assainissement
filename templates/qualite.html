@@ -464,7 +464,13 @@
                 showLoading(true);
                 hideError();
 
-                const response = await fetch(`${API_BASE_URL}/api/v1/qualite/analyse`);
+                const token = localStorage.getItem('swmm_access_token');
+                const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+                const response = await fetch(`${API_BASE_URL}/api/v1/qualite/analyse`, {
+                    headers: headers,
+                    credentials: 'include'
+                });
                 if (!response.ok) {
                     throw new Error(`Erreur HTTP: ${response.status}`);
                 }
@@ -489,8 +495,13 @@
         // Export CSV
         async function exporterCSV() {
             try {
+                const token = localStorage.getItem('swmm_access_token');
+                const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
                 const response = await fetch(`${API_BASE_URL}/api/v1/qualite/export-csv`, {
-                    method: 'POST'
+                    method: 'POST',
+                    headers: headers,
+                    credentials: 'include'
                 });
 
                 if (!response.ok) {
@@ -531,6 +542,10 @@
             `;
 
             // Nombre d'éléments
+            const totalAnom = (scores.global.total_anomalies !== undefined) 
+                ? scores.global.total_anomalies 
+                : (scores.global.total_anomalies_brutes !== undefined ? scores.global.total_anomalies_brutes : (scores.global.total_elements_uniques_affectes || 0));
+
             statsGrid.innerHTML += `
                 <div class="stat-card">
                     <div class="stat-title">Regards</div>
@@ -544,12 +559,12 @@
                 </div>
                 <div class="stat-card">
                     <div class="stat-title">Communes</div>
-                    <div class="stat-value">${stats.nb_communes || 0}</div>
+                    <div class="stat-value">${stats.nb_communes || (scores.par_commune ? scores.par_commune.length : 1)}</div>
                     <div class="stat-subtitle">Territoires couverts</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-title">Anomalies</div>
-                    <div class="stat-value">${scores.global.total_anomalies}</div>
+                    <div class="stat-value">${totalAnom}</div>
                     <div class="stat-subtitle">Problèmes détectés</div>
                 </div>
             `;
@@ -617,7 +632,13 @@
         // Affichage des détails d'une anomalie
         async function afficherDetailsAnomalie(typeAnomalie) {
             try {
-                const response = await fetch(`${API_BASE_URL}/api/v1/qualite/anomalies/${typeAnomalie}`);
+                const token = localStorage.getItem('swmm_access_token');
+                const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+                const response = await fetch(`${API_BASE_URL}/api/v1/qualite/anomalies/${typeAnomalie}`, {
+                    headers: headers,
+                    credentials: 'include'
+                });
                 if (!response.ok) {
                     throw new Error(`Erreur HTTP: ${response.status}`);
                 }

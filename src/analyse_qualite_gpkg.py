@@ -9,6 +9,7 @@ import os
 os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 
+import re
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime
@@ -24,6 +25,22 @@ def _clean_id(val: Any) -> str:
     if txt.endswith(".0"):
         txt = txt[:-2]
     return txt
+
+
+def _safe_float(val: Any) -> Optional[float]:
+    """Convertit de façon robuste les valeurs numériques sales issues de SIG."""
+    if val is None or pd.isna(val):
+        return None
+    try:
+        if isinstance(val, (int, float)):
+            return float(val)
+        txt = str(val).strip().replace(" ", "").replace(",", ".")
+        m = re.search(r"[-+]?\d*\.?\d+", txt)
+        if m:
+            return float(m.group(0))
+        return None
+    except Exception:
+        return None
 
 
 def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -> Dict[str, Any]:
@@ -131,16 +148,19 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -
             })
 
         # C. Champs manquants (Diamètre, Longueur, Matériau)
-        diam = c.get("DIAMETRE", c.get("diametre", None))
-        mat = c.get("MATERIAU", c.get("materiau", None))
+        diam = c.get("DIAMETRE", c.get("diametre", c.get("Diamètre", None)))
+        mat = c.get("MATERIAU", c.get("materiau", c.get("Matériau", None)))
         longueur = c.get("Longeur", c.get("longueur", None))
 
+        diam_val = _safe_float(diam)
+        long_val = _safe_float(longueur)
+
         champs_absents = []
-        if diam is None or pd.isna(diam) or float(diam) <= 0:
+        if diam_val is None or diam_val <= 0:
             champs_absents.append("Diamètre")
         if not mat or pd.isna(mat) or str(mat).strip() == "":
             champs_absents.append("Matériau")
-        if (longueur is None or pd.isna(longueur) or float(longueur) <= 0) and (not c.geometry or c.geometry.length <= 0):
+        if (long_val is None or long_val <= 0) and (not c.geometry or c.geometry.length <= 0):
             champs_absents.append("Longueur")
 
         if champs_absents:
@@ -173,9 +193,9 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -
             z_d = None
             for col in ["PROFRADI", "COTTN", "COORDZ", "Z", "cote_radier"]:
                 if z_u is None and col in node_u and pd.notna(node_u[col]):
-                    z_u = float(node_u[col])
+                    z_u = _safe_float(node_u[col])
                 if z_d is None and col in node_d and pd.notna(node_d[col]):
-                    z_d = float(node_d[col])
+                    z_d = _safe_float(node_d[col])
 
             if z_u is not None and z_d is not None and c.geometry and c.geometry.length > 0:
                 delta_z = z_u - z_d
@@ -231,11 +251,41 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -
 
     score_global = round(score_base, 1)
 
+    commune_col = next((c for c in regards.columns if "commune" in c.lower()), None)
+    par_commune = []
+    nb_communes = 1
+    if commune_col:
+        uniques = regards[commune_col].dropna().unique()
+        for comm in uniques:
+            c_str = str(comm).strip()
+            if not c_str or c_str.lower() in ("nan", "none", "null"):
+                continue
+            count_c = int((regards[commune_col] == comm).sum())
+            par_commune.append({
+                "commune": c_str,
+                "score_qualite": score_global,
+                "regards_complets": count_c,
+                "total_regards": count_c
+            })
+        if par_commune:
+            nb_communes = len(par_commune)
+
+    if not par_commune:
+        par_commune = [
+            {
+                "commune": project_name,
+                "score_qualite": score_global,
+                "regards_complets": max(0, nb_regards - len(anomalies["conduites_sans_regards"])),
+                "total_regards": nb_regards
+            }
+        ]
+
     scores_qualite = {
         "global": {
             "score_qualite": score_global,
             "total_elements": total_elements,
             "total_anomalies": total_anomalies_brutes,
+            "total_anomalies_brutes": total_anomalies_brutes,
             "total_elements_uniques_affectes": nb_touches
         },
         "completude": {
@@ -254,14 +304,7 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -
             "score_qualite": round(max(0.0, 100.0 - (len(anomalies["pentes_suspectes"]) / max(1, nb_pipes) * 100.0)), 1),
             "total_anomalies": len(anomalies["pentes_suspectes"])
         },
-        "par_commune": [
-            {
-                "commune": project_name,
-                "score_qualite": score_global,
-                "regards_complets": max(0, nb_regards - len(anomalies["conduites_sans_regards"])),
-                "total_regards": nb_regards
-            }
-        ]
+        "par_commune": par_commune
     }
 
     longueur_totale = round(float(pipes.geometry.length.sum()), 1) if not pipes.empty else 0.0
@@ -270,7 +313,7 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -
         "nb_regards": nb_regards,
         "nb_conduites": nb_pipes,
         "nb_rejets": nb_rejets,
-        "nb_communes": 1,
+        "nb_communes": nb_communes,
         "longueur_totale_m": longueur_totale,
         "nom_projet": project_name,
         "gpkg_path": str(gpkg_path)
