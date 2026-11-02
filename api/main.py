@@ -14,7 +14,7 @@ os.environ.setdefault("OMP_NUM_THREADS", "1")
 import asyncio
 from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -105,6 +105,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def catch_cancelled_error_middleware(request: Request, call_next):
+    """Intercepte proprement l'annulation des requêtes HTTP en cours lors d'un arrêt Ctrl+C."""
+    try:
+        return await call_next(request)
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        return Response(status_code=503)
 
 
 # ============================================================

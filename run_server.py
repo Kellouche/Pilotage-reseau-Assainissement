@@ -46,11 +46,14 @@ if __name__ == "__main__":
     print("  Appuyez sur Ctrl+C pour arrêter")
     print("=" * 60)
     
-    uvicorn.run(
-        "api.main:app",
-        host=API_HOST,
-        port=API_PORT,
-        reload=False,
-        log_level="info",
-        access_log=True
-    )
+    try:
+        uvicorn.run(
+            "api.main:app",
+            host=API_HOST,
+            port=API_PORT,
+            reload=False,
+            log_level="info",
+            access_log=True
+        )
+    except KeyboardInterrupt:
+        print("\n[INFO] Serveur arrêté proprement par l'utilisateur (Ctrl+C).")
