@@ -220,6 +220,11 @@ def page_logout():
     return response
 
 
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return Response(status_code=204)
+
+
 @app.get("/pricing", response_class=HTMLResponse)
 @app.get("/tarifs", response_class=HTMLResponse)
 def page_pricing():
