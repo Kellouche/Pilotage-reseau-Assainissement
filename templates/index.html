@@ -326,7 +326,7 @@
             width: 100%;
             height: 100%;
             background: rgba(0, 0, 0, 0.8);
-            display: flex;
+            display: none;
             justify-content: center;
             align-items: center;
             z-index: 1000;
@@ -718,6 +718,13 @@
                 overlay.style.display = 'none';
             }
         }
+
+        // Restauration instantanée depuis le cache mémoire du navigateur (bfcache) sans recharger
+        window.addEventListener('pageshow', (event) => {
+            if (event.persisted) {
+                montrerChargement(false);
+            }
+        });
 
         // Variables pour l'éditeur manuel
         let editorState = {

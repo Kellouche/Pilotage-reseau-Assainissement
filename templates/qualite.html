@@ -341,7 +341,7 @@
 
         <div class="nav">
             <div class="nav-buttons">
-                <a href="/map" class="nav-btn" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px; background: #0284c7;">
+                <a href="/map" onclick="retournerCockpit(event)" class="nav-btn" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px; background: #0284c7;">
                     ← Retour Cockpit
                 </a>
                 <button class="nav-btn active" onclick="showSection('overview')">Vue d'ensemble</button>
@@ -440,6 +440,16 @@
         });
 
         // Navigation
+        function retournerCockpit(event) {
+            if (event) event.preventDefault();
+            // Retour instantané à la carte existante sans recharger les 20 000 objets
+            if (window.history.length > 1 && (document.referrer.includes('/map') || document.referrer.includes(window.location.host))) {
+                window.history.back();
+            } else {
+                window.location.href = '/map';
+            }
+        }
+
         function showSection(sectionName) {
             // Masquer toutes les sections
             document.querySelectorAll('.section').forEach(section => {
