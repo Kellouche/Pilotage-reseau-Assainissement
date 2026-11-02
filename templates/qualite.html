@@ -335,15 +335,18 @@
 <body>
     <div class="app">
         <div class="header">
-            <h1>🔍 Qualité du Réseau d'Assainissement</h1>
-            <p>Analyse des anomalies et scores de qualité</p>
+            <h1>🔍 Contrôle Qualité du Réseau d'Assainissement</h1>
+            <p>Audit d'intégrité topologique, géométrique et attributaire du modèle actif</p>
         </div>
 
         <div class="nav">
             <div class="nav-buttons">
+                <a href="/map" class="nav-btn" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px; background: #0284c7;">
+                    ← Retour Cockpit
+                </a>
                 <button class="nav-btn active" onclick="showSection('overview')">Vue d'ensemble</button>
                 <button class="nav-btn" onclick="showSection('anomalies')">Anomalies détaillées</button>
-                <button class="nav-btn" onclick="showSection('scores')">Scores par commune</button>
+                <button class="nav-btn" onclick="showSection('scores')">Scores &amp; Synthèse</button>
 
                 <button class="nav-btn secondary" onclick="exporterCSV()">Exporter CSV</button>
             </div>
@@ -425,7 +428,7 @@
 
     <script>
         // Configuration
-        const API_BASE_URL = 'http://127.0.0.1:5002';
+        const API_BASE_URL = '';
         let currentData = null;
         let severiteChart = null;
         let communesChart = null;
