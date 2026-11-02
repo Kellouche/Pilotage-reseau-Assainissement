@@ -637,10 +637,38 @@ def get_network_subcatchments(
             "message": "Aucun fichier GeoPackage disponible."
         }
 
+    # Vérification cache rapide sur disque
+    cache_sub_path = gpkg_path.with_suffix(".subcatchments_cache.json")
+    if cache_sub_path.exists():
+        try:
+            if cache_sub_path.stat().st_mtime >= gpkg_path.stat().st_mtime:
+                with open(cache_sub_path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"[subcatchments] Erreur lecture cache: {e}", flush=True)
+
     try:
         layers = gpd.list_layers(str(gpkg_path))['name'].tolist()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur lecture couches GPKG: {e}")
+
+    # Si la couche sous_bassins_voronoi existe déjà dans le GPKG, l'utiliser directement
+    if "sous_bassins_voronoi" in layers:
+        try:
+            subcatchments = gpd.read_file(str(gpkg_path), layer="sous_bassins_voronoi")
+            sub_wgs84 = subcatchments.to_crs("EPSG:4326") if subcatchments.crs != "EPSG:4326" else subcatchments
+            geojson = json.loads(sub_wgs84.to_json(na="drop"))
+            total_area_ha = round(float(subcatchments['area_ha'].sum()), 4) if 'area_ha' in subcatchments else 0.0
+            res = {
+                **geojson,
+                "total_area_ha": total_area_ha,
+                "subcatchments_count": len(subcatchments)
+            }
+            with open(cache_sub_path, "w", encoding="utf-8") as f:
+                json.dump(res, f, ensure_ascii=False)
+            return res
+        except Exception as e:
+            print(f"[subcatchments] Erreur lecture couche sous_bassins_voronoi: {e}", flush=True)
 
     regard_layer = next((l for l in layers if 'regard' in l.lower()), None)
     pipe_layer = next((l for l in layers if any(k in l.lower() for k in ['canalisat', 'conduit', 'pipe', 'troncon']) and 'désaffect' not in l.lower() and 'desaffect' not in l.lower()), None)
@@ -676,3 +704,52 @@ def get_network_subcatchments(
         "total_area_ha": total_area_ha,
         "subcatchments_count": len(subcatchments)
     }
+
+
+@router.get("/orphelins/geojson")
+def get_network_orphelins_geojson(
+    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context_optional),
+    db: Session = Depends(get_db)
+):
+    """
+    Retourne la liste des éléments orphelins (regards déconnectés du réseau amont-aval)
+    au format GeoJSON pour audit et correction.
+    """
+    import json
+    import geopandas as gpd
+
+    gpkg_path = None
+    if tenant_ctx and tenant_ctx.org_id:
+        project = db.query(Project).filter(
+            Project.org_id == tenant_ctx.org_id,
+            Project.is_archived.is_(False)
+        ).first()
+        if project and project.source_gpkg_key and Path(project.source_gpkg_key).exists():
+            gpkg_path = Path(project.source_gpkg_key)
+
+    if not gpkg_path or not gpkg_path.exists():
+        cand = Path("uploads/a66e32ad-f32b-4529-acc3-7a6026eb5a8a/network_Assainissement_Ville.gpkg")
+        if cand.exists():
+            gpkg_path = cand
+
+    if not gpkg_path or not gpkg_path.exists():
+        raise HTTPException(status_code=404, detail="Aucun projet actif trouvé")
+
+    # 1. Vérifier si elements_orphelins.geojson existe
+    orph_json_p = gpkg_path.parent / "elements_orphelins.geojson"
+    if orph_json_p.exists():
+        with open(orph_json_p, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    # 2. Sinon lire depuis la couche GPKG elements_orphelins_regards
+    try:
+        layers = gpd.list_layers(str(gpkg_path))['name'].tolist()
+        if "elements_orphelins_regards" in layers:
+            gdf = gpd.read_file(str(gpkg_path), layer="elements_orphelins_regards")
+            gdf_wgs84 = gdf.to_crs("EPSG:4326") if gdf.crs != "EPSG:4326" else gdf
+            return json.loads(gdf_wgs84.to_json(na="drop"))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur lecture orphelins: {e}")
+
+    return {"type": "FeatureCollection", "features": [], "message": "Aucun orphelin trouvé"}
+

@@ -565,6 +565,12 @@
                 <select id="bassin-select" style="width: 100%; font-size: 0.82rem; padding: 6px; background: #0f172a; color: #f8fafc; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;"></select>
                 <div id="bassin-info"></div>
             </div>
+
+            <div id="orphelins-export-section" style="margin-top: 8px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 6px;">
+                <a href="/api/v1/network/orphelins/geojson" target="_blank" download="elements_orphelins.geojson" style="font-size: 0.72rem; color: #f59e0b; text-decoration: none; display: flex; align-items: center; gap: 5px;">
+                    <i class="fas fa-file-export"></i> Exporter orphelins isolés (GeoJSON)
+                </a>
+            </div>
         </div>
     </div>
     <!-- Barre d'outils d'édition (déplacée hors de map) -->
@@ -1505,15 +1511,21 @@
             _bassinNoms = {};
 
             // Extraire les bassins (polygones) et construire leurs bounds
-            const bassins = geojsonData.features.filter(f => f.properties.type === 'bassin_urbain');
-            bassins.sort((a, b) => String(a.properties.cluster_id).localeCompare(String(b.properties.cluster_id), undefined, { numeric: true }));
+            const bassins = geojsonData.features.filter(f => f.properties && f.properties.type === 'bassin_urbain');
+            bassins.sort((a, b) => {
+                const idA = parseInt(a.properties.cluster_id) || 0;
+                const idB = parseInt(b.properties.cluster_id) || 0;
+                return idA - idB;
+            });
 
             bassins.forEach(f => {
                 const cid = f.properties.cluster_id;
                 const nom = f.properties.nom || `Bassin ${cid}`;
+                const surf = f.properties.surface_ha !== undefined ? ` (${f.properties.surface_ha} ha)` : '';
+                const typ = f.properties.exutoire_type ? ` [${f.properties.exutoire_type.toUpperCase()}]` : '';
                 const opt = document.createElement('option');
                 opt.value = cid;
-                opt.textContent = nom;
+                opt.textContent = `${cid}. ${nom}${typ}${surf}`;
                 sel.appendChild(opt);
                 _bassinNoms[cid] = nom;
             });
@@ -1535,12 +1547,14 @@
                 
                 // Activer le bouton supprimer SI c'est un bassin manuel
                 const btnDelete = document.getElementById('btn-delete-bassin');
-                if (cid && String(cid).startsWith('M_')) {
-                    btnDelete.disabled = false;
-                    btnDelete.style.color = '#e74c3c';
-                } else {
-                    btnDelete.disabled = true;
-                    btnDelete.style.color = '';
+                if (btnDelete) {
+                    if (cid && String(cid).startsWith('M_')) {
+                        btnDelete.disabled = false;
+                        btnDelete.style.color = '#e74c3c';
+                    } else {
+                        btnDelete.disabled = true;
+                        btnDelete.style.color = '';
+                    }
                 }
 
                 if (!cid) {
@@ -1549,7 +1563,6 @@
                     return;
                 }
                 
-                // Si c'est manuel, c'est une chaîne, sinon un int
                 const finalCid = cid.startsWith('M_') ? cid : parseInt(cid);
                 highlightCluster(finalCid, clusterLayer);
                 afficherInfoBassin(finalCid);
@@ -1569,7 +1582,7 @@
             let bassinProperties = null;
             _activeClusterLayer.eachLayer(layer => {
                 const f = layer.feature;
-                if (f && f.geometry.type === 'LineString' && f.properties.cluster_id === clusterId) {
+                if (f && f.geometry && (f.geometry.type === 'LineString' || f.geometry.type === 'MultiLineString') && String(f.properties.cluster_id) === String(clusterId)) {
                     nb++;
                     longueur += (f.properties.longueur || 0);
                 }
@@ -1578,14 +1591,24 @@
                 }
             });
             if (bassinProperties) {
-                nb = bassinProperties.nb_troncons ?? nb;
+                nb = bassinProperties.nb_conduites ?? (bassinProperties.nb_troncons ?? nb);
                 longueur = bassinProperties.longueur_totale_m ?? longueur;
             }
             const nom = _bassinNoms && _bassinNoms[clusterId] ? _bassinNoms[clusterId] : `Bassin ${clusterId}`;
+            const surfHa = bassinProperties && bassinProperties.surface_ha !== undefined ? `${bassinProperties.surface_ha} ha` : 'N/A';
+            const nbReg = bassinProperties && bassinProperties.nb_regards !== undefined ? bassinProperties.nb_regards : 'N/A';
+            const nbOrph = bassinProperties && bassinProperties.nb_regards_orphelins !== undefined ? bassinProperties.nb_regards_orphelins : 0;
+            const typEx = bassinProperties && bassinProperties.exutoire_type ? bassinProperties.exutoire_type.toUpperCase() : 'EXUTOIRE';
+            const bColor = bassinProperties && bassinProperties.couleur ? bassinProperties.couleur : '#38bdf8';
+
             infoDiv.innerHTML = `
-                <b>${nom}</b><br>
-                📍 ${nb} tronçon(s)<br>
-                📏 ${longueur.toFixed(1)} m
+                <div style="margin-top: 6px; padding: 6px 8px; background: rgba(30,41,59,0.85); border-radius: 6px; font-size: 0.74rem; border-left: 3px solid ${bColor};">
+                    <div style="font-weight: 700; color: #f8fafc;">${nom}</div>
+                    <div style="color: #94a3b8; font-size: 0.7rem;">🏷️ Type : <b>${typEx}</b></div>
+                    <div style="color: #cbd5e1; margin-top: 2px;">📐 Surface : <b>${surfHa}</b></div>
+                    <div style="color: #cbd5e1;">📍 Regards : <b>${nbReg}</b> ${nbOrph > 0 ? `<span style="color: #f59e0b; font-size: 0.68rem;">(${nbOrph} orphelins rattachés)</span>` : ''}</div>
+                    <div style="color: #cbd5e1;">📏 Conduites : <b>${nb}</b> (${longueur.toFixed(0)} m)</div>
+                </div>
             `;
         }
 
