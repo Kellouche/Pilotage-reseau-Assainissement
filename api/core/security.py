@@ -81,6 +81,8 @@ def get_tenant_context(
         token = auth_creds.credentials.strip()
     elif "access_token" in request.cookies:
         token = request.cookies.get("access_token")
+    elif "refresh_token" in request.cookies:
+        token = request.cookies.get("refresh_token")
 
     if not token:
         raise HTTPException(
@@ -101,9 +103,15 @@ def get_tenant_context(
         role = "admin" if "admin" in api_key.scopes else "engineer" if "write" in api_key.scopes else "viewer"
         return TenantContext(actor=api_key, org=org, role=role, is_api_key=True)
 
-    # 2. Cas Jeton JWT Utilisateur
+    # 2. Cas Jeton JWT Utilisateur (avec fallback refresh token)
     payload = decode_token(token)
-    if not payload or payload.get("type") != "access":
+    if not payload:
+        # Fallback si le jeton access a expiré mais le cookie refresh est valide
+        ref_cookie = request.cookies.get("refresh_token")
+        if ref_cookie:
+            payload = decode_token(ref_cookie)
+
+    if not payload or payload.get("type") not in ("access", "refresh"):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Jeton JWT invalide ou expiré.",

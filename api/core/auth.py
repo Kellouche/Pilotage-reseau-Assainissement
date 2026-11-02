@@ -42,7 +42,7 @@ _ph = PasswordHasher(
 # Configuration JWT
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "swmm_platform_jwt_secret_dev_key_2026_super_secure")
 JWT_ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 jours pour maintenir une session de travail fluide
 REFRESH_TOKEN_EXPIRE_DAYS = 30
 
 

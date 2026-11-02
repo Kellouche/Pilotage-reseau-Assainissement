@@ -413,10 +413,14 @@
                 return;
             }
 
-            // Sauvegarder les jetons d'accès
+            // Sauvegarder les jetons d'accès et de rafraîchissement
             if (data.access_token) {
                 localStorage.setItem('swmm_access_token', data.access_token);
                 document.cookie = `access_token=${data.access_token}; path=/; max-age=604800; SameSite=Lax`;
+            }
+            if (data.refresh_token) {
+                localStorage.setItem('swmm_refresh_token', data.refresh_token);
+                document.cookie = `refresh_token=${data.refresh_token}; path=/; max-age=2592000; SameSite=Lax`;
             }
 
             // Flag pour proposer le choix de projet à la connexion (comme une 1ère fois)

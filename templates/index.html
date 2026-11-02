@@ -2522,12 +2522,38 @@
             const avatarEl = document.getElementById('nav-user-avatar');
 
             try {
-                const token = localStorage.getItem('swmm_access_token');
+                let token = localStorage.getItem('swmm_access_token');
                 if (token && !document.cookie.includes('access_token=')) {
                     document.cookie = `access_token=${token}; path=/; max-age=604800; SameSite=Lax`;
                 }
-                const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-                const resp = await fetch('/api/v1/auth/me', { headers, credentials: 'include' });
+                let headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+                let resp = await fetch('/api/v1/auth/me', { headers, credentials: 'include' });
+
+                // Si le jeton d'accès a expiré, tenter un rafraîchissement transparent via refresh_token
+                if (!resp.ok && (resp.status === 401 || resp.status === 403)) {
+                    try {
+                        const rToken = localStorage.getItem('swmm_refresh_token');
+                        const refResp = await fetch('/api/v1/auth/refresh', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify(rToken ? { refresh_token: rToken } : {})
+                        });
+                        if (refResp.ok) {
+                            const refData = await refResp.json();
+                            if (refData.access_token) {
+                                token = refData.access_token;
+                                localStorage.setItem('swmm_access_token', token);
+                                document.cookie = `access_token=${token}; path=/; max-age=604800; SameSite=Lax`;
+                                headers = { 'Authorization': `Bearer ${token}` };
+                                resp = await fetch('/api/v1/auth/me', { headers, credentials: 'include' });
+                            }
+                        }
+                    } catch (eRef) {
+                        console.warn('Échec renouvellement session:', eRef);
+                    }
+                }
+
                 if (resp.ok) {
                     const data = await resp.json();
                     if (token) {
@@ -2535,7 +2561,11 @@
                     }
                     if (loadingEl) loadingEl.style.display = 'none';
                     if (userEl) userEl.style.display = 'flex';
-                    if (orgNameEl) orgNameEl.textContent = `${data.active_organization.name} [${(data.active_organization.billing_plan || 'BET').toUpperCase()}]`;
+                    if (guestEl) guestEl.style.display = 'none';
+
+                    if (orgNameEl && data.active_organization) {
+                        orgNameEl.textContent = `${data.active_organization.name} [${(data.active_organization.billing_plan || 'BET').toUpperCase()}]`;
+                    }
                     
                     const name = data.user.full_name || data.user.email;
                     if (userNameEl) userNameEl.textContent = name;
@@ -2551,7 +2581,7 @@
                     if (dEmail) dEmail.textContent = data.user.email;
                     const dRole = document.getElementById('dropdown-user-role');
                     if (dRole) {
-                        dRole.textContent = data.user.is_superadmin ? 'SuperAdmin' : (data.active_organization.role || 'Ingénieur');
+                        dRole.textContent = data.user.is_superadmin ? 'SuperAdmin' : ((data.active_organization && data.active_organization.role) || 'Ingénieur');
                     }
                     const editEmail = document.getElementById('profile-edit-email');
                     if (editEmail) editEmail.value = data.user.email;
@@ -2568,6 +2598,7 @@
                 console.warn('Session anonyme:', e);
             }
             if (loadingEl) loadingEl.style.display = 'none';
+            if (userEl) userEl.style.display = 'none';
             if (guestEl) guestEl.style.display = 'flex';
         }
         window.addEventListener('DOMContentLoaded', initSaaSNavbar);
