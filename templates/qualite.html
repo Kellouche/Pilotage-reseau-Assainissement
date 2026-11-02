@@ -434,15 +434,32 @@
         let communesChart = null;
 
         // Initialisation
-        document.addEventListener('DOMContentLoaded', function() {
+        function demarrerQualite() {
             console.log('Application Qualité Réseau initialisée');
             chargerAnalyse();
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', demarrerQualite);
+        } else {
+            demarrerQualite();
+        }
+
+        window.addEventListener('pageshow', function() {
+            if (!currentData) {
+                chargerAnalyse();
+            }
         });
 
         // Navigation
         function retournerCockpit(event) {
             if (event) event.preventDefault();
-            // Retour instantané à la carte existante sans recharger les 20 000 objets
+            // 1. Si affiché dans l'iframe intégrée du Cockpit
+            if (window.parent && window.parent !== window && typeof window.parent.basculerVueCockpit === 'function') {
+                window.parent.basculerVueCockpit('carto');
+                return;
+            }
+            // 2. Si historique disponible
             if (window.history.length > 1 && (document.referrer.includes('/map') || document.referrer.includes(window.location.host))) {
                 window.history.back();
             } else {
@@ -465,7 +482,9 @@
             document.getElementById(sectionName).style.display = 'block';
 
             // Activer le bouton correspondant
-            event.target.classList.add('active');
+            if (event && event.target) {
+                event.target.classList.add('active');
+            }
         }
 
         // Chargement des données
@@ -488,16 +507,15 @@
                 currentData = await response.json();
                 console.log('Données chargées:', currentData);
 
-                afficherStatistiques();
-                afficherAnomalies();
-                afficherScores();
-                creerGraphiques();
-
-                showLoading(false);
+                try { afficherStatistiques(); } catch (e) { console.error('Erreur stats:', e); }
+                try { afficherAnomalies(); } catch (e) { console.error('Erreur anomalies:', e); }
+                try { afficherScores(); } catch (e) { console.error('Erreur scores:', e); }
+                try { creerGraphiques(); } catch (e) { console.error('Erreur graphiques:', e); }
 
             } catch (error) {
                 console.error('Erreur lors du chargement:', error);
                 showError(`Impossible de charger l'analyse: ${error.message}`);
+            } finally {
                 showLoading(false);
             }
         }

@@ -383,12 +383,12 @@
 
         <!-- Section Centre : Espaces de Travail (Onglets Métier Épurés) -->
         <div style="display: flex; align-items: center; gap: 4px; background: rgba(0, 0, 0, 0.25); padding: 3px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);">
-            <a href="/map" style="color: #38bdf8; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); font-weight: 700; padding: 5px 12px; border-radius: 6px; font-size: 0.82rem; display: flex; align-items: center; gap: 6px; text-decoration: none;">
+            <button id="tab-nav-carto" onclick="basculerVueCockpit('carto')" style="color: #38bdf8; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); font-weight: 700; padding: 5px 12px; border-radius: 6px; font-size: 0.82rem; display: flex; align-items: center; gap: 6px; cursor: pointer; transition: all 0.2s;">
                 <i class="fas fa-map-marked-alt"></i> Cartographie
-            </a>
-            <a href="/qualite" style="color: #cbd5e1; font-weight: 600; padding: 5px 12px; border-radius: 6px; font-size: 0.82rem; display: flex; align-items: center; gap: 6px; text-decoration: none; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='transparent'">
+            </button>
+            <button id="tab-nav-qualite" onclick="basculerVueCockpit('qualite')" style="color: #cbd5e1; background: transparent; border: 1px solid transparent; font-weight: 600; padding: 5px 12px; border-radius: 6px; font-size: 0.82rem; display: flex; align-items: center; gap: 6px; cursor: pointer; transition: all 0.2s;" onmouseover="if (this.style.background === 'transparent') this.style.background='rgba(255,255,255,0.06)'" onmouseout="if (this.style.borderColor === 'transparent') this.style.background='transparent'">
                 <i class="fas fa-clipboard-check" style="color: #10b981;"></i> Contrôle Qualité
-            </a>
+            </button>
         </div>
 
         <!-- Section Droite : Simulation, Ressources & Profil Utilisateur -->
@@ -583,6 +583,11 @@
     <div id="map"></div>
     </div> <!-- fin app-workspace -->
 
+    <!-- Vue Intégrée Contrôle Qualité (Évite tout déchargement de la carte et du réseau SIG) -->
+    <div id="container-qualite-cockpit" style="display: none; width: 100%; height: calc(100vh - 52px); overflow: hidden; background: #0f172a;">
+        <iframe id="iframe-qualite" src="" style="width: 100%; height: 100%; border: none;"></iframe>
+    </div>
+
     <!-- Modal d'édition (Flottante) -->
     <div id="edit-modal" style="display: none; position: fixed; top: 100px; left: 100px; width: 350px; background: white; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); z-index: 3000; overflow: hidden; border: 1px solid #ccc; flex-direction: column;">
         <div id="modal-header" style="background: #16213e; color: white; padding: 10px 15px; cursor: move; display: flex; justify-content: space-between; align-items: center;">
@@ -725,6 +730,74 @@
                 montrerChargement(false);
             }
         });
+
+        // ============================================================
+        // BASCULE DE VUES DU COCKPIT (CARTO <-> QUALITÉ SANS RECHARGEMENT)
+        // ============================================================
+        window.basculerVueCockpit = function(vue) {
+            const tabCarto = document.getElementById('tab-nav-carto');
+            const tabQualite = document.getElementById('tab-nav-qualite');
+            const workspace = document.getElementById('app-workspace');
+            const containerQ = document.getElementById('container-qualite-cockpit');
+            const iframeQ = document.getElementById('iframe-qualite');
+
+            if (vue === 'qualite') {
+                if (tabCarto) {
+                    tabCarto.style.color = '#cbd5e1';
+                    tabCarto.style.background = 'transparent';
+                    tabCarto.style.borderColor = 'transparent';
+                }
+                if (tabQualite) {
+                    tabQualite.style.color = '#38bdf8';
+                    tabQualite.style.background = 'rgba(56, 189, 248, 0.15)';
+                    tabQualite.style.borderColor = 'rgba(56, 189, 248, 0.3)';
+                }
+                if (workspace) workspace.style.display = 'none';
+                if (containerQ) {
+                    containerQ.style.display = 'block';
+                    if (iframeQ && (!iframeQ.src || iframeQ.src === 'about:blank' || !iframeQ.src.includes('/qualite'))) {
+                        iframeQ.src = '/qualite';
+                    }
+                }
+                if (window.history && window.history.pushState) {
+                    window.history.pushState({ tab: 'qualite' }, '', '/map?tab=qualite');
+                }
+            } else {
+                if (tabCarto) {
+                    tabCarto.style.color = '#38bdf8';
+                    tabCarto.style.background = 'rgba(56, 189, 248, 0.15)';
+                    tabCarto.style.borderColor = 'rgba(56, 189, 248, 0.3)';
+                }
+                if (tabQualite) {
+                    tabQualite.style.color = '#cbd5e1';
+                    tabQualite.style.background = 'transparent';
+                    tabQualite.style.borderColor = 'transparent';
+                }
+                if (containerQ) containerQ.style.display = 'none';
+                if (workspace) {
+                    workspace.style.display = 'flex';
+                    if (typeof carte !== 'undefined' && carte) {
+                        setTimeout(() => carte.invalidateSize(), 60);
+                    }
+                }
+                if (window.history && window.history.pushState) {
+                    window.history.pushState({ tab: 'carto' }, '', '/map');
+                }
+            }
+        };
+
+        window.addEventListener('popstate', (e) => {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('tab') === 'qualite') {
+                basculerVueCockpit('qualite');
+            } else {
+                basculerVueCockpit('carto');
+            }
+        });
+
+        if (window.location.search.includes('tab=qualite')) {
+            setTimeout(() => basculerVueCockpit('qualite'), 100);
+        }
 
         // Variables pour l'éditeur manuel
         let editorState = {

@@ -29,9 +29,49 @@ _cache_qualite = {
 }
 
 
-def reinitialiser_cache_qualite():
+def _get_disk_cache_path(gpkg_path: Path) -> Path:
+    return gpkg_path.with_suffix(".qualite_cache.json")
+
+
+def _charger_cache_disque(gpkg_path: Path) -> Optional[Dict[str, Any]]:
+    try:
+        cache_file = _get_disk_cache_path(gpkg_path)
+        if cache_file.exists():
+            if cache_file.stat().st_mtime >= gpkg_path.stat().st_mtime:
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    return json.load(f)
+    except Exception as e:
+        print(f"[CACHE QUALITE] Erreur lecture cache disque: {e}")
+    return None
+
+
+def _sauvegarder_cache_disque(gpkg_path: Path, rapport: Dict[str, Any]):
+    try:
+        cache_file = _get_disk_cache_path(gpkg_path)
+        with open(cache_file, "w", encoding="utf-8") as f:
+            json.dump(rapport, f, ensure_ascii=False)
+    except Exception as e:
+        print(f"[CACHE QUALITE] Erreur ecriture cache disque: {e}")
+
+
+def reinitialiser_cache_qualite(gpkg_path: Optional[Path] = None):
     """Purge le cache de qualité lors d'un changement de modèle/réseau."""
     global _cache_qualite
+    if gpkg_path:
+        cache_file = _get_disk_cache_path(gpkg_path)
+        if cache_file.exists():
+            try:
+                cache_file.unlink()
+            except Exception:
+                pass
+    elif _cache_qualite.get("gpkg_path"):
+        try:
+            old_p = Path(_cache_qualite["gpkg_path"]).with_suffix(".qualite_cache.json")
+            if old_p.exists():
+                old_p.unlink()
+        except Exception:
+            pass
+
     _cache_qualite["rapport"] = None
     _cache_qualite["timestamp"] = None
     _cache_qualite["gpkg_path"] = None
@@ -89,8 +129,19 @@ async def analyser_qualite_reseau(
         (maintenant - _cache_qualite["timestamp"]) < _cache_qualite["duree_validite"]):
         return _cache_qualite["rapport"]
 
+    # Tentative de récupération depuis le cache persistant sur disque (instantané <50ms)
+    if not force_refresh:
+        rapport_disque = _charger_cache_disque(gpkg_target)
+        if rapport_disque:
+            _cache_qualite["rapport"] = rapport_disque
+            _cache_qualite["timestamp"] = maintenant
+            _cache_qualite["gpkg_path"] = str(gpkg_target)
+            return rapport_disque
+
     try:
         rapport = await asyncio.to_thread(analyser_qualite_gpkg, gpkg_target, project_name)
+
+        _sauvegarder_cache_disque(gpkg_target, rapport)
 
         _cache_qualite["rapport"] = rapport
         _cache_qualite["timestamp"] = maintenant
