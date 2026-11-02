@@ -10,7 +10,7 @@ from pathlib import Path
 
 from api.database import get_db
 from api import schemas, crud
-from api.models import Project
+from api.models import Project, Organization
 from api.core.security import get_tenant_context, get_tenant_context_optional, TenantContext
 
 router = APIRouter(prefix="/network", tags=["Réseau"])
@@ -266,7 +266,7 @@ def list_available_datasets():
 @router.post("/load-dataset/{dataset_id}")
 def load_benchmark_dataset(
     dataset_id: str,
-    tenant_ctx: TenantContext = Depends(get_tenant_context),
+    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context_optional),
     db: Session = Depends(get_db)
 ):
     """Charge l'un des jeux de données officiels EPA ou de démonstration."""
@@ -278,17 +278,22 @@ def load_benchmark_dataset(
     if not target_path.exists():
         raise HTTPException(status_code=500, detail=f"Fichier réseau introuvable : {ds['gpkg_path']}")
 
-    if ds["id"] == "ville_complete" and not (tenant_ctx.user and tenant_ctx.user.is_superadmin):
+    if ds["id"] == "ville_complete" and not (tenant_ctx and tenant_ctx.user and tenant_ctx.user.is_superadmin):
         raise HTTPException(status_code=403, detail="Seul un SuperAdmin peut charger le réseau réel complet de la ville.")
 
+    org_id = tenant_ctx.org_id if tenant_ctx else None
+    if not org_id:
+        default_org = db.query(Organization).first()
+        org_id = default_org.id if default_org else "org_default"
+
     project = db.query(Project).filter(
-        Project.org_id == tenant_ctx.org_id,
+        Project.org_id == org_id,
         Project.is_archived.is_(False)
     ).first()
 
     if not project:
         project = Project(
-            org_id=tenant_ctx.org_id,
+            org_id=org_id,
             name=ds["title"],
             description=ds["description"],
         )
@@ -301,6 +306,18 @@ def load_benchmark_dataset(
     project.pipes_count = ds["pipes_count"]
     db.commit()
 
+    # Effacer immédiatement les résultats de simulation du précédent modèle
+    try:
+        from api.routes.simulations import reinitialiser_derniere_simulation
+        reinitialiser_derniere_simulation()
+    except Exception:
+        pass
+
+    try:
+        from api.routes.simulations import reinitialiser_derniere_simulation
+        reinitialiser_derniere_simulation()
+    except Exception:
+        pass
     try:
         from api.main import reset_layers_cache
         reset_layers_cache()
@@ -356,6 +373,11 @@ def load_demo_network(
     project.outfalls_count = 1
     db.commit()
 
+    try:
+        from api.routes.simulations import reinitialiser_derniere_simulation
+        reinitialiser_derniere_simulation()
+    except Exception:
+        pass
     try:
         from api.main import reset_layers_cache
         reset_layers_cache()
@@ -417,6 +439,11 @@ def load_master_network(
     db.commit()
 
     try:
+        from api.routes.simulations import reinitialiser_derniere_simulation
+        reinitialiser_derniere_simulation()
+    except Exception:
+        pass
+    try:
         from api.main import reset_layers_cache
         reset_layers_cache()
     except Exception:
@@ -456,6 +483,11 @@ def reset_project_network(
         project.name = "Nouveau Projet (Vierge)"
         db.commit()
 
+    try:
+        from api.routes.simulations import reinitialiser_derniere_simulation
+        reinitialiser_derniere_simulation()
+    except Exception:
+        pass
     try:
         from api.main import reset_layers_cache
         reset_layers_cache()
@@ -508,6 +540,11 @@ async def upload_network_gpkg(
     project.source_gpkg_key = str(target_path)
     db.commit()
 
+    try:
+        from api.routes.simulations import reinitialiser_derniere_simulation
+        reinitialiser_derniere_simulation()
+    except Exception:
+        pass
     try:
         from api.main import reset_layers_cache
         reset_layers_cache()

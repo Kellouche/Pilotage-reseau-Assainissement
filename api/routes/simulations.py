@@ -123,6 +123,12 @@ from src.domain.moteur_swmm import MoteurSWMM, SCENARIOS_PLUIE
 
 _DERNIERE_SIMULATION: Dict[str, Any] = {}
 
+
+def reinitialiser_derniere_simulation():
+    """Efface la dernière simulation en cache pour éviter les fuites entre réseaux."""
+    global _DERNIERE_SIMULATION
+    _DERNIERE_SIMULATION = {}
+
 class SimulationRunRequest(BaseModel):
     scenario_key: str = "pluie_decennale"
     duree_heures: Optional[float] = None
@@ -164,7 +170,7 @@ def run_native_swmm_simulation(
     from api.models import Project
 
     # 1. Identifier le fichier réseau GeoPackage du projet actif
-    gpkg_path = Path("data/demo_reseau.gpkg")
+    gpkg_path = None
     if tenant and tenant.org_id:
         proj = db.query(Project).filter(
             Project.org_id == tenant.org_id,
@@ -173,7 +179,16 @@ def run_native_swmm_simulation(
         if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
             gpkg_path = Path(proj.source_gpkg_key)
 
-    if not gpkg_path.exists():
+    if not gpkg_path:
+        proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
+        if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
+            gpkg_path = Path(proj.source_gpkg_key)
+        else:
+            cand = Path("data/demo_reseau.gpkg")
+            if cand.exists():
+                gpkg_path = cand
+
+    if not gpkg_path or not gpkg_path.exists():
         raise HTTPException(status_code=404, detail="Réseau hydraulique introuvable pour ce projet.")
 
     moteur = MoteurSWMM()
@@ -185,6 +200,7 @@ def run_native_swmm_simulation(
             pas_routage_sec=payload.pas_routage_sec,
             pente_moyenne_pct=payload.pente_moyenne_pct
         )
+        resultat["source_gpkg"] = str(gpkg_path.resolve())
         _DERNIERE_SIMULATION = resultat
 
         return {
@@ -216,18 +232,39 @@ def run_native_swmm_simulation(
 
 
 @router.get("/latest")
-def get_latest_simulation():
+def get_latest_simulation(
+    db: Session = Depends(get_db),
+    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional)
+):
     """
-    Retourne les résultats et cartographies thématiques de la dernière simulation exécutée.
-    Permet à l'utilisateur de ré-afficher les résultats sans devoir recalculer.
+    Retourne les résultats et cartographies thématiques de la dernière simulation exécutée
+    uniquement si elle correspond au réseau actuellement actif.
     """
     global _DERNIERE_SIMULATION
     if not _DERNIERE_SIMULATION or "node_results" not in _DERNIERE_SIMULATION:
-        try:
-            moteur = MoteurSWMM()
-            _DERNIERE_SIMULATION = moteur.executer_simulation(Path("data/demo_reseau.gpkg"))
-        except Exception:
-            return {"status": "none", "message": "Aucune simulation enregistrée."}
+        return {"status": "none", "message": "Aucune simulation enregistrée pour ce réseau."}
+
+    from api.models import Project
+    active_gpkg = None
+    if tenant and tenant.org_id:
+        proj = db.query(Project).filter(
+            Project.org_id == tenant.org_id,
+            Project.is_archived.is_(False)
+        ).first()
+        if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
+            active_gpkg = str(Path(proj.source_gpkg_key).resolve())
+    if not active_gpkg:
+        proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
+        if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
+            active_gpkg = str(Path(proj.source_gpkg_key).resolve())
+        elif Path("data/demo_reseau.gpkg").exists():
+            active_gpkg = str(Path("data/demo_reseau.gpkg").resolve())
+
+    sim_gpkg = _DERNIERE_SIMULATION.get("source_gpkg")
+    if active_gpkg and sim_gpkg and active_gpkg != sim_gpkg:
+        # La simulation en mémoire appartenait à un autre modèle/démo
+        _DERNIERE_SIMULATION = {}
+        return {"status": "none", "message": "Aucune simulation enregistrée pour le réseau actif."}
 
     resultat = _DERNIERE_SIMULATION
     return {

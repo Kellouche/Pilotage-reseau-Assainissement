@@ -359,7 +359,21 @@ def get_layers(
                     if cand.exists():
                         gpkg_target = cand
 
-    # Si aucun réseau n'est chargé pour ce compte/projet -> ESPACE VIERGE (Option B)
+    # Si aucun réseau n'est chargé pour ce compte/projet -> Fallback projet actif local ou démo
+    if not gpkg_target and db:
+        project = db.query(Project).filter(Project.is_archived.is_(False)).first()
+        if project:
+            project_name = project.name
+            if project.source_gpkg_key:
+                cand = Path(project.source_gpkg_key)
+                if cand.exists():
+                    gpkg_target = cand
+        if not gpkg_target:
+            cand = Path("data/demo_reseau.gpkg")
+            if cand.exists():
+                gpkg_target = cand
+                project_name = "Quartier Témoin (Démo)"
+
     if not gpkg_target:
         empty_response["project_name"] = project_name
         return empty_response
