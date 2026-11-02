@@ -697,6 +697,9 @@
 
         // Génération des détails d'une anomalie
         function genererDetailsAnomalie(anomalie) {
+            if (anomalie.description) {
+                return anomalie.description;
+            }
             if (anomalie.champs_manquants) {
                 return `Champs manquants: ${anomalie.champs_manquants.join(', ')}`;
             }
