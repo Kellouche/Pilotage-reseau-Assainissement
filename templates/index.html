@@ -531,6 +531,12 @@
                 <label class="layer-item"><input type="checkbox" id="f-stations" checked> <span class="layer-indicator" style="background: #f59e0b;"></span> Stations de pompage</label>
                 <label class="layer-item"><input type="checkbox" id="f-step" checked> <span class="layer-indicator" style="background: #10b981;"></span> Station d'épuration (STEP)</label>
                 <label class="layer-item"><input type="checkbox" id="f-ouvrages" checked> <span class="layer-indicator" style="background: #a855f7;"></span> Ouvrages spéciaux</label>
+                <label class="layer-item" id="label-orphelins" style="margin-top: 4px; border-top: 1px dashed rgba(255,255,255,0.08); padding-top: 5px;">
+                    <input type="checkbox" id="f-orphelins" onchange="basculerCoucheOrphelins(this.checked)">
+                    <span class="layer-indicator" style="background: #f59e0b; border: 1px dashed #d97706;"></span>
+                    <span>Tronçons orphelins (déconnectés)</span>
+                    <span id="badge-orphelins-count" style="font-size: 0.68rem; color: #f59e0b; margin-left: auto; font-weight: 600;">--</span>
+                </label>
             </div>
         </div>
 
@@ -540,7 +546,15 @@
         <div class="sidebar-section">
             <div class="section-title">
                 <span><i class="fas fa-draw-polygon text-emerald me-1"></i> 2. Hydrologie &amp; Surfaces</span>
-                <span id="badge-subcatchments-count" class="badge-pill">-- SB</span>
+                <span id="badge-subcatchments-count" class="badge-pill">79 BV &bull; 10538 SB</span>
+            </div>
+            <!-- Checkbox Couche Bassins Versants 79 (Point 4) -->
+            <div class="layer-list" style="margin-bottom: 6px;">
+                <label class="layer-item" id="label-bassins" style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 6px; padding: 6px 10px;">
+                    <input type="checkbox" id="f-bassins" checked onchange="basculerCoucheBassins(this.checked)">
+                    <span class="layer-indicator" style="background: #38bdf8;"></span>
+                    <span style="font-weight: 600; color: #38bdf8;">Bassins Versants (79 Exutoires)</span>
+                </label>
             </div>
             <!-- Checkbox Sous-bassins versants Voronoï (Point 1) -->
             <div class="layer-list" style="margin-bottom: 10px;">
@@ -629,7 +643,8 @@
             stations: L.layerGroup().addTo(carte),
             step: L.layerGroup().addTo(carte),
             ouvrages: L.layerGroup().addTo(carte),
-            bassins: L.layerGroup(),
+            bassins: L.layerGroup().addTo(carte),
+            orphelins: L.layerGroup(),
             incidents: L.layerGroup().addTo(carte),
             subcatchments: L.layerGroup().addTo(carte),
             res_conduites: L.layerGroup().addTo(carte),
@@ -637,11 +652,22 @@
             sens_ecoulement: L.layerGroup()
         };
 
+        function basculerCoucheBassins(checked) {
+            if (checked) couches.bassins.addTo(carte);
+            else carte.removeLayer(couches.bassins);
+        }
+
+        function basculerCoucheOrphelins(checked) {
+            if (checked) couches.orphelins.addTo(carte);
+            else carte.removeLayer(couches.orphelins);
+        }
+
         // Couche pour les clusters détectés
         let clusterCouche = L.layerGroup().addTo(carte);
         
         // Référence globale vers le layer Leaflet des clusters (pour synchro dropdown)
         let _activeClusterLayer = null;
+        let _selectedClusterId = null;
         // Map clusterId -> bounds du bassin
         let _bassinBounds = {};
 
@@ -1384,10 +1410,23 @@
                                     });
 
                                     layer.on('mouseover', function() {
-                                        this.setStyle({ fillOpacity: 0.5, weight: 3 });
+                                        const fCid = String(feature.properties.cluster_id);
+                                        if (_selectedClusterId !== null && fCid !== _selectedClusterId) {
+                                            this.setStyle({ fillOpacity: 0.22, weight: 1.8 });
+                                        } else {
+                                            this.setStyle({ fillOpacity: 0.55, weight: 3.5 });
+                                        }
                                     });
                                     layer.on('mouseout', function() {
-                                        this.setStyle({ fillOpacity: 0.3, weight: 2 });
+                                        const fCid = String(feature.properties.cluster_id);
+                                        const bColor = feature.properties.couleur || '#38bdf8';
+                                        if (_selectedClusterId === null) {
+                                            this.setStyle({ fillOpacity: 0.18, weight: 1.8, color: bColor, fillColor: bColor, dashArray: '5, 4' });
+                                        } else if (fCid === _selectedClusterId) {
+                                            this.setStyle({ fillOpacity: 0.45, weight: 3.5, color: '#ffffff', fillColor: bColor, dashArray: null });
+                                        } else {
+                                            this.setStyle({ fillOpacity: 0.04, weight: 0.8, color: '#64748b', fillColor: '#334155', dashArray: '4, 4' });
+                                        }
                                     });
                                 } else if (feature.properties.type === 'exutoire') {
                                     const typLabels = { step: '🔴 STEP', station: '🔵 Station', ouvrage: '🟣 Ouvrage', rejet: '🟠 Rejet' };
@@ -1396,7 +1435,7 @@
                                         `<b>Exutoire: ${feature.properties.nom}</b><br>${typLabel}`,
                                         { sticky: true }
                                     );
-                                } else if (feature.geometry.type === 'LineString') {
+                                } else if (feature.geometry && (feature.geometry.type === 'LineString' || feature.geometry.type === 'MultiLineString')) {
                                     const p = feature.properties;
                                     layer.bindTooltip(
                                         `<b>Conduite ${p.conduit_id || ''}</b><br>` +
@@ -1410,30 +1449,60 @@
                             }
                         });
 
+                        // Réinitialiser les couches d'affichage
+                        couches.bassins.clearLayers();
+                        clusterCouche.clearLayers();
+                        couches.orphelins.clearLayers();
+
                         // Séparer les bassins des tronçons pour la gestion des couches
                         clusterLayer.eachLayer(layer => {
-                            if (layer.feature.properties.type === 'bassin_urbain') {
+                            if (layer.feature && layer.feature.properties && layer.feature.properties.type === 'bassin_urbain') {
                                 layer.addTo(couches.bassins);
                             } else {
-                                // Tronçons ET exutoires (points) restent sur la couche réseau
                                 layer.addTo(clusterCouche);
                             }
                         });
+
+                        // Alimenter la couche dédiée des tronçons orphelins (déconnectés)
+                        const orphelinsGeo = clusterData.orphelins_conduites;
+                        const nbOrphelins = clusterData.nb_troncons_orphelins || (orphelinsGeo && orphelinsGeo.features ? orphelinsGeo.features.length : 0);
+                        if (orphelinsGeo && orphelinsGeo.features && orphelinsGeo.features.length > 0) {
+                            L.geoJSON(orphelinsGeo, {
+                                style: {
+                                    color: '#f59e0b',
+                                    weight: 3.0,
+                                    opacity: 0.9,
+                                    dashArray: '5, 5'
+                                },
+                                onEachFeature: (feature, layer) => {
+                                    const p = feature.properties || {};
+                                    layer.bindTooltip(
+                                        `<b>⚠️ Tronçon orphelin (déconnecté)</b><br>` +
+                                        `ID: ${p.conduit_id || 'N/A'}<br>` +
+                                        `📏 ${p.longueur ? p.longueur.toFixed(1) + ' m' : 'N/A'} &nbsp;|&nbsp; ⌀ ${p.diametre || 'N/A'} mm<br>` +
+                                        `Matériau: ${p.materiau || 'N/A'}<br>` +
+                                        `<em>Non raccordé hydrauliquement au réseau principal</em>`,
+                                        { sticky: true }
+                                    );
+                                }
+                            }).addTo(couches.orphelins);
+                        }
+                        const badgeOrph = document.getElementById('badge-orphelins-count');
+                        if (badgeOrph) badgeOrph.textContent = `(${nbOrphelins})`;
 
                         _activeClusterLayer = clusterLayer;
                         
                         const nbBassins = clusterData.clusters_crees || clusterData.features.filter(f => f.properties && f.properties.type === 'bassin_urbain').length;
                         const nbTroncons = clusterData.troncons_connectes !== undefined ? clusterData.troncons_connectes : clusterData.features.filter(f => f.geometry && (f.geometry.type === 'LineString' || f.geometry.type === 'MultiLineString')).length;
-                        const nbOrphelins = clusterData.troncons_orphelins || 0;
                         
                         statusDiv.innerHTML = `
                             <div style="margin-top: 6px; padding: 6px 8px; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 6px; font-size: 0.75rem;">
                                 <div style="color: #38bdf8; font-weight: 600; margin-bottom: 3px;"><i class="fas fa-check-circle me-1"></i> Partitionnement terminé</div>
                                 <div style="color: #f8fafc;"><b>${nbBassins}</b> bassins versants d'exutoires</div>
                                 <div style="color: #cbd5e1;"><b>${nbTroncons}</b> tronçons reliés aux exutoires</div>
-                                ${nbOrphelins > 0 ? `<div style="color: #f87171;"><b>${nbOrphelins}</b> tronçons orphelins (déconnectés)</div>` : ''}
+                                ${nbOrphelins > 0 ? `<div style="color: #f59e0b;"><b>${nbOrphelins}</b> tronçons orphelins (déconnectés)</div>` : ''}
                                 <div style="color: #94a3b8; font-size: 0.7rem; margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 4px;">
-                                    💡 <em>Chaque couleur représente les conduites drainant vers un exutoire (graphe topologique, pas une simulation hydraulique).</em>
+                                    💡 <em>Chaque couleur représente les conduites drainant vers un exutoire (graphe topologique).</em>
                                 </div>
                             </div>
                         `;
@@ -1441,15 +1510,20 @@
                         // Construire le menu déroulant des bassins
                         peuplerDropdownBassins(clusterData, clusterLayer);
                         
-                        // S'assurer que rien n'est surligné au départ
+                        // S'assurer que rien n'est grisé au départ
                         highlightCluster(null, clusterLayer);
                         
-                        // Activer la case à cocher des bassins (désactivée par défaut)
+                        // Activer la case à cocher des bassins
                         const chkBassins = document.getElementById('f-bassins');
                         const lblBassins = document.getElementById('label-bassins');
-                        chkBassins.disabled = false;
-                        lblBassins.style.color = 'inherit';
-                        lblBassins.style.fontWeight = 'bold';
+                        if (chkBassins) {
+                            chkBassins.disabled = false;
+                            chkBassins.checked = true;
+                        }
+                        if (lblBassins) {
+                            lblBassins.style.color = 'inherit';
+                            lblBassins.style.fontWeight = 'bold';
+                        }
 
                         if (clusterLayer.getBounds().isValid()) {
                             carte.fitBounds(clusterLayer.getBounds(), { padding: [50, 50] });
@@ -1470,35 +1544,71 @@
         });
 
         function highlightCluster(clusterId, geojsonLayer) {
+            _selectedClusterId = (clusterId === null || clusterId === undefined || clusterId === '') ? null : String(clusterId);
+
             // Synchroniser le dropdown si l'appel vient du clic carte
             const sel = document.getElementById('bassin-select');
-            if (clusterId !== null && sel.value !== String(clusterId)) {
-                sel.value = String(clusterId);
-                afficherInfoBassin(clusterId);
+            if (sel && sel.value !== (_selectedClusterId || '')) {
+                sel.value = _selectedClusterId || '';
             }
+            afficherInfoBassin(_selectedClusterId);
 
-            const clusterIdString = clusterId === null || clusterId === undefined ? null : String(clusterId);
+            if (!geojsonLayer) return;
 
             geojsonLayer.eachLayer(layer => {
                 const feature = layer.feature;
                 if (!feature) return;
-                if (feature.geometry && feature.geometry.type === 'LineString') {
-                    const featureClusterId = feature.properties ? String(feature.properties.cluster_id) : '';
-                    if (clusterIdString === null || featureClusterId === clusterIdString) {
-                        layer.setStyle({ color: '#f1c40f', weight: 8, opacity: 1 });
-                        layer.bringToFront();
+
+                // Cas 1 : Tronçons (LineString / MultiLineString)
+                if (feature.geometry && (feature.geometry.type === 'LineString' || feature.geometry.type === 'MultiLineString')) {
+                    const fCid = feature.properties ? String(feature.properties.cluster_id) : '';
+                    const cColor = feature.properties ? feature.properties.couleur || '#38bdf8' : '#38bdf8';
+
+                    if (_selectedClusterId === null) {
+                        // Vue globale : toutes les conduites ont la couleur de leur bassin
+                        layer.setStyle({ color: cColor, weight: 2.4, opacity: 0.85 });
+                    } else if (fCid === _selectedClusterId) {
+                        // Conduite du bassin sélectionné : mise en valeur éclatante
+                        layer.setStyle({ color: cColor, weight: 4.5, opacity: 1.0 });
+                        try { layer.bringToFront(); } catch(e) {}
                     } else {
-                        layer.setStyle({ color: feature.properties.couleur || '#e74c3c', weight: 2.5, opacity: 0.35 });
+                        // Autre bassin : grisé et discret
+                        layer.setStyle({ color: '#475569', weight: 1.2, opacity: 0.18 });
                     }
-                } else if (feature.properties && feature.properties.type === 'bassin_urbain') {
-                    const featureClusterId = feature.properties ? String(feature.properties.cluster_id) : '';
-                    if (clusterIdString === null || featureClusterId === clusterIdString) {
-                        // Bassin sélectionné : couleur de surbrillance distincte
-                        layer.setStyle({ fillOpacity: 0.55, weight: 4, color: '#f39c12', dashArray: '' });
-                        layer.bringToFront();
+                }
+                // Cas 2 : Polygones de Bassins Versants
+                else if (feature.properties && feature.properties.type === 'bassin_urbain') {
+                    const fCid = feature.properties ? String(feature.properties.cluster_id) : '';
+                    const bColor = feature.properties ? feature.properties.couleur || '#38bdf8' : '#38bdf8';
+
+                    if (_selectedClusterId === null) {
+                        // Vue globale : tous les bassins versants colorés
+                        layer.setStyle({
+                            color: bColor,
+                            fillColor: bColor,
+                            fillOpacity: 0.18,
+                            weight: 1.8,
+                            dashArray: '5, 4'
+                        });
+                    } else if (fCid === _selectedClusterId) {
+                        // Bassin sélectionné : actif avec bordure nette et couleur soutenue
+                        layer.setStyle({
+                            color: '#ffffff',
+                            fillColor: bColor,
+                            fillOpacity: 0.45,
+                            weight: 3.5,
+                            dashArray: null
+                        });
+                        try { layer.bringToFront(); } catch(e) {}
                     } else {
-                        // Autres bassins : plus transparents
-                        layer.setStyle({ fillOpacity: 0.08, weight: 1, color: '#27ae60', dashArray: '6, 4' });
+                        // Les 78 autres bassins versants : grisés
+                        layer.setStyle({
+                            color: '#64748b',
+                            fillColor: '#334155',
+                            fillOpacity: 0.04,
+                            weight: 0.8,
+                            dashArray: '4, 4'
+                        });
                     }
                 }
             });
@@ -1574,7 +1684,7 @@
 
         function afficherInfoBassin(clusterId) {
             const infoDiv = document.getElementById('bassin-info');
-            if (!_activeClusterLayer || clusterId === null) {
+            if (!_activeClusterLayer || clusterId === null || clusterId === undefined || clusterId === '') {
                 infoDiv.innerHTML = ''; return;
             }
             let nb = 0;
@@ -1582,24 +1692,25 @@
             let bassinProperties = null;
             _activeClusterLayer.eachLayer(layer => {
                 const f = layer.feature;
-                if (f && f.geometry && (f.geometry.type === 'LineString' || f.geometry.type === 'MultiLineString') && String(f.properties.cluster_id) === String(clusterId)) {
+                if (!f) return;
+                if (f.geometry && (f.geometry.type === 'LineString' || f.geometry.type === 'MultiLineString') && String(f.properties.cluster_id) === String(clusterId)) {
                     nb++;
                     longueur += (f.properties.longueur || 0);
                 }
-                if (f && f.properties && f.properties.type === 'bassin_urbain' && String(f.properties.cluster_id) === String(clusterId)) {
+                if (f.properties && f.properties.type === 'bassin_urbain' && String(f.properties.cluster_id) === String(clusterId)) {
                     bassinProperties = f.properties;
                 }
             });
             if (bassinProperties) {
-                nb = bassinProperties.nb_conduites ?? (bassinProperties.nb_troncons ?? nb);
-                longueur = bassinProperties.longueur_totale_m ?? longueur;
+                nb = bassinProperties.nb_conduites !== undefined ? bassinProperties.nb_conduites : (bassinProperties.nb_troncons ?? nb);
+                longueur = bassinProperties.longueur_totale_m !== undefined ? bassinProperties.longueur_totale_m : longueur;
             }
             const nom = _bassinNoms && _bassinNoms[clusterId] ? _bassinNoms[clusterId] : `Bassin ${clusterId}`;
-            const surfHa = bassinProperties && bassinProperties.surface_ha !== undefined ? `${bassinProperties.surface_ha} ha` : 'N/A';
-            const nbReg = bassinProperties && bassinProperties.nb_regards !== undefined ? bassinProperties.nb_regards : 'N/A';
-            const nbOrph = bassinProperties && bassinProperties.nb_regards_orphelins !== undefined ? bassinProperties.nb_regards_orphelins : 0;
-            const typEx = bassinProperties && bassinProperties.exutoire_type ? bassinProperties.exutoire_type.toUpperCase() : 'EXUTOIRE';
-            const bColor = bassinProperties && bassinProperties.couleur ? bassinProperties.couleur : '#38bdf8';
+            const surfHa = (bassinProperties && bassinProperties.surface_ha !== undefined && bassinProperties.surface_ha !== null) ? `${bassinProperties.surface_ha} ha` : 'N/A';
+            const nbReg = (bassinProperties && bassinProperties.nb_regards !== undefined && bassinProperties.nb_regards !== null) ? bassinProperties.nb_regards : 'N/A';
+            const nbOrph = (bassinProperties && bassinProperties.nb_regards_orphelins !== undefined && bassinProperties.nb_regards_orphelins !== null) ? bassinProperties.nb_regards_orphelins : 0;
+            const typEx = (bassinProperties && bassinProperties.exutoire_type) ? bassinProperties.exutoire_type.toUpperCase() : 'EXUTOIRE';
+            const bColor = (bassinProperties && bassinProperties.couleur) ? bassinProperties.couleur : '#38bdf8';
 
             infoDiv.innerHTML = `
                 <div style="margin-top: 6px; padding: 6px 8px; background: rgba(30,41,59,0.85); border-radius: 6px; font-size: 0.74rem; border-left: 3px solid ${bColor};">
@@ -2547,9 +2658,9 @@
                     const count = fc.subcatchments_count || fc.features.length;
                     const totArea = (fc.total_area_ha || 0).toFixed(2);
                     const badge = document.getElementById('badge-subcatchments-count');
-                    if (badge) badge.innerText = `${count} SB (${totArea} ha)`;
+                    if (badge) badge.innerText = `79 BV • ${count} SB (${totArea} ha)`;
                     const legend = document.getElementById('subcatchments-legend');
-                    if (legend) legend.innerHTML = `Surface drainée : <b>${totArea} ha</b> sur <b>${count} sous-bassins</b> (Horton).`;
+                    if (legend) legend.innerHTML = `Surface drainée : <b>${totArea} ha</b> sur <b>${count} sous-bassins</b> (79 BV d'exutoires).`;
 
                     L.geoJSON(fc, {
                         style: {

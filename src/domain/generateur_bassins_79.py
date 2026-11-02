@@ -19,8 +19,9 @@ import colorsys
 import numpy as np
 import networkx as nx
 import geopandas as gpd
+import pyproj
 from shapely.geometry import Point, LineString, Polygon, MultiPolygon, MultiPoint, mapping
-from shapely.ops import voronoi_diagram, unary_union
+from shapely.ops import voronoi_diagram, unary_union, transform
 from shapely import STRtree
 
 from src.domain.graphe_reseau import construire_graphe
@@ -281,49 +282,81 @@ def partitionner_79_bassins_versants(
     bassins_records.sort(key=lambda x: x['id_bassin'])
     gdf_bassins_79 = gpd.GeoDataFrame(bassins_records, crs=crs_metrique)
 
-    # 7. Identifier et colorier les canalisations par bassin versant
+    # 7. Identifier et colorier les canalisations par bassin versant depuis le graphe topologique G
     pipes_by_exutoire: Dict[str, List[Dict[str, Any]]] = {ex_id: [] for ex_id in exutoire_id_list}
-    if not pipes_gdf.empty:
-        try:
-            pipes_wgs84 = pipes_gdf.to_crs("EPSG:4326")
-            for idx, row in pipes_wgs84.iterrows():
-                geom = row.geometry
-                if geom and not geom.is_empty:
-                    pipe_id = str(row.get('id', row.get('ID', idx)))
-                    u_val = str(row.get('noeud_amont', row.get('AMONT', row.get('amont', '')))).strip()
-                    v_val = str(row.get('noeud_aval', row.get('AVAL', row.get('aval', '')))).strip()
-                    if u_val.endswith('.0'): u_val = u_val[:-2]
-                    if v_val.endswith('.0'): v_val = v_val[:-2]
+    orphelins_pipes_features: List[Dict[str, Any]] = []
 
-                    assigned_pipe_ex = node_to_exutoire.get(u_val) or node_to_exutoire.get(v_val)
-                    if not assigned_pipe_ex and not connected_points:
-                        assigned_pipe_ex = exutoire_id_list[0]
-                    elif not assigned_pipe_ex:
-                        # Rapprochement spatial du centroïde de la conduite
-                        centroid = geom.centroid
-                        # Conversion rapide
-                        nearest_p_idx = conn_tree.nearest(Point(row.geometry.centroid.x, row.geometry.centroid.y))
-                        assigned_pipe_ex = connected_ex_ids[nearest_p_idx]
+    print("[bassins_79] Classification topologique des conduites par exutoire...", flush=True)
+    try:
+        transformer_to_wgs84 = pyproj.Transformer.from_crs(crs_metrique, "EPSG:4326", always_xy=True).transform
 
-                    b_num = ex_to_num.get(assigned_pipe_ex, 1)
-                    b_color = ex_to_color.get(assigned_pipe_ex, "#3498db")
+        for u, v, data in G.edges(data=True):
+            geom_metric = data.get('geometry')
+            if geom_metric is None or geom_metric.is_empty:
+                continue
 
-                    feat_pipe = {
-                        "type": "Feature",
-                        "geometry": mapping(geom),
-                        "properties": {
-                            "conduit_id": pipe_id,
-                            "cluster_id": b_num,
-                            "couleur": b_color,
-                            "diametre": row.get('DIAMETRE', row.get('diametre', None)),
-                            "longueur": row.get('LONGUEUR', row.get('longueur', None)),
-                            "materiau": row.get('MATERIAU', row.get('materiau', None))
-                        }
+            pipe_id = str(data.get('id', f"{u}_{v}"))
+            raw_len = data.get('length')
+            if raw_len is None or (isinstance(raw_len, float) and (math.isnan(raw_len) or raw_len <= 0)):
+                longueur = float(geom_metric.length)
+            else:
+                longueur = float(raw_len)
+            longueur = round(longueur, 1)
+
+            raw_diam = data.get('diametre_mm', 300)
+            diametre = int(raw_diam) if raw_diam and not (isinstance(raw_diam, float) and math.isnan(raw_diam)) else 300
+            materiau = str(data.get('materiau', data.get('type', 'Béton')))
+
+            try:
+                geom_wgs84 = transform(transformer_to_wgs84, geom_metric)
+            except Exception:
+                geom_wgs84 = None
+
+            if geom_wgs84 is None or geom_wgs84.is_empty:
+                continue
+
+            # Priorité à l'exutoire du nœud aval, sinon amont
+            assigned_pipe_ex = node_to_exutoire.get(v) or node_to_exutoire.get(u)
+
+            if assigned_pipe_ex and assigned_pipe_ex in pipes_by_exutoire:
+                b_num = ex_to_num.get(assigned_pipe_ex, 1)
+                b_color = ex_to_color.get(assigned_pipe_ex, "#3498db")
+                feat_pipe = {
+                    "type": "Feature",
+                    "geometry": mapping(geom_wgs84),
+                    "properties": {
+                        "conduit_id": pipe_id,
+                        "cluster_id": b_num,
+                        "couleur": b_color,
+                        "diametre": diametre,
+                        "longueur": longueur,
+                        "materiau": materiau,
+                        "type": "conduite",
+                        "is_orphelin": 0
                     }
-                    if assigned_pipe_ex in pipes_by_exutoire:
-                        pipes_by_exutoire[assigned_pipe_ex].append(feat_pipe)
-        except Exception as e:
-            print(f"[bassins_79] Erreur classification conduites: {e}", flush=True)
+                }
+                pipes_by_exutoire[assigned_pipe_ex].append(feat_pipe)
+            else:
+                feat_pipe = {
+                    "type": "Feature",
+                    "geometry": mapping(geom_wgs84),
+                    "properties": {
+                        "conduit_id": pipe_id,
+                        "cluster_id": "orphelin",
+                        "couleur": "#f59e0b",
+                        "diametre": diametre,
+                        "longueur": longueur,
+                        "materiau": materiau,
+                        "type": "conduite_orpheline",
+                        "is_orphelin": 1
+                    }
+                }
+                orphelins_pipes_features.append(feat_pipe)
+
+        print(f"[bassins_79] {sum(len(p) for p in pipes_by_exutoire.values())} conduites connectées réparties sur les 79 bassins.", flush=True)
+        print(f"[bassins_79] {len(orphelins_pipes_features)} tronçons orphelins isolés.", flush=True)
+    except Exception as e:
+        print(f"[bassins_79] Erreur classification conduites: {e}", flush=True)
 
     gdf_orphelins_regards = gpd.GeoDataFrame(orphelins_regards_records, crs=crs_metrique) if orphelins_regards_records else gpd.GeoDataFrame()
 
@@ -381,12 +414,19 @@ def partitionner_79_bassins_versants(
         b_nom = props.get("nom_exutoire")
         b_type = props.get("type_exutoire")
         b_color = props.get("couleur")
+        bassin_pipes = pipes_by_exutoire.get(ex_id_str, [])
 
         feat["properties"]["type"] = "bassin_urbain"
         feat["properties"]["cluster_id"] = b_id
         feat["properties"]["nom"] = b_nom
         feat["properties"]["exutoire_type"] = b_type
         feat["properties"]["couleur"] = b_color
+        feat["properties"]["surface_ha"] = float(props.get("surface_ha", 0.0))
+        feat["properties"]["nb_regards"] = int(props.get("nb_regards", 0))
+        feat["properties"]["nb_regards_orphelins"] = int(props.get("nb_regards_orphelins", 0))
+        feat["properties"]["nb_conduites"] = len(bassin_pipes)
+        longueur_bassin = round(sum(p['properties'].get('longueur', 0.0) for p in bassin_pipes), 1)
+        feat["properties"]["longueur_totale_m"] = longueur_bassin
 
         cluster_features = [feat]
 
@@ -411,7 +451,6 @@ def partitionner_79_bassins_versants(
                 pass
 
         # Ajouter les conduites de ce bassin
-        bassin_pipes = pipes_by_exutoire.get(ex_id_str, [])
         cluster_features.extend(bassin_pipes)
         total_troncons_assignes += len(bassin_pipes)
 
@@ -429,11 +468,13 @@ def partitionner_79_bassins_versants(
                 "surface_ha": props.get("surface_ha"),
                 "nb_regards": props.get("nb_regards"),
                 "nb_regards_orphelins": props.get("nb_regards_orphelins"),
-                "nb_conduites": len(bassin_pipes)
+                "nb_conduites": len(bassin_pipes),
+                "longueur_totale_m": longueur_bassin
             },
             "infrastructures": {
                 "regards": props.get("nb_regards"),
-                "conduites": len(bassin_pipes)
+                "conduites": len(bassin_pipes),
+                "longueur_totale_m": longueur_bassin
             },
             "geojson": {
                 "type": "FeatureCollection",
@@ -452,8 +493,13 @@ def partitionner_79_bassins_versants(
             "surface_totale_ha": total_surface_ha,
             "nb_sous_bassins_voronoi": len(gdf_voronoi),
             "nb_regards_orphelins": len(gdf_orphelins_regards),
+            "nb_troncons_orphelins": len(orphelins_pipes_features),
             "troncons_connectes": total_troncons_assignes,
             "bassins_geojson": bassins_geojson,
+            "orphelins_conduites": {
+                "type": "FeatureCollection",
+                "features": orphelins_pipes_features
+            },
             "resultats": results_formatted
         }
         with open(cache_clusters_path, "w", encoding="utf-8") as f:

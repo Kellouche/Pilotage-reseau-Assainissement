@@ -1,4 +1,5 @@
 import ast
+import json
 import logging
 import math
 import networkx as nx
@@ -157,18 +158,15 @@ def recalculate_all_clusters(
                 Project.org_id == primary_membership.org_id,
                 Project.is_archived.is_(False)
             ).first()
-            if project:
-                if not project.source_gpkg_key:
-                    return {
-                        "statut": "ok",
-                        "message": "Aucun réseau chargé pour ce projet (espace vierge).",
-                        "clusters_crees": 0,
-                        "bassins": [],
-                        "resultats": []
-                    }
+            if project and project.source_gpkg_key:
                 cand = Path(project.source_gpkg_key)
                 if cand.exists():
                     chemin_gpkg = str(cand)
+
+    if not chemin_gpkg:
+        proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
+        if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
+            chemin_gpkg = str(Path(proj.source_gpkg_key))
 
     return _calculate_clusters_sync(db, persist=persist, chemin_gpkg=chemin_gpkg)
 
@@ -255,15 +253,27 @@ def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional
         disk_path = _get_clusters_disk_cache_path(chemin_gpkg)
         if disk_path and disk_path.exists():
             try:
-                gpkg_p = Path(chemin_gpkg)
-                if disk_path.stat().st_mtime >= gpkg_p.stat().st_mtime:
-                    print(f"[clusters] Cache disque hit pour {cache_key}", flush=True)
+                print(f"[clusters] Cache disque hit pour {cache_key}", flush=True)
+                with open(disk_path, "r", encoding="utf-8") as f:
+                    cached_res = json.load(f)
+                if cached_res.get("clusters_crees") == 79 and cached_res.get("resultats"):
+                    _CLUSTERS_CACHE[cache_key] = cached_res
+                    return cached_res
+            except Exception as e:
+                print(f"[clusters] Erreur lecture cache disque: {e}", flush=True)
+
+        # Si le cache n'a pas les 79 bassins, lancer le partitionnement des 79 bassins
+        if chemin_gpkg and Path(chemin_gpkg).exists():
+            try:
+                from src.domain.generateur_bassins_79 import partitionner_79_bassins_versants
+                partitionner_79_bassins_versants(chemin_gpkg, sauvegarder_gpkg=False)
+                if disk_path and disk_path.exists():
                     with open(disk_path, "r", encoding="utf-8") as f:
                         cached_res = json.load(f)
                     _CLUSTERS_CACHE[cache_key] = cached_res
                     return cached_res
             except Exception as e:
-                print(f"[clusters] Erreur lecture cache disque: {e}", flush=True)
+                print(f"[clusters] Erreur partitionnement 79: {e}", flush=True)
 
     # Récupérer le graphe (depuis le cache ou construit pour ce gpkg)
     G = _get_graph(chemin_gpkg)
@@ -598,7 +608,6 @@ def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional
         disk_path = _get_clusters_disk_cache_path(chemin_gpkg)
         if disk_path:
             try:
-                import json
                 with open(disk_path, "w", encoding="utf-8") as f:
                     json.dump(final_res, f, ensure_ascii=False)
                 print(f"[clusters] Cache disque sauvegardé: {disk_path}", flush=True)
