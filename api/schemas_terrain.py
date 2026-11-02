@@ -72,7 +72,8 @@ class IncidentResponse(BaseModel):
     longitude: float
     latitude: float
     statut: str
-    date_creation: datetime
+    date_signalement: Optional[datetime] = None
+    date_creation: Optional[datetime] = None
     device_id: Optional[str] = None
     version: int
     last_modified: datetime

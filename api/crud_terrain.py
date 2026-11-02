@@ -69,7 +69,7 @@ def get_incident(db: Session, incident_id: int) -> Optional[Incident]:
 
 
 def get_incidents(db: Session, skip: int = 0, limit: int = 100) -> List[Incident]:
-    return db.query(Incident).order_by(Incident.date_creation.desc()).offset(skip).limit(limit).all()
+    return db.query(Incident).order_by(Incident.date_signalement.desc()).offset(skip).limit(limit).all()
 
 
 def create_incident(db: Session, incident_data: Dict[str, Any], user_id: str = None) -> Incident:

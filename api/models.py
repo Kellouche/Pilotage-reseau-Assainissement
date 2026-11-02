@@ -575,6 +575,10 @@ class Incident(Base):
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     last_modified: Mapped[datetime] = mapped_column(DateTime, default=_utc_now, onupdate=_utc_now, nullable=False)
 
+    @property
+    def date_creation(self) -> datetime:
+        return self.date_signalement
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "id": self.id,
