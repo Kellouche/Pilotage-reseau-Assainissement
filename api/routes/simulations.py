@@ -198,7 +198,8 @@ def run_native_swmm_simulation(
             scenario_key=payload.scenario_key,
             duree_heures=payload.duree_heures,
             pas_routage_sec=payload.pas_routage_sec,
-            pente_moyenne_pct=payload.pente_moyenne_pct
+            pente_moyenne_pct=payload.pente_moyenne_pct,
+            cluster_id=payload.cluster_id
         )
         resultat["source_gpkg"] = str(gpkg_path.resolve())
         _DERNIERE_SIMULATION = resultat

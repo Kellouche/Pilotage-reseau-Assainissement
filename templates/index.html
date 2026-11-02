@@ -385,15 +385,7 @@
             </button>
         </div>
 
-        <!-- Section Centre : Espaces de Travail (Onglets Métier Épurés) -->
-        <div style="display: flex; align-items: center; gap: 4px; background: rgba(0, 0, 0, 0.25); padding: 3px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);">
-            <button id="tab-nav-carto" onclick="basculerVueCockpit('carto')" style="color: #38bdf8; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); font-weight: 700; padding: 5px 12px; border-radius: 6px; font-size: 0.82rem; display: flex; align-items: center; gap: 6px; cursor: pointer; transition: all 0.2s;">
-                <i class="fas fa-map-marked-alt"></i> Cartographie
-            </button>
-            <button id="tab-nav-qualite" onclick="basculerVueCockpit('qualite')" style="color: #cbd5e1; background: transparent; border: 1px solid transparent; font-weight: 600; padding: 5px 12px; border-radius: 6px; font-size: 0.82rem; display: flex; align-items: center; gap: 6px; cursor: pointer; transition: all 0.2s;" onmouseover="if (this.style.background === 'transparent') this.style.background='rgba(255,255,255,0.06)'" onmouseout="if (this.style.borderColor === 'transparent') this.style.background='transparent'">
-                <i class="fas fa-clipboard-check" style="color: #10b981;"></i> Contrôle Qualité
-            </button>
-        </div>
+
 
         <!-- Section Droite : Simulation, Ressources & Profil Utilisateur -->
         <div id="nav-user-area" style="display: flex; align-items: center; gap: 10px;">
@@ -409,6 +401,11 @@
                     <button onclick="fermerMenuActions(); ouvrirModalSimulation();" style="width: 100%; text-align: left; padding: 8px 14px; font-size: 12px; font-weight: 600; color: #f8fafc; background: transparent; border: none; cursor: pointer; display: flex; align-items: center; gap: 9px; transition: background 0.15s;" onmouseover="this.style.background='rgba(56, 189, 248, 0.15)'" onmouseout="this.style.background='transparent'">
                         <i class="fas fa-play" style="color: #38bdf8; width: 16px; font-size: 12px;"></i>
                         <span>Simuler</span>
+                    </button>
+                    <!-- Action : Contrôle Qualité Réseau -->
+                    <button onclick="fermerMenuActions(); basculerVueCockpit('qualite');" style="width: 100%; text-align: left; padding: 8px 14px; font-size: 12px; font-weight: 600; color: #f8fafc; background: transparent; border: none; cursor: pointer; display: flex; align-items: center; gap: 9px; transition: background 0.15s;" onmouseover="this.style.background='rgba(16, 185, 129, 0.15)'" onmouseout="this.style.background='transparent'">
+                        <i class="fas fa-clipboard-check" style="color: #10b981; width: 16px; font-size: 12px;"></i>
+                        <span>Contrôle Qualité Réseau</span>
                     </button>
                     <!-- Séparateur -->
                     <div style="height: 1px; background: rgba(255,255,255,0.08); margin: 4px 0;"></div>
@@ -1501,9 +1498,6 @@
                                 <div style="color: #f8fafc;"><b>${nbBassins}</b> bassins versants d'exutoires</div>
                                 <div style="color: #cbd5e1;"><b>${nbTroncons}</b> tronçons reliés aux exutoires</div>
                                 ${nbOrphelins > 0 ? `<div style="color: #f59e0b;"><b>${nbOrphelins}</b> tronçons orphelins (déconnectés)</div>` : ''}
-                                <div style="color: #94a3b8; font-size: 0.7rem; margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 4px;">
-                                    💡 <em>Chaque couleur représente les conduites drainant vers un exutoire (graphe topologique).</em>
-                                </div>
                             </div>
                         `;
                         
@@ -2787,6 +2781,20 @@
                         const idx = pipesGeo.features.indexOf(feature);
                         const cid = `C_${idx + 1}`;
                         const r = cRes[cid];
+                        if (!r) {
+                            if (data.meta && data.meta.cluster_id) {
+                                return {
+                                    color: '#475569',
+                                    weight: 1.2,
+                                    opacity: 0.15
+                                };
+                            }
+                            return {
+                                color: '#10b981',
+                                weight: 3.5,
+                                opacity: 0.95
+                            };
+                        }
                         const col = r ? r.color : '#10b981';
                         const w = (r && r.status !== 'normal') ? 5 : 3.5;
                         return {
@@ -2905,7 +2913,26 @@
             }
 
             const resultsCard = document.getElementById('sim-results-card');
-            if (resultsCard) resultsCard.style.display = 'block';
+            if (resultsCard) {
+                const bassinTitle = document.getElementById('sim-results-bassin-title');
+                if (bassinTitle) {
+                    if (data.meta && data.meta.cluster_nom) {
+                        bassinTitle.innerHTML = `<i class="fas fa-sitemap me-1"></i> Périmètre simulé : <b>${data.meta.cluster_nom}</b> (Bassin ${data.meta.cluster_id}) &bull; ${data.meta.junctions_count + 1} regards, ${data.meta.conduits_count} conduites (${data.meta.total_area_ha} ha)`;
+                        bassinTitle.style.display = 'block';
+                    } else {
+                        bassinTitle.innerHTML = `<i class="fas fa-globe me-1"></i> Périmètre simulé : <b>Réseau Complet</b> &bull; ${data.meta ? data.meta.conduits_count : ''} conduites`;
+                        bassinTitle.style.display = 'block';
+                    }
+                }
+                resultsCard.style.display = 'block';
+            }
+
+            // Si un bassin spécifique a été simulé, centrer la carte sur son emprise
+            if (data.meta && data.meta.cluster_id && window._bassinBounds && window._bassinBounds[data.meta.cluster_id]) {
+                try {
+                    carte.fitBounds(window._bassinBounds[data.meta.cluster_id], { padding: [40, 40], maxZoom: 17 });
+                } catch (e) {}
+            }
 
             window._dernierResultatSimulation = data;
             if (typeof activerActionsSimulation === 'function') {
@@ -2992,7 +3019,37 @@
         // ==========================================
         window.ouvrirModalSimulation = function() {
             const m = document.getElementById('modal-simulation');
-            if (m) m.style.display = 'flex';
+            if (m) {
+                // Synchroniser les options de bassin depuis #bassin-select
+                const simBassinSel = document.getElementById('sim-select-bassin');
+                const mainBassinSel = document.getElementById('bassin-select');
+                if (simBassinSel) {
+                    simBassinSel.innerHTML = '<option value="">🌐 Réseau Complet (Tous les bassins interconnectés)</option>';
+                    if (mainBassinSel && mainBassinSel.options.length > 1) {
+                        for (let i = 1; i < mainBassinSel.options.length; i++) {
+                            const opt = mainBassinSel.options[i];
+                            const newOpt = document.createElement('option');
+                            newOpt.value = opt.value;
+                            newOpt.textContent = opt.textContent;
+                            simBassinSel.appendChild(newOpt);
+                        }
+                        if (mainBassinSel.value) {
+                            simBassinSel.value = mainBassinSel.value;
+                        }
+                    } else if (window._bassinNoms && Object.keys(window._bassinNoms).length > 0) {
+                        Object.keys(window._bassinNoms).forEach(cid => {
+                            const newOpt = document.createElement('option');
+                            newOpt.value = cid;
+                            newOpt.textContent = `${cid}. ${window._bassinNoms[cid]}`;
+                            simBassinSel.appendChild(newOpt);
+                        });
+                        if (window._selectedClusterId) {
+                            simBassinSel.value = window._selectedClusterId;
+                        }
+                    }
+                }
+                m.style.display = 'flex';
+            }
         };
 
         window.fermerModalSimulation = function() {
@@ -3006,6 +3063,8 @@
             const pasRoutage = parseInt(document.getElementById('sim-select-step').value);
             const penteInput = document.getElementById('sim-pente-moyenne');
             const penteVal = (penteInput && penteInput.value) ? parseFloat(penteInput.value) : null;
+            const simBassinVal = document.getElementById('sim-select-bassin') ? document.getElementById('sim-select-bassin').value : '';
+            const clusterId = simBassinVal ? parseInt(simBassinVal) : null;
 
             const btn = document.getElementById('btn-run-sim-action');
             const statusDiv = document.getElementById('sim-status-message');
@@ -3029,7 +3088,8 @@
                     scenario_key: scen,
                     duree_heures: duree,
                     pas_routage_sec: pasRoutage,
-                    pente_moyenne_pct: penteVal
+                    pente_moyenne_pct: penteVal,
+                    cluster_id: clusterId
                 })
             })
             .then(async r => {
@@ -3281,6 +3341,16 @@
 
             <!-- Corps scrollable -->
             <div style="padding: 22px 24px; overflow-y: auto; flex: 1;">
+                <!-- Choix du Périmètre / Bassin Urbain -->
+                <div style="margin-bottom: 16px;">
+                    <label style="font-size: 0.82rem; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 6px;">
+                        <i class="fas fa-sitemap me-1" style="color: #38bdf8;"></i> Périmètre de Simulation (Bassin Urbain)
+                    </label>
+                    <select id="sim-select-bassin" style="width: 100%; padding: 10px 12px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #f8fafc; font-size: 0.88rem;">
+                        <option value="">🌐 Réseau Complet (Tous les bassins interconnectés)</option>
+                    </select>
+                </div>
+
                 <!-- Choix Scénario -->
                 <div style="margin-bottom: 16px;">
                     <label style="font-size: 0.82rem; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 6px;">
@@ -3340,7 +3410,7 @@
 
                 <!-- Résumé du modèle -->
                 <div style="background: rgba(2, 132, 199, 0.08); border: 1px solid rgba(2, 132, 199, 0.25); border-radius: 10px; padding: 12px 16px; margin-bottom: 20px; font-size: 0.82rem; color: #94a3b8; line-height: 1.5;">
-                    <strong style="color: #38bdf8;">Configuration appliquée :</strong> Résolution complète Saint-Venant 1D (Dynamic Wave) &bull; Découpage surfacique en <b>59 sous-bassins versants Voronoï</b> &bull; Infiltration d'eau selon <b>Horton</b> ($f_0=75, f_c=10\text{ mm/h}$) &bull; Unités métriques CMS.
+                    <strong style="color: #38bdf8;">Configuration appliquée :</strong> Résolution complète Saint-Venant 1D (Dynamic Wave) &bull; Découpage surfacique en <b>sous-bassins versants Voronoï</b> &bull; Infiltration d'eau selon <b>Horton</b> ($f_0=75, f_c=10\text{ mm/h}$) &bull; Unités métriques CMS.
                 </div>
 
                 <!-- Bouton d'action -->
@@ -3361,6 +3431,9 @@
                             CONFORME
                         </span>
                     </div>
+
+                    <!-- En-tête périmètre simulé -->
+                    <div id="sim-results-bassin-title" style="font-size: 0.82rem; color: #38bdf8; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 6px; padding: 6px 10px; margin-bottom: 12px; display: none;"></div>
 
                     <!-- Cartouches KPIs -->
                     <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px;">

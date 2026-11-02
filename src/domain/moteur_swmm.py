@@ -234,10 +234,13 @@ class MoteurSWMM:
         scenario_key: str = "pluie_decennale",
         duree_heures: Optional[float] = None,
         pas_routage_sec: int = 5,
-        pente_moyenne_pct: Optional[float] = None
+        pente_moyenne_pct: Optional[float] = None,
+        cluster_id: Optional[int] = None
     ) -> Tuple[str, Dict[str, Any]]:
         """
         Génère l'intégralité du contenu textuel conforme au standard EPA SWMM 5.2 .inp.
+        Si cluster_id est renseigné, extrait et modélise uniquement le sous-réseau amont
+        drainant vers l'exutoire de ce cluster (bassin urbain ciblé).
         """
         if scenario_key not in SCENARIOS_PLUIE:
             scenario_key = "pluie_decennale"
@@ -256,6 +259,44 @@ class MoteurSWMM:
         regards = gpd.read_file(str(gpkg_path), layer=regard_layer)
         canalisations = gpd.read_file(str(gpkg_path), layer=pipe_layer)
         rejets = gpd.read_file(str(gpkg_path), layer=rejet_layer) if rejet_layer else gpd.GeoDataFrame()
+
+        bassin_nom = None
+        outfall_code = None
+        target_ex_id = None
+        exutoires_map: Dict[Any, Any] = {}
+
+        # Filtrage ciblé par bassin versant urbain (Cluster d'exutoire)
+        if cluster_id is not None:
+            from src.domain.graphe_reseau import construire_graphe
+            from src.domain.detecteur_clusters import trouver_exutoires_physiques
+            G_topo = construire_graphe(str(gpkg_path))
+            exutoires_map = trouver_exutoires_physiques(G_topo)
+            ex_list = list(exutoires_map.items())
+            cid_int = int(cluster_id)
+            if 1 <= cid_int <= len(ex_list):
+                target_ex_id, ex_info = ex_list[cid_int - 1]
+                bassin_nom = ex_info.get("nom") or f"Bassin {cid_int}"
+
+                target_nodes = set([target_ex_id])
+                queue = [target_ex_id]
+                ex_set = set(exutoires_map.keys())
+                while queue:
+                    curr = queue.pop(0)
+                    for pred in G_topo.predecessors(curr):
+                        if pred not in ex_set and pred not in target_nodes:
+                            target_nodes.add(pred)
+                            queue.append(pred)
+
+                clean_target_nodes = set(_clean_node_id(x) for x in target_nodes)
+                clean_target_nodes.add(_clean_node_id(target_ex_id))
+
+                regards = regards[regards.apply(lambda r: _clean_node_id(r.get("Code")) in clean_target_nodes, axis=1)].copy()
+                canalisations = canalisations[canalisations.apply(lambda c: _clean_node_id(c.get("ID_AMONT")) in clean_target_nodes and _clean_node_id(c.get("ID_AVAL")) in clean_target_nodes, axis=1)].copy()
+
+                if len(canalisations) == 0:
+                    raise ValueError(f"Le bassin versant '{bassin_nom}' ne comporte aucune canalisation connectée à simuler.")
+
+                outfall_code = _clean_node_id(target_ex_id)
 
         # Recensement des identifiants des regards et rejets
         noeuds_regards: Dict[str, Any] = {}
@@ -283,41 +324,41 @@ class MoteurSWMM:
                 conduit_nodes.add(d)
                 downstream_nodes.add(d)
 
-        # Détermination de l'exutoire principal (Outfall)
-        outfall_code = None
-        # Cas 1 : Un nœud aval de canalisation correspond directement à un exutoire dans la couche rejets
-        for d in downstream_nodes:
-            if d in noeuds_rejets:
-                outfall_code = d
-                break
-
-        # Cas 2 : Un point de rejet existe, associer le nœud aval / sink le plus proche
-        if not outfall_code and len(rejets) > 0:
-            outfall_geom = rejets.geometry.iloc[0]
-            sinks = downstream_nodes - upstream_nodes
-            best_sink = None
-            min_dist = float("inf")
-            for s in sinks:
-                geom = noeuds_regards[s].geometry if s in noeuds_regards else None
-                if geom:
-                    d_m = geom.distance(outfall_geom)
-                    if d_m < min_dist:
-                        min_dist = d_m
-                        best_sink = s
-            if best_sink:
-                outfall_code = best_sink
-            else:
-                distances = regards.geometry.distance(outfall_geom)
-                outfall_idx = distances.idxmin()
-                outfall_code = _clean_node_id(regards.loc[outfall_idx, "Code"]) if ("Code" in regards and pd.notna(regards.loc[outfall_idx, "Code"])) else str(outfall_idx)
-
-        # Cas 3 : Ni rejet explicite ni correspondance directe, prendre le sink aval
+        # Détermination de l'exutoire principal (Outfall) si non déjà défini par cluster_id
         if not outfall_code:
-            sinks = downstream_nodes - upstream_nodes
-            if sinks:
-                outfall_code = list(sinks)[0]
-            else:
-                outfall_code = _clean_node_id(regards.iloc[-1]["Code"]) if ("Code" in regards and pd.notna(regards.iloc[-1]["Code"])) else str(len(regards) - 1)
+            # Cas 1 : Un nœud aval de canalisation correspond directement à un exutoire dans la couche rejets
+            for d in downstream_nodes:
+                if d in noeuds_rejets:
+                    outfall_code = d
+                    break
+
+            # Cas 2 : Un point de rejet existe, associer le nœud aval / sink le plus proche
+            if not outfall_code and len(rejets) > 0:
+                outfall_geom = rejets.geometry.iloc[0]
+                sinks = downstream_nodes - upstream_nodes
+                best_sink = None
+                min_dist = float("inf")
+                for s in sinks:
+                    geom = noeuds_regards[s].geometry if s in noeuds_regards else None
+                    if geom:
+                        d_m = geom.distance(outfall_geom)
+                        if d_m < min_dist:
+                            min_dist = d_m
+                            best_sink = s
+                if best_sink:
+                    outfall_code = best_sink
+                else:
+                    distances = regards.geometry.distance(outfall_geom)
+                    outfall_idx = distances.idxmin()
+                    outfall_code = _clean_node_id(regards.loc[outfall_idx, "Code"]) if ("Code" in regards and pd.notna(regards.loc[outfall_idx, "Code"])) else str(outfall_idx)
+
+            # Cas 3 : Ni rejet explicite ni correspondance directe, prendre le sink aval
+            if not outfall_code:
+                sinks = downstream_nodes - upstream_nodes
+                if sinks:
+                    outfall_code = list(sinks)[0]
+                else:
+                    outfall_code = _clean_node_id(regards.iloc[-1]["Code"]) if ("Code" in regards and pd.notna(regards.iloc[-1]["Code"])) else str(len(regards) - 1)
 
         # Génération des sous-bassins versants Voronoï / Thiessen
         sb_gdf = self.gh.generer_sous_bassins(regards, canalisations)
@@ -464,6 +505,12 @@ class MoteurSWMM:
                 if r_id and r_id not in coords_traitees:
                     lines.append(f"{r_id:<16} {rj.geometry.x:<18.3f} {rj.geometry.y:<18.3f}")
                     coords_traitees.add(r_id)
+
+        if outfall_code and outfall_code not in coords_traitees and target_ex_id and target_ex_id in exutoires_map:
+            ex_geom = exutoires_map[target_ex_id].get("geometry")
+            if ex_geom:
+                lines.append(f"{outfall_code:<16} {ex_geom.x:<18.3f} {ex_geom.y:<18.3f}")
+                coords_traitees.add(outfall_code)
         lines.append("")
 
         # Polygones des sous-bassins
@@ -483,12 +530,14 @@ class MoteurSWMM:
         meta = {
             "scenario": scen["nom"],
             "duree_heures": duree_sim,
+            "cluster_id": cluster_id,
+            "cluster_nom": bassin_nom,
             "subcatchments_count": len(sb_gdf),
-            "junctions_count": len(regards) - 1,
+            "junctions_count": max(0, len(regards) - 1),
             "outfalls_count": 1,
             "conduits_count": len(canalisations),
             "outfall_code": outfall_code,
-            "total_area_ha": round(float(sb_gdf["area_ha"].sum()), 2),
+            "total_area_ha": round(float(sb_gdf["area_ha"].sum()), 2) if not sb_gdf.empty else 0.0,
             "source_altimetrique": source_alt,
             "pente_moyenne_pct": pente_moyenne_pct,
         }
@@ -501,7 +550,8 @@ class MoteurSWMM:
         scenario_key: str = "pluie_decennale",
         duree_heures: Optional[float] = None,
         pas_routage_sec: int = 5,
-        pente_moyenne_pct: Optional[float] = None
+        pente_moyenne_pct: Optional[float] = None,
+        cluster_id: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Exécute la simulation complète avec pyswmm et extrait les KPIs hydrauliques.
@@ -511,7 +561,8 @@ class MoteurSWMM:
             scenario_key=scenario_key,
             duree_heures=duree_heures,
             pas_routage_sec=pas_routage_sec,
-            pente_moyenne_pct=pente_moyenne_pct
+            pente_moyenne_pct=pente_moyenne_pct,
+            cluster_id=cluster_id
         )
 
         with tempfile.NamedTemporaryFile(suffix=".inp", mode="w", delete=False, encoding="utf-8") as f:
