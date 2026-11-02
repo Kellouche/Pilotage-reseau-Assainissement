@@ -2754,6 +2754,202 @@
         };
 
         // ==========================================
+        // GESTION DU FOCUS SUR LA ZONE SIMULÉE (ZOOM & IHM)
+        // ==========================================
+        function zoomerSurZoneSimulee(data) {
+            if (!data || !window.carte) return;
+            const meta = data.meta || {};
+            const cRes = data.conduit_results || {};
+            let bounds = L.latLngBounds();
+
+            // 1. Emprise exacte calculée depuis les conduites appartenant à la simulation
+            if (window._rawNetworkData && window._rawNetworkData.couches && window._rawNetworkData.couches.conduites) {
+                const pipesGeo = window._rawNetworkData.couches.conduites;
+                if (pipesGeo && pipesGeo.features) {
+                    pipesGeo.features.forEach((feature, idx) => {
+                        const cid = `C_${idx + 1}`;
+                        if (cRes[cid] && feature.geometry && feature.geometry.coordinates) {
+                            const coords = feature.geometry.type === 'LineString' ? [feature.geometry.coordinates] : feature.geometry.coordinates;
+                            coords.forEach(line => {
+                                if (Array.isArray(line)) {
+                                    line.forEach(pt => {
+                                        if (pt && pt.length >= 2) {
+                                            bounds.extend([pt[1], pt[0]]);
+                                        }
+                                    });
+                                }
+                            });
+                        }
+                    });
+                }
+            }
+
+            // 2. Si _bassinBounds existe pour ce cluster_id, le prendre en compte
+            if (meta.cluster_id && window._bassinBounds && window._bassinBounds[meta.cluster_id]) {
+                try {
+                    bounds.extend(window._bassinBounds[meta.cluster_id]);
+                } catch(e) {}
+            }
+
+            // 3. Inclure les regards de visite de la simulation
+            const nRes = data.node_results || {};
+            if (window._rawNetworkData && window._rawNetworkData.couches && window._rawNetworkData.couches.regards) {
+                const nodesGeo = window._rawNetworkData.couches.regards;
+                if (nodesGeo && nodesGeo.features) {
+                    nodesGeo.features.forEach(feature => {
+                        const p = feature.properties || {};
+                        const nid = String(p.Code || p.code || p.CODE || p.id || '');
+                        if (nRes[nid] && feature.geometry && feature.geometry.coordinates) {
+                            const pt = feature.geometry.coordinates;
+                            if (pt && pt.length >= 2) {
+                                bounds.extend([pt[1], pt[0]]);
+                            }
+                        }
+                    });
+                }
+            }
+
+            if (bounds.isValid()) {
+                window._lastSimBounds = bounds;
+                carte.fitBounds(bounds, { padding: [50, 50], maxZoom: 17, animate: true, duration: 1.0 });
+            }
+        }
+
+        function mettreAJourIHMZoneSimulee(data) {
+            if (!data) return;
+            const meta = data.meta || {};
+            const k = data.kpis || {};
+            const isTargeted = !!meta.cluster_id;
+
+            // 1. Panneau d'Ingénierie : Mini-stats de l'en-tête
+            const miniStatsEl = document.getElementById('mini-stats');
+            if (miniStatsEl) {
+                if (isTargeted) {
+                    miniStatsEl.innerHTML = `<span style="color: #38bdf8; font-weight: 700;">Zone : ${meta.cluster_nom || ('Bassin ' + meta.cluster_id)}</span> | Conduites: <b>${meta.conduits_count}</b> | Regards: <b>${meta.junctions_count + 1}</b>`;
+                    miniStatsEl.style.background = 'rgba(56, 189, 248, 0.15)';
+                    miniStatsEl.style.border = '1px solid rgba(56, 189, 248, 0.3)';
+                    miniStatsEl.style.color = '#f8fafc';
+                } else {
+                    miniStatsEl.innerHTML = `Réseau Complet | Conduites: <b>${meta.conduits_count}</b> | Exutoires: <b>${meta.outfalls_count || 1}</b>`;
+                    miniStatsEl.style.background = 'rgba(255, 255, 255, 0.06)';
+                    miniStatsEl.style.border = 'none';
+                    miniStatsEl.style.color = '#94a3b8';
+                }
+            }
+
+            // 2. Section 2 Hydrologie : Badge & Description
+            const badgeSb = document.getElementById('badge-subcatchments-count');
+            if (badgeSb) {
+                if (isTargeted) {
+                    badgeSb.innerHTML = `${meta.subcatchments_count} SB (${meta.total_area_ha} ha)`;
+                    badgeSb.style.background = 'rgba(16, 185, 129, 0.2)';
+                    badgeSb.style.color = '#34d399';
+                } else {
+                    badgeSb.innerHTML = `${meta.subcatchments_count} SB (${meta.total_area_ha} ha)`;
+                    badgeSb.style.background = '';
+                    badgeSb.style.color = '';
+                }
+            }
+
+            const subLeg = document.getElementById('subcatchments-legend');
+            if (subLeg) {
+                if (isTargeted) {
+                    subLeg.innerHTML = `Périmètre simulé : <b style="color: #38bdf8;">${meta.cluster_nom || ('Bassin ' + meta.cluster_id)}</b> (${meta.total_area_ha} ha drainés vers l'exutoire ${meta.outfall_code || ''}).`;
+                } else {
+                    subLeg.innerHTML = `Surface drainée totale : <b>${meta.total_area_ha} ha</b> sur <b>${meta.subcatchments_count} sous-bassins</b>.`;
+                }
+            }
+
+            // 3. Section Bassin Sélectionné dans la barre latérale
+            const bSec = document.getElementById('bassin-section');
+            if (bSec) bSec.style.display = 'block';
+
+            const bSel = document.getElementById('bassin-select');
+            if (bSel && isTargeted) {
+                let found = false;
+                for (let opt of bSel.options) {
+                    if (opt.value === String(meta.cluster_id)) {
+                        found = true; break;
+                    }
+                }
+                if (!found) {
+                    const newOpt = document.createElement('option');
+                    newOpt.value = String(meta.cluster_id);
+                    newOpt.textContent = `${meta.cluster_id}. ${meta.cluster_nom || 'Bassin ' + meta.cluster_id}`;
+                    bSel.appendChild(newOpt);
+                }
+                bSel.value = String(meta.cluster_id);
+            }
+
+            const infoDiv = document.getElementById('bassin-info');
+            if (infoDiv && isTargeted) {
+                infoDiv.innerHTML = `
+                    <div style="margin-top: 6px; padding: 8px 10px; background: rgba(15, 23, 42, 0.95); border-radius: 6px; font-size: 0.74rem; border-left: 3px solid #38bdf8; border: 1px solid rgba(56, 189, 248, 0.25);">
+                        <div style="font-weight: 800; color: #38bdf8; font-size: 0.82rem; display: flex; align-items: center; justify-content: space-between;">
+                            <span>${meta.cluster_nom || ('Bassin ' + meta.cluster_id)}</span>
+                            <span style="font-size: 0.68rem; background: rgba(56,189,248,0.2); padding: 1px 6px; border-radius: 4px; color: #38bdf8; font-weight: 700;">SIMULÉ</span>
+                        </div>
+                        <div style="color: #94a3b8; font-size: 0.7rem; margin-top: 3px;">🏷️ Exutoire récepteur : <b>${meta.outfall_code || 'N/A'}</b></div>
+                        <div style="color: #cbd5e1; margin-top: 3px;">📐 Surface drainée : <b>${meta.total_area_ha} ha</b> (${meta.subcatchments_count} sous-bassins)</div>
+                        <div style="color: #cbd5e1;">📍 Regards : <b>${meta.junctions_count + 1}</b> ${k.flooded_nodes_count > 0 ? `<span style="color:#ef4444; font-weight:700;">(${k.flooded_nodes_count} débordements)</span>` : ''}</div>
+                        <div style="color: #cbd5e1;">📏 Conduites : <b>${meta.conduits_count}</b></div>
+                        <div style="color: #34d399; margin-top: 4px; font-weight: 700; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 4px;">
+                            ⚡ Débit de pointe : <b>${(k.peak_outflow_m3s || 0).toFixed(3)} m³/s</b>
+                        </div>
+                        <div style="color: #38bdf8;">💧 Erreur continuité : <b>${(k.routing_continuity_error_pct || 0).toFixed(2)} %</b></div>
+                    </div>
+                `;
+            }
+
+            // 4. Mettre en valeur les sous-bassins Voronoï du périmètre simulé
+            if (couches.subcatchments) {
+                const nRes = data.node_results || {};
+                couches.subcatchments.eachLayer(layer => {
+                    const p = (layer.feature && layer.feature.properties) ? layer.feature.properties : {};
+                    const outlet = String(p.outlet || '');
+                    if (isTargeted) {
+                        if (nRes[outlet] || (meta.outfall_code && outlet === String(meta.outfall_code))) {
+                            layer.setStyle({
+                                color: '#10b981',
+                                fillColor: '#10b981',
+                                fillOpacity: 0.30,
+                                weight: 2,
+                                opacity: 1.0
+                            });
+                            try { layer.bringToFront(); } catch(e) {}
+                        } else {
+                            layer.setStyle({
+                                color: '#475569',
+                                fillColor: '#334155',
+                                fillOpacity: 0.02,
+                                weight: 0.5,
+                                opacity: 0.12
+                            });
+                        }
+                    } else {
+                        layer.setStyle({
+                            color: '#059669',
+                            fillColor: '#10b981',
+                            fillOpacity: 0.18,
+                            weight: 1.5,
+                            opacity: 0.85
+                        });
+                    }
+                });
+            }
+
+            // 5. Mettre à jour le titre de la légende flottante
+            const legTitle = document.querySelector('#sim-floating-legend span');
+            if (legTitle) {
+                if (isTargeted) {
+                    legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> SWMM 5.2 — ${meta.cluster_nom || ('Bassin ' + meta.cluster_id)}`;
+                } else {
+                    legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> Légende SWMM 5.2`;
+                }
+            }
+        }
+
+        // ==========================================
         // POINTS 2 & 3 : COUCHES RÉSULTATS SWMM 5.2
         // ==========================================
         window.afficherResultatsSimulation = function(data) {
@@ -2927,12 +3123,11 @@
                 resultsCard.style.display = 'block';
             }
 
-            // Si un bassin spécifique a été simulé, centrer la carte sur son emprise
-            if (data.meta && data.meta.cluster_id && window._bassinBounds && window._bassinBounds[data.meta.cluster_id]) {
-                try {
-                    carte.fitBounds(window._bassinBounds[data.meta.cluster_id], { padding: [40, 40], maxZoom: 17 });
-                } catch (e) {}
-            }
+            // Mettre à jour l'ensemble de l'IHM latérale pour refléter la zone simulée
+            mettreAJourIHMZoneSimulee(data);
+
+            // Centrer et zoomer immédiatement la carte sur la zone simulée
+            zoomerSurZoneSimulee(data);
 
             window._dernierResultatSimulation = data;
             if (typeof activerActionsSimulation === 'function') {
@@ -2981,7 +3176,51 @@
             const kpiSub = document.getElementById('kpi-subcatchments');
             if (kpiSub) kpiSub.innerText = '--';
 
+            // Rétablir les statistiques globales du Panneau d'Ingénierie
+            if (window._rawNetworkData && window._rawNetworkData.compteurs) {
+                const c = window._rawNetworkData.compteurs;
+                const miniStatsEl = document.getElementById('mini-stats');
+                if (miniStatsEl) {
+                    miniStatsEl.innerHTML =
+                        'Conduites: ' + (c.conduites || 0) +
+                        ' | Regards: ' + (c.regards || 0) +
+                        ' | Rejets: ' + (c.rejets || 0) +
+                        ' | Stations: ' + (c.stations || 0) +
+                        ' | STEP: ' + (c.step || 0) +
+                        ' | Ouvrages: ' + (c.ouvrages || 0);
+                    miniStatsEl.style.background = 'rgba(255,255,255,0.06)';
+                    miniStatsEl.style.border = 'none';
+                    miniStatsEl.style.color = '#94a3b8';
+                }
+            }
+
+            // Rétablir le badge et la légende des sous-bassins
+            const badgeSb = document.getElementById('badge-subcatchments-count');
+            if (badgeSb && window._rawNetworkData && window._rawNetworkData.compteurs) {
+                badgeSb.innerHTML = `79 BV &bull; ${window._rawNetworkData.compteurs.regards || 10538} SB`;
+                badgeSb.style.background = '';
+                badgeSb.style.color = '';
+            }
+
+            // Rétablir le style uniforme des sous-bassins Voronoï
+            if (couches.subcatchments) {
+                couches.subcatchments.eachLayer(layer => {
+                    layer.setStyle({
+                        color: '#059669',
+                        fillColor: '#10b981',
+                        fillOpacity: 0.18,
+                        weight: 1.5,
+                        opacity: 0.85
+                    });
+                });
+            }
+
+            // Rétablir le titre de la légende flottante
+            const legTitle = document.querySelector('#sim-floating-legend span');
+            if (legTitle) legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> Légende SWMM 5.2`;
+
             window._dernierResultatSimulation = null;
+            window._lastSimBounds = null;
             if (typeof activerActionsSimulation === 'function') {
                 activerActionsSimulation(false);
             }
@@ -3055,6 +3294,15 @@
         window.fermerModalSimulation = function() {
             const m = document.getElementById('modal-simulation');
             if (m) m.style.display = 'none';
+            if (window.carte) {
+                setTimeout(() => {
+                    carte.invalidateSize();
+                    if (window._dernierResultatSimulation) {
+                        zoomerSurZoneSimulee(window._dernierResultatSimulation);
+                        mettreAJourIHMZoneSimulee(window._dernierResultatSimulation);
+                    }
+                }, 100);
+            }
         };
 
         window.declencherSimulationSWMM = function() {
@@ -3323,7 +3571,7 @@
     </div>
 
     <!-- Modal de Configuration & Exécution SWMM 5.2 -->
-    <div id="modal-simulation" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(6px); z-index: 3000; align-items: center; justify-content: center;">
+    <div id="modal-simulation" onclick="if(event.target === this) fermerModalSimulation();" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(6px); z-index: 3000; align-items: center; justify-content: center;">
         <div style="background: #1e293b; color: #f8fafc; border-radius: 16px; width: 92%; max-width: 680px; max-height: 90vh; display: flex; flex-direction: column; border: 1px solid rgba(255, 255, 255, 0.15); box-shadow: 0 25px 50px rgba(0, 0, 0, 0.6); overflow: hidden;">
             <!-- Entête -->
             <div style="background: #0f172a; padding: 18px 24px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); display: flex; justify-content: space-between; align-items: center;">
@@ -3464,6 +3712,11 @@
                             <i class="fas fa-file-alt"></i> Rapport .RPT
                         </a>
                     </div>
+
+                    <!-- Bouton pour voir la zone simulée sur la carte -->
+                    <button onclick="fermerModalSimulation()" style="width: 100%; margin-top: 14px; padding: 11px 16px; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4); transition: filter 0.15s;" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter='brightness(1)'">
+                        <i class="fas fa-search-location"></i> Explorer la zone simulée sur la carte &amp; Quitter
+                    </button>
                 </div>
             </div>
         </div>
