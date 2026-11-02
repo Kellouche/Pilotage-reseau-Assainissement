@@ -264,6 +264,7 @@ class MoteurSWMM:
         outfall_code = None
         target_ex_id = None
         exutoires_map: Dict[Any, Any] = {}
+        clean_target_nodes: Set[str] = set()
 
         # Filtrage ciblé par bassin versant urbain (Cluster d'exutoire)
         if cluster_id is not None:
@@ -527,6 +528,17 @@ class MoteurSWMM:
         lines.append("LINKS ALL")
         lines.append("")
 
+        # Calcul certifié de la bounding box géographique (WGS84) du périmètre simulé
+        bbox_wgs84 = None
+        try:
+            pipes_for_bounds = canalisations if not canalisations.empty else regards
+            if not pipes_for_bounds.empty:
+                pipes_wgs = pipes_for_bounds.to_crs("EPSG:4326") if pipes_for_bounds.crs and str(pipes_for_bounds.crs).lower() not in ("epsg:4326", "4326", "wgs84") else pipes_for_bounds
+                minx, miny, maxx, maxy = pipes_wgs.total_bounds
+                bbox_wgs84 = [round(float(miny), 6), round(float(minx), 6), round(float(maxy), 6), round(float(maxx), 6)]
+        except Exception as e_bbox:
+            logger.warning(f"Impossible de calculer la bbox WGS84: {e_bbox}")
+
         meta = {
             "scenario": scen["nom"],
             "duree_heures": duree_sim,
@@ -540,6 +552,8 @@ class MoteurSWMM:
             "total_area_ha": round(float(sb_gdf["area_ha"].sum()), 2) if not sb_gdf.empty else 0.0,
             "source_altimetrique": source_alt,
             "pente_moyenne_pct": pente_moyenne_pct,
+            "bbox": bbox_wgs84,
+            "simulated_nodes": list(clean_target_nodes),
         }
 
         return "\n".join(lines), meta

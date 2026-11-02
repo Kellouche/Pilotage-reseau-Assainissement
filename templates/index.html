@@ -1641,6 +1641,8 @@
                 const cid = feature.properties.cluster_id;
                 try { _bassinBounds[cid] = layer.getBounds(); } catch(e) {}
             });
+            window._bassinBounds = _bassinBounds;
+            window._bassinNoms = _bassinNoms;
 
             // Afficher la section
             document.getElementById('bassin-section').style.display = 'block';
@@ -2759,59 +2761,67 @@
         function zoomerSurZoneSimulee(data) {
             if (!data || !window.carte) return;
             const meta = data.meta || {};
-            const cRes = data.conduit_results || {};
-            let bounds = L.latLngBounds();
+            let bounds = null;
 
-            // 1. Emprise exacte calculée depuis les conduites appartenant à la simulation
-            if (window._rawNetworkData && window._rawNetworkData.couches && window._rawNetworkData.couches.conduites) {
-                const pipesGeo = window._rawNetworkData.couches.conduites;
-                if (pipesGeo && pipesGeo.features) {
-                    pipesGeo.features.forEach((feature, idx) => {
-                        const cid = `C_${idx + 1}`;
-                        if (cRes[cid] && feature.geometry && feature.geometry.coordinates) {
-                            const coords = feature.geometry.type === 'LineString' ? [feature.geometry.coordinates] : feature.geometry.coordinates;
-                            coords.forEach(line => {
-                                if (Array.isArray(line)) {
-                                    line.forEach(pt => {
-                                        if (pt && pt.length >= 2) {
-                                            bounds.extend([pt[1], pt[0]]);
-                                        }
-                                    });
-                                }
-                            });
-                        }
-                    });
+            // Priorité 1 : Bounding box certifiée WGS84 envoyée directement par le solveur SWMM 5.2
+            if (meta.bbox && Array.isArray(meta.bbox) && meta.bbox.length === 4) {
+                const [minLat, minLon, maxLat, maxLon] = meta.bbox;
+                if (!isNaN(minLat) && !isNaN(minLon) && !isNaN(maxLat) && !isNaN(maxLon)) {
+                    bounds = L.latLngBounds([minLat, minLon], [maxLat, maxLon]);
                 }
             }
 
-            // 2. Si _bassinBounds existe pour ce cluster_id, le prendre en compte
-            if (meta.cluster_id && window._bassinBounds && window._bassinBounds[meta.cluster_id]) {
-                try {
-                    bounds.extend(window._bassinBounds[meta.cluster_id]);
-                } catch(e) {}
+            // Priorité 2 : Bounds du bassin pré-calculés lors de la sectorisation
+            if ((!bounds || !bounds.isValid()) && meta.cluster_id) {
+                const bMap = window._bassinBounds || (typeof _bassinBounds !== 'undefined' ? _bassinBounds : null);
+                if (bMap) {
+                    const b = bMap[meta.cluster_id] || bMap[String(meta.cluster_id)];
+                    if (b && b.isValid && b.isValid()) bounds = b;
+                }
             }
 
-            // 3. Inclure les regards de visite de la simulation
-            const nRes = data.node_results || {};
-            if (window._rawNetworkData && window._rawNetworkData.couches && window._rawNetworkData.couches.regards) {
-                const nodesGeo = window._rawNetworkData.couches.regards;
-                if (nodesGeo && nodesGeo.features) {
-                    nodesGeo.features.forEach(feature => {
-                        const p = feature.properties || {};
-                        const nid = String(p.Code || p.code || p.CODE || p.id || '');
-                        if (nRes[nid] && feature.geometry && feature.geometry.coordinates) {
-                            const pt = feature.geometry.coordinates;
-                            if (pt && pt.length >= 2) {
-                                bounds.extend([pt[1], pt[0]]);
+            // Priorité 3 : Calcul géométrique depuis les conduites associées
+            if (!bounds || !bounds.isValid()) {
+                const cRes = data.conduit_results || {};
+                const dynBounds = L.latLngBounds();
+                if (window._rawNetworkData && window._rawNetworkData.couches && window._rawNetworkData.couches.conduites) {
+                    const pipesGeo = window._rawNetworkData.couches.conduites;
+                    if (pipesGeo && pipesGeo.features) {
+                        pipesGeo.features.forEach((feature, idx) => {
+                            const cid = `C_${idx + 1}`;
+                            if (cRes[cid] && feature.geometry && feature.geometry.coordinates) {
+                                const coords = feature.geometry.type === 'LineString' ? [feature.geometry.coordinates] : feature.geometry.coordinates;
+                                coords.forEach(line => {
+                                    if (Array.isArray(line)) {
+                                        line.forEach(pt => {
+                                            if (pt && pt.length >= 2) {
+                                                dynBounds.extend([pt[1], pt[0]]);
+                                            }
+                                        });
+                                    }
+                                });
                             }
-                        }
-                    });
+                        });
+                    }
+                }
+                if (dynBounds.isValid()) {
+                    bounds = dynBounds;
                 }
             }
 
-            if (bounds.isValid()) {
+            if (bounds && bounds.isValid()) {
                 window._lastSimBounds = bounds;
-                carte.fitBounds(bounds, { padding: [50, 50], maxZoom: 17, animate: true, duration: 1.0 });
+                carte.invalidateSize(true);
+                // Utiliser animate: false pour un centrage/zoom immédiat et infaillible (sans blocage reflow)
+                carte.fitBounds(bounds, { padding: [50, 50], maxZoom: 17, animate: false });
+
+                // Double exécution sécurisée après reflow du DOM
+                setTimeout(() => {
+                    if (window.carte && window._lastSimBounds) {
+                        carte.invalidateSize(true);
+                        carte.fitBounds(window._lastSimBounds, { padding: [50, 50], maxZoom: 17, animate: false });
+                    }
+                }, 150);
             }
         }
 
@@ -2904,15 +2914,17 @@
             // 4. Mettre en valeur les sous-bassins Voronoï du périmètre simulé
             if (couches.subcatchments) {
                 const nRes = data.node_results || {};
+                const simNodes = new Set((meta.simulated_nodes || []).map(String));
                 couches.subcatchments.eachLayer(layer => {
                     const p = (layer.feature && layer.feature.properties) ? layer.feature.properties : {};
                     const outlet = String(p.outlet || '');
                     if (isTargeted) {
-                        if (nRes[outlet] || (meta.outfall_code && outlet === String(meta.outfall_code))) {
+                        const isSim = (simNodes.size > 0) ? simNodes.has(outlet) : (nRes[outlet] || (meta.outfall_code && outlet === String(meta.outfall_code)));
+                        if (isSim) {
                             layer.setStyle({
                                 color: '#10b981',
                                 fillColor: '#10b981',
-                                fillOpacity: 0.30,
+                                fillOpacity: 0.35,
                                 weight: 2,
                                 opacity: 1.0
                             });
@@ -2923,7 +2935,7 @@
                                 fillColor: '#334155',
                                 fillOpacity: 0.02,
                                 weight: 0.5,
-                                opacity: 0.12
+                                opacity: 0.10
                             });
                         }
                     } else {
@@ -3295,13 +3307,26 @@
             const m = document.getElementById('modal-simulation');
             if (m) m.style.display = 'none';
             if (window.carte) {
+                // Invalidation et cadrage immédiat
+                carte.invalidateSize(true);
+                if (window._lastSimBounds && window._lastSimBounds.isValid && window._lastSimBounds.isValid()) {
+                    carte.fitBounds(window._lastSimBounds, { padding: [50, 50], maxZoom: 17, animate: false });
+                } else if (window._dernierResultatSimulation) {
+                    zoomerSurZoneSimulee(window._dernierResultatSimulation);
+                }
+
+                // Ré-exécution sécurisée après reflow complet du navigateur
                 setTimeout(() => {
-                    carte.invalidateSize();
-                    if (window._dernierResultatSimulation) {
+                    carte.invalidateSize(true);
+                    if (window._lastSimBounds && window._lastSimBounds.isValid && window._lastSimBounds.isValid()) {
+                        carte.fitBounds(window._lastSimBounds, { padding: [50, 50], maxZoom: 17, animate: false });
+                    } else if (window._dernierResultatSimulation) {
                         zoomerSurZoneSimulee(window._dernierResultatSimulation);
+                    }
+                    if (window._dernierResultatSimulation) {
                         mettreAJourIHMZoneSimulee(window._dernierResultatSimulation);
                     }
-                }, 100);
+                }, 120);
             }
         };
 
