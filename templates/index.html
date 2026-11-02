@@ -379,17 +379,39 @@
                 <i class="fas fa-map-marked-alt"></i> Cartographie
             </a>
             <a href="/qualite" style="color: #cbd5e1; font-weight: 600; padding: 5px 12px; border-radius: 6px; font-size: 0.82rem; display: flex; align-items: center; gap: 6px; text-decoration: none; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='transparent'">
-                <i class="fas fa-check-circle" style="color: #10b981;"></i> Diagnostic NP 650
+                <i class="fas fa-clipboard-check" style="color: #10b981;"></i> Contrôle Qualité
             </a>
         </div>
 
         <!-- Section Droite : Simulation, Ressources & Profil Utilisateur -->
         <div id="nav-user-area" style="display: flex; align-items: center; gap: 10px;">
-            <!-- Bouton Action Rapide : Lancer Simulation -->
-            <button onclick="ouvrirModalSimulation()" title="Configurer et exécuter la simulation hydrodynamique EPA SWMM 5.2" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); border: none; color: white; padding: 5px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 2px 8px rgba(2, 132, 199, 0.35);">
-                <i class="fas fa-play" style="font-size: 9px;"></i>
-                <span>Simuler</span>
-            </button>
+            <!-- Menu Déroulant Actions & Analyse Hydraulique -->
+            <div style="position: relative;">
+                <button id="btn-actions-menu" onclick="basculerMenuActions(event)" title="Actions de simulation et d'analyse hydraulique" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); border: none; color: white; padding: 5px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 2px 8px rgba(2, 132, 199, 0.35); transition: all 0.2s;">
+                    <i class="fas fa-bolt" style="font-size: 10px;"></i>
+                    <span>Actions</span>
+                    <i class="fas fa-chevron-down" style="font-size: 9px; opacity: 0.85;"></i>
+                </button>
+                <div id="actions-dropdown" style="display: none; position: absolute; right: 0; top: 100%; margin-top: 6px; width: 235px; background: rgba(15, 23, 42, 0.98); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.18); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); z-index: 2600; overflow: hidden; padding: 6px 0;">
+                    <!-- Action 1 : Simuler (toujours actif) -->
+                    <button onclick="fermerMenuActions(); ouvrirModalSimulation();" style="width: 100%; text-align: left; padding: 8px 14px; font-size: 12px; font-weight: 600; color: #f8fafc; background: transparent; border: none; cursor: pointer; display: flex; align-items: center; gap: 9px; transition: background 0.15s;" onmouseover="this.style.background='rgba(56, 189, 248, 0.15)'" onmouseout="this.style.background='transparent'">
+                        <i class="fas fa-play" style="color: #38bdf8; width: 16px; font-size: 12px;"></i>
+                        <span>Simuler</span>
+                    </button>
+                    <!-- Séparateur -->
+                    <div style="height: 1px; background: rgba(255,255,255,0.08); margin: 4px 0;"></div>
+                    <!-- Action 2 : Afficher les résultats (désactivé tant que pas de simulation) -->
+                    <button id="action-item-results" onclick="fermerMenuActions(); afficherDerniersResultats();" class="action-dropdown-item disabled" style="width: 100%; text-align: left; padding: 8px 14px; font-size: 12px; font-weight: 600; color: #cbd5e1; background: transparent; border: none; cursor: not-allowed; display: flex; align-items: center; gap: 9px; opacity: 0.45; pointer-events: none; transition: all 0.2s;" onmouseover="if(!this.classList.contains('disabled')) this.style.background='rgba(16, 185, 129, 0.15)'" onmouseout="this.style.background='transparent'">
+                        <i class="fas fa-chart-line" style="color: #10b981; width: 16px; font-size: 12px;"></i>
+                        <span>Afficher les résultats</span>
+                    </button>
+                    <!-- Action 3 : Interprétation des résultats (désactivé tant que pas de simulation) -->
+                    <button id="action-item-interpretation" onclick="fermerMenuActions(); ouvrirModalInterpretation();" class="action-dropdown-item disabled" style="width: 100%; text-align: left; padding: 8px 14px; font-size: 12px; font-weight: 600; color: #cbd5e1; background: transparent; border: none; cursor: not-allowed; display: flex; align-items: center; gap: 9px; opacity: 0.45; pointer-events: none; transition: all 0.2s;" onmouseover="if(!this.classList.contains('disabled')) this.style.background='rgba(168, 85, 247, 0.15)'" onmouseout="this.style.background='transparent'">
+                        <i class="fas fa-brain" style="color: #a855f7; width: 16px; font-size: 12px;"></i>
+                        <span>Interprétation des résultats</span>
+                    </button>
+                </div>
+            </div>
 
             <!-- Menu Déroulant Aide & Ressources -->
             <div style="position: relative;">
@@ -1851,7 +1873,271 @@
             if (d) d.style.display = 'none';
         };
 
+        // ==========================================
+        // GESTION DU MENU ACTIONS & SIMULATION
+        // ==========================================
+        window.basculerMenuActions = function(e) {
+            if (e) e.stopPropagation();
+            const d = document.getElementById('actions-dropdown');
+            if (d) d.style.display = (d.style.display === 'block') ? 'none' : 'block';
+        };
+
+        window.fermerMenuActions = function() {
+            const d = document.getElementById('actions-dropdown');
+            if (d) d.style.display = 'none';
+        };
+
+        window.activerActionsSimulation = function(actif) {
+            const itemResults = document.getElementById('action-item-results');
+            const itemInterp = document.getElementById('action-item-interpretation');
+            
+            [itemResults, itemInterp].forEach(el => {
+                if (!el) return;
+                if (actif) {
+                    el.classList.remove('disabled');
+                    el.style.opacity = '1';
+                    el.style.pointerEvents = 'auto';
+                    el.style.cursor = 'pointer';
+                } else {
+                    el.classList.add('disabled');
+                    el.style.opacity = '0.45';
+                    el.style.pointerEvents = 'none';
+                    el.style.cursor = 'not-allowed';
+                }
+            });
+        };
+
+        window.afficherDerniersResultats = function() {
+            if (!window._dernierResultatSimulation) {
+                alert("Aucun résultat de simulation disponible pour ce réseau. Veuillez d'abord lancer une simulation.");
+                return;
+            }
+            if (couches.res_conduites && !carte.hasLayer(couches.res_conduites)) {
+                couches.res_conduites.addTo(carte);
+            }
+            if (couches.res_regards && !carte.hasLayer(couches.res_regards)) {
+                couches.res_regards.addTo(carte);
+            }
+            const leg = document.getElementById('sim-floating-legend');
+            if (leg) leg.style.display = 'block';
+
+            const resSec = document.getElementById('section-results-sidebar');
+            if (resSec) resSec.style.display = 'block';
+
+            ouvrirModalSimulation();
+        };
+
+        window.ouvrirModalInterpretation = function() {
+            if (!window._dernierResultatSimulation) {
+                alert("Aucun résultat de simulation disponible pour l'interprétation. Veuillez d'abord exécuter une simulation.");
+                return;
+            }
+            const m = document.getElementById('modal-interpretation');
+            if (m) {
+                m.style.display = 'flex';
+                genererRapportInterpretation(window._dernierResultatSimulation);
+            }
+        };
+
+        window.fermerModalInterpretation = function() {
+            const m = document.getElementById('modal-interpretation');
+            if (m) m.style.display = 'none';
+        };
+
+        window.genererRapportInterpretation = function(simData) {
+            const container = document.getElementById('interpretation-modal-body');
+            if (!container || !simData) return;
+
+            const k = simData.kpis || {};
+            const cRes = simData.conduit_results || {};
+            const nRes = simData.node_results || {};
+            const meta = simData.meta || {};
+
+            const contError = Math.abs(k.routing_continuity_error_pct || 0);
+            const surchargedNodes = k.surcharged_nodes_count || 0;
+            const floodedNodes = k.flooded_nodes_count || 0;
+            const peakOutflow = (k.peak_outflow_m3s || 0).toFixed(3);
+
+            let nbConduites = Object.keys(cRes).length;
+            let nbNormal = 0;
+            let nbVigilance = 0;
+            let nbSurcharge = 0;
+            let nbErosion = 0;
+            let nbAutocurageFaible = 0;
+            let topTension = [];
+
+            for (const [cid, c] of Object.entries(cRes)) {
+                const ratio = c.flow_ratio || 0;
+                const vel = c.max_velocity_ms || 0;
+                if (ratio > 1.0) nbSurcharge++;
+                else if (ratio >= 0.75) nbVigilance++;
+                else nbNormal++;
+
+                if (vel > 4.0) nbErosion++;
+                if (vel < 0.6 && ratio > 0.05) nbAutocurageFaible++;
+
+                topTension.push({ cid, ratio, vel, q: c.max_flow_cms || 0, label: c.label || '', color: c.color || '#38bdf8' });
+            }
+
+            topTension.sort((a, b) => b.ratio - a.ratio);
+            const top3 = topTension.slice(0, 3);
+
+            let statutGlobal = "Réseau Performant & Écoulement Fluide";
+            let couleurStatut = "#10b981";
+            let iconeStatut = "fa-check-circle";
+            let avisSynthese = "L'ensemble des collecteurs absorbe l'événement pluvial en surface libre gravitaire sans débordement sur la chaussée.";
+
+            if (floodedNodes > 0) {
+                statutGlobal = "Surcharge Critique & Inondation de Surface";
+                couleurStatut = "#ef4444";
+                iconeStatut = "fa-exclamation-triangle";
+                avisSynthese = `Débordement en surface détecté sur <b>${floodedNodes} regard(s)</b> de visite. Les débits de pointe dépassent la capacité d'évacuation maximale du réseau aval.`;
+            } else if (surchargedNodes > 0 || nbSurcharge > 0) {
+                statutGlobal = "Mise en Charge Hydraulique Sous Pression";
+                couleurStatut = "#f59e0b";
+                iconeStatut = "fa-exclamation-circle";
+                avisSynthese = `Aucun débordement en surface, mais <b>${surchargedNodes} regard(s)</b> et <b>${nbSurcharge} canalisation(s)</b> travaillent en charge sous pression temporaire.`;
+            }
+
+            let qualiteContinuite = "Excellente (Conforme EPA SWMM)";
+            let couleurContinuite = "#10b981";
+            let explicationContinuite = "Erreur de masse inférieure à 1.0%. Le schéma Saint-Venant 1D Dynamic Wave converge avec une précision optimale sans instabilité numérique.";
+            if (contError >= 5.0) {
+                qualiteContinuite = "Avertissement (Bilan de masse perfectible)";
+                couleurContinuite = "#ef4444";
+                explicationContinuite = "Erreur supérieure à 5%. Il est recommandé d'abaisser le pas de routage à 1 ou 2 secondes pour éliminer les micro-oscillations.";
+            } else if (contError >= 1.0) {
+                qualiteContinuite = "Bonne (Conforme standard)";
+                couleurContinuite = "#38bdf8";
+                explicationContinuite = "Erreur comprise entre 1% et 5%, conforme aux recommandations de l'EPA pour les réseaux maillés.";
+            }
+
+            let html = `
+                <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid ${couleurStatut}44; border-left: 5px solid ${couleurStatut}; border-radius: 12px; padding: 16px 20px; margin-bottom: 20px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                        <span style="font-size: 1.05rem; font-weight: 800; color: ${couleurStatut}; display: flex; align-items: center; gap: 8px;">
+                            <i class="fas ${iconeStatut}"></i> ${statutGlobal}
+                        </span>
+                        <span style="font-size: 0.75rem; background: ${couleurStatut}22; color: ${couleurStatut}; border: 1px solid ${couleurStatut}55; padding: 3px 10px; border-radius: 20px; font-weight: 700;">
+                            ${meta.scenario_key ? meta.scenario_key.toUpperCase() : 'SWMM 5.2'}
+                        </span>
+                    </div>
+                    <p style="margin: 0; color: #cbd5e1; font-size: 0.88rem; line-height: 1.5;">${avisSynthese}</p>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+                    <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px;">
+                        <div style="font-weight: 700; font-size: 0.85rem; color: #38bdf8; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+                            <i class="fas fa-calculator"></i> 1. Convergence &amp; Continuité Saint-Venant
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span style="font-size: 0.82rem; color: #94a3b8;">Erreur de bilan :</span>
+                            <span style="font-size: 0.95rem; font-weight: 800; color: ${couleurContinuite};">${(k.routing_continuity_error_pct || 0).toFixed(2)} %</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span style="font-size: 0.82rem; color: #94a3b8;">Fiabilité du solveur :</span>
+                            <span style="font-size: 0.82rem; font-weight: 700; color: #e2e8f0;">${qualiteContinuite}</span>
+                        </div>
+                        <p style="font-size: 0.78rem; color: #94a3b8; line-height: 1.4; margin: 0; margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px;">
+                            ${explicationContinuite}
+                        </p>
+                    </div>
+
+                    <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px;">
+                        <div style="font-weight: 700; font-size: 0.85rem; color: #f87171; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+                            <i class="fas fa-water"></i> 2. Regards &amp; Risque Submersion
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span style="font-size: 0.82rem; color: #94a3b8;">Regards en charge :</span>
+                            <span style="font-size: 0.95rem; font-weight: 800; color: ${surchargedNodes > 0 ? '#f59e0b' : '#34d399'};">${surchargedNodes}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span style="font-size: 0.82rem; color: #94a3b8;">Regards avec débordement :</span>
+                            <span style="font-size: 0.95rem; font-weight: 800; color: ${floodedNodes > 0 ? '#ef4444' : '#34d399'};">${floodedNodes}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 0.82rem; color: #94a3b8;">Débit de crête exutoire :</span>
+                            <span style="font-size: 0.95rem; font-weight: 800; color: #38bdf8;">${peakOutflow} m³/s</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px; margin-bottom: 20px;">
+                    <div style="font-weight: 700; font-size: 0.85rem; color: #fbbf24; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">
+                        <i class="fas fa-network-wired"></i> 3. Répartition du Taux de Charge des Canalisations (Q/Qmax)
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px;">
+                        <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 8px; padding: 10px; text-align: center;">
+                            <div style="font-size: 0.75rem; color: #34d399; font-weight: 600;">Normal (&lt; 75%)</div>
+                            <div style="font-size: 1.15rem; font-weight: 800; color: #34d399;">${nbNormal}</div>
+                            <div style="font-size: 0.7rem; color: #94a3b8;">Écoulement libre</div>
+                        </div>
+                        <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 8px; padding: 10px; text-align: center;">
+                            <div style="font-size: 0.75rem; color: #fbbf24; font-weight: 600;">Vigilance (75-100%)</div>
+                            <div style="font-size: 1.15rem; font-weight: 800; color: #fbbf24;">${nbVigilance}</div>
+                            <div style="font-size: 0.7rem; color: #94a3b8;">Proche saturation</div>
+                        </div>
+                        <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 8px; padding: 10px; text-align: center;">
+                            <div style="font-size: 0.75rem; color: #f87171; font-weight: 600;">Surchargé (&gt; 100%)</div>
+                            <div style="font-size: 1.15rem; font-weight: 800; color: #f87171;">${nbSurcharge}</div>
+                            <div style="font-size: 0.7rem; color: #94a3b8;">Mise en pression</div>
+                        </div>
+                    </div>
+
+                    ${top3.length > 0 ? `
+                        <div style="font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 8px;">
+                            Tronçons les plus sollicités hydrauliquement :
+                        </div>
+                        <div style="display: grid; gap: 6px;">
+                            ${top3.map(t => `
+                                <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem;">
+                                    <div>
+                                        <strong style="color: ${t.color};">${t.cid}</strong>
+                                        <span style="color: #94a3b8; font-size: 0.75rem; margin-left: 6px;">(${t.label})</span>
+                                    </div>
+                                    <div style="display: flex; gap: 14px; align-items: center;">
+                                        <span>Q/Qmax: <b style="color: ${t.color};">${(t.ratio * 100).toFixed(0)}%</b></span>
+                                        <span style="color: #94a3b8;">Vmax: <b>${t.vel.toFixed(2)} m/s</b></span>
+                                        <span style="color: #94a3b8;">Qmax: <b>${t.q.toFixed(3)} m³/s</b></span>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                </div>
+
+                <div style="background: rgba(168, 85, 247, 0.08); border: 1px solid rgba(168, 85, 247, 0.25); border-radius: 12px; padding: 16px;">
+                    <div style="font-weight: 700; font-size: 0.88rem; color: #c084fc; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                        <i class="fas fa-lightbulb"></i> 4. Préconisations Techniques de l'Ingénieur
+                    </div>
+                    <ul style="margin: 0; padding-left: 18px; font-size: 0.82rem; color: #cbd5e1; line-height: 1.6;">
+                        ${floodedNodes > 0 ? `
+                            <li><strong>Recalibrage des conduites avals :</strong> Augmenter le diamètre nominal sur les tronçons affichant Q/Qmax &gt; 100% pour résorber les surpressions.</li>
+                            <li><strong>Ouvrage de rétention tampon :</strong> Implanter un bassin d'orage ou des noues d'infiltration en amont des regards débordants pour écrêter l'hydrogramme de crue.</li>
+                        ` : `
+                            <li><strong>Capacité satisfaisante :</strong> Le dimensionnement actuel garantit l'évacuation des débits de la pluie sélectionnée sans risque de submersion de voirie.</li>
+                        `}
+                        ${nbAutocurageFaible > 0 ? `
+                            <li><strong>Auto-curage limite :</strong> ${nbAutocurageFaible} tronçon(s) présentent des vitesses faibles (&lt; 0.6 m/s), induisant un risque de décantation et d'ensablement à long terme.</li>
+                        ` : ''}
+                        ${nbErosion > 0 ? `
+                            <li><strong>Risque d'affouillement :</strong> ${nbErosion} tronçon(s) présentent des vitesses élevées (&gt; 4.0 m/s), nécessitant des tuyaux résistant à l'abrasion ou des regards de chute.</li>
+                        ` : ''}
+                        <li><strong>Gestion durable :</strong> Favoriser la déconnexion des eaux pluviales à la source (toitures végétalisées, tranchées filtrantes) pour limiter l'apport au réseau collectif.</li>
+                    </ul>
+                </div>
+            `;
+
+            container.innerHTML = html;
+        };
+
         window.addEventListener('click', function(e) {
+            const btnActions = document.getElementById('btn-actions-menu');
+            const dActions = document.getElementById('actions-dropdown');
+            if (dActions && btnActions && !btnActions.contains(e.target) && !dActions.contains(e.target)) {
+                dActions.style.display = 'none';
+            }
+
             const btnProfile = document.getElementById('btn-user-profile-menu');
             const dProfile = document.getElementById('user-profile-dropdown');
             if (dProfile && btnProfile && !btnProfile.contains(e.target) && !dProfile.contains(e.target)) {
@@ -2397,6 +2683,11 @@
 
             const resultsCard = document.getElementById('sim-results-card');
             if (resultsCard) resultsCard.style.display = 'block';
+
+            window._dernierResultatSimulation = data;
+            if (typeof activerActionsSimulation === 'function') {
+                activerActionsSimulation(true);
+            }
         };
 
         // ==========================================
@@ -2438,6 +2729,9 @@
             if (kpiSub) kpiSub.innerText = '--';
 
             window._dernierResultatSimulation = null;
+            if (typeof activerActionsSimulation === 'function') {
+                activerActionsSimulation(false);
+            }
         };
 
         // ==========================================
@@ -2824,6 +3118,48 @@
                             <i class="fas fa-file-alt"></i> Rapport .RPT
                         </a>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal d'Interprétation Experte des Résultats SWMM 5.2 -->
+    <div id="modal-interpretation" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(6px); z-index: 3000; align-items: center; justify-content: center;">
+        <div style="background: #1e293b; color: #f8fafc; border-radius: 16px; width: 92%; max-width: 760px; max-height: 90vh; display: flex; flex-direction: column; border: 1px solid rgba(255, 255, 255, 0.15); box-shadow: 0 25px 50px rgba(0, 0, 0, 0.6); overflow: hidden;">
+            <!-- Entête -->
+            <div style="background: #0f172a; padding: 18px 24px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="width: 38px; height: 38px; border-radius: 10px; background: linear-gradient(135deg, #a855f7, #7c3aed); display: flex; align-items: center; justify-content: center; font-size: 18px; color: white;">
+                        <i class="fas fa-brain"></i>
+                    </div>
+                    <div>
+                        <h5 style="margin: 0; font-weight: 700; font-size: 1.05rem;">Interprétation Experte &amp; Diagnostic Hydraulique</h5>
+                        <small style="color: #94a3b8;">Analyse automatisée selon les règles de l'art du génie urbain et de l'EPA SWMM</small>
+                    </div>
+                </div>
+                <button onclick="fermerModalInterpretation()" style="background: transparent; border: none; color: #94a3b8; font-size: 24px; cursor: pointer; line-height: 1;">&times;</button>
+            </div>
+
+            <!-- Corps scrollable -->
+            <div style="padding: 22px 24px; overflow-y: auto; flex: 1;" id="interpretation-modal-body">
+                <div style="text-align: center; color: #94a3b8; padding: 30px;">
+                    <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+                    <p>Génération de l'analyse hydraulique en cours...</p>
+                </div>
+            </div>
+            
+            <!-- Pied de page -->
+            <div style="background: #0f172a; padding: 14px 24px; border-top: 1px solid rgba(255, 255, 255, 0.1); display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 0.78rem; color: #64748b;">
+                    <i class="fas fa-shield-alt me-1"></i> Résolution hydrodynamique 1D Saint-Venant (Dynamic Wave)
+                </span>
+                <div style="display: flex; gap: 10px;">
+                    <button onclick="fermerModalInterpretation()" style="padding: 6px 14px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #e2e8f0; border-radius: 8px; font-size: 0.82rem; font-weight: 600; cursor: pointer;">
+                        Fermer
+                    </button>
+                    <button onclick="window.print()" style="padding: 6px 14px; background: linear-gradient(135deg, #a855f7, #7c3aed); border: none; color: white; border-radius: 8px; font-size: 0.82rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                        <i class="fas fa-print"></i> Imprimer le diagnostic
+                    </button>
                 </div>
             </div>
         </div>
