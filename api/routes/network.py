@@ -312,10 +312,14 @@ def load_benchmark_dataset(
         reinitialiser_derniere_simulation()
     except Exception:
         pass
-
     try:
-        from api.routes.simulations import reinitialiser_derniere_simulation
-        reinitialiser_derniere_simulation()
+        from api.routes.qualite import reinitialiser_cache_qualite
+        reinitialiser_cache_qualite()
+    except Exception:
+        pass
+    try:
+        from api.routes.qualite import reinitialiser_cache_qualite
+        reinitialiser_cache_qualite()
     except Exception:
         pass
     try:
@@ -376,6 +380,11 @@ def load_demo_network(
     try:
         from api.routes.simulations import reinitialiser_derniere_simulation
         reinitialiser_derniere_simulation()
+    except Exception:
+        pass
+    try:
+        from api.routes.qualite import reinitialiser_cache_qualite
+        reinitialiser_cache_qualite()
     except Exception:
         pass
     try:
@@ -444,6 +453,11 @@ def load_master_network(
     except Exception:
         pass
     try:
+        from api.routes.qualite import reinitialiser_cache_qualite
+        reinitialiser_cache_qualite()
+    except Exception:
+        pass
+    try:
         from api.main import reset_layers_cache
         reset_layers_cache()
     except Exception:
@@ -486,6 +500,11 @@ def reset_project_network(
     try:
         from api.routes.simulations import reinitialiser_derniere_simulation
         reinitialiser_derniere_simulation()
+    except Exception:
+        pass
+    try:
+        from api.routes.qualite import reinitialiser_cache_qualite
+        reinitialiser_cache_qualite()
     except Exception:
         pass
     try:
@@ -543,6 +562,11 @@ async def upload_network_gpkg(
     try:
         from api.routes.simulations import reinitialiser_derniere_simulation
         reinitialiser_derniere_simulation()
+    except Exception:
+        pass
+    try:
+        from api.routes.qualite import reinitialiser_cache_qualite
+        reinitialiser_cache_qualite()
     except Exception:
         pass
     try:
