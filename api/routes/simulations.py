@@ -6,6 +6,10 @@ Lancement asynchrone via Celery, suivi de jobs et récupération des résultats.
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
 from sqlalchemy.orm import Session
 from typing import List, Optional, Any, Dict
+from pathlib import Path
+import logging
+
+logger = logging.getLogger(__name__)
 
 from api.database import get_db
 from api import schemas, crud

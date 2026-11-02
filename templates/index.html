@@ -2157,6 +2157,17 @@
         window.fermerModalInterpretation = function() {
             const m = document.getElementById('modal-interpretation');
             if (m) m.style.display = 'none';
+            if (window.carte && window._dernierResultatSimulation) {
+                carte.invalidateSize(true);
+                zoomerSurZoneSimulee(window._dernierResultatSimulation);
+                mettreAJourIHMZoneSimulee(window._dernierResultatSimulation);
+                setTimeout(() => {
+                    if (window.carte && window._dernierResultatSimulation) {
+                        carte.invalidateSize(true);
+                        zoomerSurZoneSimulee(window._dernierResultatSimulation);
+                    }
+                }, 150);
+            }
         };
 
         // ==========================================

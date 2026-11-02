@@ -445,13 +445,42 @@ class MoteurSWMM:
         node_elevs, source_alt = _resoudre_altimetrie_noeuds(regards, canalisations, rejets, outfall_code, pente_moyenne_pct)
         outfall_elev = node_elevs.get(outfall_code, 100.0)
 
+        # Analyse des connexions au nœud outfall_code
+        inlet_conduits = [c for _, c in canalisations.iterrows() if _clean_node_id(c.get("ID_AVAL")) == outfall_code]
+        outlet_conduits = [c for _, c in canalisations.iterrows() if _clean_node_id(c.get("ID_AMONT")) == outfall_code]
+        inlet_count = len(inlet_conduits)
+        outlet_count = len(outlet_conduits)
+
+        # Si l'exutoire présumé n'a aucune conduite connectée en aval, chercher le sink réel
+        if inlet_count == 0 and len(canalisations) > 0:
+            sinks = downstream_nodes - upstream_nodes
+            if sinks:
+                outfall_code = list(sinks)[0]
+                inlet_conduits = [c for _, c in canalisations.iterrows() if _clean_node_id(c.get("ID_AVAL")) == outfall_code]
+                outlet_conduits = [c for _, c in canalisations.iterrows() if _clean_node_id(c.get("ID_AMONT")) == outfall_code]
+                inlet_count = len(inlet_conduits)
+                outlet_count = len(outlet_conduits)
+
+        # Dans EPA SWMM 5.2 Dynamic Wave :
+        # Un nœud [OUTFALLS] ne peut STRICTEMENT pas avoir plus d'un tronçon entrant, ni aucun tronçon sortant (Erreur 141).
+        # Si plus d'une conduite y converge ou s'il y a des conduites aval, le nœud physique doit être conservé
+        # comme un regard [JUNCTIONS], et relié à un exutoire terminal dédié [OUTFALLS] via un tronçon court de décharge.
+        creer_exutoire_dedie = (inlet_count != 1 or outlet_count > 0)
+
+        if creer_exutoire_dedie:
+            actual_outfall_name = f"OUT_{outfall_code}"
+            terminal_outfall_elev = round(outfall_elev - 0.05, 3)
+        else:
+            actual_outfall_name = outfall_code
+            terminal_outfall_elev = outfall_elev
+
         # Section regards (Junctions)
         lines.append("[JUNCTIONS]")
         lines.append(";;Name           Elevation  MaxDepth   InitDepth  SurDepth   Aponded")
         noeuds_traites = set()
         for idx, r in regards.iterrows():
             nid = _clean_node_id(r.get("Code")) or str(idx)
-            if nid == outfall_code or nid in noeuds_traites:
+            if (not creer_exutoire_dedie and nid == outfall_code) or nid in noeuds_traites:
                 continue
             prof = float(r["Profondeur"]) if ("Profondeur" in r and r["Profondeur"] > 0) else 2.0
             z_rad = node_elevs.get(nid, 100.0)
@@ -460,17 +489,21 @@ class MoteurSWMM:
 
         # Inclusion des nœuds de canalisations absents de regards
         for nid in conduit_nodes:
-            if nid == outfall_code or nid in noeuds_traites:
+            if (not creer_exutoire_dedie and nid == outfall_code) or nid in noeuds_traites:
                 continue
             z_rad = node_elevs.get(nid, 100.0)
             lines.append(f"{nid:<16} {z_rad:<10.3f} 2.000      0.000      0.000      0.000")
             noeuds_traites.add(nid)
+
+        if creer_exutoire_dedie and outfall_code not in noeuds_traites:
+            lines.append(f"{outfall_code:<16} {outfall_elev:<10.3f} 2.000      0.000      0.000      0.000")
+            noeuds_traites.add(outfall_code)
         lines.append("")
 
         # Section exutoire (Outfalls)
         lines.append("[OUTFALLS]")
         lines.append(";;Name           Elevation  Type       Stage Data       Gated    Route To")
-        lines.append(f"{outfall_code:<16} {outfall_elev:<10.3f} FREE                        NO")
+        lines.append(f"{actual_outfall_name:<16} {terminal_outfall_elev:<10.3f} FREE                        NO")
         lines.append("")
 
         # Section conduites (Conduits)
@@ -491,6 +524,14 @@ class MoteurSWMM:
 
             conduit_lines.append(f"{cid:<16} {u_node:<16} {d_node:<16} {length:<10.2f} {rough:<10.4f} 0.000      0.000      0.000      0.000")
             xsec_lines.append(f"{cid:<16} CIRCULAR     {diam_m:<16.3f} 0.000      0.000      0.000      1")
+
+        # Si exutoire dédié requis, ajouter le tronçon de liaison aval sécurisé vers l'exutoire terminal
+        if creer_exutoire_dedie:
+            cid_out = f"C_OUT_{outfall_code}"
+            max_inlet_d = max([float(c.get("DIAMETRE", 600)) for c in inlet_conduits] or [1000.0])
+            diam_out_m = max(1.2, max_inlet_d / 1000.0)
+            conduit_lines.append(f"{cid_out:<16} {outfall_code:<16} {actual_outfall_name:<16} 5.00       0.0130     0.000      0.000      0.000      0.000")
+            xsec_lines.append(f"{cid_out:<16} CIRCULAR     {diam_out_m:<16.3f} 0.000      0.000      0.000      1")
 
         lines.extend(conduit_lines)
         lines.append("")
@@ -522,6 +563,21 @@ class MoteurSWMM:
             if ex_geom:
                 lines.append(f"{outfall_code:<16} {ex_geom.x:<18.3f} {ex_geom.y:<18.3f}")
                 coords_traitees.add(outfall_code)
+
+        if creer_exutoire_dedie and actual_outfall_name not in coords_traitees:
+            out_coord = None
+            if outfall_code in noeuds_regards:
+                g = noeuds_regards[outfall_code].geometry
+                out_coord = (g.x + 5.0, g.y + 5.0)
+            elif target_ex_id and target_ex_id in exutoires_map:
+                eg = exutoires_map[target_ex_id].get("geometry")
+                if eg:
+                    out_coord = (eg.x + 5.0, eg.y + 5.0)
+            if not out_coord and coords_traitees:
+                out_coord = (100.0, 100.0)
+            if out_coord:
+                lines.append(f"{actual_outfall_name:<16} {out_coord[0]:<18.3f} {out_coord[1]:<18.3f}")
+                coords_traitees.add(actual_outfall_name)
         lines.append("")
 
         # Polygones des sous-bassins
@@ -558,7 +614,8 @@ class MoteurSWMM:
             "junctions_count": max(0, len(regards) - 1),
             "outfalls_count": 1,
             "conduits_count": len(canalisations),
-            "outfall_code": outfall_code,
+            "outfall_code": actual_outfall_name,
+            "junction_outfall_code": outfall_code,
             "total_area_ha": round(float(sb_gdf["area_ha"].sum()), 2) if not sb_gdf.empty else 0.0,
             "buffer_m": buf_actuel,
             "source_altimetrique": source_alt,
@@ -770,13 +827,20 @@ class MoteurSWMM:
         if "Outfall Loading Summary" in rpt_text:
             outfall_sec = rpt_text.split("Outfall Loading Summary")[1].split("\n\n")[0]
             for line in outfall_sec.strip().splitlines():
-                if meta.get("outfall_code") and meta["outfall_code"] in line:
-                    parts = line.split()
-                    if len(parts) >= 4:
+                parts = line.split()
+                if len(parts) >= 4 and not parts[0].startswith("-") and parts[0] not in ("Outfall", "System", "Node"):
+                    node_name = parts[0]
+                    target_out = meta.get("outfall_code")
+                    target_junc = meta.get("junction_outfall_code")
+                    if (not target_out) or (target_out == node_name) or (target_junc == node_name) or ("OUT_" in node_name) or (kpis["peak_outflow_m3s"] == 0.0):
                         try:
-                            kpis["peak_outflow_m3s"] = float(parts[2])
+                            # In SWMM 5.2 Outfall Loading: [Node, Flow_Freq_Pcnt, Avg_Flow_CMS, Max_Flow_CMS, Total_Vol]
+                            kpis["peak_outflow_m3s"] = float(parts[3])
                         except Exception:
-                            pass
+                            try:
+                                kpis["peak_outflow_m3s"] = float(parts[2])
+                            except Exception:
+                                pass
 
         # 6. Surcharge des regards (Node Surcharge Summary)
         if "Node Surcharge Summary" in rpt_text:
