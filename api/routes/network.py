@@ -258,9 +258,34 @@ AVAILABLE_DATASETS = [
 
 
 @router.get("/datasets")
-def list_available_datasets():
-    """Retourne la liste des jeux de données et modèles de référence disponibles."""
-    return {"status": "ok", "datasets": AVAILABLE_DATASETS}
+def list_available_datasets(
+    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context_optional),
+    db: Session = Depends(get_db)
+):
+    """Retourne la liste des jeux de données et modèles de référence disponibles ainsi que le projet en cours."""
+    active_project = None
+    try:
+        org_id = tenant_ctx.org_id if tenant_ctx else None
+        if not org_id:
+            default_org = db.query(Organization).first()
+            org_id = default_org.id if default_org else "org_default"
+
+        proj = db.query(Project).filter(Project.org_id == org_id, Project.is_archived.is_(False)).first()
+        if not proj:
+            proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
+
+        if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
+            active_project = {
+                "id": proj.id,
+                "name": proj.name or "Projet Réseau Actif",
+                "pipes_count": proj.pipes_count or 0,
+                "nodes_count": proj.nodes_count or 0,
+                "gpkg_path": proj.source_gpkg_key
+            }
+    except Exception as e:
+        print(f"[datasets] Erreur extraction projet actif: {e}", flush=True)
+
+    return {"status": "ok", "datasets": AVAILABLE_DATASETS, "active_project": active_project}
 
 
 @router.post("/load-dataset/{dataset_id}")

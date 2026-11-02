@@ -125,25 +125,39 @@ async def catch_cancelled_error_middleware(request: Request, call_next):
 
 def _get_authenticated_user(request: Request, db):
     """Extrait l'utilisateur connecté via cookie ou Bearer token (sans lever d'exception)."""
+    from api.core.auth import decode_token
+    from api.models import User
+
     token = request.cookies.get("access_token")
     if not token:
         auth_header = request.headers.get("Authorization")
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header.split(" ", 1)[1].strip()
-    if not token:
-        return None
-    try:
-        from api.core.auth import decode_token
-        from api.models import User
-        payload = decode_token(token)
-        if not payload or not payload.get("sub"):
-            return None
-        user = db.query(User).filter(User.id == payload["sub"], User.is_active.is_(True)).first()
-        if not user or not user.email_verified:
-            return None
-        return user
-    except Exception:
-        return None
+
+    # 1. Tenter avec access_token
+    if token:
+        try:
+            payload = decode_token(token)
+            if payload and payload.get("sub"):
+                user = db.query(User).filter(User.id == payload["sub"], User.is_active.is_(True)).first()
+                if user and user.email_verified:
+                    return user
+        except Exception:
+            pass
+
+    # 2. Fallback avec refresh_token (pour maintenir la session active sur F5 / réouverture)
+    refresh_token = request.cookies.get("refresh_token")
+    if refresh_token:
+        try:
+            payload = decode_token(refresh_token)
+            if payload and payload.get("sub"):
+                user = db.query(User).filter(User.id == payload["sub"], User.is_active.is_(True)).first()
+                if user and user.email_verified:
+                    return user
+        except Exception:
+            pass
+
+    return None
 
 
 # ============================================================

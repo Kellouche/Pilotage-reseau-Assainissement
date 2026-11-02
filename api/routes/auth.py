@@ -59,30 +59,33 @@ router = APIRouter(prefix="/auth", tags=["Authentification & Multi-Tenant"])
 
 
 def _set_auth_cookies(response: Response, access_token: str, refresh_token: Optional[str] = None):
-    """Injecte les cookies de session HTTP-Only sécurisés."""
+    """Injecte les cookies de session sécurisés (valides 7 jours)."""
+    cookie_max_age = REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600
     response.set_cookie(
         key="access_token",
         value=access_token,
-        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        httponly=True,
+        max_age=cookie_max_age,
+        httponly=False,  # Permet la synchronisation avec le JavaScript client
         samesite="lax",
-        secure=False,  # Permet le test sur HTTP localement, activé par proxy TLS en production
+        secure=False,
+        path="/"
     )
     if refresh_token:
         response.set_cookie(
             key="refresh_token",
             value=refresh_token,
-            max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
+            max_age=cookie_max_age,
             httponly=True,
             samesite="lax",
             secure=False,
+            path="/"
         )
 
 
 def _clear_auth_cookies(response: Response):
     """Supprime les cookies de session."""
-    response.delete_cookie(key="access_token")
-    response.delete_cookie(key="refresh_token")
+    response.delete_cookie(key="access_token", path="/")
+    response.delete_cookie(key="refresh_token", path="/")
 
 
 @router.get("/check-email")

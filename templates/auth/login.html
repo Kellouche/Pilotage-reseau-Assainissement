@@ -201,7 +201,7 @@
 </div>
 
 <script>
-    // Récupération éventuelle de l'email depuis l'URL
+    // Vérifier si l'utilisateur est déjà connecté pour éviter une reconnexion inutile
     window.addEventListener('DOMContentLoaded', () => {
         const urlParams = new URLSearchParams(window.location.search);
         const emailParam = urlParams.get('email');
@@ -211,6 +211,20 @@
                 emailInput.value = emailParam;
                 document.getElementById('password').focus();
             }
+        }
+
+        const existingToken = localStorage.getItem('swmm_access_token');
+        if (existingToken) {
+            fetch('/api/v1/auth/me', {
+                headers: { 'Authorization': `Bearer ${existingToken}` },
+                credentials: 'include'
+            }).then(r => {
+                if (r.ok) {
+                    document.cookie = `access_token=${existingToken}; path=/; max-age=604800; SameSite=Lax`;
+                    const nextUrl = urlParams.get('next') || '/cockpit';
+                    window.location.href = nextUrl;
+                }
+            }).catch(() => {});
         }
     });
 
@@ -405,9 +419,12 @@
                 document.cookie = `access_token=${data.access_token}; path=/; max-age=604800; SameSite=Lax`;
             }
 
-            // Redirection vers l'espace applicatif
+            // Flag pour proposer le choix de projet à la connexion (comme une 1ère fois)
+            sessionStorage.setItem('choisir_projet_apres_login', 'true');
+
+            // Redirection vers le cockpit
             const params = new URLSearchParams(window.location.search);
-            const nextUrl = params.get('next') || '/map';
+            const nextUrl = params.get('next') || '/cockpit';
             window.location.href = nextUrl;
 
         } catch (err) {
