@@ -323,15 +323,19 @@
             position: fixed;
             top: 0;
             left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.8);
+            width: 100vw;
+            height: 100vh;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(4px);
             display: none;
             justify-content: center;
             align-items: center;
-            z-index: 1000;
-            font-size: 24px;
+            z-index: 99999;
+            font-size: 1.1rem;
             color: #fff;
+            cursor: wait;
+            user-select: none;
+            pointer-events: all;
         }
         
         .loading-content {
@@ -498,7 +502,7 @@
     <div id="loading-overlay">
         <div class="loading-content">
             <div class="spinner"></div>
-            <div>Chargement des données...</div>
+            <div id="loading-overlay-text" style="font-weight: 600; font-size: 1rem; color: #f8fafc; margin-top: 10px;">Chargement des données...</div>
         </div>
     </div>
     
@@ -706,9 +710,11 @@
         }, 500);
 
         // Fonction pour afficher/masquer l'overlay de chargement avec timeout de sécurité
-        function montrerChargement(afficher) {
+        function montrerChargement(afficher, message = 'Chargement des données...') {
             const overlay = document.getElementById('loading-overlay');
             if (!overlay) return;
+            const txtEl = document.getElementById('loading-overlay-text');
+            if (txtEl && message) txtEl.textContent = message;
             if (afficher) {
                 overlay.style.display = 'flex';
                 if (window._loadingSafetyTimer) clearTimeout(window._loadingSafetyTimer);
@@ -717,7 +723,7 @@
                         overlay.style.display = 'none';
                         console.warn('Timeout de sécurité : overlay de chargement masqué automatiquement.');
                     }
-                }, 7000);
+                }, 25000);
             } else {
                 if (window._loadingSafetyTimer) clearTimeout(window._loadingSafetyTimer);
                 overlay.style.display = 'none';
@@ -1281,7 +1287,8 @@
             const btn = this;
             const statusDiv = document.getElementById('cluster-status');
             
-            // Désactiver le bouton pendant le traitement
+            // Geler l'interface et verrouiller toute interaction ou navigation utilisateur
+            montrerChargement(true, 'Sectorisation et partitionnement des 79 bassins versants...');
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Partitionnement...';
             statusDiv.style.display = 'block';
@@ -1450,6 +1457,7 @@
                     statusDiv.textContent = 'Erreur lors de la détection';
                 })
                 .finally(() => {
+                    montrerChargement(false);
                     btn.disabled = false;
                     btn.innerHTML = '<i class="fas fa-sitemap me-1"></i> Partitionner bassins versants (Exutoires)';
                 });
