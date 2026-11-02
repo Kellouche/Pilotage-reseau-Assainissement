@@ -4,65 +4,102 @@ Exposition des anomalies et scores de qualité via API REST.
 """
 
 import asyncio
-from fastapi import APIRouter, BackgroundTasks, HTTPException
-from typing import Dict, Any
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends
+from sqlalchemy.orm import Session
+from typing import Dict, Any, Optional
 import json
 import os
+import csv
+from pathlib import Path
 from datetime import datetime
 
-from src.qualite_reseau import QualiteReseau
+from api.database import get_db
+from api.models import Project
+from api.core.security import get_tenant_context_optional, TenantContext
+from src.analyse_qualite_gpkg import analyser_qualite_gpkg
 
 router = APIRouter(prefix="/qualite", tags=["Qualité réseau"])
 
 # Cache global pour éviter de recalculer à chaque requête
 _cache_qualite = {
+    "gpkg_path": None,
     "rapport": None,
     "timestamp": None,
     "duree_validite": 3600  # 1 heure en secondes
 }
 
 
-@router.get("/analyse", response_model=Dict[str, Any])
-async def analyser_qualite_reseau(force_refresh: bool = False):
-    """
-    Analyse complète de la qualité du réseau d'assainissement.
+def reinitialiser_cache_qualite():
+    """Purge le cache de qualité lors d'un changement de modèle/réseau."""
+    global _cache_qualite
+    _cache_qualite["rapport"] = None
+    _cache_qualite["timestamp"] = None
+    _cache_qualite["gpkg_path"] = None
 
-    - **force_refresh**: Force un recalcul complet (sinon utilise le cache)
+
+def get_active_project_and_gpkg(db: Session, tenant_ctx: Optional[TenantContext] = None):
+    """Résout le chemin du GeoPackage et le nom du projet actif."""
+    if tenant_ctx and tenant_ctx.org_id:
+        project = db.query(Project).filter(
+            Project.org_id == tenant_ctx.org_id,
+            Project.is_archived.is_(False)
+        ).first()
+        if project and project.source_gpkg_key:
+            cand = Path(project.source_gpkg_key)
+            if cand.exists():
+                return cand, project.name
+
+    project = db.query(Project).filter(Project.is_archived.is_(False)).first()
+    if project and project.source_gpkg_key:
+        cand = Path(project.source_gpkg_key)
+        if cand.exists():
+            return cand, project.name
+
+    demo_cand = Path("data/demo_reseau.gpkg")
+    if demo_cand.exists():
+        return demo_cand, "Quartier Témoin (Démo)"
+
+    return None, "Aucun réseau"
+
+
+@router.get("/analyse", response_model=Dict[str, Any])
+async def analyser_qualite_reseau(
+    force_refresh: bool = False,
+    db: Session = Depends(get_db),
+    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context_optional)
+):
+    """
+    Analyse complète de la qualité du réseau d'assainissement actif.
+    Exécute un audit géométrique, attributaire et topologique dynamique sur le GeoPackage.
     """
     global _cache_qualite
 
-    # Vérifier si le cache est encore valide
+    gpkg_target, project_name = get_active_project_and_gpkg(db, tenant_ctx)
+    if not gpkg_target or not gpkg_target.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Aucun fichier réseau GeoPackage actif trouvé pour le projet."
+        )
+
     maintenant = datetime.now().timestamp()
     if (not force_refresh and
         _cache_qualite["rapport"] is not None and
+        _cache_qualite["gpkg_path"] == str(gpkg_target) and
         _cache_qualite["timestamp"] is not None and
         (maintenant - _cache_qualite["timestamp"]) < _cache_qualite["duree_validite"]):
-
-        print("Utilisation du cache pour l'analyse qualite")
         return _cache_qualite["rapport"]
 
     try:
-        print("Lancement d'une nouvelle analyse qualite...")
+        rapport = await asyncio.to_thread(analyser_qualite_gpkg, gpkg_target, project_name)
 
-        # Créer l'analyseur et lancer l'analyse dans un thread séparé
-        # pour ne pas bloquer l'event loop FastAPI (sinon la réponse HTTP
-        # n'est jamais renvoyée et la fenêtre de progression reste bloquée)
-        analyseur = QualiteReseau()
-
-        rapport = await asyncio.to_thread(analyseur.analyser_reseau_complet)
-
-        # Fermer proprement la connexion
-        analyseur.fermer_connexion()
-
-        # Mettre à jour le cache
         _cache_qualite["rapport"] = rapport
         _cache_qualite["timestamp"] = maintenant
+        _cache_qualite["gpkg_path"] = str(gpkg_target)
 
-        print("Analyse qualite terminee et mise en cache")
         return rapport
 
     except Exception as e:
-        print(f"Erreur lors de l'analyse qualite: {e}")
+        print(f"Erreur lors de l'analyse qualité: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Erreur lors de l'analyse de qualité: {str(e)}"
@@ -106,7 +143,11 @@ async def diagnostic_tunnel():
 
 
 @router.get("/anomalies/{type_anomalie}", response_model=Dict[str, Any])
-async def get_anomalies_par_type(type_anomalie: str):
+async def get_anomalies_par_type(
+    type_anomalie: str,
+    db: Session = Depends(get_db),
+    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context_optional)
+):
     """
     Récupère les anomalies d'un type spécifique.
 
@@ -120,15 +161,21 @@ async def get_anomalies_par_type(type_anomalie: str):
     """
     global _cache_qualite
 
+    gpkg_target, project_name = get_active_project_and_gpkg(db, tenant_ctx)
     if (_cache_qualite["rapport"] is None or
-        "anomalies" not in _cache_qualite["rapport"]):
+        (gpkg_target and _cache_qualite.get("gpkg_path") != str(gpkg_target))):
+        if gpkg_target and gpkg_target.exists():
+            rapport = await asyncio.to_thread(analyser_qualite_gpkg, gpkg_target, project_name)
+            _cache_qualite["rapport"] = rapport
+            _cache_qualite["timestamp"] = datetime.now().timestamp()
+            _cache_qualite["gpkg_path"] = str(gpkg_target)
+        else:
+            raise HTTPException(
+                status_code=404,
+                detail="Aucune analyse de qualité disponible."
+            )
 
-        raise HTTPException(
-            status_code=404,
-            detail="Aucune analyse de qualité disponible. Lancez d'abord /qualite/analyse"
-        )
-
-    anomalies = _cache_qualite["rapport"]["anomalies"]
+    anomalies = _cache_qualite["rapport"].get("anomalies", {})
 
     if type_anomalie not in anomalies:
         raise HTTPException(
@@ -145,37 +192,55 @@ async def get_anomalies_par_type(type_anomalie: str):
 
 
 @router.get("/scores", response_model=Dict[str, Any])
-async def get_scores_qualite():
+async def get_scores_qualite(
+    db: Session = Depends(get_db),
+    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context_optional)
+):
     """
     Récupère les scores de qualité calculés.
     """
     global _cache_qualite
 
+    gpkg_target, project_name = get_active_project_and_gpkg(db, tenant_ctx)
     if (_cache_qualite["rapport"] is None or
-        "scores_qualite" not in _cache_qualite["rapport"]):
-
-        raise HTTPException(
-            status_code=404,
-            detail="Aucun score de qualité disponible. Lancez d'abord /qualite/analyse"
-        )
+        (gpkg_target and _cache_qualite.get("gpkg_path") != str(gpkg_target))):
+        if gpkg_target and gpkg_target.exists():
+            rapport = await asyncio.to_thread(analyser_qualite_gpkg, gpkg_target, project_name)
+            _cache_qualite["rapport"] = rapport
+            _cache_qualite["timestamp"] = datetime.now().timestamp()
+            _cache_qualite["gpkg_path"] = str(gpkg_target)
+        else:
+            raise HTTPException(
+                status_code=404,
+                detail="Aucun score de qualité disponible."
+            )
 
     return _cache_qualite["rapport"]["scores_qualite"]
 
 
 @router.get("/statistiques", response_model=Dict[str, Any])
-async def get_statistiques_reseau():
+async def get_statistiques_reseau(
+    db: Session = Depends(get_db),
+    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context_optional)
+):
     """
     Récupère les statistiques globales du réseau.
     """
     global _cache_qualite
 
+    gpkg_target, project_name = get_active_project_and_gpkg(db, tenant_ctx)
     if (_cache_qualite["rapport"] is None or
-        "statistiques_globales" not in _cache_qualite["rapport"]):
-
-        raise HTTPException(
-            status_code=404,
-            detail="Aucune statistique disponible. Lancez d'abord /qualite/analyse"
-        )
+        (gpkg_target and _cache_qualite.get("gpkg_path") != str(gpkg_target))):
+        if gpkg_target and gpkg_target.exists():
+            rapport = await asyncio.to_thread(analyser_qualite_gpkg, gpkg_target, project_name)
+            _cache_qualite["rapport"] = rapport
+            _cache_qualite["timestamp"] = datetime.now().timestamp()
+            _cache_qualite["gpkg_path"] = str(gpkg_target)
+        else:
+            raise HTTPException(
+                status_code=404,
+                detail="Aucune statistique disponible."
+            )
 
     return _cache_qualite["rapport"]["statistiques_globales"]
 
@@ -385,11 +450,7 @@ async def clear_cache():
     """
     Vide le cache d'analyse qualité.
     """
-    global _cache_qualite
-
-    _cache_qualite["rapport"] = None
-    _cache_qualite["timestamp"] = None
-
+    reinitialiser_cache_qualite()
     return {"message": "Cache d'analyse qualité vidé"}
 
 
@@ -406,7 +467,7 @@ def _calculer_distribution_severite(anomalies: list) -> Dict[str, int]:
 
 
 async def _export_async(fichier_destination: str):
-    """Fonction d'export asynchrone."""
+    """Fonction d'export asynchrone au format CSV."""
     try:
         global _cache_qualite
 
@@ -414,10 +475,20 @@ async def _export_async(fichier_destination: str):
             print("Aucun rapport disponible pour l'export")
             return
 
-        # Créer l'analyseur pour l'export
-        analyseur = QualiteReseau()
-        analyseur.exporter_rapport_csv(_cache_qualite["rapport"], fichier_destination)
-        analyseur.fermer_connexion()
+        rapport = _cache_qualite["rapport"]
+        with open(fichier_destination, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["categorie", "id_conduite", "severite", "description", "latitude", "longitude"])
+            for cat, items in rapport.get("anomalies", {}).items():
+                for item in items:
+                    writer.writerow([
+                        cat,
+                        item.get("id_conduite", ""),
+                        item.get("severite", ""),
+                        item.get("description", ""),
+                        item.get("latitude", ""),
+                        item.get("longitude", "")
+                    ])
 
         print(f"Export CSV termine: {fichier_destination}")
 
