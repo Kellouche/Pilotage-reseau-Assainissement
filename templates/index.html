@@ -1723,30 +1723,12 @@
             `;
         }
 
-        // Choix du projet à la connexion ou rechargement direct sur F5
+        // Reprise du projet en cours depuis la modale
         window.reprendreProjetEnCours = function() {
             sessionStorage.setItem('projet_charge', 'true');
             montrerModalProjet(false);
             chargerDonneesInitiales();
         };
-
-        const urlParams = new URLSearchParams(window.location.search);
-        const flagChoix = sessionStorage.getItem('choisir_projet_apres_login') === 'true' ||
-                          sessionStorage.getItem('projet_charge') !== 'true' ||
-                          urlParams.get('choix') === '1';
-
-        if (flagChoix) {
-            sessionStorage.removeItem('choisir_projet_apres_login');
-            montrerModalProjet(true);
-            const miniStats = document.getElementById('mini-stats');
-            if (miniStats) {
-                miniStats.innerHTML = '<span style="color: #38bdf8;"><i class="fas fa-folder-open me-1"></i> Choisissez un projet ou modèle certifié</span>';
-            }
-            montrerChargement(false);
-        } else {
-            // Rechargement direct (F5 lors d'une session de travail active)
-            chargerDonneesInitiales();
-        }
 
         // Fonctions d'édition
         let currentEditProperties = null;
@@ -1940,13 +1922,14 @@
         // ==========================================
         // GESTION DU PROJET RÉSEAU & OPTION B
         // ==========================================
-        window.montrerModalProjet = function(show) {
+        function montrerModalProjet(show) {
             const el = document.getElementById('modal-project');
             if (el) {
                 el.style.display = show ? 'flex' : 'none';
                 if (show) chargerCatalogueDatasets();
             }
-        };
+        }
+        window.montrerModalProjet = montrerModalProjet;
 
         window.chargerCatalogueDatasets = async function() {
             const cont = document.getElementById('container-benchmark-datasets');
@@ -3080,6 +3063,45 @@
                 statusDiv.innerHTML = `<span style="color: #ef4444;"><i class="fas fa-exclamation-triangle me-1"></i> Erreur : ${err.message}</span>`;
             });
         };
+
+        // ==========================================
+        // INITIALISATION ET DÉMARRAGE DU COCKPIT
+        // ==========================================
+        function initialiserCockpit() {
+            // 1. Initialiser le profil utilisateur et la barre SaaS
+            if (typeof initSaaSNavbar === 'function') {
+                initSaaSNavbar();
+            }
+
+            // 2. Gestion du choix de projet ou chargement direct sur F5
+            const urlParams = new URLSearchParams(window.location.search);
+            const flagChoix = sessionStorage.getItem('choisir_projet_apres_login') === 'true' ||
+                              sessionStorage.getItem('projet_charge') !== 'true' ||
+                              urlParams.get('choix') === '1';
+
+            if (flagChoix) {
+                sessionStorage.removeItem('choisir_projet_apres_login');
+                if (typeof montrerModalProjet === 'function') {
+                    montrerModalProjet(true);
+                }
+                const miniStats = document.getElementById('mini-stats');
+                if (miniStats) {
+                    miniStats.innerHTML = '<span style="color: #38bdf8;"><i class="fas fa-folder-open me-1"></i> Choisissez un projet ou modèle certifié</span>';
+                }
+                montrerChargement(false);
+            } else {
+                // Rechargement direct (F5 lors d'une session de travail active)
+                if (typeof chargerDonneesInitiales === 'function') {
+                    chargerDonneesInitiales();
+                }
+            }
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initialiserCockpit);
+        } else {
+            initialiserCockpit();
+        }
 
     </script>
 
