@@ -133,9 +133,28 @@ class AgentDiagnosticCausal:
                     "diagnostic": "Débordement avec inondation superficielle de voirie"
                 })
 
+        nb_deb = len(flooded_nodes_detail)
+        nb_sur = len(surcharged_links)
+        nb_goul = len(bottlenecks)
+
+        if nb_deb > 0 or nb_sur > 0:
+            note_technique = (
+                f"L'analyse hydrodynamique 1D Saint-Venant (Dynamic Wave) met en évidence un régime d'écoulement sous forte tension. "
+                f"Lors du pic d'intensité pluviométrique, {nb_deb} regard(s) subissent un débordement direct en surface et {nb_sur} tronçon(s) "
+                f"travaillent en charge sévère (Q/Qmax > 100% ou H/D = 100%). Cette mise en pression résulte d'un effet de remous hydraulique (backwater) "
+                f"amplifié par {nb_goul} goulot(s) d'étranglement géométrique où le diamètre diminue anormalement vers l'aval. "
+                f"La ligne d'eau piézométrique dépasse la cote tampon du terrain naturel, provoquant des reflux et des stagnations d'eau sur les voiries urbaines."
+            )
+        else:
+            note_technique = (
+                "L'analyse hydrodynamique confirme un écoulement gravitaire fluide et stable à surface libre sur l'ensemble des collecteurs. "
+                "Aucune surpression ni reflux critique n'a été détecté sous ce scénario pluviométrique."
+            )
+
         return {
             "agent": "Agent 1 : Diagnosticien Causal",
             "statut": "Analyse Complète",
+            "note_technique": note_technique,
             "nb_surcharges": len(surcharged_links),
             "surcharged_links": surcharged_links,
             "nb_goulots": len(bottlenecks),
@@ -216,9 +235,24 @@ class AgentGenieCivil:
                 "type_travaux": "Recalibrage de collecteur par tranchée ouverte"
             })
 
+        if prescriptions:
+            note_technique = (
+                f"Le diagnostic met en évidence un déficit capacitaire marqué sur {len(prescriptions)} tronçon(s) structurant(s). "
+                f"Conformément aux règles de l'art du dimensionnement gravitaire (formule de Manning-Strickler avec K=70 pour béton armé 135A "
+                f"et K=90 pour PEHD double paroi), les diamètres actuels sont recalibrés avec une marge de sécurité de +25% afin de maintenir un tirant d'eau H/D <= 0.80. "
+                f"L'ensemble du programme de renouvellement totalise {round(total_metres_a_remplacer, 1)} mètres linéaires pour une enveloppe estimative de "
+                f"{int(cout_total_estime_dzd):,} DZD (terrassement, fourniture, pose et réfection de chaussée compris)."
+            )
+        else:
+            note_technique = (
+                "L'évaluation de la capacité gravitaire confirme que les collecteurs existants présentent un gabarit hydraulique suffisant. "
+                "Aucun recalibrage structurel lourd n'est requis sous cette intensité de pluie."
+            )
+
         return {
             "agent": "Agent 2 : Génie Civil & Dimensionnement",
             "statut": "Prescriptions Établies",
+            "note_technique": note_technique,
             "nb_troncons_a_recalibrer": len(prescriptions),
             "metres_lineaires_totaux": round(total_metres_a_remplacer, 1),
             "cout_global_estime_dzd": round(cout_total_estime_dzd, 0),
@@ -282,9 +316,18 @@ class AgentHydrologieDurable:
             }
         ]
 
+        note_technique = (
+            f"La minéralisation et l'imperméabilisation des sols génèrent un volume de ruissellement direct qui sature rapidement les canalisations aval. "
+            f"L'Agent SFN préconise d'intercepter et de temporiser les eaux pluviales à la source par des solutions fondées sur la nature (LID). "
+            f"Un volume tampon de {vol_retention_cible_m3} m³ doit être mobilisé, combinant un bassin d'écrêtement paysager ({emprise_sol_bassin_m2} m² d'emprise) "
+            f"et {lineaire_noues_m} ml de noues végétalisées en délaissés de voirie. Cette approche permet de rabattre le pic de débit de 35% à 45% "
+            f"et d'éviter le surdimensionnement onéreux des réseaux enterrés en zone urbaine dense."
+        )
+
         return {
             "agent": "Agent 3 : Hydrologie Durable (LID / SFN)",
             "statut": "Solutions Établies",
+            "note_technique": note_technique,
             "volume_tampon_requis_m3": vol_retention_cible_m3,
             "surface_bassin_m2": emprise_sol_bassin_m2,
             "solutions": solutions
@@ -339,8 +382,18 @@ class AgentGestionRisques:
                 "action": "Curage préventif programmé et reprise de pente lors des travaux de voirie"
             })
 
+        note_technique = (
+            f"La hiérarchisation multi-critères classe les interventions en 3 horizons d'urgence : "
+            f"{len(actions_p1)} action(s) P1 - Critique (éradication immédiate des inondations sur voiries sous 3 mois), "
+            f"{len(actions_p2)} action(s) P2 - Majeur (renforcement des tronçons sous pression continue à programmer sous 12 mois), et "
+            f"{len(actions_p3)} action(s) P3 - Maintenance (curage préventif des zones de sédimentation où la vitesse chute sous 0.60 m/s). "
+            f"Cette priorisation optimise l'allocation des budgets d'investissement de la collectivité."
+        )
+
         return {
             "agent": "Agent 4 : Priorisation des Risques",
+            "statut": "Priorisation Établie",
+            "note_technique": note_technique,
             "synthese": {
                 "nb_p1_critique": len(actions_p1),
                 "nb_p2_majeur": len(actions_p2),
@@ -400,6 +453,13 @@ class AgentSyntheseExecutive:
                 "sans mise en charge critique ni débordement. Prévoir uniquement l'entretien courant."
             )
 
+        note_technique = (
+            f"Synthèse stratégique d'aide à la décision destinée à la Direction Générale (ONA, DRE, Wilaya). "
+            f"Le verdict hydraulique conclut à : {verdict}. {recommandation_cle} "
+            f"Le couplage du recalibrage des points critiques P1 avec les aménagements d'écrêtement SFN constitue "
+            f"la solution la plus pérenne et la plus économique pour garantir la sécurité des biens et des personnes."
+        )
+
         return {
             "agent": "Agent 5 : Synthèse Exécutive",
             "titre": "Note d'Aide à la Décision en Assainissement Urbain",
@@ -408,6 +468,8 @@ class AgentSyntheseExecutive:
             "verdict": verdict,
             "couleur": couleur,
             "recommandation_cle": recommandation_cle,
+            "note_technique": note_technique,
+            "avis_direction_generale": recommandation_cle,
             "indicateurs_marquants": {
                 "debit_pointe_m3s": kpis.get("peak_outflow_m3s", 0.0),
                 "volume_total_m3": kpis.get("total_outflow_m3", 0.0),

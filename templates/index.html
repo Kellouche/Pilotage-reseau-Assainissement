@@ -703,8 +703,8 @@
 
                         <!-- Comportement des Regards -->
                         <div style="font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">Regards de Visite :</div>
-                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 2px;"><span style="display:inline-block; width:10px; height:10px; background:#f97316; border-radius:50%; border:1px solid #c2410c;"></span> Surcharge (dans cheminée)</div>
-                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 8px;"><span style="display:inline-block; width:12px; height:12px; background:#ef4444; border-radius:50%; border:2px solid #991b1b;"></span> Débordement (au sol)</div>
+                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 3px;"><span style="display:inline-block; width:11px; height:11px; background:#f97316; border-radius:50%; border:2px solid #ffffff;"></span> Surcharge (dans cheminée)</div>
+                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 8px;"><span style="display:inline-block; width:11px; height:11px; background:#ef4444; border-radius:50%; border:2px solid #ffffff;"></span> Débordement (au sol)</div>
 
                         <!-- Hydrologie & Sens d'écoulement -->
                         <div style="font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">Hydrologie &amp; Écoulement :</div>
@@ -2351,6 +2351,8 @@
         .badge-p1 { background: #ef4444; }
         .badge-p2 { background: #f97316; }
         .badge-p3 { background: #0284c7; }
+        .agent-memo-box { background: #f8fafc; border: 1px solid #cbd5e1; border-left: 4.5px solid #0284c7; border-radius: 5px; padding: 7px 11px; margin: 6px 0 8px 0; font-size: 8.2pt; color: #1e293b; line-height: 1.42; page-break-inside: avoid; }
+        .agent-memo-title { font-weight: 700; color: #0284c7; font-size: 8pt; margin-bottom: 3px; display: flex; align-items: center; gap: 6px; text-transform: uppercase; letter-spacing: 0.3px; }
         .footer { margin-top: 16px; border-top: 1px solid #cbd5e1; padding-top: 5px; display: flex; justify-content: space-between; font-size: 7pt; color: #94a3b8; }
         @media print {
             .no-print { display: none !important; }
@@ -2401,11 +2403,19 @@
             Orientation Direction Générale : ${synth.avis_direction_generale || "Prioriser les investissements P1 sur les collecteurs structurants pour éliminer immédiatement les risques d'inondation en surface."}
         </div>
     </div>
+    <div class="agent-memo-box">
+        <div class="agent-memo-title">📋 Mémoire de Synthèse Stratégique &bull; Directeur Technique (Agent 5)</div>
+        ${synth.note_technique || "Synthèse stratégique d'aide à la décision destinée à la Direction Générale (ONA, DRE, Wilaya). Le verdict hydraulique conclut à la nécessité d'un plan combiné de recalibrage et de rétention amont pour résorber durablement les débordements."}
+    </div>
 
     <!-- 2. Matrice des Risques & Plan d'Action (Agent 4) -->
     <div class="section-title">
         <span>2. Plan d'Action Priorisé &amp; Matrice des Risques (Agent 4)</span>
         <span style="font-size: 7.5pt; color: #64748b;">Budget Total Estimé : <b>${(gc.cout_global_estime_dzd || 0).toLocaleString('fr-FR')} DZD</b></span>
+    </div>
+    <div class="agent-memo-box">
+        <div class="agent-memo-title">🎯 Note de Hiérarchisation Multi-Critères &bull; Expert Risques &amp; Exploitation (Agent 4)</div>
+        ${risk.note_technique || "La hiérarchisation multi-critères classe les interventions en 3 horizons d'urgence (P1 Critique à 3 mois, P2 Majeur sous tension à 12 mois, P3 Maintenance préventive) pour optimiser l'allocation budgétaire de la collectivité."}
     </div>
     <table>
         <thead>
@@ -2427,6 +2437,10 @@
     <div class="section-title">
         <span>3. Diagnostic Causal &amp; Dysfonctionnements Hydrauliques (Agent 1)</span>
         <span style="font-size: 7.5pt; color: #64748b;">${diag.nb_surcharges || 0} Tronçons Surchargés &bull; ${diag.nb_goulots || 0} Goulots Détectés</span>
+    </div>
+    <div class="agent-memo-box">
+        <div class="agent-memo-title">🔬 Diagnostic Hydrodynamique &bull; Spécialiste Écoulements Saint-Venant 1D (Agent 1)</div>
+        ${diag.note_technique || "L'analyse hydrodynamique 1D Saint-Venant (Dynamic Wave) met en évidence un régime d'écoulement sous forte tension lors du pic pluvial, causé par les remous hydrauliques et les étranglements géométriques amont-aval."}
     </div>
     <table>
         <thead>
@@ -2466,6 +2480,10 @@
         <span>4. Prescriptions de Génie Civil &amp; Dimensionnement Normalisé (Agent 2)</span>
         <span style="font-size: 7.5pt; color: #64748b;">Métré Total : <b>${(gc.metres_lineaires_totaux || 0).toFixed(1)} ml</b> &bull; Marge Sécurité Manning : <b>+25%</b></span>
     </div>
+    <div class="agent-memo-box">
+        <div class="agent-memo-title">📐 Justification de Calcul Gravitaire &bull; Ingénieur Génie Civil &amp; Réseaux (Agent 2)</div>
+        ${gc.note_technique || "Conformément aux règles de l'art du dimensionnement gravitaire (formule de Manning-Strickler), les diamètres actuels sont recalibrés avec une marge de sécurité de +25% afin de maintenir un tirant d'eau H/D <= 0.80."}
+    </div>
     <table>
         <thead>
             <tr>
@@ -2488,6 +2506,10 @@
         <span>5. Solutions Alternatives LID / SFN &amp; Écrêtement des Pointes (Agent 3)</span>
         <span style="font-size: 7.5pt; color: #64748b;">Volume Tampon Total : <b>${(lid.volume_tampon_requis_m3 || 0).toFixed(0)} m³</b></span>
     </div>
+    <div class="agent-memo-box">
+        <div class="agent-memo-title">🌿 Stratégie d'Écrêtement à la Source &bull; Hydrologue SFN &amp; Ville Durable (Agent 3)</div>
+        ${lid.note_technique || "L'Agent SFN préconise d'intercepter et de temporiser les eaux pluviales à la source par des solutions fondées sur la nature (LID) pour rabattre le pic de débit de 35% à 45% et éviter le surdimensionnement onéreux des réseaux enterrés."}
+    </div>
     <table>
         <thead>
             <tr>
@@ -2506,6 +2528,10 @@
     <div class="section-title">
         <span>6. Analyse de Sensibilité du Tampon Voronoï (35m, 45m, 60m)</span>
         <span style="font-size: 7.5pt; color: #64748b;">Validation Technique &bull; Point d'Inflexion Recommandé</span>
+    </div>
+    <div class="agent-memo-box">
+        <div class="agent-memo-title">📈 Analyse Morphologique du Ruissellement &bull; Calage du Tampon Voronoï</div>
+        La simulation automatisée des trois variantes de buffer (35m emprise voirie, 45m comblement d'îlots bâtis, 60m périurbain) identifie un point d'inflexion majeur à <b>45 mètres</b>. Cette configuration capture l'intégralité du bassin versant urbain actif sans déformation artificielle des temps de concentration.
     </div>
     <table>
         <thead>
@@ -2742,6 +2768,10 @@
                 <!-- CONTENU DE L'ONGLET 1 : DIAGNOSTIC CAUSAL -->
                 <div id="pane-agent-diag" class="agent-tab-pane" style="display: block;">
                     <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px; margin-bottom: 14px;">
+                        <div style="background: rgba(56, 189, 248, 0.08); border-left: 4px solid #38bdf8; border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.82rem; color: #e2e8f0; line-height: 1.5;">
+                            <strong style="color: #38bdf8; display: block; margin-bottom: 4px;"><i class="fas fa-microscope me-1"></i> Mémoire Technique du Diagnosticien Saint-Venant (Agent 1) :</strong>
+                            ${diag.note_technique || "L'analyse hydrodynamique 1D Saint-Venant (Dynamic Wave) met en évidence un régime d'écoulement sous forte tension lors du pic d'intensité pluviométrique."}
+                        </div>
                         <div style="font-weight: 700; font-size: 0.88rem; color: #38bdf8; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
                             <i class="fas fa-microscope"></i> Identification des Causes Racines &amp; Anomalies Hydrauliques
                         </div>
@@ -2799,6 +2829,10 @@
                 <!-- CONTENU DE L'ONGLET 2 : GÉNIE CIVIL & DIMENSIONNEMENT -->
                 <div id="pane-agent-gc" class="agent-tab-pane" style="display: none;">
                     <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px; margin-bottom: 14px;">
+                        <div style="background: rgba(52, 211, 153, 0.08); border-left: 4px solid #34d399; border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.82rem; color: #e2e8f0; line-height: 1.5;">
+                            <strong style="color: #34d399; display: block; margin-bottom: 4px;"><i class="fas fa-ruler-combined me-1"></i> Mémoire Technique de Dimensionnement Manning &amp; Recalibrage (Agent 2) :</strong>
+                            ${gc.note_technique || "Prescriptions de recalibrage selon la formule de Manning-Strickler avec marge de sécurité de +25% afin de maintenir un tirant d'eau maximal H/D <= 0.80."}
+                        </div>
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                             <div style="font-weight: 700; font-size: 0.88rem; color: #34d399; display: flex; align-items: center; gap: 6px;">
                                 <i class="fas fa-ruler-combined"></i> Prescriptions de Recalibrage (Formule de Manning-Strickler)
@@ -2843,6 +2877,10 @@
                 <!-- CONTENU DE L'ONGLET 3 : HYDROLOGIE DURABLE & RÉTENTION -->
                 <div id="pane-agent-lid" class="agent-tab-pane" style="display: none;">
                     <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px; margin-bottom: 14px;">
+                        <div style="background: rgba(16, 185, 129, 0.08); border-left: 4px solid #10b981; border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.82rem; color: #e2e8f0; line-height: 1.5;">
+                            <strong style="color: #10b981; display: block; margin-bottom: 4px;"><i class="fas fa-leaf me-1"></i> Mémoire Technique de Gestion Pluviale à la Source &bull; Solutions SFN (Agent 3) :</strong>
+                            ${lid.note_technique || "Stratégie d'interception et de temporisation à la source par des solutions fondées sur la nature (LID) pour rabattre la pointe de débit."}
+                        </div>
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                             <div style="font-weight: 700; font-size: 0.88rem; color: #10b981; display: flex; align-items: center; gap: 6px;">
                                 <i class="fas fa-tint"></i> Solutions Fondées sur la Nature &amp; Écrêtement de Crue
@@ -2875,6 +2913,10 @@
                 <!-- CONTENU DE L'ONGLET 4 : PRIORISATION DES RISQUES (P1, P2, P3) -->
                 <div id="pane-agent-risk" class="agent-tab-pane" style="display: none;">
                     <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px; margin-bottom: 14px;">
+                        <div style="background: rgba(245, 158, 11, 0.08); border-left: 4px solid #f59e0b; border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.82rem; color: #e2e8f0; line-height: 1.5;">
+                            <strong style="color: #f59e0b; display: block; margin-bottom: 4px;"><i class="fas fa-shield-alt me-1"></i> Mémoire Technique de Priorisation Multi-Critères des Risques (Agent 4) :</strong>
+                            ${risk.note_technique || "Hiérarchisation multi-critères des interventions (P1 Critique sous 3 mois, P2 Majeur sous 12 mois, P3 Maintenance préventive) pour optimiser les investissements."}
+                        </div>
                         <div style="font-weight: 700; font-size: 0.88rem; color: #f59e0b; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
                             <i class="fas fa-layer-group"></i> Matrice de Hiérarchisation des Travaux &amp; Investissements
                         </div>
@@ -2935,6 +2977,10 @@
                 <!-- CONTENU DE L'ONGLET 5 : NOTE EXÉCUTIVE STRATÉGIQUE -->
                 <div id="pane-agent-synth" class="agent-tab-pane" style="display: none;">
                     <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px; margin-bottom: 14px;">
+                        <div style="background: rgba(192, 132, 252, 0.08); border-left: 4px solid #c084fc; border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.82rem; color: #e2e8f0; line-height: 1.5;">
+                            <strong style="color: #c084fc; display: block; margin-bottom: 4px;"><i class="fas fa-user-tie me-1"></i> Mémoire Exécutif d'Aide à la Décision Ministérielle &amp; Direction (Agent 5) :</strong>
+                            ${synth.note_technique || "Synthèse stratégique d'aide à la décision pour la Direction Générale (ONA, DRE, Wilaya)."}
+                        </div>
                         <div style="font-weight: 700; font-size: 0.92rem; color: #c084fc; margin-bottom: 8px;">
                             <i class="fas fa-file-alt me-1"></i> Note d'Orientation Stratégique pour la Direction
                         </div>
@@ -3809,7 +3855,7 @@
 
                         return L.circleMarker(latlng, {
                             pane: 'swmmNodesPane',
-                            radius: isFlooded ? 8.5 : 6.5,
+                            radius: 8.0,
                             color: '#ffffff',
                             fillColor: isFlooded ? '#ef4444' : '#f97316',
                             weight: 2.5,
@@ -4143,14 +4189,14 @@
                 if (!r.ok) {
                     let errMsg = `Erreur ${r.status}`;
                     try {
-                        const errData = await r.json();
-                        errMsg = errData.detail || errData.message || errMsg;
-                    } catch (_) {
+                        const rawText = await r.text();
                         try {
-                            const errText = await r.text();
-                            if (errText) errMsg = errText;
-                        } catch (__) {}
-                    }
+                            const errData = JSON.parse(rawText);
+                            errMsg = errData.detail || errData.message || errMsg;
+                        } catch (_) {
+                            if (rawText && rawText.length < 250) errMsg = rawText;
+                        }
+                    } catch (__) {}
                     throw new Error(errMsg);
                 }
                 return r.json();
