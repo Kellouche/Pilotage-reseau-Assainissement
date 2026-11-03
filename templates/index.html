@@ -317,6 +317,19 @@
             color: #95a5a6;
             line-height: 1.5;
         }
+
+        /* Infobulle de survol pour la zone d'étude simulée */
+        .sim-bassin-tooltip {
+            background: rgba(15, 23, 42, 0.96) !important;
+            border: 1px solid rgba(56, 189, 248, 0.5) !important;
+            border-radius: 8px !important;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.4) !important;
+            padding: 8px 12px !important;
+            color: #f8fafc !important;
+        }
+        .sim-bassin-tooltip::before {
+            border-top-color: rgba(15, 23, 42, 0.96) !important;
+        }
         
         /* Overlay de chargement */
         #loading-overlay {
@@ -3711,24 +3724,9 @@
                 bSel.value = String(meta.cluster_id);
             }
 
-            const infoDiv = document.getElementById('bassin-info');
-            if (infoDiv && isTargeted) {
-                infoDiv.innerHTML = `
-                    <div style="margin-top: 6px; padding: 8px 10px; background: rgba(15, 23, 42, 0.95); border-radius: 6px; font-size: 0.74rem; border-left: 3px solid #38bdf8; border: 1px solid rgba(56, 189, 248, 0.25);">
-                        <div style="font-weight: 800; color: #38bdf8; font-size: 0.82rem; display: flex; align-items: center; justify-content: space-between;">
-                            <span>${meta.cluster_nom || ('Bassin ' + meta.cluster_id)}</span>
-                            <span style="font-size: 0.68rem; background: rgba(56,189,248,0.2); padding: 1px 6px; border-radius: 4px; color: #38bdf8; font-weight: 700;">SIMULÉ</span>
-                        </div>
-                        <div style="color: #94a3b8; font-size: 0.7rem; margin-top: 3px;">🏷️ Exutoire récepteur : <b>${meta.outfall_code || 'N/A'}</b></div>
-                        <div style="color: #cbd5e1; margin-top: 3px;">📐 Surface drainée : <b>${meta.total_area_ha} ha</b> (${meta.subcatchments_count} sous-bassins)</div>
-                        <div style="color: #cbd5e1;">📍 Regards : <b>${meta.junctions_count + 1}</b> ${k.flooded_nodes_count > 0 ? `<span style="color:#ef4444; font-weight:700;">(${k.flooded_nodes_count} débordements)</span>` : ''}</div>
-                        <div style="color: #cbd5e1;">📏 Conduites : <b>${meta.conduits_count}</b></div>
-                        <div style="color: #34d399; margin-top: 4px; font-weight: 700; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 4px;">
-                            ⚡ Débit de pointe : <b>${(k.peak_outflow_m3s || 0).toFixed(3)} m³/s</b>
-                        </div>
-                        <div style="color: #38bdf8;">💧 Erreur continuité : <b>${(k.routing_continuity_error_pct || 0).toFixed(2)} %</b></div>
-                    </div>
-                `;
+            // Conserver une barre latérale sobre : afficher la fiche standard du bassin sans le cartouche lourd de simulation
+            if (isTargeted) {
+                afficherInfoBassin(meta.cluster_id);
             }
 
             // 4. Mettre en valeur les sous-bassins Voronoï du périmètre simulé
@@ -3778,6 +3776,93 @@
                 } else {
                     legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> Légende SWMM 5.2`;
                 }
+            }
+
+            // 6. Déplacer les détails de simulation sur la fenêtre de survol de la zone d'étude (bassin et sous-bassins)
+            mettreAJourTooltipZoneSimulee(data);
+        }
+
+        function mettreAJourTooltipZoneSimulee(data) {
+            if (!data || !data.meta) return;
+            const meta = data.meta;
+            const k = data.kpis || {};
+            const isTargeted = !!meta.cluster_id;
+            if (!isTargeted) return;
+
+            const simCardHtml = `
+                <div style="font-family: inherit; font-size: 12px; min-width: 220px; color: #f8fafc; padding: 2px;">
+                    <div style="font-weight: 800; color: #38bdf8; font-size: 13px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.15); padding-bottom: 4px; margin-bottom: 6px;">
+                        <span>${meta.cluster_nom || ('Bassin ' + meta.cluster_id)}</span>
+                        <span style="font-size: 10px; background: rgba(56,189,248,0.25); color: #38bdf8; padding: 1px 6px; border-radius: 4px; font-weight: 800;">SIMULÉ</span>
+                    </div>
+                    <div style="color: #94a3b8; font-size: 11px; margin-bottom: 3px;">🏷️ Exutoire récepteur : <b>${meta.outfall_code || 'N/A'}</b></div>
+                    <div style="margin-bottom: 2px;">📐 Surface drainée : <b>${meta.total_area_ha} ha</b> (${meta.subcatchments_count} sous-bassins)</div>
+                    <div style="margin-bottom: 2px;">📍 Regards : <b>${meta.junctions_count + 1}</b> ${k.flooded_nodes_count > 0 ? `<span style="color:#ef4444; font-weight:700;">(${k.flooded_nodes_count} débordements)</span>` : ''}</div>
+                    <div style="margin-bottom: 2px;">📏 Conduites : <b>${meta.conduits_count}</b></div>
+                    <div style="color: #34d399; margin-top: 4px; font-weight: 700; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 4px;">
+                        ⚡ Débit de pointe : <b>${(k.peak_outflow_m3s || 0).toFixed(3)} m³/s</b>
+                    </div>
+                    <div style="color: #38bdf8; font-weight: 700;">💧 Erreur continuité : <b>${(k.routing_continuity_error_pct || 0).toFixed(2)} %</b></div>
+                </div>
+            `;
+
+            // 1. Mettre à jour les polygones de bassins versants dans couches.bassins et window._activeClusterLayer
+            const updateBassinLayer = (layer) => {
+                const f = layer.feature;
+                if (!f || !f.properties) return;
+                if (f.properties.type === 'bassin_urbain' && String(f.properties.cluster_id) === String(meta.cluster_id)) {
+                    if (!layer._originalTooltip) {
+                        const curTip = layer.getTooltip();
+                        layer._originalTooltip = curTip ? curTip.getContent() : null;
+                    }
+                    layer.unbindTooltip();
+                    layer.bindTooltip(simCardHtml, { sticky: true, opacity: 0.98, className: 'sim-bassin-tooltip' });
+                    layer.bindPopup(simCardHtml);
+                    try { layer.bringToFront(); } catch(e) {}
+                }
+            };
+
+            if (couches.bassins) couches.bassins.eachLayer(updateBassinLayer);
+            if (window._activeClusterLayer) window._activeClusterLayer.eachLayer(updateBassinLayer);
+
+            // 2. Mettre à jour les sous-bassins versants Voronoï du périmètre simulé
+            if (couches.subcatchments) {
+                const nRes = data.node_results || {};
+                const simNodes = new Set((meta.simulated_nodes || []).map(String));
+                couches.subcatchments.eachLayer(sbLayer => {
+                    const p = (sbLayer.feature && sbLayer.feature.properties) ? sbLayer.feature.properties : {};
+                    const outlet = String(p.outlet || '');
+                    const isSim = (simNodes.size > 0) ? simNodes.has(outlet) : (nRes[outlet] || (meta.outfall_code && outlet === String(meta.outfall_code)));
+                    if (isSim) {
+                        if (!sbLayer._originalTooltip) {
+                            const curTip = sbLayer.getTooltip();
+                            sbLayer._originalTooltip = curTip ? curTip.getContent() : null;
+                        }
+                        const sId = p.subcatchment_id || p.id || 'SB';
+                        const aHa = (p.area_ha || 0).toFixed(2);
+                        const sbTooltipHtml = `
+                            <div style="font-family: inherit; font-size: 12px; min-width: 220px; color: #f8fafc; padding: 2px;">
+                                <div style="font-weight: 800; color: #38bdf8; font-size: 13px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.15); padding-bottom: 4px; margin-bottom: 6px;">
+                                    <span>${meta.cluster_nom || ('Bassin ' + meta.cluster_id)}</span>
+                                    <span style="font-size: 10px; background: rgba(56,189,248,0.25); color: #38bdf8; padding: 1px 6px; border-radius: 4px; font-weight: 800;">SIMULÉ</span>
+                                </div>
+                                <div style="color: #94a3b8; font-size: 11px; margin-bottom: 3px;">🏷️ Exutoire récepteur : <b>${meta.outfall_code || 'N/A'}</b></div>
+                                <div style="margin-bottom: 2px;">📐 Surface drainée : <b>${meta.total_area_ha} ha</b> (${meta.subcatchments_count} sous-bassins)</div>
+                                <div style="margin-bottom: 2px;">📍 Regards : <b>${meta.junctions_count + 1}</b> ${k.flooded_nodes_count > 0 ? `<span style="color:#ef4444; font-weight:700;">(${k.flooded_nodes_count} débordements)</span>` : ''}</div>
+                                <div style="margin-bottom: 2px;">📏 Conduites : <b>${meta.conduits_count}</b></div>
+                                <div style="color: #34d399; margin-top: 4px; font-weight: 700; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 4px;">
+                                    ⚡ Débit de pointe : <b>${(k.peak_outflow_m3s || 0).toFixed(3)} m³/s</b>
+                                </div>
+                                <div style="color: #38bdf8; font-weight: 700; margin-bottom: 5px;">💧 Erreur continuité : <b>${(k.routing_continuity_error_pct || 0).toFixed(2)} %</b></div>
+                                <div style="border-top: 1px dashed rgba(255,255,255,0.15); padding-top: 4px; color: #94a3b8; font-size: 10.5px;">
+                                    <i class="fas fa-draw-polygon me-1"></i> Sous-bassin local ${sId} &bull; Regard N° ${outlet} (${aHa} ha)
+                                </div>
+                            </div>
+                        `;
+                        sbLayer.unbindTooltip();
+                        sbLayer.bindTooltip(sbTooltipHtml, { sticky: true, opacity: 0.98, className: 'sim-bassin-tooltip' });
+                    }
+                });
             }
         }
 
@@ -4111,7 +4196,7 @@
                 badgeSb.style.color = '';
             }
 
-            // Rétablir le style uniforme des sous-bassins Voronoï
+            // Rétablir le style uniforme et infobulles initiales des sous-bassins Voronoï
             if (couches.subcatchments) {
                 couches.subcatchments.eachLayer(layer => {
                     layer.setStyle({
@@ -4121,8 +4206,24 @@
                         weight: 1.5,
                         opacity: 0.85
                     });
+                    if (layer._originalTooltip) {
+                        layer.unbindTooltip();
+                        layer.bindTooltip(layer._originalTooltip, { sticky: true, opacity: 0.95 });
+                        layer._originalTooltip = null;
+                    }
                 });
             }
+
+            // Rétablir les infobulles initiales des bassins
+            const restoreBassinTooltip = (layer) => {
+                if (layer._originalTooltip) {
+                    layer.unbindTooltip();
+                    layer.bindTooltip(layer._originalTooltip, { sticky: true });
+                    layer._originalTooltip = null;
+                }
+            };
+            if (couches.bassins) couches.bassins.eachLayer(restoreBassinTooltip);
+            if (window._activeClusterLayer) window._activeClusterLayer.eachLayer(restoreBassinTooltip);
 
             // Rétablir le titre de la légende flottante
             const legTitle = document.querySelector('#sim-floating-legend span');
@@ -4276,6 +4377,11 @@
                             if (rawText && rawText.length < 250) errMsg = rawText;
                         }
                     } catch (__) {}
+                    if (r.status === 401 || r.status === 403) {
+                        errMsg = "Session expirée. Veuillez rafraîchir la page ou vous reconnecter.";
+                    } else if (r.status === 500 && (!errMsg || errMsg === 'Erreur 500')) {
+                        errMsg = "Erreur interne 500 du serveur lors du calcul SWMM 5.2.";
+                    }
                     throw new Error(errMsg);
                 }
                 return r.json();
