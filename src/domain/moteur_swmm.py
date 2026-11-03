@@ -17,6 +17,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
 import re
+import math
 import tempfile
 import logging
 from pathlib import Path
@@ -34,13 +35,16 @@ except ImportError:
 logger = logging.getLogger("swmm_platform.moteur_swmm")
 
 
-def _clean_node_id(val: Any) -> str:
-    """Normalise proprement un identifiant de nœud sans planter sur les chaînes de caractères."""
-    if val is None or (isinstance(val, float) and pd.isna(val)):
-        return ""
+def _clean_node_id(val: Any, fallback: str = "") -> str:
+    """Normalise proprement un identifiant de nœud sans espaces ni caractères invalides pour SWMM."""
+    if val is None or (isinstance(val, float) and (math.isnan(val) or pd.isna(val))):
+        return fallback
     txt = str(val).strip()
     if txt.endswith(".0"):
         txt = txt[:-2]
+    txt = re.sub(r'[\s;\'",]+', '_', txt).strip('_')
+    if not txt or txt.lower() in ('nan', 'none', 'null'):
+        return fallback
     return txt
 
 
@@ -138,7 +142,7 @@ def _resoudre_altimetrie_noeuds(
 
     if col_trouvee:
         for idx, r in regards.iterrows():
-            nid = _clean_node_id(r.get("Code")) or str(idx)
+            nid = _clean_node_id(r.get("Code"), fallback=f"REG_{idx+1}")
             val = float(r[col_trouvee]) if pd.notna(r[col_trouvee]) else 100.0
             if col_trouvee in ("COTTN", "cote_tampon"):
                 prof = float(r["Profondeur"]) if ("Profondeur" in r and pd.notna(r["Profondeur"]) and r["Profondeur"] > 0) else 2.0
@@ -149,7 +153,7 @@ def _resoudre_altimetrie_noeuds(
         # Vérifier si des nœuds dans rejets ont aussi une altimétrie
         if rejets is not None and len(rejets) > 0:
             for idx, rj in rejets.iterrows():
-                r_id = _clean_node_id(rj.get("Code") or rj.get("CODE") or rj.get("id") or rj.get("NOM")) or f"REJ_{idx+1}"
+                r_id = _clean_node_id(rj.get("Code") or rj.get("CODE") or rj.get("id") or rj.get("NOM"), fallback=f"REJ_{idx+1}")
                 val = None
                 for ac in [col_trouvee, "PROFRADI", "COTTN", "COORDZ", "Z", "COTETN"]:
                     if ac and ac in rj and pd.notna(rj[ac]):
@@ -184,24 +188,24 @@ def _resoudre_altimetrie_noeuds(
         u = _clean_node_id(pipe.get("ID_AMONT"))
         v = _clean_node_id(pipe.get("ID_AVAL"))
         length = float(pipe["Longeur"]) if ("Longeur" in pipe and pipe["Longeur"] > 0) else float(pipe.geometry.length)
-        if u and v:
+        if u and v and u != v:
             G.add_edge(u, v, weight=max(1.0, length))
 
     outfall_geom = None
     for idx, r in regards.iterrows():
-        nid = _clean_node_id(r.get("Code")) or str(idx)
+        nid = _clean_node_id(r.get("Code"), fallback=f"REG_{idx+1}")
         if nid == outfall_code:
             outfall_geom = r.geometry
             break
     if outfall_geom is None and rejets is not None and len(rejets) > 0:
         for idx, rj in rejets.iterrows():
-            r_id = _clean_node_id(rj.get("Code") or rj.get("CODE") or rj.get("id") or rj.get("NOM"))
+            r_id = _clean_node_id(rj.get("Code") or rj.get("CODE") or rj.get("id") or rj.get("NOM"), fallback=f"REJ_{idx+1}")
             if r_id == outfall_code:
                 outfall_geom = rj.geometry
                 break
 
     for idx, r in regards.iterrows():
-        nid = _clean_node_id(r.get("Code")) or str(idx)
+        nid = _clean_node_id(r.get("Code"), fallback=f"REG_{idx+1}")
         if nid == outfall_code:
             elevations[nid] = outfall_z
         else:
@@ -308,13 +312,13 @@ class MoteurSWMM:
         # Recensement des identifiants des regards et rejets
         noeuds_regards: Dict[str, Any] = {}
         for idx, r in regards.iterrows():
-            nid = _clean_node_id(r.get("Code")) or str(idx)
+            nid = _clean_node_id(r.get("Code"), fallback=f"REG_{idx+1}")
             noeuds_regards[nid] = r
 
         noeuds_rejets: Dict[str, Any] = {}
         if len(rejets) > 0:
             for idx, rj in rejets.iterrows():
-                r_id = _clean_node_id(rj.get("Code") or rj.get("CODE") or rj.get("id") or rj.get("NOM")) or f"REJ_{idx+1}"
+                r_id = _clean_node_id(rj.get("Code") or rj.get("CODE") or rj.get("id") or rj.get("NOM"), fallback=f"REJ_{idx+1}")
                 noeuds_rejets[r_id] = rj
 
         # Analyse du graphe des canalisations
@@ -324,12 +328,12 @@ class MoteurSWMM:
         for idx, c in canalisations.iterrows():
             u = _clean_node_id(c.get("ID_AMONT"))
             d = _clean_node_id(c.get("ID_AVAL"))
-            if u:
-                conduit_nodes.add(u)
-                upstream_nodes.add(u)
-            if d:
-                conduit_nodes.add(d)
-                downstream_nodes.add(d)
+            if not u or not d or u == d:
+                continue
+            conduit_nodes.add(u)
+            upstream_nodes.add(u)
+            conduit_nodes.add(d)
+            downstream_nodes.add(d)
 
         # Détermination de l'exutoire principal (Outfall) si non déjà défini par cluster_id
         if not outfall_code:
@@ -357,7 +361,7 @@ class MoteurSWMM:
                 else:
                     distances = regards.geometry.distance(outfall_geom)
                     outfall_idx = distances.idxmin()
-                    outfall_code = _clean_node_id(regards.loc[outfall_idx, "Code"]) if ("Code" in regards and pd.notna(regards.loc[outfall_idx, "Code"])) else str(outfall_idx)
+                    outfall_code = _clean_node_id(regards.loc[outfall_idx, "Code"], fallback=f"REG_{outfall_idx+1}") if ("Code" in regards and pd.notna(regards.loc[outfall_idx, "Code"])) else f"REG_{outfall_idx+1}"
 
             # Cas 3 : Ni rejet explicite ni correspondance directe, prendre le sink aval
             if not outfall_code:
@@ -365,7 +369,7 @@ class MoteurSWMM:
                 if sinks:
                     outfall_code = list(sinks)[0]
                 else:
-                    outfall_code = _clean_node_id(regards.iloc[-1]["Code"]) if ("Code" in regards and pd.notna(regards.iloc[-1]["Code"])) else str(len(regards) - 1)
+                    outfall_code = _clean_node_id(regards.iloc[-1]["Code"], fallback=f"REG_{len(regards)}")
 
         # Sauvegarde pour l'analyse de sensibilité et l'équipe multi-agents
         self._last_regards = regards.copy()
@@ -479,7 +483,7 @@ class MoteurSWMM:
         lines.append(";;Name           Elevation  MaxDepth   InitDepth  SurDepth   Aponded")
         noeuds_traites = set()
         for idx, r in regards.iterrows():
-            nid = _clean_node_id(r.get("Code")) or str(idx)
+            nid = _clean_node_id(r.get("Code"), fallback=f"REG_{idx+1}")
             if (not creer_exutoire_dedie and nid == outfall_code) or nid in noeuds_traites:
                 continue
             prof = float(r["Profondeur"]) if ("Profondeur" in r and r["Profondeur"] > 0) else 2.0
@@ -517,6 +521,8 @@ class MoteurSWMM:
             cid = f"C_{idx+1}"
             u_node = _clean_node_id(c.get("ID_AMONT"))
             d_node = _clean_node_id(c.get("ID_AVAL"))
+            if not u_node or not d_node or u_node == d_node:
+                continue
             length = float(c["Longeur"]) if ("Longeur" in c and pd.notna(c["Longeur"]) and c["Longeur"] > 0) else float(c.geometry.length)
             length = max(1.0, round(length, 2))
             rough = 0.013  # Manning béton standard
@@ -559,14 +565,14 @@ class MoteurSWMM:
         lines.append("[COORDINATES]")
         coords_traitees = set()
         for idx, r in regards.iterrows():
-            nid = _clean_node_id(r.get("Code")) or str(idx)
+            nid = _clean_node_id(r.get("Code"), fallback=f"REG_{idx+1}")
             if nid not in coords_traitees:
                 lines.append(f"{nid:<16} {r.geometry.x:<18.3f} {r.geometry.y:<18.3f}")
                 coords_traitees.add(nid)
 
         if len(rejets) > 0:
             for idx, rj in rejets.iterrows():
-                r_id = _clean_node_id(rj.get("Code") or rj.get("CODE") or rj.get("id") or rj.get("NOM")) or f"REJ_{idx+1}"
+                r_id = _clean_node_id(rj.get("Code") or rj.get("CODE") or rj.get("id") or rj.get("NOM"), fallback=f"REJ_{idx+1}")
                 if r_id and r_id not in coords_traitees:
                     lines.append(f"{r_id:<16} {rj.geometry.x:<18.3f} {rj.geometry.y:<18.3f}")
                     coords_traitees.add(r_id)

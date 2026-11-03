@@ -12,6 +12,7 @@ os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 os.environ.setdefault("MKL_NUM_THREADS", "1")
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 
+import re
 from typing import Dict, Any, List, Optional
 import math
 import geopandas as gpd
@@ -21,13 +22,16 @@ from shapely.ops import voronoi_diagram, unary_union
 from shapely import STRtree
 
 
-def _identifiant_propre(val: Any) -> str:
-    """Normalise un identifiant pour SWMM."""
-    if val is None:
-        return ""
+def _identifiant_propre(val: Any, fallback: str = "N") -> str:
+    """Normalise un identifiant pour SWMM sans espace ni nan."""
+    if val is None or (isinstance(val, float) and (math.isnan(val) or pd.isna(val))):
+        return fallback
     txt = str(val).strip()
     if txt.endswith('.0'):
         txt = txt[:-2]
+    txt = re.sub(r'[\s;\'",]+', '_', txt).strip('_')
+    if not txt or txt.lower() in ('nan', 'none', 'null'):
+        return fallback
     return txt
 
 
@@ -102,11 +106,16 @@ class GenerateurHydrologie:
         # 4. Découpage et enrichissement vectoriel
         sous_bassins_records = []
         buf_m = float(self.tampon_buffer_m)
+        seen_sb_ids = set()
 
         for i, (idx, row) in enumerate(valid_rows):
             pt = points_list[i]
-            raw_id = row.get('id', row.get('id_noeud', row.get('swmm_id', row.get('code', row.get('Code', idx)))))
-            noeud_id = _identifiant_propre(raw_id)
+            code_val = None
+            for k in ['Code', 'code', 'id_noeud', 'swmm_id', 'id']:
+                if k in row and row[k] is not None and not (isinstance(row[k], float) and pd.isna(row[k])):
+                    code_val = row[k]
+                    break
+            noeud_id = _identifiant_propre(code_val, fallback=f"REG_{idx+1}")
 
             cell = pt_to_cell.get(i)
             if cell is not None and not cell.is_empty:
@@ -121,7 +130,14 @@ class GenerateurHydrologie:
             largeur_m = max(round(math.sqrt(aire_m2), 2), 5.0)
             pente_pct = 0.5  # Pente minimale conventionnelle d'assainissement
 
-            subcatchment_id = f"SB_{noeud_id}"
+            base_sb_id = f"SB_{noeud_id}"
+            subcatchment_id = base_sb_id
+            if subcatchment_id in seen_sb_ids:
+                c_dup = 2
+                while f"{base_sb_id}_{c_dup}" in seen_sb_ids:
+                    c_dup += 1
+                subcatchment_id = f"{base_sb_id}_{c_dup}"
+            seen_sb_ids.add(subcatchment_id)
 
             sous_bassins_records.append({
                 "subcatchment_id": subcatchment_id,
