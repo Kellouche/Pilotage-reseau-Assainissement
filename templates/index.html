@@ -2431,15 +2431,35 @@
 
             // Tableau Risques (Agent 4)
             let riskRows = '';
-            if (risk.actions_priorisees && risk.actions_priorisees.length > 0) {
-                risk.actions_priorisees.forEach(a => {
+            let riskList = [];
+            if (Array.isArray(risk.actions_liste) && risk.actions_liste.length > 0) {
+                riskList = risk.actions_liste;
+            } else if (Array.isArray(risk.actions_priorisees) && risk.actions_priorisees.length > 0) {
+                riskList = risk.actions_priorisees;
+            } else if (risk.actions_priorisees && typeof risk.actions_priorisees === 'object') {
+                ['P1', 'P2', 'P3'].forEach(prio => {
+                    (risk.actions_priorisees[prio] || []).forEach(item => {
+                        riskList.push({
+                            priorite: prio,
+                            conduite: item.conduite || item.cible || '--',
+                            type_risque: item.type_risque || item.probleme || '--',
+                            action_requise: item.action_requise || item.action || '--',
+                            estimation_cout_dzd: item.estimation_cout_dzd || 0,
+                            delai_recommande: item.delai_recommande || item.delai || (prio === 'P1' ? '3 mois (Urgence)' : (prio === 'P2' ? '12 mois' : 'Maintenance'))
+                        });
+                    });
+                });
+            }
+
+            if (riskList.length > 0) {
+                riskList.forEach(a => {
                     const badgeClass = a.priorite === 'P1' ? 'badge-p1' : (a.priorite === 'P2' ? 'badge-p2' : 'badge-p3');
                     riskRows += `
                         <tr>
-                            <td style="text-align: center;"><span class="badge ${badgeClass}">${a.priorite}</span></td>
-                            <td><b>${a.conduite || '--'}</b></td>
-                            <td>${a.type_risque || '--'}</td>
-                            <td>${a.action_requise || '--'}</td>
+                            <td style="text-align: center;"><span class="badge ${badgeClass}">${a.priorite || 'P1'}</span></td>
+                            <td><b>${a.conduite || a.cible || '--'}</b></td>
+                            <td>${a.type_risque || a.probleme || '--'}</td>
+                            <td>${a.action_requise || a.action || '--'}</td>
                             <td style="text-align: right; font-weight: 700;">${(a.estimation_cout_dzd || 0).toLocaleString('fr-FR')} DZD</td>
                             <td style="text-align: center;">${a.delai_recommande || '--'}</td>
                         </tr>
@@ -2453,14 +2473,17 @@
             let surchRows = '';
             if (diag.surcharged_links && diag.surcharged_links.length > 0) {
                 diag.surcharged_links.forEach(l => {
+                    const cName = l.conduit || l.cid || '--';
+                    const vel = l.vitesse !== undefined ? l.vitesse : (l.max_velocity_ms !== undefined ? l.max_velocity_ms : 0);
+                    const qm = l.q_max !== undefined ? l.q_max : (l.max_flow_cms !== undefined ? l.max_flow_cms : 0);
                     surchRows += `
                         <tr>
-                            <td><b>${l.conduit || '--'}</b></td>
+                            <td><b>${cName}</b></td>
                             <td style="text-align: right; color: #ef4444; font-weight: 700;">${((l.flow_ratio || 0) * 100).toFixed(0)} %</td>
                             <td style="text-align: right;">${((l.depth_ratio || 0) * 100).toFixed(0)} %</td>
-                            <td style="text-align: right;">${(l.vitesse || 0).toFixed(2)} m/s</td>
-                            <td style="text-align: right;">${(l.q_max || 0).toFixed(3)} m³/s</td>
-                            <td>${l.q_full ? `Capacité max : ${l.q_full.toFixed(3)} m³/s` : 'Surcharge sous pression'}</td>
+                            <td style="text-align: right;">${Number(vel).toFixed(2)} m/s</td>
+                            <td style="text-align: right;">${Number(qm).toFixed(3)} m³/s</td>
+                            <td>${l.q_full ? `Capacité max : ${l.q_full.toFixed(3)} m³/s` : (l.cause || 'Surcharge sous pression')}</td>
                         </tr>
                     `;
                 });
@@ -2472,13 +2495,16 @@
             let bottleRows = '';
             if (diag.bottlenecks && diag.bottlenecks.length > 0) {
                 diag.bottlenecks.forEach(b => {
+                    const am = b.amont || b.amont_cid || '--';
+                    const av = b.aval || b.aval_cid || '--';
+                    const lg = b.longueur !== undefined ? b.longueur : (b.longueur_m !== undefined ? b.longueur_m : 0);
                     bottleRows += `
                         <tr>
-                            <td><b>${b.amont || '--'}</b> &rarr; <b>${b.aval || '--'}</b></td>
+                            <td><b>${am}</b> &rarr; <b>${av}</b></td>
                             <td style="text-align: right;">${b.diam_amont || '--'} mm</td>
                             <td style="text-align: right; color: #ef4444; font-weight: 700;">${b.diam_aval || '--'} mm</td>
-                            <td style="text-align: right;">${(b.longueur || 0).toFixed(1)} m</td>
-                            <td>Goulot géométrique &bull; Réduction anormale de section vers l'aval</td>
+                            <td style="text-align: right;">${Number(lg).toFixed(1)} m</td>
+                            <td>${b.description || 'Goulot géométrique • Réduction anormale de section vers l\'aval'}</td>
                         </tr>
                     `;
                 });
@@ -2490,15 +2516,23 @@
             let gcRows = '';
             if (gc.prescriptions && gc.prescriptions.length > 0) {
                 gc.prescriptions.forEach(p => {
+                    const cond = p.conduit || p.cid || '--';
+                    const dAct = p.diametre_actuel_mm || p.diam_actuel_mm || '--';
+                    const dReq = p.diametre_requis_mm || p.diam_theorique_mm || p.dn_calc_mm || p.diam_prescrit_mm || 0;
+                    const dn = p.dn_normalise_mm || p.diam_prescrit_mm || '--';
+                    const mat = p.materiau_recommande || p.materiau || 'Béton Armé 135A';
+                    const long = p.longueur_m !== undefined ? p.longueur_m : (p.longueur !== undefined ? p.longueur : 0);
+                    const cout = p.cout_estime_dzd || 0;
+
                     gcRows += `
                         <tr>
-                            <td><b>${p.conduit || '--'}</b></td>
-                            <td style="text-align: right;">${p.diametre_actuel_mm || '--'} mm</td>
-                            <td style="text-align: right;">${(p.diametre_requis_mm || 0).toFixed(0)} mm</td>
-                            <td style="text-align: right; font-weight: 700; color: #0284c7;">DN ${p.dn_normalise_mm || '--'}</td>
-                            <td>${p.materiau_recommande || 'Béton Armé 135A'}</td>
-                            <td style="text-align: right;">${(p.longueur_m || 0).toFixed(1)} m</td>
-                            <td style="text-align: right; font-weight: 700;">${(p.cout_estime_dzd || 0).toLocaleString('fr-FR')} DZD</td>
+                            <td><b>${cond}</b></td>
+                            <td style="text-align: right;">${dAct} mm</td>
+                            <td style="text-align: right;">${Number(dReq).toFixed(0)} mm</td>
+                            <td style="text-align: right; font-weight: 700; color: #0284c7;">DN ${dn}</td>
+                            <td>${mat}</td>
+                            <td style="text-align: right;">${Number(long).toFixed(1)} m</td>
+                            <td style="text-align: right; font-weight: 700;">${Number(cout).toLocaleString('fr-FR')} DZD</td>
                         </tr>
                     `;
                 });
@@ -2510,12 +2544,15 @@
             let lidRows = '';
             if (lid.solutions && lid.solutions.length > 0) {
                 lid.solutions.forEach(s => {
+                    const desig = s.designation || s.solution || '--';
+                    const dim = s.dimensionnement || (s.volume_utile_m3 ? `Volume : ${s.volume_utile_m3} m³` : (s.lineaire_recommande_m ? `Linéaire : ${s.lineaire_recommande_m} ml` : '--'));
+                    const imp = s.impact_attendu || s.reduction_debit_pointe_estimee || '--';
                     lidRows += `
                         <tr>
                             <td><b>${s.type || '--'}</b></td>
-                            <td><b>${s.designation || '--'}</b></td>
-                            <td>${s.dimensionnement || '--'}</td>
-                            <td>${s.impact_attendu || '--'}</td>
+                            <td><b>${desig}</b></td>
+                            <td>${dim}</td>
+                            <td>${imp}</td>
                         </tr>
                     `;
                 });

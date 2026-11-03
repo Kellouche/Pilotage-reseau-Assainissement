@@ -48,12 +48,38 @@ class AgentDiagnosticCausal:
                 diam = row.get("DIAMETRE") or row.get("diametre") or row.get("Diametre")
                 mat = row.get("MATERIAU") or row.get("materiau") or "Béton"
                 try:
-                    diam = float(diam) if diam else 600.0
+                    diam = float(diam) if (diam is not None and pd.notna(diam) and float(diam) > 0) else 600.0
                 except Exception:
                     diam = 600.0
-                u = str(row.get("ID_AMONT", ""))
-                d = str(row.get("ID_AVAL", ""))
-                pipe_geom_map[cid] = {"diam": diam, "mat": mat, "upstream": u, "downstream": d}
+                u = str(row.get("ID_AMONT", "")).replace(".0", "").strip()
+                d = str(row.get("ID_AVAL", "")).replace(".0", "").strip()
+
+                # Récupération de la longueur réelle métrique
+                val_l = row.get("Longeur")
+                if val_l is not None and pd.notna(val_l) and float(val_l) > 0:
+                    length = float(val_l)
+                elif hasattr(row, 'geometry') and row.geometry:
+                    try:
+                        length = float(row.geometry.length)
+                    except Exception:
+                        length = 45.0
+                else:
+                    length = 45.0
+                length = max(1.0, round(length, 1))
+
+                # Récupération de l'adresse ou rue
+                nom_voie = str(row.get("NOM-VOIE") or row.get("NOMVOIE") or row.get("nom_voie") or "").strip()
+                if nom_voie.lower() in ("nan", "none", "null", ""):
+                    nom_voie = ""
+
+                pipe_geom_map[cid] = {
+                    "diam": diam,
+                    "mat": mat,
+                    "upstream": u,
+                    "downstream": d,
+                    "length": length,
+                    "nom_voie": nom_voie
+                }
 
         # 1. Analyse des conduites en charge et des vitesses
         for cid, c in conduit_results.items():
@@ -61,18 +87,28 @@ class AgentDiagnosticCausal:
             depth_ratio = c.get("depth_ratio", 0.0)
             vel = c.get("max_velocity_ms", 0.0)
             q_max = c.get("max_flow_cms", 0.0)
-            pipe_info = pipe_geom_map.get(cid, {"diam": 600.0, "mat": "Béton"})
+            pipe_info = pipe_geom_map.get(cid, {"diam": 600.0, "mat": "Béton", "upstream": "", "downstream": "", "length": 45.0, "nom_voie": ""})
+
+            u_str = pipe_info.get("upstream", "")
+            d_str = pipe_info.get("downstream", "")
+            cond_label = f"{cid} ({u_str}➔{d_str})" if (u_str and d_str) else cid
 
             # Surcharge / Mise en pression
             if ratio >= 1.0 or depth_ratio >= 1.0:
                 surcharged_links.append({
                     "cid": cid,
+                    "conduit": cond_label,
+                    "nom_voie": pipe_info.get("nom_voie", ""),
                     "flow_ratio": ratio,
                     "depth_ratio": depth_ratio,
                     "max_flow_cms": q_max,
+                    "q_max": q_max,
                     "max_velocity_ms": vel,
+                    "vitesse": vel,
                     "diam": pipe_info["diam"],
                     "mat": pipe_info["mat"],
+                    "longueur_m": pipe_info["length"],
+                    "longueur": pipe_info["length"],
                     "cause": "Capacité gravitaire théorique dépassée lors du pic de crue"
                 })
 
@@ -80,7 +116,9 @@ class AgentDiagnosticCausal:
             if vel < 0.6 and ratio > 0.08:
                 low_velocity_links.append({
                     "cid": cid,
+                    "conduit": cond_label,
                     "velocity_ms": vel,
+                    "vitesse": vel,
                     "flow_ratio": ratio,
                     "cause": f"Vitesse maximale {vel:.2f} m/s < 0.6 m/s (seuil réglementaire d'auto-curage)"
                 })
@@ -89,7 +127,9 @@ class AgentDiagnosticCausal:
             if vel > 4.0:
                 high_velocity_links.append({
                     "cid": cid,
+                    "conduit": cond_label,
                     "velocity_ms": vel,
+                    "vitesse": vel,
                     "cause": f"Vitesse d'écoulement {vel:.2f} m/s > 4.0 m/s (risque d'érosion du radier)"
                 })
 
@@ -113,8 +153,11 @@ class AgentDiagnosticCausal:
                                 "regard": nid,
                                 "amont_cid": ic,
                                 "aval_cid": oc,
+                                "amont": f"{ic} (Ø{int(d_in)}mm)",
+                                "aval": f"{oc} (Ø{int(d_out)}mm)",
                                 "diam_amont": d_in,
                                 "diam_aval": d_out,
+                                "longueur": pipe_geom_map[ic]["length"],
                                 "delta_mm": d_in - d_out,
                                 "description": f"Étranglement géométrique anormal : passage de Ø{int(d_in)} à Ø{int(d_out)} mm au regard {nid}."
                             })
@@ -196,6 +239,8 @@ class AgentGenieCivil:
             cid = item["cid"]
             q_max = item.get("max_flow_cms", 0.1)
             diam_actuel = item.get("diam", 500.0)
+            longueur_reelle_m = item.get("longueur_m") or item.get("longueur") or 45.0
+            nom_voie = item.get("nom_voie", "")
 
             # Calcul du diamètre requis avec marge de sécurité de 25% (remplissage à 80% max)
             # Formule de Manning-Strickler pour conduite circulaire pleine
@@ -213,24 +258,35 @@ class AgentGenieCivil:
                 idx_cur = self.STANDARDS_DN_MM.index(int(diam_actuel)) if int(diam_actuel) in self.STANDARDS_DN_MM else 0
                 dn_prescrit = self.STANDARDS_DN_MM[min(idx_cur + 1, len(self.STANDARDS_DN_MM) - 1)]
 
-            longueur_estimee_m = 45.0  # Longueur moyenne entre 2 regards en zone urbaine
-            total_metres_a_remplacer += longueur_estimee_m
+            total_metres_a_remplacer += longueur_reelle_m
 
             # Estimation de coût travaux (Fourniture + Pose + Terrassement + Réfection chaussée)
             # Environs 25 000 DZD/ml pour Ø500, 40 000 DZD/ml pour Ø800, 65 000 DZD/ml pour Ø1200
             cout_unitaire_dzd = 20000.0 + (dn_prescrit / 1000.0) * 35000.0
-            cout_troncon_dzd = cout_unitaire_dzd * longueur_estimee_m
+            cout_troncon_dzd = cout_unitaire_dzd * longueur_reelle_m
             cout_total_estime_dzd += cout_troncon_dzd
 
             materiau_recommande = "Béton Armé Classe 135A" if dn_prescrit >= 800 else "PEHD Double Paroi SN8"
 
+            conduit_label = item.get("conduit") or cid
+            if nom_voie and nom_voie not in conduit_label:
+                conduit_label = f"{conduit_label} [{nom_voie}]"
+
             prescriptions.append({
                 "cid": cid,
+                "conduit": conduit_label,
+                "nom_voie": nom_voie,
                 "diam_actuel_mm": int(diam_actuel),
+                "diametre_actuel_mm": int(diam_actuel),
+                "diam_theorique_mm": int(round(dn_calc_mm)),
+                "diametre_requis_mm": int(round(dn_calc_mm)),
                 "diam_prescrit_mm": dn_prescrit,
+                "dn_normalise_mm": dn_prescrit,
                 "gain_capacite_pct": round(((dn_prescrit / diam_actuel)**2.67 - 1.0) * 100.0, 1),
-                "longueur_m": longueur_estimee_m,
+                "longueur_m": round(longueur_reelle_m, 1),
+                "longueur": round(longueur_reelle_m, 1),
                 "materiau": materiau_recommande,
+                "materiau_recommande": materiau_recommande,
                 "cout_estime_dzd": round(cout_troncon_dzd, 0),
                 "type_travaux": "Recalibrage de collecteur par tranchée ouverte"
             })
@@ -256,7 +312,7 @@ class AgentGenieCivil:
             "nb_troncons_a_recalibrer": len(prescriptions),
             "metres_lineaires_totaux": round(total_metres_a_remplacer, 1),
             "cout_global_estime_dzd": round(cout_total_estime_dzd, 0),
-            "prescriptions": prescriptions[:10]  # Top 10 prioritaire
+            "prescriptions": prescriptions[:50]  # Liste détaillée (jusqu'à 50 tronçons prioritaires)
         }
 
 
@@ -294,24 +350,33 @@ class AgentHydrologieDurable:
         solutions = [
             {
                 "solution": "Bassin d'Écrêtement & Rétention Paysager",
+                "designation": "Bassin d'Écrêtement & Rétention Paysager",
                 "type": "Ouvrage de stockage centralisé en amont",
                 "volume_utile_m3": vol_retention_cible_m3,
                 "emprise_au_sol_m2": emprise_sol_bassin_m2,
+                "dimensionnement": f"Volume : {vol_retention_cible_m3} m³ (Emprise ~ {emprise_sol_bassin_m2} m²)",
                 "reduction_debit_pointe_estimee": "35 % à 45 %",
+                "impact_attendu": "Abattement pointe : 35 % à 45 %",
                 "avantage": "Évite le recalibrage lourd des collecteurs aval en milieu urbain dense"
             },
             {
                 "solution": "Noues Végétalisées & Tranchées d'Infiltration",
+                "designation": "Noues Végétalisées & Tranchées d'Infiltration",
                 "type": "Gestion linéaire le long des délaissés de voirie",
                 "lineaire_recommande_m": lineaire_noues_m,
+                "dimensionnement": f"Linéaire : {lineaire_noues_m} ml (Largeur 2.0 m)",
                 "reduction_debit_pointe_estimee": "20 % à 30 %",
+                "impact_attendu": "Abattement pointe : 20 % à 30 %",
                 "avantage": "Recharge de la nappe phréatique et îlots de fraîcheur urbains"
             },
             {
                 "solution": "Chaussées Réservoirs & Pavés Drainants",
+                "designation": "Chaussées Réservoirs & Pavés Drainants",
                 "type": "Infiltration directe dans les parkings et voies secondaires",
                 "surface_recommandee_m2": round(emprise_sol_bassin_m2 * 2.5, 1),
+                "dimensionnement": f"Surface perméable : {round(emprise_sol_bassin_m2 * 2.5, 1)} m²",
                 "reduction_debit_pointe_estimee": "15 % à 25 %",
+                "impact_attendu": "Abattement pointe : 15 % à 25 %",
                 "avantage": "Zéro emprise foncière supplémentaire"
             }
         ]
@@ -357,29 +422,49 @@ class AgentGestionRisques:
         # P1 : Tous les regards qui inondent la surface
         for fn in diagnostic.get("flooded_nodes", []):
             actions_p1.append({
+                "priorite": "P1",
                 "cible": f"Regard {fn['node_id']}",
+                "conduite": f"Regard {fn['node_id']}",
                 "urgence": "P1 - CRITIQUE",
+                "type_risque": "Submersion & Inondation de voirie",
                 "probleme": f"Débordement de surface ({fn['flood_volume_m3']} m³ pendant {fn['hours_flooded']} h)",
-                "action": "Aménagement prioritaire d'un ouvrage de rétention ou recalibrage du collecteur aval"
+                "action": "Aménagement prioritaire d'un ouvrage de rétention ou recalibrage du collecteur aval",
+                "action_requise": "Aménagement prioritaire d'un ouvrage de rétention ou recalibrage du collecteur aval",
+                "estimation_cout_dzd": 3500000.0,
+                "delai_recommande": "3 mois (Urgence)"
             })
 
         # P2 : Conduites surchargées > 100% sans inondation immédiate
         for prescr in genie_civil.get("prescriptions", []):
             if prescr["cid"] not in [a["cible"] for a in actions_p1]:
+                c_lbl = prescr.get("conduit", prescr["cid"])
                 actions_p2.append({
-                    "cible": f"Conduite {prescr['cid']}",
+                    "priorite": "P2",
+                    "cible": c_lbl,
+                    "conduite": c_lbl,
                     "urgence": "P2 - MAJEUR",
+                    "type_risque": "Mise en pression & reflux",
                     "probleme": f"Conduite en charge à 100% (Ø{prescr['diam_actuel_mm']} mm saturé)",
-                    "action": f"Remplacement par {prescr['materiau']} Ø{prescr['diam_prescrit_mm']} mm ({prescr['longueur_m']} m)"
+                    "action": f"Remplacement par {prescr['materiau']} Ø{prescr['diam_prescrit_mm']} mm ({prescr['longueur_m']} m)",
+                    "action_requise": f"Remplacement par {prescr['materiau']} Ø{prescr['diam_prescrit_mm']} mm ({prescr['longueur_m']} m)",
+                    "estimation_cout_dzd": prescr.get("cout_estime_dzd", 0.0),
+                    "delai_recommande": "12 mois (Programmation)"
                 })
 
         # P3 : Problèmes d'auto-curage
         for lv in diagnostic.get("low_velocity_links", []):
+            c_lbl = lv.get("conduit", lv["cid"])
             actions_p3.append({
-                "cible": f"Conduite {lv['cid']}",
+                "priorite": "P3",
+                "cible": c_lbl,
+                "conduite": c_lbl,
                 "urgence": "P3 - ENTRETIEN",
+                "type_risque": "Dépôt & ensablement",
                 "probleme": f"Vitesse {lv['velocity_ms']:.2f} m/s insuffisante (< 0.6 m/s)",
-                "action": "Curage préventif programmé et reprise de pente lors des travaux de voirie"
+                "action": "Curage préventif programmé et reprise de pente lors des travaux de voirie",
+                "action_requise": "Curage préventif programmé et reprise de pente",
+                "estimation_cout_dzd": 150000.0,
+                "delai_recommande": "Entretien régulier"
             })
 
         note_technique = (
@@ -389,6 +474,8 @@ class AgentGestionRisques:
             f"{len(actions_p3)} action(s) P3 - Maintenance (curage préventif des zones de sédimentation où la vitesse chute sous 0.60 m/s). "
             f"Cette priorisation optimise l'allocation des budgets d'investissement de la collectivité."
         )
+
+        actions_liste = actions_p1 + actions_p2 + actions_p3
 
         return {
             "agent": "Agent 4 : Priorisation des Risques",
@@ -403,7 +490,8 @@ class AgentGestionRisques:
                 "P1": actions_p1[:5],
                 "P2": actions_p2[:5],
                 "P3": actions_p3[:5]
-            }
+            },
+            "actions_liste": actions_liste[:30]
         }
 
 

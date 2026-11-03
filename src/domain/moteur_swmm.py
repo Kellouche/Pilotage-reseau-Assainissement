@@ -517,12 +517,23 @@ class MoteurSWMM:
             cid = f"C_{idx+1}"
             u_node = _clean_node_id(c.get("ID_AMONT"))
             d_node = _clean_node_id(c.get("ID_AVAL"))
-            conduit_endpoints[cid] = {"u": u_node, "d": d_node}
-            length = float(c["Longeur"]) if ("Longeur" in c and c["Longeur"] > 0) else float(c.geometry.length)
+            length = float(c["Longeur"]) if ("Longeur" in c and pd.notna(c["Longeur"]) and c["Longeur"] > 0) else float(c.geometry.length)
             length = max(1.0, round(length, 2))
             rough = 0.013  # Manning béton standard
-            diam_mm = float(c["DIAMETRE"]) if ("DIAMETRE" in c and c["DIAMETRE"] > 0) else 600.0
+            diam_mm = float(c["DIAMETRE"]) if ("DIAMETRE" in c and pd.notna(c["DIAMETRE"]) and c["DIAMETRE"] > 0) else 600.0
             diam_m = max(0.2, diam_mm / 1000.0)
+            nom_v = str(c.get("NOM-VOIE") or c.get("NOMVOIE") or c.get("nom_voie") or "").strip()
+            if nom_v.lower() in ("nan", "none", "null", ""):
+                nom_v = ""
+
+            conduit_endpoints[cid] = {
+                "u": u_node,
+                "d": d_node,
+                "length": length,
+                "diam_mm": diam_mm,
+                "material": str(c.get("MATERIAU", "Béton")),
+                "nom_voie": nom_v
+            }
 
             conduit_lines.append(f"{cid:<16} {u_node:<16} {d_node:<16} {length:<10.2f} {rough:<10.4f} 0.000      0.000      0.000      0.000")
             xsec_lines.append(f"{cid:<16} CIRCULAR     {diam_m:<16.3f} 0.000      0.000      0.000      1")
@@ -926,10 +937,18 @@ class MoteurSWMM:
                             label = "Normal (< 50%)"
 
                         c_endpoints = meta.get("conduit_endpoints", {}).get(cid, {})
+                        u_str = str(c_endpoints.get("u", "") or "")
+                        d_str = str(c_endpoints.get("d", "") or "")
+                        cond_name = f"{cid} ({u_str}➔{d_str})" if (u_str and d_str) else cid
                         kpis["conduit_results"][cid] = {
                             "link_id": cid,
-                            "u_node": c_endpoints.get("u"),
-                            "d_node": c_endpoints.get("d"),
+                            "conduit": cond_name,
+                            "u_node": u_str,
+                            "d_node": d_str,
+                            "length": c_endpoints.get("length", 45.0),
+                            "diam_mm": c_endpoints.get("diam_mm", 600.0),
+                            "material": c_endpoints.get("material", "Béton"),
+                            "nom_voie": c_endpoints.get("nom_voie", ""),
                             "max_flow_cms": flow_cms,
                             "max_velocity_ms": veloc_ms,
                             "flow_ratio": round(q_ratio, 2),
