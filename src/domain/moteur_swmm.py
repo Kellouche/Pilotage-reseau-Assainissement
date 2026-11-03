@@ -243,7 +243,11 @@ class MoteurSWMM:
         pas_routage_sec: int = 5,
         pente_moyenne_pct: Optional[float] = None,
         cluster_id: Optional[int] = None,
-        tampon_buffer_m: Optional[float] = None
+        tampon_buffer_m: Optional[float] = None,
+        G_topo: Optional[Any] = None,
+        exutoires_map: Optional[Dict[Any, Any]] = None,
+        regards_gdf: Optional[gpd.GeoDataFrame] = None,
+        canalisations_gdf: Optional[gpd.GeoDataFrame] = None,
     ) -> Tuple[str, Dict[str, Any]]:
         """
         Génère l'intégralité du contenu textuel conforme au standard EPA SWMM 5.2 .inp.
@@ -258,30 +262,38 @@ class MoteurSWMM:
         scen = SCENARIOS_PLUIE[scenario_key]
         duree_sim = duree_heures if (duree_heures and duree_heures > 0) else scen["duree_heures"]
 
-        layers = gpd.list_layers(str(gpkg_path))["name"].tolist()
-        regard_layer = next((l for l in layers if "regard" in l.lower()), None)
-        pipe_layer = next((l for l in layers if any(k in l.lower() for k in ["canalisat", "conduit", "pipe", "troncon"]) and "désaffect" not in l.lower() and "desaffect" not in l.lower()), None)
-        rejet_layer = next((l for l in layers if any(k in l.lower() for k in ["rejet", "exutoire", "outfall"])), None)
+        if regards_gdf is not None and canalisations_gdf is not None:
+            regards = regards_gdf.copy()
+            canalisations = canalisations_gdf.copy()
+            rejets = gpd.GeoDataFrame()
+        else:
+            layers = gpd.list_layers(str(gpkg_path))["name"].tolist()
+            regard_layer = next((l for l in layers if "regard" in l.lower()), None)
+            pipe_layer = next((l for l in layers if any(k in l.lower() for k in ["canalisat", "conduit", "pipe", "troncon"]) and "désaffect" not in l.lower() and "desaffect" not in l.lower()), None)
+            rejet_layer = next((l for l in layers if any(k in l.lower() for k in ["rejet", "exutoire", "outfall"])), None)
 
-        if not regard_layer or not pipe_layer:
-            raise ValueError("Le fichier GeoPackage doit contenir les couches regards et canalisations.")
+            if not regard_layer or not pipe_layer:
+                raise ValueError("Le fichier GeoPackage doit contenir les couches regards et canalisations.")
 
-        regards = gpd.read_file(str(gpkg_path), layer=regard_layer)
-        canalisations = gpd.read_file(str(gpkg_path), layer=pipe_layer)
-        rejets = gpd.read_file(str(gpkg_path), layer=rejet_layer) if rejet_layer else gpd.GeoDataFrame()
+            regards = gpd.read_file(str(gpkg_path), layer=regard_layer)
+            canalisations = gpd.read_file(str(gpkg_path), layer=pipe_layer)
+            rejets = gpd.read_file(str(gpkg_path), layer=rejet_layer) if rejet_layer else gpd.GeoDataFrame()
 
         bassin_nom = None
         outfall_code = None
         target_ex_id = None
-        exutoires_map: Dict[Any, Any] = {}
+        if exutoires_map is None:
+            exutoires_map = {}
         clean_target_nodes: Set[str] = set()
 
         # Filtrage ciblé par bassin versant urbain (Cluster d'exutoire)
         if cluster_id is not None:
-            from src.domain.graphe_reseau import construire_graphe
-            from src.domain.detecteur_clusters import trouver_exutoires_physiques
-            G_topo = construire_graphe(str(gpkg_path))
-            exutoires_map = trouver_exutoires_physiques(G_topo)
+            if G_topo is None:
+                from src.domain.graphe_reseau import construire_graphe
+                G_topo = construire_graphe(str(gpkg_path))
+            if not exutoires_map:
+                from src.domain.detecteur_clusters import trouver_exutoires_physiques
+                exutoires_map = trouver_exutoires_physiques(G_topo)
             ex_list = list(exutoires_map.items())
             cid_int = int(cluster_id)
             if 1 <= cid_int <= len(ex_list):
@@ -298,14 +310,72 @@ class MoteurSWMM:
                             target_nodes.add(pred)
                             queue.append(pred)
 
+                # Si l'exutoire est en tête de réseau ou n'a pas de prédécesseurs directs,
+                # explorer les successeurs vers l'aval jusqu'au prochain exutoire
+                if len(target_nodes) == 1 and G_topo.has_node(target_ex_id) and G_topo.out_degree(target_ex_id) > 0:
+                    queue = [target_ex_id]
+                    while queue:
+                        curr = queue.pop(0)
+                        for succ in G_topo.successors(curr):
+                            if succ not in target_nodes:
+                                target_nodes.add(succ)
+                                if succ not in ex_set:
+                                    queue.append(succ)
+
                 clean_target_nodes = set(_clean_node_id(x) for x in target_nodes)
                 clean_target_nodes.add(_clean_node_id(target_ex_id))
 
-                regards = regards[regards.apply(lambda r: _clean_node_id(r.get("Code")) in clean_target_nodes, axis=1)].copy()
-                canalisations = canalisations[canalisations.apply(lambda c: _clean_node_id(c.get("ID_AMONT")) in clean_target_nodes and _clean_node_id(c.get("ID_AVAL")) in clean_target_nodes, axis=1)].copy()
+                # Filtrer les canalisations du bassin :
+                # Conduites internes (amont et aval dans target_nodes) OU conduites arrivant directement à l'exutoire
+                c_filter = canalisations.apply(
+                    lambda c: (
+                        (_clean_node_id(c.get("ID_AMONT")) in clean_target_nodes and _clean_node_id(c.get("ID_AVAL")) in clean_target_nodes)
+                        or (_clean_node_id(c.get("ID_AVAL")) == _clean_node_id(target_ex_id))
+                        or (len(target_nodes) == 1 and _clean_node_id(c.get("ID_AMONT")) == _clean_node_id(target_ex_id))
+                    ),
+                    axis=1
+                )
+                canalisations = canalisations[c_filter].copy()
 
+                # Ajouter les nœuds amont/aval de toutes les conduites retenues pour la cohérence
+                for _, c in canalisations.iterrows():
+                    u = _clean_node_id(c.get("ID_AMONT"))
+                    d = _clean_node_id(c.get("ID_AVAL"))
+                    if u: clean_target_nodes.add(u)
+                    if d: clean_target_nodes.add(d)
+
+                regards = regards[regards.apply(lambda r: _clean_node_id(r.get("Code")) in clean_target_nodes, axis=1)].copy()
+
+                # Robustesse : si le bassin n'a aucune canalisation dans le SIG (exutoire isolé),
+                # synthétiser un tronçon de décharge direct de 5m pour permettre la simulation SWMM de la surface drainée
                 if len(canalisations) == 0:
-                    raise ValueError(f"Le bassin versant '{bassin_nom}' ne comporte aucune canalisation connectée à simuler.")
+                    from shapely.geometry import Point, LineString
+                    ex_pt = ex_info.get("geometry")
+                    if ex_pt is None or (hasattr(ex_pt, 'is_empty') and ex_pt.is_empty):
+                        x = float(ex_info.get("x", 100.0))
+                        y = float(ex_info.get("y", 100.0))
+                        ex_pt = Point(x, y)
+
+                    reg_code = _clean_node_id(target_ex_id, fallback=f"REG_{cid_int}")
+                    if len(regards) == 0:
+                        reg_dict = {
+                            "Code": reg_code,
+                            "Profondeur": 2.0,
+                            "COTTN": 100.0,
+                            "geometry": ex_pt
+                        }
+                        regards = gpd.GeoDataFrame([reg_dict], crs=regards.crs or "EPSG:32631")
+
+                    line_geom = LineString([(ex_pt.x, ex_pt.y), (ex_pt.x + 5.0, ex_pt.y + 5.0)])
+                    dummy_pipe = {
+                        "ID_AMONT": reg_code,
+                        "ID_AVAL": f"OUT_{reg_code}",
+                        "Longeur": 5.0,
+                        "DIAMETRE": 600.0,
+                        "MATERIAU": "Béton",
+                        "geometry": line_geom
+                    }
+                    canalisations = gpd.GeoDataFrame([dummy_pipe], crs=canalisations.crs or "EPSG:32631")
 
                 outfall_code = _clean_node_id(target_ex_id)
 

@@ -71,9 +71,10 @@ class ConstructeurGrapheReseau:
         self.anomalies_topologiques.clear()
 
         for _, row in gdf_noeuds.iterrows():
-            noeud_id = str(row.get(
+            raw_id = row.get(
                 'id', row.get('id_noeud', row.get('swmm_id', row.get('code', row.get('Code', row.get('NOM', row.name)))))
-            ))
+            )
+            noeud_id = _identifiant_reseau(raw_id) or str(row.name)
             geom = row.geometry if hasattr(row, 'geometry') else None
             x = geom.x if isinstance(geom, Point) else row.get('x', row.get('COORDX', 0.0))
             y = geom.y if isinstance(geom, Point) else row.get('y', row.get('COORDY', 0.0))

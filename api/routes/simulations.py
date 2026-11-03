@@ -200,6 +200,13 @@ def run_native_swmm_simulation(
     if not gpkg_path or not gpkg_path.exists():
         raise HTTPException(status_code=404, detail="Réseau hydraulique introuvable pour ce projet.")
 
+    # Règle d'ingénierie hydraulique : la sectorisation préalable est obligatoire avant simulation
+    if payload.cluster_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Règle hydraulique d'ingénierie : La sectorisation préalable en bassins versants d'exutoires est obligatoire avant la simulation SWMM. Veuillez sélectionner un bassin versant à simuler."
+        )
+
     moteur = MoteurSWMM()
     try:
         resultat = moteur.executer_simulation(

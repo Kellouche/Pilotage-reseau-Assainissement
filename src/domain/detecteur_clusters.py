@@ -106,7 +106,7 @@ def trouver_exutoires_physiques(
                     dist_min = dist
                     meilleur_noeud = nc
             
-            if dist_min <= 1.0:
+            if dist_min <= 75.0:
                 to_ouv = data.get('type_ouvrage') or G.nodes[meilleur_noeud].get('type_ouvrage')
                 h_seuil = data.get('h_seuil') or G.nodes[meilleur_noeud].get('h_seuil')
                 milieu_rec = data.get('milieu_rec') or G.nodes[meilleur_noeud].get('milieu_rec')
