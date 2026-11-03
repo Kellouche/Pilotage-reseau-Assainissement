@@ -87,6 +87,14 @@
 - [ ] Audit trail modifications
 - [ ] Impact hydraulique calculé à la volée
 
+### Phase 10 — Déconnexion manuelle d'exutoires & Correction des frontières de bassins (Point 4)
+
+> [!WARNING]
+> **Remarque importante (Non encore validé) :** Avant de passer à la réalisation de cette fonctionnalité, une discussion approfondie doit être menée avec l'utilisateur pour cadrer précisément l'ergonomie :
+> 1. Coupure manuelle interactive d'un tronçon frontière sur la carte (ex: canalisation Ø800 de 83.5m reliant le DVO 166 au trop-plein 171).
+> 2. Filtrage/décochage d'exutoires secondaires directement dans le modal de paramétrage de simulation SWMM.
+> 3. Requalification d'un ouvrage spécial (ex: DVO) en frontière étanche de bassin interdisant la remontée amont.
+
 ---
 
 ## Fait
