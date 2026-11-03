@@ -524,10 +524,27 @@
                 <label class="layer-item"><input type="checkbox" id="f-conduites" checked> <span class="layer-indicator" style="background: #38bdf8;"></span> Conduites</label>
                 <label class="layer-item"><input type="checkbox" id="f-sens-ecoulement" onchange="basculerSensEcoulement(this.checked)"> <span class="layer-indicator" style="background: transparent; color: #38bdf8; font-weight: bold; font-size: 11px; display: inline-flex; align-items: center; justify-content: center;">➤</span> Sens d'écoulement</label>
                 <label class="layer-item"><input type="checkbox" id="f-regards" checked> <span class="layer-indicator" style="background: #e2e8f0; border-radius: 50%;"></span> Regards de visite</label>
-                <label class="layer-item"><input type="checkbox" id="f-rejets" checked> <span class="layer-indicator" style="background: #ef4444; border-radius: 50%;"></span> Exutoires / Rejets</label>
-                <label class="layer-item"><input type="checkbox" id="f-stations" checked> <span class="layer-indicator" style="background: #f59e0b;"></span> Stations de pompage</label>
-                <label class="layer-item"><input type="checkbox" id="f-step" checked> <span class="layer-indicator" style="background: #10b981;"></span> Station d'épuration (STEP)</label>
-                <label class="layer-item"><input type="checkbox" id="f-ouvrages" checked> <span class="layer-indicator" style="background: #a855f7;"></span> Ouvrages spéciaux</label>
+                <label class="layer-item"><input type="checkbox" id="f-rejets" checked> <span class="layer-indicator" style="background: #ef4444; border-radius: 50%;"></span> Rejets vers le milieu naturel (Oueds)</label>
+                <label class="layer-item"><input type="checkbox" id="f-stations" checked> <span class="layer-indicator" style="background: #f97316; border-radius: 50%;"></span> Stations de relevage / pompage</label>
+                <label class="layer-item"><input type="checkbox" id="f-step" checked> <span class="layer-indicator" style="background: #22c55e; border-radius: 50%;"></span> Station d'épuration (STEP)</label>
+                <label class="layer-item"><input type="checkbox" id="f-ouvrages" checked> <span class="layer-indicator" style="background: #06b6d4; border-radius: 50%;"></span> Ouvrages spéciaux</label>
+                <div id="subtypes-ouvrages" style="margin-left: 14px; margin-top: 2px; margin-bottom: 6px; padding-left: 8px; border-left: 2px solid rgba(255,255,255,0.12); display: flex; flex-direction: column; gap: 3px;">
+                    <div style="font-size: 0.72rem; color: #94a3b8; display: flex; align-items: center; gap: 6px;">
+                        <span class="layer-indicator" style="background: #06b6d4; width: 8px; height: 8px; border-radius: 50%;"></span> Déversoir d'orage (DVO, seuil $H_s$)
+                    </div>
+                    <div style="font-size: 0.72rem; color: #94a3b8; display: flex; align-items: center; gap: 6px;">
+                        <span class="layer-indicator" style="background: #a855f7; width: 8px; height: 8px; border-radius: 50%;"></span> Trop-plein de réseau
+                    </div>
+                    <div style="font-size: 0.72rem; color: #94a3b8; display: flex; align-items: center; gap: 6px;">
+                        <span class="layer-indicator" style="background: #10b981; width: 8px; height: 8px; border-radius: 50%;"></span> Bassin de rétention
+                    </div>
+                    <div style="font-size: 0.72rem; color: #94a3b8; display: flex; align-items: center; gap: 6px;">
+                        <span class="layer-indicator" style="background: #6366f1; width: 8px; height: 8px; border-radius: 50%;"></span> Ouvrage de régulation
+                    </div>
+                    <div style="font-size: 0.72rem; color: #94a3b8; display: flex; align-items: center; gap: 6px;">
+                        <span class="layer-indicator" style="background: #f59e0b; width: 8px; height: 8px; border-radius: 50%;"></span> Ouvrage de réception
+                    </div>
+                </div>
                 <label class="layer-item" id="label-orphelins" style="margin-top: 4px; border-top: 1px dashed rgba(255,255,255,0.08); padding-top: 5px;">
                     <input type="checkbox" id="f-orphelins" onchange="basculerCoucheOrphelins(this.checked)">
                     <span class="layer-indicator" style="background: #f59e0b; border: 1px dashed #d97706;"></span>
@@ -705,6 +722,13 @@
                         <div style="font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">Regards de Visite :</div>
                         <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 3px;"><span style="display:inline-block; width:11px; height:11px; background:#f97316; border-radius:50%; border:2px solid #ffffff;"></span> Surcharge (dans cheminée)</div>
                         <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 8px;"><span style="display:inline-block; width:11px; height:11px; background:#ef4444; border-radius:50%; border:2px solid #ffffff;"></span> Débordement (au sol)</div>
+
+                        <!-- Ouvrages Spéciaux & Exutoires -->
+                        <div style="font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">Ouvrages &amp; Exutoires :</div>
+                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 2px;"><span style="display:inline-block; width:10px; height:10px; background:#06b6d4; border-radius:50%; border:1px solid #ffffff;"></span> Déversoir d'orage (DVO)</div>
+                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 2px;"><span style="display:inline-block; width:10px; height:10px; background:#a855f7; border-radius:50%; border:1px solid #ffffff;"></span> Trop-plein de réseau</div>
+                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 2px;"><span style="display:inline-block; width:10px; height:10px; background:#10b981; border-radius:50%; border:1px solid #ffffff;"></span> Bassin de rétention</div>
+                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 8px;"><span style="display:inline-block; width:10px; height:10px; background:#ef4444; border-radius:50%; border:1px solid #ffffff;"></span> Rejet direct (Oued)</div>
 
                         <!-- Hydrologie & Sens d'écoulement -->
                         <div style="font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">Hydrologie &amp; Écoulement :</div>
@@ -1214,31 +1238,86 @@
                         }
                     }).addTo(couches.conduites);
 
+                    // Styles typologiques pour les ouvrages spéciaux
+                    function getOuvrageStyle(feature) {
+                        const props = feature.properties || {};
+                        const to = (props.TYPEOUVR || props.type_ouvrage || props.type_detaille || props.Type || '').toLowerCase();
+                        if (to.includes('déversoir') || to.includes('deversoir') || to.includes('dvo')) {
+                            return { radius: 7, color: '#0891b2', fillColor: '#06b6d4', fillOpacity: 0.9, weight: 2 };
+                        } else if (to.includes('trop plein') || to.includes('trop-plein')) {
+                            return { radius: 7, color: '#9333ea', fillColor: '#a855f7', fillOpacity: 0.9, weight: 2 };
+                        } else if (to.includes('rétention') || to.includes('retention')) {
+                            return { radius: 8, color: '#059669', fillColor: '#10b981', fillOpacity: 0.9, weight: 2 };
+                        } else if (to.includes('régulation') || to.includes('regulation')) {
+                            return { radius: 7, color: '#4f46e5', fillColor: '#6366f1', fillOpacity: 0.9, weight: 2 };
+                        } else if (to.includes('réception') || to.includes('reception')) {
+                            return { radius: 6, color: '#d97706', fillColor: '#f59e0b', fillOpacity: 0.9, weight: 2 };
+                        }
+                        return { radius: 7, color: '#0891b2', fillColor: '#06b6d4', fillOpacity: 0.9, weight: 2 };
+                    }
+
+                    // Popup enrichie pour les ouvrages spéciaux
+                    function ouvragePopup(feature) {
+                        const p = feature.properties || {};
+                        const to = p.TYPEOUVR || p.type_ouvrage || p.libelle_type || 'Ouvrage spécial';
+                        const seuilVal = p.H_de_Seuil !== undefined && p.H_de_Seuil !== null && p.H_de_Seuil !== '' && !isNaN(p.H_de_Seuil) ? parseFloat(p.H_de_Seuil).toFixed(2) : null;
+                        const voie = p.NOMVOIE || p.nom_voie || p.ADRESSE || '--';
+                        const zc = p.ZONECOLLE || p.zone_collecte || '--';
+                        const code = p.Code || p.CODE || p.id || '--';
+                        return `<div style="font-family: inherit; font-size: 12.5px; min-width: 215px; color: #1e293b;">
+                            <div style="font-weight: 800; color: #0891b2; font-size: 13.5px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 6px;">
+                                <i class="fas fa-water me-1"></i> ${to}
+                            </div>
+                            <div style="margin-bottom: 3px;"><b>Adresse / Voie :</b> <span style="color: #0f172a; font-weight: 600;">${voie}</span></div>
+                            <div style="margin-bottom: 3px;"><b>Zone collecte :</b> ${zc}</div>
+                            ${seuilVal ? `<div style="margin-bottom: 3px;"><b>Seuil de crête ($H_s$) :</b> <span style="color: #d97706; font-weight: 800;">${seuilVal} m</span></div>` : ''}
+                            <div style="font-size: 11px; color: #64748b; margin-top: 4px;">N° Ouvrage / Code : ${code}</div>
+                        </div>`;
+                    }
+
+                    // Popup enrichie pour les rejets et exutoires
+                    function rejetPopup(feature) {
+                        const p = feature.properties || {};
+                        const milieu = p.MILIEUREC || p.milieu_rec || 'Milieu naturel';
+                        const nom = p.NOM || p.nom || p.NOM_VOIE || p.id || 'Exutoire';
+                        const code = p.CODE || p.code || '--';
+                        const tn = p.COTETN || p.cote_tampon || '--';
+                        return `<div style="font-family: inherit; font-size: 12.5px; min-width: 215px; color: #1e293b;">
+                            <div style="font-weight: 800; color: #ef4444; font-size: 13.5px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 6px;">
+                                <i class="fas fa-sign-out-alt me-1"></i> Exutoire / Rejet direct
+                            </div>
+                            <div style="margin-bottom: 3px;"><b>Milieu récepteur :</b> <span style="color: #0284c7; font-weight: 700;">${milieu}</span></div>
+                            <div style="margin-bottom: 3px;"><b>Nom / Emplacement :</b> ${nom}</div>
+                            <div style="margin-bottom: 3px;"><b>Cote TN :</b> ${tn} m</div>
+                            <div style="font-size: 11px; color: #64748b; margin-top: 4px;">Code SIG : ${code}</div>
+                        </div>`;
+                    }
+
                     // Points (regards, rejets, stations, step, ouvrages)
                     const styles = {
                         regards: { radius: 4, color: '#2c3e50', fillColor: '#2c3e50', fillOpacity: 0.8 },
-                        rejets: { radius: 7, color: '#e74c3c', fillColor: '#e74c3c', fillOpacity: 0.9, weight: 2 },
-                        stations: { radius: 6, color: '#e67e22', fillColor: '#e67e22', fillOpacity: 0.8 },
-                        step: { radius: 7, color: '#27ae60', fillColor: '#27ae60', fillOpacity: 0.8 },
-                        ouvrages: { radius: 6, color: '#9b59b6', fillColor: '#9b59b6', fillOpacity: 0.8 }
+                        rejets: { radius: 7, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.9, weight: 2 },
+                        stations: { radius: 7, color: '#f97316', fillColor: '#f97316', fillOpacity: 0.85, weight: 2 },
+                        step: { radius: 8, color: '#22c55e', fillColor: '#22c55e', fillOpacity: 0.9, weight: 2 },
+                        ouvrages: { radius: 7, color: '#06b6d4', fillColor: '#06b6d4', fillOpacity: 0.9, weight: 2 }
                     };
                     window.regardProperties = [];
                     ['regards', 'rejets', 'stations', 'step', 'ouvrages'].forEach(type => {
                         if (!d.couches[type] || !d.couches[type].features) return;
                         L.geoJSON(d.couches[type], {
-                            pointToLayer: (feature, latlng) => L.circleMarker(latlng, styles[type]),
+                            pointToLayer: (feature, latlng) => {
+                                if (type === 'ouvrages') return L.circleMarker(latlng, getOuvrageStyle(feature));
+                                return L.circleMarker(latlng, styles[type]);
+                            },
                             onEachFeature: (feature, layer) => {
                                 if (type === 'regards') {
                                     const index = window.regardProperties.length;
                                     window.regardProperties.push(feature.properties);
                                     layer.bindPopup(regardPopup(feature, index));
+                                } else if (type === 'ouvrages') {
+                                    layer.bindPopup(ouvragePopup(feature));
                                 } else if (type === 'rejets') {
-                                    layer.bindPopup(`<div style="font-family: Arial, sans-serif; font-size: 13px;">
-                                        <b style="color: #e74c3c;">🌊 Exutoire / Rejet</b><br>
-                                        <b>Nom:</b> ${feature.properties.NOM || feature.properties.nom || feature.id || 'Exutoire'}<br>
-                                        <b>Code:</b> ${feature.properties.CODE || feature.properties.code || '--'}<br>
-                                        <b>Cote TN:</b> ${feature.properties.COTETN || feature.properties.cote_tampon || '--'} m
-                                    </div>`);
+                                    layer.bindPopup(rejetPopup(feature));
                                 }
                             }
                         }).addTo(couches[type]);
@@ -1626,10 +1705,10 @@
                 const cid = f.properties.cluster_id;
                 const nom = f.properties.nom || `Bassin ${cid}`;
                 const surf = f.properties.surface_ha !== undefined ? ` (${f.properties.surface_ha} ha)` : '';
-                const typ = f.properties.exutoire_type ? ` [${f.properties.exutoire_type.toUpperCase()}]` : '';
+                // Consigne stricte utilisateur : uniquement l'adresse réelle et la surface (sans mention de type d'ouvrage)
                 const opt = document.createElement('option');
                 opt.value = cid;
-                opt.textContent = `${cid}. ${nom}${typ}${surf}`;
+                opt.textContent = `${cid}. ${nom}${surf}`;
                 sel.appendChild(opt);
                 _bassinNoms[cid] = nom;
             });

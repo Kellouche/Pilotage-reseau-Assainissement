@@ -25,7 +25,13 @@ from shapely.ops import voronoi_diagram, unary_union, transform
 from shapely import STRtree
 
 from src.domain.graphe_reseau import construire_graphe
-from src.domain.detecteur_clusters import trouver_exutoires_physiques
+from src.domain.detecteur_clusters import (
+    trouver_exutoires_physiques,
+    extraire_adresse_reelle_bassin,
+    classifier_type_hydraulique,
+)
+from collections import Counter
+import re
 
 
 def generer_palette_couleurs(nb_couleurs: int) -> List[str]:
@@ -220,6 +226,7 @@ def partitionner_79_bassins_versants(
             "exutoire_id": str(assigned_ex),
             "nom_bassin": ex_info.get('nom', f"Bassin_{b_num}"),
             "type_exutoire": ex_info.get('type', 'exutoire'),
+            "nom_voie": str(row.get('NOMVOIE', '') or (G.nodes.get(str_code, {}).get('nom_voie', '') if str_code in G.nodes else '')),
             "area_ha": area_ha,
             "area_m2": area_m2,
             "imperv_pct": 70.0,
@@ -265,11 +272,55 @@ def partitionner_79_bassins_versants(
         nb_regards_total = len(regards_in_bassin)
         nb_regards_orphelins = sum(1 for r in regards_in_bassin if r['is_orphelin'] == 1)
 
+        # Collecter les noms de voie des regards du bassin
+        voies_bassin = [r.get('nom_voie') for r in regards_in_bassin if r.get('nom_voie')]
+        compteur_voies = Counter([
+            str(v).strip() for v in voies_bassin 
+            if v and str(v).strip().lower() not in ('nan', 'none', '', 'null') 
+            and not re.match(r'^\d+(\.0)?$', str(v).strip())
+        ])
+        top_voie = compteur_voies.most_common(1)[0][0] if compteur_voies else None
+
+        ex_nom = ex_info.get('nom')
+        ex_node_voie = G.nodes.get(ex_id, {}).get('nom_voie') if ex_id in G.nodes else None
+        
+        def est_invalide(s):
+            if not s: return True
+            st = str(s).strip()
+            return st.lower() in ('nan', 'none', '', 'null', 'sans designation', 'inconnu') or bool(re.match(r'^\d+(\.0)?$', st))
+
+        if str(ex_id) == '0' or 'step' in str(ex_info.get('type', '')).lower():
+            adresse_reelle = f"{top_voie or 'Chorfa'} (STEP)"
+        else:
+            zc = ex_info.get('zone_collecte') or (G.nodes.get(ex_id, {}).get('zone_collecte') if ex_id in G.nodes else None)
+            zc_clean = str(zc).replace('BC_', '').replace('_', ' ').strip() if zc and not est_invalide(zc) else None
+            
+            candidats = []
+            for val in [ex_nom, ex_node_voie, top_voie, zc_clean]:
+                if val and not est_invalide(val):
+                    candidats.append(str(val).strip())
+            
+            if candidats:
+                # Priorité au candidat le plus descriptif
+                adresse_reelle = max(candidats, key=lambda s: (len(s.split()), len(s)))
+            else:
+                adresse_reelle = f"Bassin {b_num}"
+
+        typ_det = ex_info.get('type_detaille') or ex_info.get('type', 'exutoire')
+        lib_det = ex_info.get('libelle_type') or typ_det
+        coul_det = ex_info.get('couleur_type')
+
         bassins_records.append({
             "id_bassin": b_num,
             "exutoire_id": str(ex_id),
-            "nom_exutoire": ex_info.get('nom', f"Exutoire_{b_num}"),
-            "type_exutoire": ex_info.get('type', 'exutoire'),
+            "nom_exutoire": adresse_reelle,
+            "type_exutoire": typ_det,
+            "libelle_type": lib_det,
+            "couleur_type": coul_det,
+            "type_ouvrage": ex_info.get('type_ouvrage'),
+            "h_seuil": ex_info.get('h_seuil'),
+            "milieu_rec": ex_info.get('milieu_rec'),
+            "zone_collecte": ex_info.get('zone_collecte'),
             "surface_ha": area_ha,
             "surface_m2": area_m2,
             "nb_regards": nb_regards_total,
@@ -420,6 +471,12 @@ def partitionner_79_bassins_versants(
         feat["properties"]["cluster_id"] = b_id
         feat["properties"]["nom"] = b_nom
         feat["properties"]["exutoire_type"] = b_type
+        feat["properties"]["exutoire_type_detaille"] = props.get("type_exutoire")
+        feat["properties"]["libelle_type"] = props.get("libelle_type")
+        feat["properties"]["couleur_type"] = props.get("couleur_type")
+        feat["properties"]["type_ouvrage"] = props.get("type_ouvrage")
+        feat["properties"]["h_seuil"] = props.get("h_seuil")
+        feat["properties"]["milieu_rec"] = props.get("milieu_rec")
         feat["properties"]["couleur"] = b_color
         feat["properties"]["surface_ha"] = float(props.get("surface_ha", 0.0))
         feat["properties"]["nb_regards"] = int(props.get("nb_regards", 0))
@@ -444,7 +501,13 @@ def partitionner_79_bassins_versants(
                         "type": "exutoire",
                         "cluster_id": b_id,
                         "nom": b_nom,
-                        "exutoire_type": b_type
+                        "exutoire_type": b_type,
+                        "exutoire_type_detaille": props.get("type_exutoire"),
+                        "libelle_type": props.get("libelle_type"),
+                        "couleur_type": props.get("couleur_type"),
+                        "type_ouvrage": props.get("type_ouvrage"),
+                        "h_seuil": props.get("h_seuil"),
+                        "milieu_rec": props.get("milieu_rec"),
                     }
                 })
             except Exception:

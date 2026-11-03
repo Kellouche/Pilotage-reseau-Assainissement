@@ -364,11 +364,17 @@ def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional
     # ──────────────────────────────────────────────────────────────────
 
     color_map = {
-        "step":    "#e74c3c",
-        "rejet":   "#e67e22",
-        "station": "#3498db",
-        "ouvrage": "#9b59b6",
-        "exutoire_implicite": "#f1c40f"
+        "step":               "#22c55e",
+        "station":            "#f97316",
+        "rejet":              "#ef4444",
+        "deversoir_orage":    "#06b6d4",
+        "trop_plein":         "#a855f7",
+        "bassin_retention":   "#10b981",
+        "ouvrage_regulation": "#6366f1",
+        "ouvrage_reception":  "#f59e0b",
+        "ouvrage_special":    "#ec4899",
+        "ouvrage":            "#9b59b6",
+        "exutoire_implicite": "#64748b"
     }
 
     results = []
@@ -417,8 +423,8 @@ def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional
             continue
 
         try:
-            # Déterminer le nom du bassin depuis les données de la zone drainée
-            nom_bassin = determiner_nom_bassin(edges, G, exutoire_info=info_local)
+            # Déterminer l'adresse réelle du bassin depuis les données de la zone drainée
+            nom_bassin = determiner_nom_bassin(edges, G, exutoire_info=info_local, exutoire_node=noeud_exutoire)
             nom_exutoire = info_local["nom"]
 
             # Calculer les statistiques et le polygone du bassin
@@ -436,9 +442,10 @@ def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional
                 if bassin_hull is not None and not bassin_hull.is_empty:
                     emprise_occupee = bassin_hull if emprise_occupee is None else emprise_occupee.union(bassin_hull)
 
-            couleur = color_map.get(info_local["type"], "#4a90e2")
+            t_det = info_local.get("type_detaille", info_local.get("type"))
+            couleur = info_local.get("couleur_type") or color_map.get(t_det) or color_map.get(info_local.get("type"), "#4a90e2")
             classification = {
-                edge: {"type": f"connecte_{info_local['type']}", "couleur": couleur}
+                edge: {"type": f"connecte_{t_det}", "couleur": couleur}
                 for edge in edges
             }
             geojson = construire_geojson_cluster(

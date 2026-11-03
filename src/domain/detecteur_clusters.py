@@ -5,6 +5,8 @@ Fichier : src/domain/detecteur_clusters.py
 """
 
 from typing import Dict, List, Set, Tuple, Any, Optional
+from collections import Counter
+import re
 import networkx as nx
 from shapely.geometry import Point, LineString, MultiPoint, Polygon, MultiPolygon, mapping
 from shapely.ops import unary_union
@@ -23,6 +25,39 @@ PRIORITE_EXUTOIRES_DEFAUT = {
     'exutoire_implicite': 8,
     'sortie_graphe': 9
 }
+
+def classifier_type_hydraulique(
+    type_noeud: str,
+    type_ouvrage: Optional[str] = None,
+    milieu_rec: Optional[str] = None
+) -> Tuple[str, str, str]:
+    """
+    Retourne (code_type, libelle, couleur_hex) pour un nœud hydraulique aval.
+    """
+    tn = str(type_noeud or '').lower()
+    to = str(type_ouvrage or '').lower()
+    mr = str(milieu_rec or '').strip()
+
+    if 'déversoir' in to or 'deversoir' in to or 'dvo' in to:
+        return ('deversoir_orage', "Déversoir d'orage (DVO)", '#06b6d4')
+    elif 'trop plein' in to or 'trop-plein' in to:
+        return ('trop_plein', "Trop-plein de réseau", '#a855f7')
+    elif 'rétention' in to or 'retention' in to:
+        return ('bassin_retention', "Bassin de rétention", '#10b981')
+    elif 'régulation' in to or 'regulation' in to:
+        return ('ouvrage_regulation', "Ouvrage de régulation", '#6366f1')
+    elif 'réception' in to or 'reception' in to:
+        return ('ouvrage_reception', "Ouvrage de réception", '#f59e0b')
+    elif 'ouvrage' in tn or to:
+        return ('ouvrage_special', "Ouvrage spécial", '#ec4899')
+    elif 'rejet' in tn or 'outfall' in tn:
+        libelle = f"Rejet direct ({mr})" if mr and mr.lower() != 'nan' else "Rejet vers milieu naturel"
+        return ('rejet', libelle, '#ef4444')
+    elif 'station' in tn:
+        return ('station', "Station de pompage / relevage", '#f97316')
+    elif 'step' in tn:
+        return ('step', "Station d'épuration (STEP)", '#22c55e')
+    return ('regard', "Regard de visite", '#64748b')
 
 def _iterer_aretes_avec_data(G: nx.Graph):
     if G.is_multigraph():
@@ -72,18 +107,52 @@ def trouver_exutoires_physiques(
                     meilleur_noeud = nc
             
             if dist_min <= 1.0:
+                to_ouv = data.get('type_ouvrage') or G.nodes[meilleur_noeud].get('type_ouvrage')
+                h_seuil = data.get('h_seuil') or G.nodes[meilleur_noeud].get('h_seuil')
+                milieu_rec = data.get('milieu_rec') or G.nodes[meilleur_noeud].get('milieu_rec')
+                zone_colle = data.get('zone_collecte') or G.nodes[meilleur_noeud].get('zone_collecte')
+                typ_det, lib_det, coul_det = classifier_type_hydraulique(matched_type, to_ouv, milieu_rec)
+
+                # Préférer l'adresse la plus descriptive et spécifique
+                noms_candidats = [
+                    _texte_valide(data.get('nom')),
+                    _texte_valide(data.get('nom_voie')),
+                    _texte_valide(G.nodes[meilleur_noeud].get('nom_voie')),
+                ]
+                nom_choisi = max([n for n in noms_candidats if n], key=lambda s: (len(s.split()), len(s)), default=str(noeud))
+
                 exutoires[meilleur_noeud] = {
                     **G.nodes[meilleur_noeud],
                     "type": matched_type,
+                    "type_detaille": typ_det,
+                    "libelle_type": lib_det,
+                    "couleur_type": coul_det,
+                    "type_ouvrage": to_ouv,
+                    "h_seuil": h_seuil,
+                    "milieu_rec": milieu_rec,
+                    "zone_collecte": zone_colle,
                     "priorite": priorite_map[matched_type],
-                    "nom": _texte_valide(data.get('nom')) or _texte_valide(data.get('nom_voie')) or str(noeud)
+                    "nom": nom_choisi
                 }
                 continue
+
+        to_ouv = data.get('type_ouvrage')
+        h_seuil = data.get('h_seuil')
+        milieu_rec = data.get('milieu_rec')
+        zone_colle = data.get('zone_collecte')
+        typ_det, lib_det, coul_det = classifier_type_hydraulique(matched_type, to_ouv, milieu_rec)
 
         nom_exutoire = _texte_valide(data.get('nom')) or _texte_valide(data.get('nom_voie')) or str(noeud)
         exutoires[noeud] = {
             **data,
             "type": matched_type,
+            "type_detaille": typ_det,
+            "libelle_type": lib_det,
+            "couleur_type": coul_det,
+            "type_ouvrage": to_ouv,
+            "h_seuil": h_seuil,
+            "milieu_rec": milieu_rec,
+            "zone_collecte": zone_colle,
             "priorite": priorite_map[matched_type],
             "nom": nom_exutoire
         }
@@ -243,21 +312,85 @@ def _premier_texte(*values: Any) -> Optional[str]:
     return None
 
 
-def determiner_nom_bassin(edges: Set[Tuple], G: nx.DiGraph, exutoire_info: Dict) -> str:
-    """Produit un nom métier stable à partir de l'exutoire et des rues."""
-    exutoire = _premier_texte(
-        exutoire_info.get('nom'), exutoire_info.get('adresse'),
-        exutoire_info.get('nom_voie'), exutoire_info.get('commune')
-    ) or 'sans désignation'
+def _est_nom_technique_ou_generique(val: Any) -> bool:
+    if val is None:
+        return True
+    s = str(val).strip()
+    if not s or s.lower() in {'none', 'nan', 'null', '', 'sans designation', 'inconnu', 'bassin', 'exutoire'}:
+        return True
+    if re.match(r'^\d+(\.0)?$', s):
+        return True
+    return False
+
+
+def extraire_adresse_reelle_bassin(
+    edges: Set[Tuple],
+    G: nx.DiGraph,
+    exutoire_node: Any,
+    exutoire_info: Optional[Dict[str, Any]] = None
+) -> str:
+    """
+    Extrait l'adresse urbaine réelle et signifiante (quartier, rue, cité, AADL)
+    d'un bassin versant à partir de son réseau drainé (nœuds, tronçons et exutoire),
+    en éliminant les identifiants techniques bruts (ex: '13', '15', '23', '32.0').
+    """
+    if exutoire_info is None:
+        exutoire_info = {}
+
+    # 1. Collecter les noms de voie des noeuds et troncons du cluster
     voies = []
-    for edge in edges:
-        data = G.edges[edge[0], edge[1], edge[2]] if G.is_multigraph() else G.edges[edge[0], edge[1]]
-        voie = _texte_valide(data.get('nom_voie'))
-        if voie and voie not in voies:
-            voies.append(voie)
-    type_exutoire = _premier_texte(exutoire_info.get('type')) or 'exutoire'
-    suffixe_voies = f" — rues: {', '.join(voies[:3])}" if voies else ''
-    return f"Bassin hydraulique — {type_exutoire} {exutoire}{suffixe_voies}"
+    if edges:
+        for e in edges:
+            edata = G.edges[e] if e in G.edges else (G.edges[e[0], e[1], e[2]] if G.is_multigraph() else G.edges[e[0], e[1]])
+            v = edata.get('nom_voie')
+            if v and not _est_nom_technique_ou_generique(v):
+                voies.append(str(v).strip())
+            for n in e[:2]:
+                if n in G.nodes:
+                    nv = G.nodes[n].get('nom_voie')
+                    if nv and not _est_nom_technique_ou_generique(nv):
+                        voies.append(str(nv).strip())
+    
+    compteur = Counter(voies)
+    top_voie = compteur.most_common(1)[0][0] if compteur else None
+
+    # 2. Adresse sur le noeud exutoire
+    ex_node_data = G.nodes.get(exutoire_node, {}) if exutoire_node in G.nodes else {}
+    ex_node_voie = ex_node_data.get('nom_voie')
+    if _est_nom_technique_ou_generique(ex_node_voie):
+        ex_node_voie = None
+    else:
+        ex_node_voie = str(ex_node_voie).strip()
+
+    # 3. Nom sur l'exutoire info
+    ex_nom = exutoire_info.get('nom')
+    if _est_nom_technique_ou_generique(ex_nom):
+        ex_nom = None
+    else:
+        ex_nom = str(ex_nom).strip()
+
+    # 4. Zone de collecte
+    zc = exutoire_info.get('zone_collecte') or ex_node_data.get('zone_collecte')
+    if zc and not _est_nom_technique_ou_generique(zc):
+        zc = str(zc).replace('BC_', '').replace('_', ' ').strip()
+    else:
+        zc = None
+
+    # 5. Déterminer la meilleure adresse : choisir le candidat le plus informatif
+    candidats = []
+    for val in [ex_nom, ex_node_voie, top_voie, zc]:
+        if val and not _est_nom_technique_ou_generique(val):
+            candidats.append(str(val).strip())
+
+    if candidats:
+        # Priorité au texte le plus complet / descriptif (mots + longueur)
+        return max(candidats, key=lambda s: (len(s.split()), len(s)))
+    return f"Secteur {exutoire_node}"
+
+
+def determiner_nom_bassin(edges: Set[Tuple], G: nx.DiGraph, exutoire_info: Dict, exutoire_node: Any = None) -> str:
+    """Produit l'adresse urbaine réelle du bassin pour l'utilisateur final."""
+    return extraire_adresse_reelle_bassin(edges, G, exutoire_node, exutoire_info)
 
 
 def bassin_hydraulique_valide(
@@ -420,6 +553,12 @@ def construire_geojson_cluster(
                 'cluster_id': cluster_id,
                 'nom': nom_bassin,
                 'exutoire_type': exutoire_info.get('type') if exutoire_info else 'inconnu',
+                'exutoire_type_detaille': exutoire_info.get('type_detaille') if exutoire_info else exutoire_info.get('type'),
+                'libelle_type': exutoire_info.get('libelle_type') if exutoire_info else None,
+                'couleur_type': exutoire_info.get('couleur_type') if exutoire_info else None,
+                'type_ouvrage': exutoire_info.get('type_ouvrage') if exutoire_info else None,
+                'h_seuil': exutoire_info.get('h_seuil') if exutoire_info else None,
+                'milieu_rec': exutoire_info.get('milieu_rec') if exutoire_info else None,
                 'surface_source': exutoire_info.get('surface_source', 'non_precisee') if exutoire_info else 'non_precisee',
                 'raccordement_statut': exutoire_info.get('raccordement', {}).get('statut') if exutoire_info else None,
                 'raccordement_noeud': exutoire_info.get('raccordement', {}).get('noeud_reseau') if exutoire_info else None,
@@ -443,8 +582,14 @@ def construire_geojson_cluster(
                 'properties': {
                     'type': 'exutoire',
                     'cluster_id': cluster_id,
-                    'nom': exutoire_info.get('nom', str(exutoire_node)) if exutoire_info else str(exutoire_node),
+                    'nom': nom_bassin or exutoire_info.get('nom', str(exutoire_node)),
                     'exutoire_type': exutoire_info.get('type', 'inconnu') if exutoire_info else 'inconnu',
+                    'exutoire_type_detaille': exutoire_info.get('type_detaille') if exutoire_info else exutoire_info.get('type'),
+                    'libelle_type': exutoire_info.get('libelle_type') if exutoire_info else None,
+                    'couleur_type': exutoire_info.get('couleur_type') if exutoire_info else None,
+                    'type_ouvrage': exutoire_info.get('type_ouvrage') if exutoire_info else None,
+                    'h_seuil': exutoire_info.get('h_seuil') if exutoire_info else None,
+                    'milieu_rec': exutoire_info.get('milieu_rec') if exutoire_info else None,
                     'sens_ecoulement': 'vers_exutoire',
                 },
                 'geometry': mapping(geom_export)

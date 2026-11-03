@@ -108,7 +108,11 @@ class ProcesseurNoeuds:
                         'nom_voie': ligne.get('NOMVOIE', ligne.get('NOM_VOIE', ligne.get('NOM-VOIE'))),
                         'commune': ligne.get('COMMUNE'),
                         'adresse': ligne.get('ADRESSE'),
-                        'elevation': elevation
+                        'elevation': elevation,
+                        'type_ouvrage': ligne.get('TYPEOUVR', ligne.get('TYPE_OUVR', ligne.get('type_ouvrage'))),
+                        'h_seuil': ligne.get('H_de_Seuil', ligne.get('H_DE_SEUIL', ligne.get('h_seuil'))),
+                        'milieu_rec': ligne.get('MILIEUREC', ligne.get('MILIEU_REC', ligne.get('milieu_rec'))),
+                        'zone_collecte': ligne.get('ZONECOLLE', ligne.get('ZONE_COLLE', ligne.get('zone_collecte'))),
                     })
         except Exception as e:
             logger.error(

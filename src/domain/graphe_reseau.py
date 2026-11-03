@@ -110,6 +110,10 @@ class ConstructeurGrapheReseau:
                 nom_voie=row.get('nom_voie', row.get('NOMVOIE', row.get('NOM-VOIE'))),
                 commune=row.get('commune', row.get('COMMUNE')),
                 adresse=row.get('adresse', row.get('ADRESSE')),
+                type_ouvrage=row.get('type_ouvrage', row.get('TYPEOUVR', row.get('TYPE_OUVR'))),
+                h_seuil=row.get('h_seuil', row.get('H_de_Seuil', row.get('H_DE_SEUIL'))),
+                milieu_rec=row.get('milieu_rec', row.get('MILIEUREC', row.get('MILIEU_REC'))),
+                zone_collecte=row.get('zone_collecte', row.get('ZONECOLLE', row.get('ZONE_COLLE'))),
             )
 
         self._construire_index_noeuds(G)
