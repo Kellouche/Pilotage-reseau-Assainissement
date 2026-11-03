@@ -1288,6 +1288,48 @@
                         </div>`;
                     }
 
+                    // Popup et infobulle enrichies pour les stations de relevage / pompage
+                    function stationPopup(feature) {
+                        const p = feature.properties || {};
+                        const code = p.CODEPRR || p.Code || p.code || p.id || '--';
+                        const nom = p.NOMPRR || p.Nom || p.nom || p.NOMVOIE || 'Station de relevage';
+                        const etat = p.ETATFONCT || p.etat || 'En service';
+                        const effluent = p.TYPE_EFFL || p.type_effluent || 'Eaux usées';
+                        const mode = p.FONCTIOP6 || p.mode || 'Refoulement';
+                        const pompe = p.CONSTPOMP || p.pompe || '';
+                        const commande = p.ASSERV || p.commande || '';
+                        const isMarche = String(etat).toLowerCase().includes('marche') || String(etat).toLowerCase().includes('service');
+                        const isArret = String(etat).toLowerCase().includes('arrêt') || String(etat).toLowerCase().includes('arret');
+                        const etatColor = isMarche ? '#16a34a' : (isArret ? '#ef4444' : '#f59e0b');
+
+                        return `<div style="font-family: inherit; font-size: 12.5px; min-width: 220px; color: #1e293b;">
+                            <div style="font-weight: 800; color: #ea580c; font-size: 13.5px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 6px;">
+                                <i class="fas fa-charging-station me-1"></i> Station : ${nom}
+                            </div>
+                            <div style="margin-bottom: 3px;"><b>Code station :</b> <span style="font-weight: 700; color: #0f172a;">${code}</span></div>
+                            <div style="margin-bottom: 3px;"><b>État fonctionnement :</b> <span style="font-weight: 700; color: ${etatColor};">${etat}</span></div>
+                            <div style="margin-bottom: 3px;"><b>Type effluent :</b> ${effluent}</div>
+                            <div style="margin-bottom: 3px;"><b>Mode :</b> ${mode}</div>
+                            ${pompe ? `<div style="margin-bottom: 3px;"><b>Pompe :</b> ${pompe}</div>` : ''}
+                            ${commande ? `<div style="margin-bottom: 3px;"><b>Asservissement :</b> ${commande}</div>` : ''}
+                        </div>`;
+                    }
+
+                    // Popup et infobulle enrichies pour la STEP
+                    function stepPopup(feature) {
+                        const p = feature.properties || {};
+                        const code = p.CODE || p.code || p.id || 'STEP-01';
+                        const nom = p.NOM || p.nom || "Station d'Épuration (STEP)";
+                        return `<div style="font-family: inherit; font-size: 12.5px; min-width: 215px; color: #1e293b;">
+                            <div style="font-weight: 800; color: #16a34a; font-size: 13.5px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 6px;">
+                                <i class="fas fa-recycle me-1"></i> ${nom}
+                            </div>
+                            <div style="margin-bottom: 3px;"><b>Référence SIG :</b> <span style="font-weight: 700; color: #0f172a;">${code}</span></div>
+                            <div style="margin-bottom: 3px;"><b>Fonction :</b> Traitement et épuration des eaux usées</div>
+                            <div style="margin-bottom: 3px;"><b>Statut opérationnel :</b> <span style="color: #16a34a; font-weight: 700;">En exploitation</span></div>
+                        </div>`;
+                    }
+
                     // Popup enrichie pour les rejets et exutoires
                     function rejetPopup(feature) {
                         const p = feature.properties || {};
@@ -1323,14 +1365,26 @@
                                 return L.circleMarker(latlng, styles[type]);
                             },
                             onEachFeature: (feature, layer) => {
-                                if (type === 'regards') {
+                                if (type === 'stations') {
+                                    const html = stationPopup(feature);
+                                    layer.bindPopup(html);
+                                    layer.bindTooltip(html, { sticky: true, opacity: 0.98 });
+                                } else if (type === 'step') {
+                                    const html = stepPopup(feature);
+                                    layer.bindPopup(html);
+                                    layer.bindTooltip(html, { sticky: true, opacity: 0.98 });
+                                } else if (type === 'ouvrages') {
+                                    const html = ouvragePopup(feature);
+                                    layer.bindPopup(html);
+                                    layer.bindTooltip(html, { sticky: true, opacity: 0.98 });
+                                } else if (type === 'rejets') {
+                                    const html = rejetPopup(feature);
+                                    layer.bindPopup(html);
+                                    layer.bindTooltip(html, { sticky: true, opacity: 0.98 });
+                                } else if (type === 'regards') {
                                     const index = window.regardProperties.length;
                                     window.regardProperties.push(feature.properties);
                                     layer.bindPopup(regardPopup(feature, index));
-                                } else if (type === 'ouvrages') {
-                                    layer.bindPopup(ouvragePopup(feature));
-                                } else if (type === 'rejets') {
-                                    layer.bindPopup(rejetPopup(feature));
                                 }
                             }
                         }).addTo(couches[type]);
@@ -1496,6 +1550,7 @@
                                         const sel = document.getElementById('bassin-select');
                                         sel.value = String(cid);
                                         afficherInfoBassin(cid);
+                                        zoomerSurBassin(cid, clusterLayer);
                                     });
 
                                     layer.on('mouseover', function() {
@@ -1518,12 +1573,27 @@
                                         }
                                     });
                                 } else if (feature.properties.type === 'exutoire') {
-                                    const typLabels = { step: '🔴 STEP', station: '🔵 Station', ouvrage: '🟣 Ouvrage', rejet: '🟠 Rejet' };
-                                    const typLabel = typLabels[feature.properties.exutoire_type] || '⚪ Exutoire';
-                                    layer.bindTooltip(
-                                        `<b>Exutoire: ${feature.properties.nom}</b><br>${typLabel}`,
-                                        { sticky: true }
-                                    );
+                                    const p = feature.properties;
+                                    const typLabels = {
+                                        step: '🔴 Station d\'Épuration (STEP)',
+                                        station: '🔵 Station de relevage / pompage',
+                                        ouvrage: '🟣 Ouvrage spécial',
+                                        rejet: '🟠 Rejet naturel (Oued)'
+                                    };
+                                    const typLabel = typLabels[p.exutoire_type] || (p.libelle_type || '⚪ Exutoire');
+                                    const tipHtml = `
+                                        <div style="font-family: inherit; font-size: 12px; min-width: 210px; line-height: 1.45;">
+                                            <div style="font-weight: 800; color: #38bdf8; font-size: 13px; border-bottom: 1px solid rgba(0,0,0,0.1); padding-bottom: 3px; margin-bottom: 5px;">
+                                                <i class="fas fa-sign-out-alt me-1"></i> ${p.nom || 'Exutoire'}
+                                            </div>
+                                            <div><b>Catégorie :</b> ${typLabel}</div>
+                                            <div><b>Bassin rattaché :</b> Bassin N° ${p.cluster_id || '?'}</div>
+                                            ${p.h_seuil ? `<div><b>Seuil $H_s$ :</b> <span style="color:#d97706; font-weight:700;">${p.h_seuil} m</span></div>` : ''}
+                                            ${p.milieu_rec ? `<div><b>Milieu récepteur :</b> ${p.milieu_rec}</div>` : ''}
+                                        </div>
+                                    `;
+                                    layer.bindTooltip(tipHtml, { sticky: true, opacity: 0.98 });
+                                    layer.bindPopup(tipHtml);
                                 } else if (feature.geometry && (feature.geometry.type === 'LineString' || feature.geometry.type === 'MultiLineString')) {
                                     const p = feature.properties;
                                     layer.bindTooltip(
@@ -1764,10 +1834,78 @@
                 const finalCid = cid.startsWith('M_') ? cid : parseInt(cid);
                 highlightCluster(finalCid, clusterLayer);
                 afficherInfoBassin(finalCid);
-                if (_bassinBounds[cid]) {
-                    carte.fitBounds(_bassinBounds[cid], { padding: [60, 60] });
+                zoomerSurBassin(finalCid, clusterLayer);
+            });
+        }
+
+        // ==========================================
+        // CADRAGE ET ZOOM PROPORTIONNEL SUR LE BASSIN VERSANT
+        // ==========================================
+        function zoomerSurBassin(clusterId, clusterLayer) {
+            if (!clusterId || !window.carte) return;
+            const cid = String(clusterId);
+            const clLayer = clusterLayer || window._activeClusterLayer || couches.bassins;
+            if (!clLayer) return;
+
+            // 1. Trouver l'exutoire du cluster (centre de gravité fonctionnel)
+            let exLatLng = null;
+            if (window._activeClusterLayer) {
+                window._activeClusterLayer.eachLayer(l => {
+                    const f = l.feature;
+                    if (f && f.properties && f.properties.type === 'exutoire' && String(f.properties.cluster_id) === cid) {
+                        if (l.getLatLng) exLatLng = l.getLatLng();
+                    }
+                });
+            }
+
+            // 2. Construire la bounding box dense du réseau (conduites + polygone contigu)
+            const bounds = L.latLngBounds();
+            let hasGeom = false;
+
+            clLayer.eachLayer(layer => {
+                const f = layer.feature;
+                if (!f || !f.properties || String(f.properties.cluster_id) !== cid) return;
+
+                // Conduites du cluster
+                if (f.geometry && (f.geometry.type === 'LineString' || f.geometry.type === 'MultiLineString')) {
+                    if (layer.getBounds && layer.getBounds().isValid()) {
+                        const b = layer.getBounds();
+                        if (!exLatLng || carte.distance(b.getCenter(), exLatLng) < 2500) {
+                            bounds.extend(b);
+                            hasGeom = true;
+                        }
+                    }
+                }
+
+                // Polygone du bassin versant urbain (filtre des fragments distants)
+                if (f.properties.type === 'bassin_urbain' && layer.getBounds && layer.getBounds().isValid()) {
+                    const b = layer.getBounds();
+                    if (!exLatLng || carte.distance(b.getCenter(), exLatLng) < 2500) {
+                        bounds.extend(b);
+                        hasGeom = true;
+                    }
                 }
             });
+
+            if (exLatLng) {
+                bounds.extend(exLatLng);
+                hasGeom = true;
+            }
+
+            // Fallback si la recherche n'a pas pu borner
+            if (!hasGeom || !bounds.isValid()) {
+                const fb = window._bassinBounds ? (window._bassinBounds[cid] || window._bassinBounds[String(cid)]) : null;
+                if (fb && fb.isValid && fb.isValid()) bounds.extend(fb);
+            }
+
+            if (bounds.isValid()) {
+                carte.flyToBounds(bounds, {
+                    padding: [50, 50],
+                    maxZoom: 17,
+                    duration: 1.2,
+                    easeLinearity: 0.25
+                });
+            }
         }
 
         function afficherInfoBassin(clusterId) {
@@ -4019,10 +4157,10 @@
 
                         return L.circleMarker(latlng, {
                             pane: 'swmmNodesPane',
-                            radius: 8.0,
+                            radius: 5.0,
                             color: '#ffffff',
                             fillColor: isFlooded ? '#ef4444' : '#f97316',
-                            weight: 2.5,
+                            weight: 1.5,
                             opacity: 1,
                             fillOpacity: 0.95
                         });
@@ -4681,14 +4819,14 @@
                     <div style="display: flex; gap: 12px; align-items: center;">
                         <input type="number" id="sim-pente-moyenne" step="0.1" min="0.1" max="15.0" value="1.0" style="width: 95px; padding: 8px 10px; background: #0f172a; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; color: #f8fafc; font-size: 0.95rem; font-weight: 700; text-align: center;">
                         <span style="font-size: 0.78rem; color: #94a3b8; line-height: 1.35;">
-                            Pente hydraulique amont ➔ aval pour calculer la capacité gravitaire de Manning ($Q_{\text{full}}$). Évite l'arrêt de la simulation si le SIG est dépourvu de cotes altimétriques.
+                            Pente hydraulique amont ➔ aval pour calculer la capacité gravitaire de Manning (Q<sub>full</sub>). Évite l'arrêt de la simulation si le SIG est dépourvu de cotes altimétriques.
                         </span>
                     </div>
                 </div>
 
                 <!-- Résumé du modèle -->
                 <div style="background: rgba(2, 132, 199, 0.08); border: 1px solid rgba(2, 132, 199, 0.25); border-radius: 10px; padding: 12px 16px; margin-bottom: 20px; font-size: 0.82rem; color: #94a3b8; line-height: 1.5;">
-                    <strong style="color: #38bdf8;">Configuration appliquée :</strong> Résolution complète Saint-Venant 1D (Dynamic Wave) &bull; Découpage surfacique en <b>sous-bassins versants Voronoï</b> &bull; Infiltration d'eau selon <b>Horton</b> ($f_0=75, f_c=10\text{ mm/h}$) &bull; Unités métriques CMS.
+                    <strong style="color: #38bdf8;">Configuration appliquée :</strong> Résolution complète Saint-Venant 1D (Dynamic Wave) &bull; Découpage surfacique en <b>sous-bassins versants Voronoï</b> &bull; Infiltration d'eau selon <b>Horton</b> (f₀ = 75 mm/h, fc = 10 mm/h) &bull; Unités métriques CMS.
                 </div>
 
                 <!-- Bouton d'action -->

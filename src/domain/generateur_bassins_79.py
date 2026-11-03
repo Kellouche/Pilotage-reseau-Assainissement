@@ -182,11 +182,22 @@ def partitionner_79_bassins_versants(
         is_orphelin = False
         dist_snap = 0.0
 
-        if str_code in node_to_exutoire:
-            assigned_ex = node_to_exutoire[str_code]
-        elif str(raw_code) in node_to_exutoire:
-            assigned_ex = node_to_exutoire[str(raw_code)]
-        else:
+        assigned_ex = None
+        cand_ex = node_to_exutoire.get(str(raw_code)) or node_to_exutoire.get(str_code)
+        if cand_ex:
+            # Vérification anti-collision : si le regard a le même identifiant textuel qu'un exutoire physique
+            # (ex: Ouvrage 11 vs Regard 11.0 distant de 3 km), on n'accepte la correspondance directe
+            # que s'ils sont physiquement au même emplacement (< 60 m).
+            if cand_ex in exutoires_physiques:
+                ex_info = exutoires_physiques[cand_ex]
+                ex_x = ex_info.get('x')
+                ex_y = ex_info.get('y')
+                if ex_x is not None and ex_y is not None:
+                    if (str_code == str(cand_ex) or str(raw_code) == str(cand_ex)) and pt.distance(Point(float(ex_x), float(ex_y))) > 60.0:
+                        cand_ex = None
+            assigned_ex = cand_ex
+
+        if not assigned_ex:
             # Orphelin -> Snapper au regard connecté le plus proche
             is_orphelin = True
             n_idx = conn_tree.nearest(pt)
@@ -258,6 +269,17 @@ def partitionner_79_bassins_versants(
 
         if geoms:
             geom_union = unary_union(geoms)
+            # Nettoyage anti-parasite : si MultiPolygon, éliminer les fragments aberrants distants de l'exutoire (> 1500m)
+            if isinstance(geom_union, MultiPolygon):
+                ex_x = ex_info.get('x')
+                ex_y = ex_info.get('y')
+                if ex_x is not None and ex_y is not None:
+                    ex_pt = Point(float(ex_x), float(ex_y))
+                    proches = [p for p in geom_union.geoms if p.distance(ex_pt) <= 1500.0]
+                    if proches:
+                        geom_union = unary_union(proches)
+                    else:
+                        geom_union = max(geom_union.geoms, key=lambda p: p.area)
             area_m2 = round(float(geom_union.area), 2)
             area_ha = round(area_m2 / 10000.0, 2)
         else:
