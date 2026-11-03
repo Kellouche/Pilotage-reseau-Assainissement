@@ -512,10 +512,12 @@ class MoteurSWMM:
 
         conduit_lines = []
         xsec_lines = []
+        conduit_endpoints = {}
         for idx, c in canalisations.iterrows():
             cid = f"C_{idx+1}"
             u_node = _clean_node_id(c.get("ID_AMONT"))
             d_node = _clean_node_id(c.get("ID_AVAL"))
+            conduit_endpoints[cid] = {"u": u_node, "d": d_node}
             length = float(c["Longeur"]) if ("Longeur" in c and c["Longeur"] > 0) else float(c.geometry.length)
             length = max(1.0, round(length, 2))
             rough = 0.013  # Manning béton standard
@@ -622,6 +624,7 @@ class MoteurSWMM:
             "pente_moyenne_pct": pente_moyenne_pct,
             "bbox": bbox_wgs84,
             "simulated_nodes": list(clean_target_nodes),
+            "conduit_endpoints": conduit_endpoints,
         }
 
         return "\n".join(lines), meta
@@ -922,8 +925,11 @@ class MoteurSWMM:
                             color = "#10b981"  # Vert (< 50%)
                             label = "Normal (< 50%)"
 
+                        c_endpoints = meta.get("conduit_endpoints", {}).get(cid, {})
                         kpis["conduit_results"][cid] = {
                             "link_id": cid,
+                            "u_node": c_endpoints.get("u"),
+                            "d_node": c_endpoints.get("d"),
                             "max_flow_cms": flow_cms,
                             "max_velocity_ms": veloc_ms,
                             "flow_ratio": round(q_ratio, 2),

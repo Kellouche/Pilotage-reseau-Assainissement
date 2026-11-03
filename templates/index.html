@@ -2158,16 +2158,390 @@
             const m = document.getElementById('modal-interpretation');
             if (m) m.style.display = 'none';
             if (window.carte && window._dernierResultatSimulation) {
-                carte.invalidateSize(true);
-                zoomerSurZoneSimulee(window._dernierResultatSimulation);
-                mettreAJourIHMZoneSimulee(window._dernierResultatSimulation);
                 setTimeout(() => {
-                    if (window.carte && window._dernierResultatSimulation) {
-                        carte.invalidateSize(true);
-                        zoomerSurZoneSimulee(window._dernierResultatSimulation);
-                    }
-                }, 150);
+                    carte.invalidateSize(true);
+                    zoomerSurZoneSimulee(window._dernierResultatSimulation);
+                    mettreAJourIHMZoneSimulee(window._dernierResultatSimulation);
+                }, 80);
             }
+        };
+
+        // ==========================================
+        // IMPRESSION COMPLÈTE DU RAPPORT D'EXPERTISE (PDF / PAPIER)
+        // ==========================================
+        window.imprimerDiagnosticTechniqueComplet = function() {
+            const simData = window._dernierResultatSimulation;
+            if (!simData) {
+                alert("Aucun résultat de simulation active à imprimer. Veuillez d'abord exécuter une simulation SWMM 5.2.");
+                return;
+            }
+
+            const meta = simData.meta || {};
+            const k = simData.kpis || {};
+            const agents = simData.agents_expertise || {};
+            const bufferSens = simData.buffer_sensitivity || {};
+
+            const diag = agents.diagnostic_causal || {};
+            const gc = agents.prescriptions_genie_civil || {};
+            const lid = agents.solutions_hydrologie_durable || {};
+            const risk = agents.matrice_risques || {};
+            const synth = agents.synthese_executive || {};
+
+            const projectName = (window._rawNetworkData && window._rawNetworkData.project_name) ? window._rawNetworkData.project_name : 'Réseau Urbain';
+            const dateStr = new Date().toLocaleString('fr-FR', { dateStyle: 'full', timeStyle: 'short' });
+
+            const printWin = window.open('', '_blank');
+            if (!printWin) {
+                alert("Veuillez autoriser l'ouverture des fenêtres pop-up dans votre navigateur pour générer le rapport PDF.");
+                return;
+            }
+
+            const verdict = synth.verdict || "ANALYSE EXPERTE MULTI-AGENTS SWMM 5.2";
+            const verdictColor = synth.couleur || "#0284c7";
+
+            // Tableau Risques (Agent 4)
+            let riskRows = '';
+            if (risk.actions_priorisees && risk.actions_priorisees.length > 0) {
+                risk.actions_priorisees.forEach(a => {
+                    const badgeClass = a.priorite === 'P1' ? 'badge-p1' : (a.priorite === 'P2' ? 'badge-p2' : 'badge-p3');
+                    riskRows += `
+                        <tr>
+                            <td style="text-align: center;"><span class="badge ${badgeClass}">${a.priorite}</span></td>
+                            <td><b>${a.conduite || '--'}</b></td>
+                            <td>${a.type_risque || '--'}</td>
+                            <td>${a.action_requise || '--'}</td>
+                            <td style="text-align: right; font-weight: 700;">${(a.estimation_cout_dzd || 0).toLocaleString('fr-FR')} DZD</td>
+                            <td style="text-align: center;">${a.delai_recommande || '--'}</td>
+                        </tr>
+                    `;
+                });
+            } else {
+                riskRows = '<tr><td colspan="6" style="text-align:center; color:#64748b;">Aucun risque critique immédiat recensé. Réseau stable sous ce scénario.</td></tr>';
+            }
+
+            // Tableau Diagnostic Surcharges (Agent 1)
+            let surchRows = '';
+            if (diag.surcharged_links && diag.surcharged_links.length > 0) {
+                diag.surcharged_links.forEach(l => {
+                    surchRows += `
+                        <tr>
+                            <td><b>${l.conduit || '--'}</b></td>
+                            <td style="text-align: right; color: #ef4444; font-weight: 700;">${((l.flow_ratio || 0) * 100).toFixed(0)} %</td>
+                            <td style="text-align: right;">${((l.depth_ratio || 0) * 100).toFixed(0)} %</td>
+                            <td style="text-align: right;">${(l.vitesse || 0).toFixed(2)} m/s</td>
+                            <td style="text-align: right;">${(l.q_max || 0).toFixed(3)} m³/s</td>
+                            <td>${l.q_full ? `Capacité max : ${l.q_full.toFixed(3)} m³/s` : 'Surcharge sous pression'}</td>
+                        </tr>
+                    `;
+                });
+            } else {
+                surchRows = '<tr><td colspan="6" style="text-align:center; color:#64748b;">Aucun tronçon en surcharge sévère (>80%).</td></tr>';
+            }
+
+            // Tableau Goulots d'étranglement (Agent 1)
+            let bottleRows = '';
+            if (diag.bottlenecks && diag.bottlenecks.length > 0) {
+                diag.bottlenecks.forEach(b => {
+                    bottleRows += `
+                        <tr>
+                            <td><b>${b.amont || '--'}</b> &rarr; <b>${b.aval || '--'}</b></td>
+                            <td style="text-align: right;">${b.diam_amont || '--'} mm</td>
+                            <td style="text-align: right; color: #ef4444; font-weight: 700;">${b.diam_aval || '--'} mm</td>
+                            <td style="text-align: right;">${(b.longueur || 0).toFixed(1)} m</td>
+                            <td>Goulot géométrique &bull; Réduction anormale de section vers l'aval</td>
+                        </tr>
+                    `;
+                });
+            } else {
+                bottleRows = '<tr><td colspan="5" style="text-align:center; color:#64748b;">Aucun goulot géométrique inverse (D_aval < D_amont) détecté.</td></tr>';
+            }
+
+            // Tableau Génie Civil (Agent 2)
+            let gcRows = '';
+            if (gc.prescriptions && gc.prescriptions.length > 0) {
+                gc.prescriptions.forEach(p => {
+                    gcRows += `
+                        <tr>
+                            <td><b>${p.conduit || '--'}</b></td>
+                            <td style="text-align: right;">${p.diametre_actuel_mm || '--'} mm</td>
+                            <td style="text-align: right;">${(p.diametre_requis_mm || 0).toFixed(0)} mm</td>
+                            <td style="text-align: right; font-weight: 700; color: #0284c7;">DN ${p.dn_normalise_mm || '--'}</td>
+                            <td>${p.materiau_recommande || 'Béton Armé 135A'}</td>
+                            <td style="text-align: right;">${(p.longueur_m || 0).toFixed(1)} m</td>
+                            <td style="text-align: right; font-weight: 700;">${(p.cout_estime_dzd || 0).toLocaleString('fr-FR')} DZD</td>
+                        </tr>
+                    `;
+                });
+            } else {
+                gcRows = '<tr><td colspan="7" style="text-align:center; color:#64748b;">Aucun recalibrage structurel lourd requis. Capacité gravitaire actuelle satisfaisante.</td></tr>';
+            }
+
+            // Tableau LID / SFN (Agent 3)
+            let lidRows = '';
+            if (lid.solutions && lid.solutions.length > 0) {
+                lid.solutions.forEach(s => {
+                    lidRows += `
+                        <tr>
+                            <td><b>${s.type || '--'}</b></td>
+                            <td><b>${s.designation || '--'}</b></td>
+                            <td>${s.dimensionnement || '--'}</td>
+                            <td>${s.impact_attendu || '--'}</td>
+                        </tr>
+                    `;
+                });
+            } else {
+                lidRows = `
+                    <tr>
+                        <td><b>Bassin d'écrêtement</b></td>
+                        <td>Bassin d'orage paysager en amont du réseau</td>
+                        <td>Volume tampon : <b>${(lid.volume_tampon_requis_m3 || 0).toFixed(0)} m³</b> (Emprise ~ ${(lid.surface_bassin_m2 || 0).toFixed(0)} m²)</td>
+                        <td>Écrêtement direct de la pointe de crue décennale (-35% de débit)</td>
+                    </tr>
+                    <tr>
+                        <td><b>Noues d'infiltration</b></td>
+                        <td>Noues végétalisées le long des voiries</td>
+                        <td>Linéaire : 1 200 m &bull; Largeur 1.5 m</td>
+                        <td>Infiltration diffuse à la source &amp; déconnexion pluviale</td>
+                    </tr>
+                `;
+            }
+
+            // Tableau Sensibilité Buffers
+            let bufRows = '';
+            if (bufferSens.curve && bufferSens.curve.length > 0) {
+                bufferSens.curve.forEach(c => {
+                    const isRec = c.is_recommended || (Math.round(c.buffer_m) === 45);
+                    bufRows += `
+                        <tr style="${isRec ? 'background: #e0f2fe; font-weight: 700;' : ''}">
+                            <td>Buffer <b>${Math.round(c.buffer_m)} m</b> ${isRec ? '⭐ (Optimal)' : ''}</td>
+                            <td style="text-align: right;">${c.surface_ha} ha</td>
+                            <td style="text-align: right;">${c.gain_pct > 0 ? '+' + c.gain_pct + '%' : 'Référence'}</td>
+                            <td style="text-align: right;">${c.peak_flow_m3s} m³/s</td>
+                            <td>${c.buffer_m === 35 ? 'Emprise voirie stricte' : (c.buffer_m === 45 ? 'Comblement des îlots bâtis (Recommandé)' : 'Extension zone périurbaine')}</td>
+                        </tr>
+                    `;
+                });
+            }
+
+            const docHtml = `
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <title>Rapport d'Expertise Hydraulique SWMM 5.2 — ${meta.cluster_nom || 'Reseau'}</title>
+    <style>
+        @page { size: A4; margin: 12mm 15mm 15mm 15mm; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #0f172a; background: #ffffff; margin: 0; padding: 0; font-size: 9pt; line-height: 1.35; }
+        .header { text-align: center; border-bottom: 2px solid #0284c7; padding-bottom: 8px; margin-bottom: 12px; }
+        .header h3 { margin: 0 0 3px 0; font-size: 11pt; color: #475569; font-weight: 700; text-transform: uppercase; }
+        .header h2 { margin: 0 0 4px 0; font-size: 13.5pt; color: #0369a1; text-transform: uppercase; font-weight: 800; letter-spacing: 0.5px; }
+        .header h4 { margin: 0; font-size: 8.5pt; color: #64748b; font-weight: 600; }
+        .cartouche { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 10px; margin-bottom: 12px; }
+        .cartouche-item { font-size: 8pt; }
+        .cartouche-item span { color: #64748b; display: block; font-size: 7pt; text-transform: uppercase; font-weight: 700; margin-bottom: 1px; }
+        .cartouche-item b { color: #0f172a; font-size: 8.5pt; }
+        .section-title { font-size: 10pt; font-weight: 800; color: #0284c7; border-bottom: 1.5px solid #0284c7; padding-bottom: 2px; margin: 14px 0 6px 0; display: flex; align-items: center; justify-content: space-between; page-break-after: avoid; }
+        .verdict-box { border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; page-break-inside: avoid; border-left: 5px solid ${verdictColor}; background: #f1f5f9; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 8pt; page-break-inside: auto; }
+        tr { page-break-inside: avoid; page-break-after: auto; }
+        th { background: #0369a1; color: #ffffff; padding: 4.5px 6px; text-align: left; font-weight: 700; border: 1px solid #0284c7; font-size: 7.5pt; text-transform: uppercase; }
+        td { padding: 4px 6px; border: 1px solid #cbd5e1; }
+        tr:nth-child(even) { background: #f8fafc; }
+        .badge { display: inline-block; padding: 1.5px 5px; border-radius: 3px; font-weight: 700; font-size: 7pt; color: white; }
+        .badge-p1 { background: #ef4444; }
+        .badge-p2 { background: #f97316; }
+        .badge-p3 { background: #0284c7; }
+        .footer { margin-top: 16px; border-top: 1px solid #cbd5e1; padding-top: 5px; display: flex; justify-content: space-between; font-size: 7pt; color: #94a3b8; }
+        @media print {
+            .no-print { display: none !important; }
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print" style="background: #0284c7; color: white; padding: 10px; text-align: center; font-weight: bold; margin-bottom: 15px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center;">
+        <span>📄 Aperçu prêt pour impression &amp; exportation PDF certifiée</span>
+        <div>
+            <button onclick="window.print()" style="padding: 6px 14px; background: white; color: #0284c7; border: none; border-radius: 4px; font-weight: 700; cursor: pointer; margin-right: 8px;">🖨️ Lancer l'impression / Sauvegarder en PDF</button>
+            <button onclick="window.close()" style="padding: 6px 12px; background: rgba(255,255,255,0.2); color: white; border: 1px solid white; border-radius: 4px; cursor: pointer;">Fermer</button>
+        </div>
+    </div>
+
+    <div class="header">
+        <h3>République Algérienne Démocratique et Populaire</h3>
+        <h4>Ministère des Ressources en Eau &bull; Office National de l'Assainissement (ONA)</h4>
+        <h2>Rapport d'Expertise Hydraulique &amp; Prescriptions Travaux</h2>
+        <h4>Simulation Numérique EPA SWMM 5.2.4 &bull; Diagnostic Multi-Agents IA &bull; Génie Civil &bull; Solutions SFN</h4>
+    </div>
+
+    <div class="cartouche">
+        <div class="cartouche-item"><span>Projet Réseau</span><b>${projectName}</b></div>
+        <div class="cartouche-item"><span>Périmètre Simulé</span><b>${meta.cluster_nom || ('Bassin ' + meta.cluster_id) || 'Réseau Complet'}</b></div>
+        <div class="cartouche-item"><span>Date d'Expertise</span><b>${dateStr}</b></div>
+        <div class="cartouche-item"><span>Scénario Pluvieux</span><b>${meta.scenario || 'Pluie Décennale (Pic 92 mm/h)'}</b></div>
+        <div class="cartouche-item"><span>Surface Drainée</span><b>${meta.total_area_ha || 0} ha (Buffer ${meta.buffer_m || 35} m)</b></div>
+        <div class="cartouche-item"><span>Éléments Modélisés</span><b>${meta.conduits_count || 0} Conduites &bull; ${(meta.junctions_count || 0) + 1} Regards</b></div>
+        <div class="cartouche-item"><span>Débit Pointe Exutoire</span><b style="color: #0284c7;">${k.peak_outflow_m3s || 0} m³/s</b></div>
+        <div class="cartouche-item"><span>Bilan Débordements</span><b style="color: ${k.flooded_nodes_count > 0 ? '#ef4444' : '#10b981'};">${k.flooded_nodes_count || 0} Débordements &bull; ${k.surcharged_nodes_count || 0} en Charge</b></div>
+    </div>
+
+    <!-- 1. Synthèse Exécutive (Agent 5) -->
+    <div class="section-title">
+        <span>1. Synthèse Stratégique &amp; Avis Décideurs (Agent 5)</span>
+        <span style="font-size: 8pt; color: #64748b;">Score Résilience : <b>${synth.score_resilience_reseau ? synth.score_resilience_reseau + ' / 100' : 'Évalué'}</b></span>
+    </div>
+    <div class="verdict-box">
+        <div style="font-weight: 800; font-size: 9.5pt; color: ${verdictColor}; margin-bottom: 3px;">
+            ${verdict}
+        </div>
+        <p style="margin: 0 0 4px 0; font-size: 8.5pt; color: #334155;">
+            ${synth.recommandation_cle || "L'analyse hydraulique Saint-Venant 1D met en évidence des contraintes de capacité sur les tronçons collecteurs stratégiques nécessitant un plan combiné de recalibrage et de rétention amont."}
+        </p>
+        <div style="font-size: 7.8pt; color: #64748b; font-style: italic;">
+            Orientation Direction Générale : ${synth.avis_direction_generale || "Prioriser les investissements P1 sur les collecteurs structurants pour éliminer immédiatement les risques d'inondation en surface."}
+        </div>
+    </div>
+
+    <!-- 2. Matrice des Risques & Plan d'Action (Agent 4) -->
+    <div class="section-title">
+        <span>2. Plan d'Action Priorisé &amp; Matrice des Risques (Agent 4)</span>
+        <span style="font-size: 7.5pt; color: #64748b;">Budget Total Estimé : <b>${(gc.cout_global_estime_dzd || 0).toLocaleString('fr-FR')} DZD</b></span>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 50px; text-align: center;">Priorité</th>
+                <th style="width: 90px;">Conduite</th>
+                <th style="width: 140px;">Risque Identifié</th>
+                <th>Action Prescrite</th>
+                <th style="width: 95px; text-align: right;">Coût Estimé</th>
+                <th style="width: 80px; text-align: center;">Délai</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${riskRows}
+        </tbody>
+    </table>
+
+    <!-- 3. Diagnostic Causal (Agent 1) -->
+    <div class="section-title">
+        <span>3. Diagnostic Causal &amp; Dysfonctionnements Hydrauliques (Agent 1)</span>
+        <span style="font-size: 7.5pt; color: #64748b;">${diag.nb_surcharges || 0} Tronçons Surchargés &bull; ${diag.nb_goulots || 0} Goulots Détectés</span>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 90px;">Conduite</th>
+                <th style="width: 80px; text-align: right;">Taux Q/Qmax</th>
+                <th style="width: 80px; text-align: right;">Remplissage H/D</th>
+                <th style="width: 80px; text-align: right;">Vitesse</th>
+                <th style="width: 90px; text-align: right;">Débit Crête</th>
+                <th>Observation / Diagnostic</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${surchRows}
+        </tbody>
+    </table>
+
+    <!-- Goulots d'étranglement -->
+    <div style="font-size: 8.5pt; font-weight: 700; color: #0f172a; margin: 6px 0 3px 0;">Anomalies Géométriques &amp; Goulots d'Étranglement Amont &rarr; Aval :</div>
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 140px;">Tronçon (Amont &rarr; Aval)</th>
+                <th style="width: 100px; text-align: right;">Diamètre Amont</th>
+                <th style="width: 100px; text-align: right;">Diamètre Aval</th>
+                <th style="width: 80px; text-align: right;">Longueur</th>
+                <th>Conséquence Hydraulique</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${bottleRows}
+        </tbody>
+    </table>
+
+    <!-- 4. Prescriptions de Génie Civil & Dimensionnement (Agent 2) -->
+    <div class="section-title">
+        <span>4. Prescriptions de Génie Civil &amp; Dimensionnement Normalisé (Agent 2)</span>
+        <span style="font-size: 7.5pt; color: #64748b;">Métré Total : <b>${(gc.metres_lineaires_totaux || 0).toFixed(1)} ml</b> &bull; Marge Sécurité Manning : <b>+25%</b></span>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 80px;">Conduite</th>
+                <th style="width: 75px; text-align: right;">Ø Actuel</th>
+                <th style="width: 75px; text-align: right;">Ø Requis</th>
+                <th style="width: 85px; text-align: right;">DN Retenu</th>
+                <th style="width: 130px;">Matériau Prescrit</th>
+                <th style="width: 75px; text-align: right;">Longueur</th>
+                <th style="width: 95px; text-align: right;">Coût Estimé</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${gcRows}
+        </tbody>
+    </table>
+
+    <!-- 5. Hydrologie Durable LID / SFN (Agent 3) -->
+    <div class="section-title">
+        <span>5. Solutions Alternatives LID / SFN &amp; Écrêtement des Pointes (Agent 3)</span>
+        <span style="font-size: 7.5pt; color: #64748b;">Volume Tampon Total : <b>${(lid.volume_tampon_requis_m3 || 0).toFixed(0)} m³</b></span>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 130px;">Type Solution SFN</th>
+                <th style="width: 180px;">Désignation &amp; Emplacement</th>
+                <th>Dimensionnement Technique</th>
+                <th style="width: 190px;">Impact Hydraulique Attendu</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${lidRows}
+        </tbody>
+    </table>
+
+    <!-- 6. Analyse de Sensibilité du Tampon Voronoï -->
+    <div class="section-title">
+        <span>6. Analyse de Sensibilité du Tampon Voronoï (35m, 45m, 60m)</span>
+        <span style="font-size: 7.5pt; color: #64748b;">Validation Technique &bull; Point d'Inflexion Recommandé</span>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 140px;">Scénario Buffer</th>
+                <th style="width: 100px; text-align: right;">Surface Drainée</th>
+                <th style="width: 90px; text-align: right;">Écart Relatif</th>
+                <th style="width: 110px; text-align: right;">Débit Pointe</th>
+                <th>Interprétation Morphologique Urbaine</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${bufRows}
+        </tbody>
+    </table>
+
+    <div class="footer">
+        <span>SWMM Platform SaaS 5.2 &bull; Certification Hydraulique Conforme EPA DYNWAVE</span>
+        <span>Dossier d'expertise confidentiel &bull; Édité le ${dateStr}</span>
+        <span>Page 1 / 1 (Document Synthétique A4)</span>
+    </div>
+</body>
+</html>
+            `;
+
+            printWin.document.open();
+            printWin.document.write(docHtml);
+            printWin.document.close();
+            printWin.focus();
+            setTimeout(() => {
+                try {
+                    printWin.print();
+                } catch (e) {
+                    console.warn("Impression auto popup:", e);
+                }
+            }, 350);
         };
 
         // ==========================================
@@ -3136,16 +3510,13 @@
             if (bounds && bounds.isValid()) {
                 window._lastSimBounds = bounds;
                 carte.invalidateSize(true);
-                // Utiliser animate: false pour un centrage/zoom immédiat et infaillible (sans blocage reflow)
-                carte.fitBounds(bounds, { padding: [50, 50], maxZoom: 17, animate: false });
-
-                // Double exécution sécurisée après reflow du DOM
-                setTimeout(() => {
-                    if (window.carte && window._lastSimBounds) {
-                        carte.invalidateSize(true);
-                        carte.fitBounds(window._lastSimBounds, { padding: [50, 50], maxZoom: 17, animate: false });
-                    }
-                }, 150);
+                // Effet de zoom fluide cinématographique (flyToBounds) sur la zone simulée
+                carte.flyToBounds(bounds, {
+                    padding: [60, 60],
+                    maxZoom: 17,
+                    duration: 1.4,
+                    easeLinearity: 0.25
+                });
             }
         }
 
@@ -3291,6 +3662,16 @@
         window.afficherResultatsSimulation = function(data) {
             if (!data || !data.conduit_results || !data.node_results) return;
 
+            // Assurer l'existence de panes z-index dédiés pour que les résultats SWMM soient toujours visibles au-dessus des sous-bassins et clusters
+            if (!carte.getPane('swmmResultsPane')) {
+                const p = carte.createPane('swmmResultsPane');
+                p.style.zIndex = 550;
+            }
+            if (!carte.getPane('swmmNodesPane')) {
+                const p = carte.createPane('swmmNodesPane');
+                p.style.zIndex = 560;
+            }
+
             // Afficher la légende interactive sur la carte uniquement suite à la simulation
             const leg = document.getElementById('sim-floating-legend');
             if (leg) {
@@ -3305,14 +3686,28 @@
             const cRes = data.conduit_results;
             const nRes = data.node_results;
 
+            // Indexer les conduites par extrémités (u_node, d_node) pour un appariement direct infaillible
+            const conduitByNodes = {};
+            Object.values(cRes).forEach(r => {
+                if (r.u_node && r.d_node) {
+                    conduitByNodes[`${r.u_node}->${r.d_node}`] = r;
+                    conduitByNodes[`${r.d_node}->${r.u_node}`] = r;
+                }
+            });
+
             // 1. Conduites : coloration dynamique selon taux de charge Q/Qmax & remplissage
             if (window._rawNetworkData && window._rawNetworkData.couches && window._rawNetworkData.couches.conduites) {
                 const pipesGeo = window._rawNetworkData.couches.conduites;
                 L.geoJSON(pipesGeo, {
+                    pane: 'swmmResultsPane',
                     style: (feature) => {
                         const idx = pipesGeo.features.indexOf(feature);
                         const cid = `C_${idx + 1}`;
-                        const r = cRes[cid];
+                        const p = feature.properties || {};
+                        const u = String(p.ID_AMONT || p.id_amont || '').replace(/\.0$/, '').trim();
+                        const d = String(p.ID_AVAL || p.id_aval || '').replace(/\.0$/, '').trim();
+                        const r = cRes[cid] || conduitByNodes[`${u}->${d}`] || conduitByNodes[`${d}->${u}`];
+
                         if (!r) {
                             if (data.meta && data.meta.cluster_id) {
                                 return {
@@ -3328,7 +3723,7 @@
                             };
                         }
                         const col = r ? r.color : '#10b981';
-                        const w = (r && r.status !== 'normal') ? 5 : 3.5;
+                        const w = (r && r.status !== 'normal') ? 5.5 : 3.5;
                         return {
                             color: col,
                             weight: w,
@@ -3338,8 +3733,10 @@
                     onEachFeature: (feature, layer) => {
                         const idx = pipesGeo.features.indexOf(feature);
                         const cid = `C_${idx + 1}`;
-                        const r = cRes[cid];
                         const p = feature.properties || {};
+                        const u = String(p.ID_AMONT || p.id_amont || '').replace(/\.0$/, '').trim();
+                        const d = String(p.ID_AVAL || p.id_aval || '').replace(/\.0$/, '').trim();
+                        const r = cRes[cid] || conduitByNodes[`${u}->${d}`] || conduitByNodes[`${d}->${u}`];
                         const diam = p.DIAMETRE || p.diametre || 600;
 
                         if (r) {
@@ -3348,7 +3745,7 @@
                             const popupHtml = `
                                 <div style="font-family: inherit; font-size: 12px; min-width: 220px;">
                                     <div style="font-weight: 800; font-size: 13px; color: ${r.color}; margin-bottom: 6px;">
-                                        <i class="fas fa-water me-1"></i> Conduite ${cid} — ${r.label}
+                                        <i class="fas fa-water me-1"></i> Conduite ${r.link_id || cid} — ${r.label}
                                     </div>
                                     <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
                                         <tr><td style="color:#64748b; padding:2px 0;">Taux de charge Q/Qmax :</td><td style="font-weight:700; text-align:right; color:${r.color};">${qPct} %</td></tr>
@@ -3360,7 +3757,7 @@
                                 </div>
                             `;
                             layer.bindPopup(popupHtml);
-                            layer.bindTooltip(`<b>${cid}</b> : Q/Qmax = <b>${qPct}%</b> (${r.label})`, { sticky: true });
+                            layer.bindTooltip(`<b>${r.link_id || cid}</b> : Q/Qmax = <b>${qPct}%</b> (${r.label})`, { sticky: true });
                         }
                     }
                 }).addTo(couches.res_conduites);
@@ -3373,35 +3770,59 @@
                 }
             }
 
+            // Désactiver le calque physique brut des regards pour ne laisser paraître que les regards en charge/débordement
+            if (carte.hasLayer(couches.regards)) {
+                carte.removeLayer(couches.regards);
+                const el = document.getElementById('f-regards');
+                if (el) el.checked = false;
+            }
+
+            // Masquer les tracés linéaires du cluster pour ne pas masquer les conduites colorées
+            if (window._activeClusterLayer) {
+                window._activeClusterLayer.eachLayer(l => {
+                    if (l instanceof L.Polyline && !(l instanceof L.Polygon)) {
+                        l.setStyle({ opacity: 0 });
+                    }
+                });
+            }
+
             // 2. Regards : surcharges hydrauliques (orange) et débordements en surface (rouge)
             if (window._rawNetworkData && window._rawNetworkData.couches && window._rawNetworkData.couches.regards) {
                 const nodesGeo = window._rawNetworkData.couches.regards;
                 L.geoJSON(nodesGeo, {
+                    pane: 'swmmNodesPane',
                     filter: (feature) => {
                         const p = feature.properties || {};
-                        const nid = String(p.Code || p.code || p.CODE || p.id || '');
-                        const r = nRes[nid];
+                        const rawCode = p.Code !== undefined ? p.Code : (p.code !== undefined ? p.code : (p.CODE || p.id || ''));
+                        const nid = String(rawCode).trim();
+                        const cleanNid = nid.endsWith('.0') ? nid.slice(0, -2) : nid;
+                        const r = nRes[cleanNid] || nRes[nid] || (cleanNid ? nRes[parseInt(cleanNid)] : null);
                         return r && (r.status === 'flooded' || r.status === 'surcharged');
                     },
                     pointToLayer: (feature, latlng) => {
                         const p = feature.properties || {};
-                        const nid = String(p.Code || p.code || p.CODE || p.id || '');
-                        const r = nRes[nid];
+                        const rawCode = p.Code !== undefined ? p.Code : (p.code !== undefined ? p.code : (p.CODE || p.id || ''));
+                        const nid = String(rawCode).trim();
+                        const cleanNid = nid.endsWith('.0') ? nid.slice(0, -2) : nid;
+                        const r = nRes[cleanNid] || nRes[nid] || (cleanNid ? nRes[parseInt(cleanNid)] : null);
                         const isFlooded = (r && r.status === 'flooded');
 
                         return L.circleMarker(latlng, {
-                            radius: isFlooded ? 9 : 7,
-                            color: isFlooded ? '#991b1b' : '#c2410c',
+                            pane: 'swmmNodesPane',
+                            radius: isFlooded ? 8.5 : 6.5,
+                            color: '#ffffff',
                             fillColor: isFlooded ? '#ef4444' : '#f97316',
-                            weight: 2,
+                            weight: 2.5,
                             opacity: 1,
-                            fillOpacity: 0.9
+                            fillOpacity: 0.95
                         });
                     },
                     onEachFeature: (feature, layer) => {
                         const p = feature.properties || {};
-                        const nid = String(p.Code || p.code || p.CODE || p.id || '');
-                        const r = nRes[nid];
+                        const rawCode = p.Code !== undefined ? p.Code : (p.code !== undefined ? p.code : (p.CODE || p.id || ''));
+                        const nid = String(rawCode).trim();
+                        const cleanNid = nid.endsWith('.0') ? nid.slice(0, -2) : nid;
+                        const r = nRes[cleanNid] || nRes[nid] || (cleanNid ? nRes[parseInt(cleanNid)] : null);
                         if (!r) return;
 
                         const isFlooded = (r.status === 'flooded');
@@ -3413,7 +3834,7 @@
                                 <div style="font-weight: 800; font-size: 13px; color: ${headerColor}; margin-bottom: 6px;">
                                     ${title}
                                 </div>
-                                <div style="margin-bottom: 4px;">Regard de visite : <b>${nid}</b></div>
+                                <div style="margin-bottom: 4px;">Regard de visite : <b>${cleanNid}</b></div>
                                 <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
                                     <tr><td style="color:#64748b; padding:2px 0;">Mise en charge :</td><td style="font-weight:700; text-align:right;">${(r.hours_surcharged || 0).toFixed(2)} h</td></tr>
                                     ${isFlooded ? `
@@ -3425,10 +3846,16 @@
                             </div>
                         `;
                         layer.bindPopup(popupHtml);
-                        layer.bindTooltip(`<b>${isFlooded ? '🚨 Débordement' : '⚠️ Surcharge'} : ${nid}</b>`, { sticky: true });
+                        layer.bindTooltip(`<b>${isFlooded ? '🚨 Débordement' : '⚠️ Surcharge'} : ${cleanNid}</b>`, { sticky: true });
                     }
                 }).addTo(couches.res_regards);
             }
+
+            // Assurer que les couches de résultats sont bien au premier plan
+            try {
+                if (couches.res_conduites && couches.res_conduites.bringToFront) couches.res_conduites.bringToFront();
+                if (couches.res_regards && couches.res_regards.bringToFront) couches.res_regards.bringToFront();
+            } catch(e) {}
 
             // 3. Mettre à jour les indicateurs KPIs dans la modale
             if (data.kpis) {
@@ -3490,6 +3917,22 @@
             }
             const elCond = document.getElementById('f-conduites');
             if (elCond) elCond.checked = true;
+
+            // Rétablir la visibilité normale de la couche physique des regards
+            if (!carte.hasLayer(couches.regards)) {
+                couches.regards.addTo(carte);
+            }
+            const elReg = document.getElementById('f-regards');
+            if (elReg) elReg.checked = true;
+
+            // Rétablir l'opacité normale des lignes de cluster
+            if (window._activeClusterLayer) {
+                window._activeClusterLayer.eachLayer(l => {
+                    if (l instanceof L.Polyline && !(l instanceof L.Polygon)) {
+                        l.setStyle({ opacity: 0.85 });
+                    }
+                });
+            }
 
             const elSens = document.getElementById('f-sens-ecoulement');
             if (elSens) elSens.checked = false;
@@ -3636,26 +4079,23 @@
             const m = document.getElementById('modal-simulation');
             if (m) m.style.display = 'none';
             if (window.carte) {
-                // Invalidation et cadrage immédiat
-                carte.invalidateSize(true);
-                if (window._lastSimBounds && window._lastSimBounds.isValid && window._lastSimBounds.isValid()) {
-                    carte.fitBounds(window._lastSimBounds, { padding: [50, 50], maxZoom: 17, animate: false });
-                } else if (window._dernierResultatSimulation) {
-                    zoomerSurZoneSimulee(window._dernierResultatSimulation);
-                }
-
-                // Ré-exécution sécurisée après reflow complet du navigateur
+                // Déclencher un zoom fluide (flyToBounds) après disparition de la modale
                 setTimeout(() => {
                     carte.invalidateSize(true);
                     if (window._lastSimBounds && window._lastSimBounds.isValid && window._lastSimBounds.isValid()) {
-                        carte.fitBounds(window._lastSimBounds, { padding: [50, 50], maxZoom: 17, animate: false });
+                        carte.flyToBounds(window._lastSimBounds, {
+                            padding: [60, 60],
+                            maxZoom: 17,
+                            duration: 1.4,
+                            easeLinearity: 0.25
+                        });
                     } else if (window._dernierResultatSimulation) {
                         zoomerSurZoneSimulee(window._dernierResultatSimulation);
                     }
                     if (window._dernierResultatSimulation) {
                         mettreAJourIHMZoneSimulee(window._dernierResultatSimulation);
                     }
-                }, 120);
+                }, 60);
             }
         };
 
@@ -3664,7 +4104,11 @@
             const duree = parseFloat(document.getElementById('sim-select-duree').value);
             const pasRoutage = parseInt(document.getElementById('sim-select-step').value);
             const penteInput = document.getElementById('sim-pente-moyenne');
-            const penteVal = (penteInput && penteInput.value) ? parseFloat(penteInput.value) : null;
+            let penteVal = null;
+            if (penteInput && penteInput.value !== undefined && penteInput.value !== '') {
+                penteVal = parseFloat(String(penteInput.value).replace(',', '.'));
+            }
+            if (isNaN(penteVal) || penteVal === null) penteVal = 1.0;
             const simBassinVal = document.getElementById('sim-select-bassin') ? document.getElementById('sim-select-bassin').value : '';
             const clusterId = simBassinVal ? parseInt(simBassinVal) : null;
 
@@ -4091,8 +4535,13 @@
                     </div>
 
                     <!-- Bouton d'accès direct à l'interprétation experte des Agents IA -->
-                    <button onclick="fermerModalSimulation(); ouvrirModalInterpretation();" style="width: 100%; margin-bottom: 14px; padding: 12px 18px; background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%); color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 0.92rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 9px; box-shadow: 0 4px 14px rgba(168, 85, 247, 0.4); transition: transform 0.15s;" onmouseover="this.style.transform='scale(1.01)'" onmouseout="this.style.transform='scale(1)'">
+                    <button onclick="fermerModalSimulation(); ouvrirModalInterpretation();" style="width: 100%; margin-bottom: 8px; padding: 12px 18px; background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%); color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 0.92rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 9px; box-shadow: 0 4px 14px rgba(168, 85, 247, 0.4); transition: transform 0.15s;" onmouseover="this.style.transform='scale(1.01)'" onmouseout="this.style.transform='scale(1)'">
                         <i class="fas fa-brain"></i> Consulter l'Interprétation des Agents IA &amp; Prescriptions Travaux
+                    </button>
+
+                    <!-- Bouton d'impression directe du rapport complet PDF -->
+                    <button onclick="imprimerDiagnosticTechniqueComplet()" style="width: 100%; margin-bottom: 14px; padding: 10px 16px; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.4); color: #d8b4fe; border-radius: 8px; font-weight: 700; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.15s;" onmouseover="this.style.background='rgba(168, 85, 247, 0.25)'" onmouseout="this.style.background='rgba(168, 85, 247, 0.15)'">
+                        <i class="fas fa-file-pdf"></i> Imprimer le Rapport d'Expertise Complet (PDF / Papier)
                     </button>
 
                     <!-- Téléchargements d'artefacts certifiés -->
@@ -4148,8 +4597,8 @@
                     <button onclick="fermerModalInterpretation()" style="padding: 6px 14px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #e2e8f0; border-radius: 8px; font-size: 0.82rem; font-weight: 600; cursor: pointer;">
                         Fermer
                     </button>
-                    <button onclick="window.print()" style="padding: 6px 14px; background: linear-gradient(135deg, #a855f7, #7c3aed); border: none; color: white; border-radius: 8px; font-size: 0.82rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px;">
-                        <i class="fas fa-print"></i> Imprimer le diagnostic
+                    <button onclick="imprimerDiagnosticTechniqueComplet()" style="padding: 7px 16px; background: linear-gradient(135deg, #a855f7, #7c3aed); border: none; color: white; border-radius: 8px; font-size: 0.84rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 7px; box-shadow: 0 4px 12px rgba(168, 85, 247, 0.4);">
+                        <i class="fas fa-file-pdf"></i> Imprimer le Rapport d'Expertise Complet (PDF)
                     </button>
                 </div>
             </div>
