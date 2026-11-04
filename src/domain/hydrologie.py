@@ -95,6 +95,36 @@ class GenerateurHydrologie:
         diagramme = voronoi_diagram(multipoints)
         cellules_voronoi = list(diagramme.geoms) if hasattr(diagramme, 'geoms') else [diagramme]
 
+        # Calcul de l'Enveloppe Convexe Globale (Impluvium étendu total)
+        convex_hull_globale = multipoints.convex_hull
+        surface_globale_convexe_ha = round(float(convex_hull_globale.area) / 10000.0, 2) if convex_hull_globale else 0.0
+
+        buf_m = float(self.tampon_buffer_m)
+
+        # Construction de l'Enveloppe Urbaine Fermée (avec comblement automatique des îlots/cours intérieurs)
+        emprise_urbaine = emprise_bassin
+        if emprise_urbaine is None or emprise_urbaine.is_empty:
+            raw_buffers = []
+            if canalisations_gdf is not None and hasattr(canalisations_gdf, 'geometry') and not canalisations_gdf.empty:
+                for g in canalisations_gdf.geometry:
+                    if g is not None and not g.is_empty:
+                        raw_buffers.append(g.buffer(buf_m))
+            for pt in points_list:
+                raw_buffers.append(pt.buffer(buf_m))
+
+            if raw_buffers:
+                try:
+                    u_buf = unary_union(raw_buffers)
+                    # Comblement des vides intérieurs (fermeture des pâtés de maisons)
+                    if isinstance(u_buf, Polygon):
+                        emprise_urbaine = Polygon(u_buf.exterior)
+                    elif isinstance(u_buf, MultiPolygon):
+                        emprise_urbaine = MultiPolygon([Polygon(p.exterior) for p in u_buf.geoms if p.area > 50.0])
+                    else:
+                        emprise_urbaine = u_buf
+                except Exception:
+                    emprise_urbaine = None
+
         # 3. Index spatial STRtree pour appariement 1-à-1 ultra-rapide (< 0.1s pour 10 000 points)
         cell_tree = STRtree(cellules_voronoi)
         pt_indices, cell_indices = cell_tree.query(points_list, predicate='intersects')
@@ -103,9 +133,8 @@ class GenerateurHydrologie:
             if p_idx not in pt_to_cell:
                 pt_to_cell[p_idx] = cellules_voronoi[c_idx]
 
-        # 4. Découpage et enrichissement vectoriel
+        # 4. Découpage et enrichissement vectoriel (Voronoï fermé sans trous)
         sous_bassins_records = []
-        buf_m = float(self.tampon_buffer_m)
         seen_sb_ids = set()
 
         for i, (idx, row) in enumerate(valid_rows):
@@ -119,7 +148,18 @@ class GenerateurHydrologie:
 
             cell = pt_to_cell.get(i)
             if cell is not None and not cell.is_empty:
-                clipped_cell = cell.intersection(pt.buffer(buf_m))
+                if emprise_urbaine is not None and not emprise_urbaine.is_empty:
+                    try:
+                        clipped_cell = cell.intersection(emprise_urbaine)
+                        if isinstance(clipped_cell, MultiPolygon):
+                            sub_parts = [p for p in clipped_cell.geoms if p.contains(pt)]
+                            clipped_cell = sub_parts[0] if sub_parts else max(clipped_cell.geoms, key=lambda p: p.area)
+                        if clipped_cell.is_empty:
+                            clipped_cell = pt.buffer(buf_m)
+                    except Exception:
+                        clipped_cell = cell.intersection(pt.buffer(buf_m))
+                else:
+                    clipped_cell = cell.intersection(pt.buffer(buf_m))
                 if clipped_cell.is_empty:
                     clipped_cell = pt.buffer(5.0)
             else:
@@ -166,6 +206,10 @@ class GenerateurHydrologie:
             })
 
         gdf_res = gpd.GeoDataFrame(sous_bassins_records, crs=crs_source)
+        total_urbaine_ha = round(float(gdf_res["area_ha"].sum()), 2) if not gdf_res.empty else 0.0
+        gdf_res.attrs["total_urbaine_ha"] = total_urbaine_ha
+        gdf_res.attrs["convexe_globale_ha"] = surface_globale_convexe_ha
+        gdf_res.attrs["ratio_drainage_pct"] = round((total_urbaine_ha / surface_globale_convexe_ha) * 100.0, 1) if surface_globale_convexe_ha > 0 else 100.0
         return gdf_res
 
     @staticmethod

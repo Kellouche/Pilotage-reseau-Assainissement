@@ -543,6 +543,11 @@ def calculer_bassin_polygon(edges: Set[Tuple], G: nx.DiGraph, largeur_bande_drai
         polygone_nettoye = union_geom.buffer(3.0).buffer(-3.0)
         if isinstance(polygone_nettoye, MultiPolygon):
             polygone_nettoye = max(polygone_nettoye.geoms, key=lambda p: p.area)
+        # Comblement systématique des cavités intérieures des îlots urbains
+        if isinstance(polygone_nettoye, Polygon):
+            polygone_nettoye = Polygon(polygone_nettoye.exterior)
+        elif isinstance(polygone_nettoye, MultiPolygon):
+            polygone_nettoye = MultiPolygon([Polygon(p.exterior) for p in polygone_nettoye.geoms if p.area > 50.0])
         return polygone_nettoye
 
     return None

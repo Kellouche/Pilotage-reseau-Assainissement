@@ -280,6 +280,11 @@ def partitionner_79_bassins_versants(
                         geom_union = unary_union(proches)
                     else:
                         geom_union = max(geom_union.geoms, key=lambda p: p.area)
+            # Comblement systématique des cavités intérieures des îlots urbains
+            if isinstance(geom_union, Polygon):
+                geom_union = Polygon(geom_union.exterior)
+            elif isinstance(geom_union, MultiPolygon):
+                geom_union = MultiPolygon([Polygon(p.exterior) for p in geom_union.geoms if p.area > 50.0])
             area_m2 = round(float(geom_union.area), 2)
             area_ha = round(area_m2 / 10000.0, 2)
         else:
@@ -299,7 +304,7 @@ def partitionner_79_bassins_versants(
         compteur_voies = Counter([
             str(v).strip() for v in voies_bassin 
             if v and str(v).strip().lower() not in ('nan', 'none', '', 'null') 
-            and not re.match(r'^\d+(\.0)?$', str(v).strip())
+            and not re.match(r'^\d+(\.0)?$', str(v).strip()) and len(str(v).strip()) > 2
         ])
         top_voie = compteur_voies.most_common(1)[0][0] if compteur_voies else None
 
@@ -309,7 +314,7 @@ def partitionner_79_bassins_versants(
         def est_invalide(s):
             if not s: return True
             st = str(s).strip()
-            return st.lower() in ('nan', 'none', '', 'null', 'sans designation', 'inconnu') or bool(re.match(r'^\d+(\.0)?$', st))
+            return st.lower() in ('nan', 'none', '', 'null', 'sans designation', 'inconnu') or bool(re.match(r'^\d+(\.0)?$', st)) or len(st) <= 2
 
         if str(ex_id) == '0' or 'step' in str(ex_info.get('type', '')).lower():
             adresse_reelle = f"{top_voie or 'Chorfa'} (STEP)"
@@ -317,14 +322,15 @@ def partitionner_79_bassins_versants(
             zc = ex_info.get('zone_collecte') or (G.nodes.get(ex_id, {}).get('zone_collecte') if ex_id in G.nodes else None)
             zc_clean = str(zc).replace('BC_', '').replace('_', ' ').strip() if zc and not est_invalide(zc) else None
             
-            candidats = []
-            for val in [ex_nom, ex_node_voie, top_voie, zc_clean]:
-                if val and not est_invalide(val):
-                    candidats.append(str(val).strip())
-            
-            if candidats:
-                # Priorité au candidat le plus descriptif
-                adresse_reelle = max(candidats, key=lambda s: (len(s.split()), len(s)))
+            # Priorité au nom d'ouvrage ou de quartier réel
+            if ex_nom and not est_invalide(ex_nom):
+                adresse_reelle = str(ex_nom).strip()
+            elif zc_clean and not est_invalide(zc_clean):
+                adresse_reelle = zc_clean
+            elif top_voie and not est_invalide(top_voie):
+                adresse_reelle = top_voie
+            elif ex_node_voie and not est_invalide(ex_node_voie):
+                adresse_reelle = str(ex_node_voie).strip()
             else:
                 adresse_reelle = f"Bassin {b_num}"
 
