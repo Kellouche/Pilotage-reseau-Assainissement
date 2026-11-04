@@ -111,6 +111,79 @@ SCENARIOS_PLUIE = {
     }
 }
 
+TYPOLOGIES_OCCUPATION_SOL = {
+    "centre_urbain_dense": {
+        "nom": "Centre urbain dense / Commercial (85%)",
+        "description": "Tissu urbain dense, toitures jointives, cours bétonnées, voirie asphaltée continue.",
+        "imperv_pct": 85.0,
+        "n_imperv": 0.013,
+        "n_perv": 0.20,
+        "d_store_imperv": 1.5,
+        "d_store_perv": 4.0,
+        "c_ruissellement_ref": 0.85
+    },
+    "habitat_collectif": {
+        "nom": "Habitat collectif / Cités denses (75%)",
+        "description": "Grands ensembles (Cités 500 Logts, etc.), parkings, cours goudronnées.",
+        "imperv_pct": 75.0,
+        "n_imperv": 0.014,
+        "n_perv": 0.22,
+        "d_store_imperv": 1.8,
+        "d_store_perv": 4.5,
+        "c_ruissellement_ref": 0.75
+    },
+    "habitat_mixte": {
+        "nom": "Habitat mixte / Tissu intermédiaire (65%)",
+        "description": "Mélange collectif et individuel, petites parcelles (Profil standard recommandé).",
+        "imperv_pct": 65.0,
+        "n_imperv": 0.015,
+        "n_perv": 0.25,
+        "d_store_imperv": 2.0,
+        "d_store_perv": 5.0,
+        "c_ruissellement_ref": 0.65
+    },
+    "habitat_individuel": {
+        "nom": "Habitat individuel / Pavillonnaire (50%)",
+        "description": "Villas, maisons individuelles avec cours, jardins et passages perméables.",
+        "imperv_pct": 50.0,
+        "n_imperv": 0.015,
+        "n_perv": 0.25,
+        "d_store_imperv": 2.5,
+        "d_store_perv": 5.0,
+        "c_ruissellement_ref": 0.50
+    },
+    "zone_activites_indus": {
+        "nom": "Zone industrielle & Entrepôts (80%)",
+        "description": "Grandes toitures métalliques, quais de chargement, voiries lourdes.",
+        "imperv_pct": 80.0,
+        "n_imperv": 0.013,
+        "n_perv": 0.20,
+        "d_store_imperv": 1.5,
+        "d_store_perv": 4.0,
+        "c_ruissellement_ref": 0.80
+    },
+    "periurbain_semi_rural": {
+        "nom": "Périurbain / Semi-rural lâche (35%)",
+        "description": "Bordure d'agglomération, parcelles agricoles intercalaires, pistes non bitumées.",
+        "imperv_pct": 35.0,
+        "n_imperv": 0.016,
+        "n_perv": 0.28,
+        "d_store_imperv": 3.0,
+        "d_store_perv": 6.0,
+        "c_ruissellement_ref": 0.35
+    },
+    "espaces_verts_friches": {
+        "nom": "Parcs / Espaces naturels / Friches (15%)",
+        "description": "Espaces verts communaux, lits d'oueds, terres naturelles perméables.",
+        "imperv_pct": 15.0,
+        "n_imperv": 0.018,
+        "n_perv": 0.30,
+        "d_store_imperv": 4.0,
+        "d_store_perv": 7.0,
+        "c_ruissellement_ref": 0.15
+    }
+}
+
 
 def _resoudre_altimetrie_noeuds(
     regards: gpd.GeoDataFrame,
@@ -255,6 +328,8 @@ class MoteurSWMM:
         regards_gdf: Optional[gpd.GeoDataFrame] = None,
         canalisations_gdf: Optional[gpd.GeoDataFrame] = None,
         valider_raccordement_deporte: bool = True,
+        typologie_sol: Optional[str] = None,
+        imperv_pct: Optional[float] = None,
     ) -> Tuple[str, Dict[str, Any]]:
         """
         Génère l'intégralité du contenu textuel conforme au standard EPA SWMM 5.2 .inp.
@@ -262,9 +337,40 @@ class MoteurSWMM:
         drainant vers l'exutoire de ce cluster (bassin urbain ciblé).
         Si l'ouvrage est déporté (> 1.0 m du regard le plus proche), le rattachement au regard amont
         est conditionné par valider_raccordement_deporte (validation explicite de l'utilisateur).
+        Intègre la typologie d'occupation du sol et le % d'imperméabilisation dynamique.
         """
         buf_actuel = tampon_buffer_m if (tampon_buffer_m and tampon_buffer_m > 0) else self.tampon_buffer_m
-        gh_local = GenerateurHydrologie(tampon_buffer_m=buf_actuel, imperv_defaut=self.gh.imperv_defaut)
+
+        # Résolution de la typologie d'occupation du sol et du % d'imperméabilisation (Palier 1)
+        active_imperv = imperv_pct
+        n_imp = 0.015
+        n_perv = 0.25
+        d_store_imp = 2.0
+        d_store_perv = 5.0
+        typ_nom = "Habitat mixte / Tissu intermédiaire (65%)"
+
+        if typologie_sol and typologie_sol in TYPOLOGIES_OCCUPATION_SOL:
+            typ_cfg = TYPOLOGIES_OCCUPATION_SOL[typologie_sol]
+            typ_nom = typ_cfg["nom"]
+            if active_imperv is None or active_imperv <= 0:
+                active_imperv = typ_cfg["imperv_pct"]
+            n_imp = typ_cfg.get("n_imperv", 0.015)
+            n_perv = typ_cfg.get("n_perv", 0.25)
+            d_store_imp = typ_cfg.get("d_store_imperv", 2.0)
+            d_store_perv = typ_cfg.get("d_store_perv", 5.0)
+        elif active_imperv is not None and active_imperv > 0:
+            typ_nom = f"Personnalisé ({active_imperv:.1f}%)"
+        else:
+            active_imperv = 65.0
+
+        gh_local = GenerateurHydrologie(
+            tampon_buffer_m=buf_actuel,
+            imperv_defaut=active_imperv,
+            n_imperv=n_imp,
+            n_perv=n_perv,
+            d_store_imperv=d_store_imp,
+            d_store_perv=d_store_perv,
+        )
         if scenario_key not in SCENARIOS_PLUIE:
             scenario_key = "pluie_decennale"
 
@@ -793,6 +899,9 @@ class MoteurSWMM:
             "bbox": bbox_wgs84,
             "simulated_nodes": list(clean_target_nodes),
             "conduit_endpoints": conduit_endpoints,
+            "typologie_sol": typologie_sol or "habitat_mixte",
+            "typologie_nom": typ_nom,
+            "imperv_pct": active_imperv,
         }
 
         return "\n".join(lines), meta
@@ -874,9 +983,12 @@ class MoteurSWMM:
         cluster_id: Optional[int] = None,
         tampon_buffer_m: Optional[float] = None,
         valider_raccordement_deporte: bool = True,
+        typologie_sol: Optional[str] = None,
+        imperv_pct: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Exécute la simulation complète avec pyswmm et extrait les KPIs hydrauliques.
+        Intègre la typologie d'occupation du sol et le % d'imperméabilisation dynamique.
         """
         current_buf = tampon_buffer_m if (tampon_buffer_m and tampon_buffer_m > 0) else self.tampon_buffer_m
         inp_content, meta = self.assembler_modele_inp(
@@ -888,6 +1000,8 @@ class MoteurSWMM:
             cluster_id=cluster_id,
             tampon_buffer_m=current_buf,
             valider_raccordement_deporte=valider_raccordement_deporte,
+            typologie_sol=typologie_sol,
+            imperv_pct=imperv_pct,
         )
 
         with tempfile.NamedTemporaryFile(suffix=".inp", mode="w", delete=False, encoding="utf-8") as f:
@@ -1213,6 +1327,10 @@ class MoteurSWMM:
             "color": coh_col,
             "message": coh_msg
         }
+
+        kpis["typologie_sol"] = meta.get("typologie_sol")
+        kpis["typologie_nom"] = meta.get("typologie_nom")
+        kpis["imperv_pct"] = meta.get("imperv_pct")
 
         kpis["compliance_continuity"] = abs(kpis["routing_continuity_error_pct"]) <= 5.0
         return kpis

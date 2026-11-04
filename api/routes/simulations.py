@@ -141,10 +141,31 @@ class SimulationRunRequest(BaseModel):
     pente_moyenne_pct: Optional[float] = 1.0
     buffer_m: Optional[float] = 35.0
     valider_raccordement: Optional[bool] = True
+    typologie_sol: Optional[str] = "habitat_mixte"
+    imperv_pct: Optional[float] = None
 
 
 class ValidateBufferRequest(BaseModel):
     buffer_m: float = 45.0
+
+
+@router.get("/typologies-sol")
+def get_simulation_typologies_sol():
+    """Retourne la liste des typologies d'occupation du sol et leurs paramètres d'imperméabilisation."""
+    from src.domain.moteur_swmm import TYPOLOGIES_OCCUPATION_SOL
+    return {
+        "typologies": [
+            {
+                "key": k,
+                "nom": v["nom"],
+                "description": v["description"],
+                "imperv_pct": v["imperv_pct"],
+                "c_ruissellement_ref": v["c_ruissellement_ref"]
+            }
+            for k, v in TYPOLOGIES_OCCUPATION_SOL.items()
+        ],
+        "default": "habitat_mixte"
+    }
 
 
 @router.get("/scenarios")
@@ -219,6 +240,8 @@ def run_native_swmm_simulation(
             cluster_id=payload.cluster_id,
             tampon_buffer_m=payload.buffer_m,
             valider_raccordement_deporte=payload.valider_raccordement if payload.valider_raccordement is not None else True,
+            typologie_sol=payload.typologie_sol,
+            imperv_pct=payload.imperv_pct,
         )
         resultat["source_gpkg"] = str(gpkg_path.resolve())
         _DERNIERE_SIMULATION = resultat
@@ -246,6 +269,9 @@ def run_native_swmm_simulation(
                 "surcharged_length_m": resultat.get("surcharged_length_m"),
                 "surcharged_length_pct": resultat.get("surcharged_length_pct"),
                 "coherence_pluie_debit": resultat.get("coherence_pluie_debit"),
+                "typologie_sol": resultat.get("meta", {}).get("typologie_sol"),
+                "typologie_nom": resultat.get("meta", {}).get("typologie_nom"),
+                "imperv_pct": resultat.get("meta", {}).get("imperv_pct"),
                 "flooded_nodes_count": resultat.get("flooded_nodes_count"),
                 "surcharged_nodes_count": resultat.get("surcharged_nodes_count", 0),
                 "flooded_nodes": resultat.get("flooded_nodes", [])[:15],

@@ -2077,12 +2077,11 @@
         function zoomerSurBassin(clusterId, clusterLayer) {
             if (!clusterId || !window.carte) return;
             const cid = String(clusterId);
-            const clLayer = clusterLayer || window._activeClusterLayer || couches.bassins;
-            if (!clLayer) return;
+            const clLayer = clusterLayer || window._activeClusterLayer || (typeof couches !== 'undefined' ? couches.bassins : null);
 
             // 1. Trouver l'exutoire du cluster (centre de gravité fonctionnel)
             let exLatLng = null;
-            if (window._activeClusterLayer) {
+            if (window._activeClusterLayer && typeof window._activeClusterLayer.eachLayer === 'function') {
                 window._activeClusterLayer.eachLayer(l => {
                     const f = l.feature;
                     if (f && f.properties && f.properties.type === 'exutoire' && String(f.properties.cluster_id) === cid) {
@@ -2095,47 +2094,56 @@
             const bounds = L.latLngBounds();
             let hasGeom = false;
 
-            clLayer.eachLayer(layer => {
-                const f = layer.feature;
-                if (!f || !f.properties || String(f.properties.cluster_id) !== cid) return;
+            if (clLayer && typeof clLayer.eachLayer === 'function') {
+                clLayer.eachLayer(layer => {
+                    const f = layer.feature;
+                    if (!f || !f.properties || String(f.properties.cluster_id) !== cid) return;
 
-                // Conduites du cluster
-                if (f.geometry && (f.geometry.type === 'LineString' || f.geometry.type === 'MultiLineString')) {
-                    if (layer.getBounds && layer.getBounds().isValid()) {
-                        const b = layer.getBounds();
-                        if (!exLatLng || carte.distance(b.getCenter(), exLatLng) < 2500) {
-                            bounds.extend(b);
-                            hasGeom = true;
-                        }
-                    }
-                }
-
-                // Polygone du bassin versant urbain (filtre des fragments distants)
-                if (f.properties.type === 'bassin_urbain' && layer.getBounds && layer.getBounds().isValid()) {
-                    const b = layer.getBounds();
-                    if (!exLatLng || carte.distance(b.getCenter(), exLatLng) < 2500) {
-                        bounds.extend(b);
+                    // Conduites ou polygones
+                    if (layer.getBounds && typeof layer.getBounds === 'function' && layer.getBounds().isValid()) {
+                        bounds.extend(layer.getBounds());
+                        hasGeom = true;
+                    } else if (layer.getLatLng && typeof layer.getLatLng === 'function' && layer.getLatLng()) {
+                        bounds.extend(layer.getLatLng());
                         hasGeom = true;
                     }
-                }
-            });
+                });
+            }
+
+            // Fallback 1 : recherche directe dans window._clustersData.features
+            if (!hasGeom && window._clustersData && Array.isArray(window._clustersData.features)) {
+                window._clustersData.features.forEach(f => {
+                    if (f && f.properties && String(f.properties.cluster_id) === cid) {
+                        try {
+                            const tmpL = L.geoJSON(f);
+                            if (tmpL.getBounds && tmpL.getBounds().isValid()) {
+                                bounds.extend(tmpL.getBounds());
+                                hasGeom = true;
+                            }
+                        } catch(e) {}
+                    }
+                });
+            }
 
             if (exLatLng) {
                 bounds.extend(exLatLng);
                 hasGeom = true;
             }
 
-            // Fallback si la recherche n'a pas pu borner
+            // Fallback 2 si la recherche n'a pas pu borner
             if (!hasGeom || !bounds.isValid()) {
                 const fb = window._bassinBounds ? (window._bassinBounds[cid] || window._bassinBounds[String(cid)]) : null;
-                if (fb && fb.isValid && fb.isValid()) bounds.extend(fb);
+                if (fb && fb.isValid && fb.isValid()) {
+                    bounds.extend(fb);
+                    hasGeom = true;
+                }
             }
 
-            if (bounds.isValid()) {
+            if (hasGeom && bounds.isValid()) {
                 carte.flyToBounds(bounds, {
                     padding: [50, 50],
                     maxZoom: 17,
-                    duration: 1.2,
+                    duration: 1.0,
                     easeLinearity: 0.25
                 });
             }
@@ -4564,10 +4572,12 @@
                 const bassinTitle = document.getElementById('sim-results-bassin-title');
                 if (bassinTitle) {
                     if (data.meta && data.meta.cluster_nom) {
-                        bassinTitle.innerHTML = `<i class="fas fa-sitemap me-1"></i> Périmètre simulé : <b>${data.meta.cluster_nom}</b> (Bassin ${data.meta.cluster_id}) &bull; ${data.meta.junctions_count + 1} regards, ${data.meta.conduits_count} conduites (${data.meta.total_area_ha} ha)`;
+                        const typoInfo = data.meta.typologie_nom ? ` &bull; 🏷️ ${data.meta.typologie_nom}` : '';
+                        bassinTitle.innerHTML = `<i class="fas fa-sitemap me-1"></i> Périmètre simulé : <b>${data.meta.cluster_nom}</b> (Bassin ${data.meta.cluster_id}) &bull; ${data.meta.junctions_count + 1} regards, ${data.meta.conduits_count} conduites (${data.meta.total_area_ha} ha)${typoInfo}`;
                         bassinTitle.style.display = 'block';
                     } else {
-                        bassinTitle.innerHTML = `<i class="fas fa-globe me-1"></i> Périmètre simulé : <b>Réseau Complet</b> &bull; ${data.meta ? data.meta.conduits_count : ''} conduites`;
+                        const typoInfo = data.meta && data.meta.typologie_nom ? ` &bull; 🏷️ ${data.meta.typologie_nom}` : '';
+                        bassinTitle.innerHTML = `<i class="fas fa-globe me-1"></i> Périmètre simulé : <b>Réseau Complet</b> &bull; ${data.meta ? data.meta.conduits_count : ''} conduites${typoInfo}`;
                         bassinTitle.style.display = 'block';
                     }
                 }
@@ -4800,12 +4810,36 @@
                             highlightCluster(this.value, window._activeClusterLayer || couches.bassins);
                             afficherInfoBassin(this.value);
                             actualiserAlerteOuvrageDeporte(this.value);
+                            zoomerSurBassin(this.value, window._activeClusterLayer || couches.bassins);
                             if (typeof window.mettreAJourIndicateurBassin === 'function') {
                                 window.mettreAJourIndicateurBassin(this.value);
                             }
                         }
                     };
                     actualiserAlerteOuvrageDeporte(simBassinSel.value);
+                    if (simBassinSel.value) {
+                        zoomerSurBassin(simBassinSel.value, window._activeClusterLayer || couches.bassins);
+                    }
+
+                    // Configuration du sélecteur d'occupation du sol et % imperv (Palier 1)
+                    const typoSolSel = document.getElementById('sim-select-typologie-sol');
+                    const impervInp = document.getElementById('sim-imperv-pct');
+                    if (typoSolSel && impervInp) {
+                        const typoMap = {
+                            'centre_urbain_dense': 85,
+                            'habitat_collectif': 75,
+                            'habitat_mixte': 65,
+                            'habitat_individuel': 50,
+                            'zone_activites_indus': 80,
+                            'periurbain_semi_rural': 35,
+                            'espaces_verts_friches': 15
+                        };
+                        typoSolSel.onchange = function() {
+                            if (typoMap[this.value] !== undefined) {
+                                impervInp.value = typoMap[this.value];
+                            }
+                        };
+                    }
                 }
                 m.style.display = 'flex';
             }
@@ -4899,6 +4933,14 @@
             const chkDeporte = document.getElementById('sim-chk-valider-raccordement');
             const validerRaccord = chkDeporte ? chkDeporte.checked : true;
 
+            const typoSolVal = document.getElementById('sim-select-typologie-sol') ? document.getElementById('sim-select-typologie-sol').value : 'habitat_mixte';
+            const impervInpEl = document.getElementById('sim-imperv-pct');
+            let impervVal = null;
+            if (impervInpEl && impervInpEl.value !== undefined && impervInpEl.value !== '') {
+                impervVal = parseFloat(String(impervInpEl.value).replace(',', '.'));
+            }
+            if (isNaN(impervVal) || impervVal === null || impervVal <= 0) impervVal = null;
+
             const btn = document.getElementById('btn-run-sim-action');
             const statusDiv = document.getElementById('sim-status-message');
             const resultsCard = document.getElementById('sim-results-card');
@@ -4928,7 +4970,9 @@
                     pente_moyenne_pct: penteVal,
                     cluster_id: clusterId,
                     buffer_m: window._activeBufferM || 35.0,
-                    valider_raccordement: validerRaccord
+                    valider_raccordement: validerRaccord,
+                    typologie_sol: typoSolVal,
+                    imperv_pct: impervVal
                 })
             })
             .then(async r => {
@@ -5246,6 +5290,40 @@
                     </select>
                     <small style="color: #94a3b8; font-size: 0.74rem; display: block; margin-top: 5px;">
                         <i class="fas fa-info-circle me-1" style="color: #38bdf8;"></i> Paramétrage hydro-météo ANRH : Formule Montana $I(t) = a \cdot t^{-b}$ &bull; Hyétogramme de projet Chicago centré &bull; $I_{max} = 92\text{ mm/h}$.
+                    </small>
+                </div>
+
+                <!-- Occupation du Sol & Imperméabilisation (Palier 1 - Instantané) -->
+                <div style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <label style="font-size: 0.82rem; font-weight: 700; color: #38bdf8; margin: 0;">
+                            <i class="fas fa-layer-group me-1"></i> Occupation du Sol &amp; Imperméabilisation Urbaine
+                        </label>
+                        <span style="font-size: 0.72rem; color: #38bdf8; background: rgba(56,189,248,0.12); padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(56,189,248,0.3); font-weight: 600;">Palier 1 - Sensibilité Instantanée</span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 12px; align-items: start;">
+                        <div>
+                            <label style="font-size: 0.75rem; color: #cbd5e1; display: block; margin-bottom: 4px;">Typologie Urbaine Dominante :</label>
+                            <select id="sim-select-typologie-sol" style="width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #f8fafc; font-size: 0.82rem;">
+                                <option value="centre_urbain_dense">🏢 Centre urbain dense / Commercial (85%)</option>
+                                <option value="habitat_collectif">🏬 Habitat collectif / Cités denses (75%)</option>
+                                <option value="habitat_mixte" selected>🏘️ Habitat mixte / Tissu intermédiaire (65% - Défaut)</option>
+                                <option value="habitat_individuel">🏡 Habitat individuel / Pavillonnaire (50%)</option>
+                                <option value="zone_activites_indus">🏭 Zone industrielle &amp; Entrepôts (80%)</option>
+                                <option value="periurbain_semi_rural">🌾 Périurbain / Semi-rural lâche (35%)</option>
+                                <option value="espaces_verts_friches">🌳 Parcs / Espaces naturels / Friches (15%)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size: 0.75rem; color: #cbd5e1; display: block; margin-bottom: 4px;">% Imperméabilisation :</label>
+                            <div style="display: flex; align-items: center; gap: 4px;">
+                                <input type="number" id="sim-imperv-pct" min="5" max="100" step="1" value="65" style="width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 6px; color: #38bdf8; font-size: 0.88rem; font-weight: 700; text-align: center;">
+                                <span style="font-size: 0.82rem; color: #94a3b8; font-weight: bold;">%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <small style="color: #94a3b8; font-size: 0.72rem; display: block; margin-top: 6px; line-height: 1.4;">
+                        <i class="fas fa-sliders-h me-1" style="color: #38bdf8;"></i> Ajustez librement le % pour tester la sensibilité au ruissellement (ex: 60% vs 85%). Modifie directement les sous-bassins SWMM et les pertes initiales ($D_{store}$).
                     </small>
                 </div>
 
