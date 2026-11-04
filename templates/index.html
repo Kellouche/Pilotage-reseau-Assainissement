@@ -1595,7 +1595,8 @@
                                         const sel = document.getElementById('bassin-select');
                                         if (sel) sel.value = String(cid);
                                         afficherInfoBassin(cid);
-                                        zoomerSurBassin(cid, clusterLayer);
+                                        const bnds = (layer.getBounds && typeof layer.getBounds === 'function') ? layer.getBounds() : null;
+                                        zoomerSurBassin(cid, clusterLayer, bnds);
                                     });
 
                                     layer.on('mouseover', function() {
@@ -1639,6 +1640,17 @@
                                     `;
                                     layer.bindTooltip(tipHtml, { sticky: true, opacity: 0.98 });
                                     layer.bindPopup(tipHtml);
+                                    layer.on('click', function(e) {
+                                        L.DomEvent.stopPropagation(e);
+                                        const cid = p.cluster_id;
+                                        if (cid !== null && cid !== undefined) {
+                                            highlightCluster(cid, clusterLayer);
+                                            const sel = document.getElementById('bassin-select');
+                                            if (sel) sel.value = String(cid);
+                                            afficherInfoBassin(cid);
+                                            zoomerSurBassin(cid, clusterLayer);
+                                        }
+                                    });
                                 } else if (feature.geometry && (feature.geometry.type === 'LineString' || feature.geometry.type === 'MultiLineString')) {
                                     const p = feature.properties;
                                     layer.bindTooltip(
@@ -1649,6 +1661,17 @@
                                         `Bassin n° ${p.cluster_id || '?'}`,
                                         { sticky: true }
                                     );
+                                    layer.on('click', function(e) {
+                                        L.DomEvent.stopPropagation(e);
+                                        const cid = p.cluster_id;
+                                        if (cid !== null && cid !== undefined) {
+                                            highlightCluster(cid, clusterLayer);
+                                            const sel = document.getElementById('bassin-select');
+                                            if (sel) sel.value = String(cid);
+                                            afficherInfoBassin(cid);
+                                            zoomerSurBassin(cid, clusterLayer);
+                                        }
+                                    });
                                 }
                             }
                         });
@@ -2074,12 +2097,77 @@
         // ==========================================
         // CADRAGE ET ZOOM PROPORTIONNEL SUR LE BASSIN VERSANT
         // ==========================================
-        function zoomerSurBassin(clusterId, clusterLayer) {
+        function zoomerSurBassin(clusterId, clusterLayer, targetBounds) {
             if (!clusterId || !window.carte) return;
             const cid = String(clusterId);
-            const clLayer = clusterLayer || window._activeClusterLayer || (typeof couches !== 'undefined' ? couches.bassins : null);
 
-            // 1. Trouver l'exutoire du cluster (centre de gravité fonctionnel)
+            // Priorité 0 : Bounds explicites fournis directement (ex: clic sur polygone)
+            if (targetBounds && typeof targetBounds.isValid === 'function' && targetBounds.isValid()) {
+                carte.invalidateSize(true);
+                carte.flyToBounds(targetBounds, {
+                    padding: [45, 45],
+                    maxZoom: 17,
+                    duration: 0.8,
+                    easeLinearity: 0.25
+                });
+                return;
+            }
+
+            // Priorité 1 : Bounding box du polygone de bassin urbain (Emprise exacte sans les tronçons orphelins distants)
+            let bBounds = null;
+            if (window._bassinBounds) {
+                bBounds = window._bassinBounds[cid] || window._bassinBounds[String(cid)];
+            }
+
+            if (!bBounds || (typeof bBounds.isValid === 'function' && !bBounds.isValid())) {
+                const searchLayers = [
+                    (typeof couches !== 'undefined' ? couches.bassins : null),
+                    clusterLayer,
+                    window._activeClusterLayer
+                ];
+                for (let sl of searchLayers) {
+                    if (sl && typeof sl.eachLayer === 'function') {
+                        sl.eachLayer(l => {
+                            if (bBounds) return;
+                            const f = l.feature;
+                            if (f && f.properties && String(f.properties.cluster_id) === cid && f.properties.type === 'bassin_urbain') {
+                                if (l.getBounds && typeof l.getBounds === 'function' && l.getBounds().isValid()) {
+                                    bBounds = l.getBounds();
+                                }
+                            }
+                        });
+                    }
+                    if (bBounds) break;
+                }
+            }
+
+            // Fallback géométrie GeoJSON pure
+            if (!bBounds && window._clustersData && Array.isArray(window._clustersData.features)) {
+                for (let f of window._clustersData.features) {
+                    if (f && f.properties && String(f.properties.cluster_id) === cid && f.properties.type === 'bassin_urbain') {
+                        try {
+                            const tmpL = L.geoJSON(f);
+                            if (tmpL.getBounds && tmpL.getBounds().isValid()) {
+                                bBounds = tmpL.getBounds();
+                                break;
+                            }
+                        } catch(e) {}
+                    }
+                }
+            }
+
+            if (bBounds && typeof bBounds.isValid === 'function' && bBounds.isValid()) {
+                carte.invalidateSize(true);
+                carte.flyToBounds(bBounds, {
+                    padding: [45, 45],
+                    maxZoom: 17,
+                    duration: 0.8,
+                    easeLinearity: 0.25
+                });
+                return;
+            }
+
+            // Priorité 2 : Si aucun polygone de bassin n'existe, délimiter via l'exutoire et les conduites proches (< 1.5 km)
             let exLatLng = null;
             if (window._activeClusterLayer && typeof window._activeClusterLayer.eachLayer === 'function') {
                 window._activeClusterLayer.eachLayer(l => {
@@ -2090,60 +2178,40 @@
                 });
             }
 
-            // 2. Construire la bounding box dense du réseau (conduites + polygone contigu)
-            const bounds = L.latLngBounds();
+            const fallbackBounds = L.latLngBounds();
             let hasGeom = false;
-
+            const clLayer = clusterLayer || window._activeClusterLayer || (typeof couches !== 'undefined' ? couches.bassins : null);
             if (clLayer && typeof clLayer.eachLayer === 'function') {
                 clLayer.eachLayer(layer => {
                     const f = layer.feature;
                     if (!f || !f.properties || String(f.properties.cluster_id) !== cid) return;
-
-                    // Conduites ou polygones
                     if (layer.getBounds && typeof layer.getBounds === 'function' && layer.getBounds().isValid()) {
-                        bounds.extend(layer.getBounds());
-                        hasGeom = true;
+                        const b = layer.getBounds();
+                        if (!exLatLng || carte.distance(b.getCenter(), exLatLng) < 1500) {
+                            fallbackBounds.extend(b);
+                            hasGeom = true;
+                        }
                     } else if (layer.getLatLng && typeof layer.getLatLng === 'function' && layer.getLatLng()) {
-                        bounds.extend(layer.getLatLng());
-                        hasGeom = true;
-                    }
-                });
-            }
-
-            // Fallback 1 : recherche directe dans window._clustersData.features
-            if (!hasGeom && window._clustersData && Array.isArray(window._clustersData.features)) {
-                window._clustersData.features.forEach(f => {
-                    if (f && f.properties && String(f.properties.cluster_id) === cid) {
-                        try {
-                            const tmpL = L.geoJSON(f);
-                            if (tmpL.getBounds && tmpL.getBounds().isValid()) {
-                                bounds.extend(tmpL.getBounds());
-                                hasGeom = true;
-                            }
-                        } catch(e) {}
+                        const ll = layer.getLatLng();
+                        if (!exLatLng || carte.distance(ll, exLatLng) < 1500) {
+                            fallbackBounds.extend(ll);
+                            hasGeom = true;
+                        }
                     }
                 });
             }
 
             if (exLatLng) {
-                bounds.extend(exLatLng);
+                fallbackBounds.extend(exLatLng);
                 hasGeom = true;
             }
 
-            // Fallback 2 si la recherche n'a pas pu borner
-            if (!hasGeom || !bounds.isValid()) {
-                const fb = window._bassinBounds ? (window._bassinBounds[cid] || window._bassinBounds[String(cid)]) : null;
-                if (fb && fb.isValid && fb.isValid()) {
-                    bounds.extend(fb);
-                    hasGeom = true;
-                }
-            }
-
-            if (hasGeom && bounds.isValid()) {
-                carte.flyToBounds(bounds, {
-                    padding: [50, 50],
+            if (hasGeom && fallbackBounds.isValid()) {
+                carte.invalidateSize(true);
+                carte.flyToBounds(fallbackBounds, {
+                    padding: [45, 45],
                     maxZoom: 17,
-                    duration: 1.0,
+                    duration: 0.8,
                     easeLinearity: 0.25
                 });
             }
