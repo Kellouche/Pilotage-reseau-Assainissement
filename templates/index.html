@@ -699,6 +699,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         let carte = L.map('map').setView([36.15, 1.33], 13);
+        window.carte = carte;
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap'
         }).addTo(carte);
@@ -718,6 +719,7 @@
             res_regards: L.featureGroup().addTo(carte),
             sens_ecoulement: L.layerGroup()
         };
+        window.couches = couches;
 
         function basculerCoucheBassins(checked) {
             if (checked) couches.bassins.addTo(carte);
@@ -2057,7 +2059,14 @@
                 const feature = layer.feature;
                 if (!feature || feature.properties.type !== 'bassin_urbain') return;
                 const cid = feature.properties.cluster_id;
-                try { _bassinBounds[cid] = layer.getBounds(); } catch(e) {}
+                try {
+                    const b = (typeof layer.getBounds === 'function') ? layer.getBounds() : null;
+                    if (b && typeof b.isValid === 'function' && b.isValid()) {
+                        _bassinBounds[cid] = b;
+                        _bassinBounds[String(cid)] = b;
+                        if (!isNaN(parseInt(cid))) _bassinBounds[parseInt(cid)] = b;
+                    }
+                } catch(e) {}
             });
             window._bassinBounds = _bassinBounds;
             window._bassinNoms = _bassinNoms;
@@ -2065,8 +2074,8 @@
             // Afficher la section
             document.getElementById('bassin-section').style.display = 'block';
 
-            // Écouteur du dropdown
-            sel.addEventListener('change', function() {
+            // Écouteur du dropdown unique (onchange direct pour éviter les doublons d'écouteurs)
+            sel.onchange = function() {
                 const cid = this.value;
                 
                 // Activer le bouton supprimer SI c'est un bassin manuel
@@ -2091,23 +2100,24 @@
                 highlightCluster(finalCid, clusterLayer);
                 afficherInfoBassin(finalCid);
                 zoomerSurBassin(finalCid, clusterLayer);
-            });
+            };
         }
 
         // ==========================================
         // CADRAGE ET ZOOM PROPORTIONNEL SUR LE BASSIN VERSANT
         // ==========================================
         function zoomerSurBassin(clusterId, clusterLayer, targetBounds) {
-            if (!clusterId || !window.carte) return;
+            const map = window.carte || (typeof carte !== 'undefined' ? carte : null);
+            if (!clusterId || !map) return;
             const cid = String(clusterId);
 
             // Priorité 0 : Bounds explicites fournis directement (ex: clic sur polygone)
             if (targetBounds && typeof targetBounds.isValid === 'function' && targetBounds.isValid()) {
-                carte.invalidateSize(true);
-                carte.flyToBounds(targetBounds, {
-                    padding: [45, 45],
-                    maxZoom: 17,
-                    duration: 0.8,
+                map.invalidateSize(true);
+                map.flyToBounds(targetBounds, {
+                    padding: [50, 50],
+                    maxZoom: 16,
+                    duration: 0.9,
                     easeLinearity: 0.25
                 });
                 return;
@@ -2116,14 +2126,14 @@
             // Priorité 1 : Bounding box du polygone de bassin urbain (Emprise exacte sans les tronçons orphelins distants)
             let bBounds = null;
             if (window._bassinBounds) {
-                bBounds = window._bassinBounds[cid] || window._bassinBounds[String(cid)];
+                bBounds = window._bassinBounds[cid] || window._bassinBounds[String(cid)] || (isNaN(parseInt(cid)) ? null : window._bassinBounds[parseInt(cid)]);
             }
 
             if (!bBounds || (typeof bBounds.isValid === 'function' && !bBounds.isValid())) {
                 const searchLayers = [
-                    (typeof couches !== 'undefined' ? couches.bassins : null),
                     clusterLayer,
-                    window._activeClusterLayer
+                    window._activeClusterLayer,
+                    (typeof couches !== 'undefined' ? couches.bassins : null)
                 ];
                 for (let sl of searchLayers) {
                     if (sl && typeof sl.eachLayer === 'function') {
@@ -2157,11 +2167,11 @@
             }
 
             if (bBounds && typeof bBounds.isValid === 'function' && bBounds.isValid()) {
-                carte.invalidateSize(true);
-                carte.flyToBounds(bBounds, {
-                    padding: [45, 45],
-                    maxZoom: 17,
-                    duration: 0.8,
+                map.invalidateSize(true);
+                map.flyToBounds(bBounds, {
+                    padding: [50, 50],
+                    maxZoom: 16,
+                    duration: 0.9,
                     easeLinearity: 0.25
                 });
                 return;
@@ -2187,13 +2197,13 @@
                     if (!f || !f.properties || String(f.properties.cluster_id) !== cid) return;
                     if (layer.getBounds && typeof layer.getBounds === 'function' && layer.getBounds().isValid()) {
                         const b = layer.getBounds();
-                        if (!exLatLng || carte.distance(b.getCenter(), exLatLng) < 1500) {
+                        if (!exLatLng || map.distance(b.getCenter(), exLatLng) < 1500) {
                             fallbackBounds.extend(b);
                             hasGeom = true;
                         }
                     } else if (layer.getLatLng && typeof layer.getLatLng === 'function' && layer.getLatLng()) {
                         const ll = layer.getLatLng();
-                        if (!exLatLng || carte.distance(ll, exLatLng) < 1500) {
+                        if (!exLatLng || map.distance(ll, exLatLng) < 1500) {
                             fallbackBounds.extend(ll);
                             hasGeom = true;
                         }
@@ -2207,11 +2217,11 @@
             }
 
             if (hasGeom && fallbackBounds.isValid()) {
-                carte.invalidateSize(true);
-                carte.flyToBounds(fallbackBounds, {
-                    padding: [45, 45],
-                    maxZoom: 17,
-                    duration: 0.8,
+                map.invalidateSize(true);
+                map.flyToBounds(fallbackBounds, {
+                    padding: [50, 50],
+                    maxZoom: 16,
+                    duration: 0.9,
                     easeLinearity: 0.25
                 });
             }
@@ -4082,7 +4092,8 @@
         // GESTION DU FOCUS SUR LA ZONE SIMULÉE (ZOOM & IHM)
         // ==========================================
         function zoomerSurZoneSimulee(data) {
-            if (!data || !window.carte) return;
+            const map = window.carte || (typeof carte !== 'undefined' ? carte : null);
+            if (!data || !map) return;
             const meta = data.meta || {};
             let bounds = null;
 
@@ -4120,9 +4131,9 @@
 
             if (bounds && bounds.isValid()) {
                 window._lastSimBounds = bounds;
-                carte.invalidateSize(true);
+                map.invalidateSize(true);
                 // Effet de zoom fluide cinématographique (flyToBounds) sur la zone simulée
-                carte.flyToBounds(bounds, {
+                map.flyToBounds(bounds, {
                     padding: [50, 50],
                     maxZoom: 16,
                     duration: 1.0,
