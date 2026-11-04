@@ -256,7 +256,7 @@ def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional
                 print(f"[clusters] Cache disque hit pour {cache_key}", flush=True)
                 with open(disk_path, "r", encoding="utf-8") as f:
                     cached_res = json.load(f)
-                if cached_res.get("clusters_crees") == 79 and cached_res.get("resultats"):
+                if cached_res.get("clusters_crees") and cached_res.get("resultats"):
                     _CLUSTERS_CACHE[cache_key] = cached_res
                     return cached_res
             except Exception as e:
