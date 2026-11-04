@@ -4488,10 +4488,16 @@
 
                 // Ligne 2 : Volumes et Surcharges
                 const vRunoffEl = document.getElementById('kpi-vol-runoff');
-                if (vRunoffEl) vRunoffEl.innerText = (k.total_runoff_volume_m3 ? Math.round(k.total_runoff_volume_m3).toLocaleString('fr-FR') : '--') + ' m³';
+                if (vRunoffEl) {
+                    const rVal = k.total_runoff_volume_m3;
+                    vRunoffEl.innerText = (rVal !== undefined && rVal !== null ? Math.round(rVal).toLocaleString('fr-FR') : '--') + ' m³';
+                }
 
                 const vInfilEl = document.getElementById('kpi-vol-infil');
-                if (vInfilEl) vInfilEl.innerText = (k.total_infiltration_volume_m3 ? Math.round(k.total_infiltration_volume_m3).toLocaleString('fr-FR') : '--') + ' m³';
+                if (vInfilEl) {
+                    const iVal = k.total_infiltration_volume_m3;
+                    vInfilEl.innerText = (iVal !== undefined && iVal !== null ? Math.round(iVal).toLocaleString('fr-FR') : '--') + ' m³';
+                }
 
                 const cEffEl = document.getElementById('kpi-coeff-eff');
                 if (cEffEl) cEffEl.innerText = (k.effective_runoff_coeff !== undefined ? k.effective_runoff_coeff.toFixed(2) : '0.70');
