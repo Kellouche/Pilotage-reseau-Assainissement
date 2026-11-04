@@ -71,6 +71,7 @@ def trouver_exutoires_physiques(
     G: nx.DiGraph,
     priorite_map: Optional[Dict[str, int]] = None,
     inclure_exutoires_implicites: bool = False,
+    tolerance_snap_m: float = 1.0,
 ) -> Dict[str, Dict[str, Any]]:
     if priorite_map is None:
         priorite_map = PRIORITE_EXUTOIRES_DEFAUT
@@ -91,22 +92,40 @@ def trouver_exutoires_physiques(
 
     # Trouver les nœuds connectés pour le snapping
     noeuds_connectes = [n for n in G.nodes() if G.in_degree(n) > 0 or G.out_degree(n) > 0]
+    tree = None
+    if noeuds_connectes:
+        try:
+            import numpy as np
+            from scipy.spatial import cKDTree
+            coords_conn = np.array([[float(G.nodes[n].get('x', 0)), float(G.nodes[n].get('y', 0))] for n in noeuds_connectes])
+            tree = cKDTree(coords_conn)
+        except Exception:
+            tree = None
     
     for noeud, matched_type, data in exutoires_bruts:
+        est_deporte = False
+        dist_min = 0.0
+        meilleur_noeud = noeud
+
         if G.in_degree(noeud) == 0 and G.out_degree(noeud) == 0 and noeuds_connectes:
             x1, y1 = float(data.get('x', 0)), float(data.get('y', 0))
-            meilleur_noeud = noeud
-            dist_min = float('inf')
+            if tree is not None:
+                p = np.array([x1, y1])
+                dist, idx = tree.query(p)
+                dist_min = float(dist)
+                meilleur_noeud = noeuds_connectes[idx]
+            else:
+                dist_min = float('inf')
+                for nc in noeuds_connectes:
+                    nc_data = G.nodes[nc]
+                    x2, y2 = float(nc_data.get('x', 0)), float(nc_data.get('y', 0))
+                    dist = ((x2 - x1)**2 + (y2 - y1)**2)**0.5
+                    if dist < dist_min:
+                        dist_min = dist
+                        meilleur_noeud = nc
             
-            for nc in noeuds_connectes:
-                nc_data = G.nodes[nc]
-                x2, y2 = float(nc_data.get('x', 0)), float(nc_data.get('y', 0))
-                dist = ((x2 - x1)**2 + (y2 - y1)**2)**0.5
-                if dist < dist_min:
-                    dist_min = dist
-                    meilleur_noeud = nc
-            
-            if dist_min <= 75.0:
+            # Seuil de tolérance topologique stricte (bibliographique standard: <= 1.0 m)
+            if dist_min <= tolerance_snap_m:
                 to_ouv = data.get('type_ouvrage') or G.nodes[meilleur_noeud].get('type_ouvrage')
                 h_seuil = data.get('h_seuil') or G.nodes[meilleur_noeud].get('h_seuil')
                 milieu_rec = data.get('milieu_rec') or G.nodes[meilleur_noeud].get('milieu_rec')
@@ -132,9 +151,15 @@ def trouver_exutoires_physiques(
                     "milieu_rec": milieu_rec,
                     "zone_collecte": zone_colle,
                     "priorite": priorite_map[matched_type],
-                    "nom": nom_choisi
+                    "nom": nom_choisi,
+                    "est_deporte": False,
+                    "distance_regard_proche_m": round(dist_min, 2),
+                    "regard_proche_id": str(meilleur_noeud)
                 }
                 continue
+            else:
+                # Ouvrage déporté (> 1.0 m) : NON rattaché automatiquement, validation requise
+                est_deporte = True
 
         to_ouv = data.get('type_ouvrage')
         h_seuil = data.get('h_seuil')
@@ -154,7 +179,10 @@ def trouver_exutoires_physiques(
             "milieu_rec": milieu_rec,
             "zone_collecte": zone_colle,
             "priorite": priorite_map[matched_type],
-            "nom": nom_exutoire
+            "nom": nom_exutoire,
+            "est_deporte": est_deporte,
+            "distance_regard_proche_m": round(dist_min, 2) if est_deporte else 0.0,
+            "regard_proche_id": str(meilleur_noeud) if est_deporte else None
         }
 
     # 3. Nœuds morts du réseau (sans exutoire officiel) -> exutoires implicites
@@ -562,6 +590,9 @@ def construire_geojson_cluster(
                 'surface_source': exutoire_info.get('surface_source', 'non_precisee') if exutoire_info else 'non_precisee',
                 'raccordement_statut': exutoire_info.get('raccordement', {}).get('statut') if exutoire_info else None,
                 'raccordement_noeud': exutoire_info.get('raccordement', {}).get('noeud_reseau') if exutoire_info else None,
+                'est_deporte': bool(exutoire_info.get('est_deporte', False)) if exutoire_info else False,
+                'distance_regard_proche_m': exutoire_info.get('distance_regard_proche_m') if exutoire_info else None,
+                'regard_proche_id': exutoire_info.get('regard_proche_id') if exutoire_info else None,
             },
             'geometry': mapping(geom_export)
         })
@@ -591,6 +622,9 @@ def construire_geojson_cluster(
                     'h_seuil': exutoire_info.get('h_seuil') if exutoire_info else None,
                     'milieu_rec': exutoire_info.get('milieu_rec') if exutoire_info else None,
                     'sens_ecoulement': 'vers_exutoire',
+                    'est_deporte': bool(exutoire_info.get('est_deporte', False)) if exutoire_info else False,
+                    'distance_regard_proche_m': exutoire_info.get('distance_regard_proche_m') if exutoire_info else None,
+                    'regard_proche_id': exutoire_info.get('regard_proche_id') if exutoire_info else None,
                 },
                 'geometry': mapping(geom_export)
             })

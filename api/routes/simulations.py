@@ -140,6 +140,7 @@ class SimulationRunRequest(BaseModel):
     cluster_id: Optional[int] = None
     pente_moyenne_pct: Optional[float] = 1.0
     buffer_m: Optional[float] = 35.0
+    valider_raccordement: Optional[bool] = True
 
 
 class ValidateBufferRequest(BaseModel):
@@ -216,7 +217,8 @@ def run_native_swmm_simulation(
             pas_routage_sec=payload.pas_routage_sec,
             pente_moyenne_pct=payload.pente_moyenne_pct,
             cluster_id=payload.cluster_id,
-            tampon_buffer_m=payload.buffer_m
+            tampon_buffer_m=payload.buffer_m,
+            valider_raccordement_deporte=payload.valider_raccordement if payload.valider_raccordement is not None else True,
         )
         resultat["source_gpkg"] = str(gpkg_path.resolve())
         _DERNIERE_SIMULATION = resultat

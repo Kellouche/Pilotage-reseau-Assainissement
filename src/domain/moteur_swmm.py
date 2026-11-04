@@ -187,7 +187,13 @@ def _resoudre_altimetrie_noeuds(
     for _, pipe in canalisations.iterrows():
         u = _clean_node_id(pipe.get("ID_AMONT"))
         v = _clean_node_id(pipe.get("ID_AVAL"))
-        length = float(pipe["Longeur"]) if ("Longeur" in pipe and pipe["Longeur"] > 0) else float(pipe.geometry.length)
+        l_cand = pipe.get("Longeur") or pipe.get("LONGUEUR") or pipe.get("Longueur") or pipe.get("length")
+        if l_cand and float(l_cand) > 0:
+            length = float(l_cand)
+        elif hasattr(pipe, 'geometry') and pipe.geometry is not None and not pipe.geometry.is_empty:
+            length = float(pipe.geometry.length)
+        else:
+            length = 5.0
         if u and v and u != v:
             G.add_edge(u, v, weight=max(1.0, length))
 
@@ -248,11 +254,14 @@ class MoteurSWMM:
         exutoires_map: Optional[Dict[Any, Any]] = None,
         regards_gdf: Optional[gpd.GeoDataFrame] = None,
         canalisations_gdf: Optional[gpd.GeoDataFrame] = None,
+        valider_raccordement_deporte: bool = True,
     ) -> Tuple[str, Dict[str, Any]]:
         """
         Génère l'intégralité du contenu textuel conforme au standard EPA SWMM 5.2 .inp.
         Si cluster_id est renseigné, extrait et modélise uniquement le sous-réseau amont
         drainant vers l'exutoire de ce cluster (bassin urbain ciblé).
+        Si l'ouvrage est déporté (> 1.0 m du regard le plus proche), le rattachement au regard amont
+        est conditionné par valider_raccordement_deporte (validation explicite de l'utilisateur).
         """
         buf_actuel = tampon_buffer_m if (tampon_buffer_m and tampon_buffer_m > 0) else self.tampon_buffer_m
         gh_local = GenerateurHydrologie(tampon_buffer_m=buf_actuel, imperv_defaut=self.gh.imperv_defaut)
@@ -299,10 +308,20 @@ class MoteurSWMM:
             if 1 <= cid_int <= len(ex_list):
                 target_ex_id, ex_info = ex_list[cid_int - 1]
                 bassin_nom = ex_info.get("nom") or f"Bassin {cid_int}"
+                est_deporte = bool(ex_info.get("est_deporte", False))
+                regard_proche = ex_info.get("regard_proche_id")
+                distance_deport = float(ex_info.get("distance_regard_proche_m") or 5.0)
 
                 target_nodes = set([target_ex_id])
                 queue = [target_ex_id]
                 ex_set = set(exutoires_map.keys())
+
+                # Gestion explicite des ouvrages déportés (> 1.0 m) :
+                # Si validé par l'utilisateur, inclure le regard amont et tout son réseau collecteur
+                if est_deporte and valider_raccordement_deporte and regard_proche and G_topo.has_node(regard_proche):
+                    target_nodes.add(regard_proche)
+                    queue.append(regard_proche)
+
                 while queue:
                     curr = queue.pop(0)
                     for pred in G_topo.predecessors(curr):
@@ -324,6 +343,8 @@ class MoteurSWMM:
 
                 clean_target_nodes = set(_clean_node_id(x) for x in target_nodes)
                 clean_target_nodes.add(_clean_node_id(target_ex_id))
+                if est_deporte and valider_raccordement_deporte and regard_proche:
+                    clean_target_nodes.add(_clean_node_id(regard_proche))
 
                 # Filtrer les canalisations du bassin :
                 # Conduites internes (amont et aval dans target_nodes) OU conduites arrivant directement à l'exutoire
@@ -336,6 +357,30 @@ class MoteurSWMM:
                     axis=1
                 )
                 canalisations = canalisations[c_filter].copy()
+
+                # Si l'ouvrage est déporté et validé par l'utilisateur, injecter le tronçon physique de décharge
+                if est_deporte and valider_raccordement_deporte and regard_proche:
+                    geom_line = None
+                    if G_topo.has_node(regard_proche) and G_topo.has_node(target_ex_id):
+                        p1 = G_topo.nodes[regard_proche].get('geometry')
+                        p2 = G_topo.nodes[target_ex_id].get('geometry')
+                        if p1 and p2:
+                            from shapely.geometry import LineString
+                            geom_line = LineString([p1, p2])
+                    conduit_racc = {
+                        "ID_TRONCON": f"C_RACC_{target_ex_id}",
+                        "ID_AMONT": _clean_node_id(regard_proche),
+                        "ID_AVAL": _clean_node_id(target_ex_id),
+                        "LONGUEUR": max(distance_deport, 1.0),
+                        "Longeur": max(distance_deport, 1.0),
+                        "DIAMETRE": 600,
+                        "Diametre": 600,
+                        "MATERIAU": "Beton arme",
+                        "RUGOSITE": 0.013,
+                        "PENTE": pente_moyenne_pct if pente_moyenne_pct else 1.0,
+                        "geometry": geom_line,
+                    }
+                    canalisations = pd.concat([canalisations, gpd.GeoDataFrame([conduit_racc])], ignore_index=True)
 
                 # Ajouter les nœuds amont/aval de toutes les conduites retenues pour la cohérence
                 for _, c in canalisations.iterrows():
@@ -791,7 +836,8 @@ class MoteurSWMM:
         pas_routage_sec: int = 5,
         pente_moyenne_pct: Optional[float] = None,
         cluster_id: Optional[int] = None,
-        tampon_buffer_m: Optional[float] = None
+        tampon_buffer_m: Optional[float] = None,
+        valider_raccordement_deporte: bool = True,
     ) -> Dict[str, Any]:
         """
         Exécute la simulation complète avec pyswmm et extrait les KPIs hydrauliques.
@@ -804,7 +850,8 @@ class MoteurSWMM:
             pas_routage_sec=pas_routage_sec,
             pente_moyenne_pct=pente_moyenne_pct,
             cluster_id=cluster_id,
-            tampon_buffer_m=current_buf
+            tampon_buffer_m=current_buf,
+            valider_raccordement_deporte=valider_raccordement_deporte,
         )
 
         with tempfile.NamedTemporaryFile(suffix=".inp", mode="w", delete=False, encoding="utf-8") as f:
