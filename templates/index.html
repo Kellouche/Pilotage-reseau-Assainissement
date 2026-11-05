@@ -341,9 +341,21 @@
             box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.4) !important;
             padding: 8px 12px !important;
             color: #f8fafc !important;
+            pointer-events: none !important;
+            z-index: 1000 !important;
         }
         .sim-bassin-tooltip::before {
             border-top-color: rgba(15, 23, 42, 0.96) !important;
+        }
+        .leaflet-tooltip {
+            pointer-events: none !important;
+            z-index: 1000 !important;
+        }
+        .leaflet-tooltip-pane {
+            z-index: 1000 !important;
+        }
+        .leaflet-popup-pane {
+            z-index: 1100 !important;
         }
         
         /* Overlay de chargement */
@@ -698,6 +710,45 @@
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap'
         }).addTo(carte);
+
+        // Hiérarchie cartographique des Panes Leaflet (z-index)
+        // 1. Sous-bassins versants Voronoï (fond géométrique)
+        if (!carte.getPane('voronoiPane')) {
+            const p = carte.createPane('voronoiPane');
+            p.style.zIndex = 410;
+        }
+        // 2. Bassins Versants (Prend le dessus sur les Voronoï)
+        if (!carte.getPane('bassinsPane')) {
+            const p = carte.createPane('bassinsPane');
+            p.style.zIndex = 430;
+        }
+        // 3. Réseau physique brut : Conduites
+        if (!carte.getPane('pipesPane')) {
+            const p = carte.createPane('pipesPane');
+            p.style.zIndex = 450;
+        }
+        // 4. Réseau physique brut : Regards et Ouvrages
+        if (!carte.getPane('nodesPane')) {
+            const p = carte.createPane('nodesPane');
+            p.style.zIndex = 470;
+        }
+        // 5. Résultats SWMM 5.2 : Conduites simulées
+        if (!carte.getPane('swmmResultsPane')) {
+            const p = carte.createPane('swmmResultsPane');
+            p.style.zIndex = 620;
+        }
+        // 6. Résultats SWMM 5.2 : Regards simulés (surcharges orange & débordements rouge)
+        if (!carte.getPane('swmmNodesPane')) {
+            const p = carte.createPane('swmmNodesPane');
+            p.style.zIndex = 650;
+        }
+        // 7. Infobulles et survol interactif au 1er plan absolu
+        if (carte.getPane('tooltipPane')) {
+            carte.getPane('tooltipPane').style.zIndex = 1000;
+        }
+        if (carte.getPane('popupPane')) {
+            carte.getPane('popupPane').style.zIndex = 1100;
+        }
 
         let couches = {
             conduites: L.layerGroup().addTo(carte),
@@ -1294,6 +1345,7 @@
                     window.conduitProperties = [];
                     // Conduites (lignes)
                     L.geoJSON(d.couches.conduites, {
+                        pane: 'pipesPane',
                         style: { color: '#3498db', weight: 3 },
                         onEachFeature: (feature, layer) => {
                             const index = window.conduitProperties.length;
@@ -1411,9 +1463,10 @@
                     ['regards', 'rejets', 'stations', 'step', 'ouvrages'].forEach(type => {
                         if (!d.couches[type] || !d.couches[type].features) return;
                         L.geoJSON(d.couches[type], {
+                            pane: 'nodesPane',
                             pointToLayer: (feature, latlng) => {
-                                if (type === 'ouvrages') return L.circleMarker(latlng, getOuvrageStyle(feature));
-                                return L.circleMarker(latlng, styles[type]);
+                                const st = (type === 'ouvrages') ? getOuvrageStyle(feature) : styles[type];
+                                return L.circleMarker(latlng, Object.assign({ pane: 'nodesPane' }, st));
                             },
                             onEachFeature: (feature, layer) => {
                                 if (type === 'stations') {
@@ -1579,6 +1632,7 @@
                                     };
                                     const color = typeColors[feature.properties.exutoire_type] || '#27ae60';
                                     return L.circleMarker(latlng, {
+                                        pane: 'nodesPane',
                                         radius: 10,
                                         fillColor: color,
                                         color: '#fff',
@@ -1692,11 +1746,13 @@
                         clusterCouche.clearLayers();
                         couches.orphelins.clearLayers();
 
-                        // Séparer les bassins des tronçons pour la gestion des couches
+                        // Séparer les bassins des tronçons pour la gestion des couches (Bassins Versants prioritaires sur Voronoï)
                         clusterLayer.eachLayer(layer => {
                             if (layer.feature && layer.feature.properties && layer.feature.properties.type === 'bassin_urbain') {
+                                layer.options.pane = 'bassinsPane';
                                 layer.addTo(couches.bassins);
                             } else {
+                                layer.options.pane = 'pipesPane';
                                 layer.addTo(clusterCouche);
                             }
                         });
@@ -2032,9 +2088,8 @@
                             sbLayer.setStyle({ color: '#059669', fillColor: '#10b981', fillOpacity: 0.18, weight: 1.5, dashArray: '4, 4' });
                         }
                     } else if (sbBassinId === _selectedClusterId) {
-                        // Sous-bassin du bassin sélectionné : mise en valeur
+                        // Sous-bassin du bassin sélectionné : mise en valeur en arrière-plan du bassin versant
                         sbLayer.setStyle({ color: '#10b981', fillColor: '#10b981', fillOpacity: 0.38, weight: 2.2, dashArray: null });
-                        try { sbLayer.bringToFront(); } catch(e) {}
                     } else {
                         // Autre sous-bassin : estompé
                         sbLayer.setStyle({ color: '#64748b', fillColor: '#334155', fillOpacity: 0.02, opacity: 0.12, weight: 0.5, dashArray: '4, 4' });
@@ -4127,6 +4182,7 @@
                     if (legend) legend.innerHTML = `Surface drainée : <b>${totArea} ha</b> sur <b>${count} sous-bassins</b> (79 BV d'exutoires).`;
 
                     L.geoJSON(fc, {
+                        pane: 'voronoiPane',
                         style: {
                             color: '#059669',
                             weight: 1.5,
@@ -4311,7 +4367,6 @@
                                 weight: 1.2,
                                 opacity: 0.8
                             });
-                            try { layer.bringToBack(); } catch(e) {}
                         } else {
                             layer.setStyle({
                                 color: '#475569',
@@ -4383,14 +4438,15 @@
                     layer.unbindTooltip();
                     layer.bindTooltip(simCardHtml, { sticky: true, opacity: 0.98, className: 'sim-bassin-tooltip' });
                     layer.bindPopup(simCardHtml);
+                    layer.options.pane = 'bassinsPane';
                     layer.setStyle({
                         color: '#38bdf8',
                         weight: 2.5,
                         fillColor: '#38bdf8',
-                        fillOpacity: 0.04,
+                        fillOpacity: 0.05,
                         dashArray: '6, 4'
                     });
-                    try { layer.bringToBack(); } catch(e) {}
+                    try { layer.bringToFront(); } catch(e) {}
                 }
             };
 
@@ -4456,6 +4512,12 @@
                 p.style.zIndex = 650;
             } else {
                 carte.getPane('swmmNodesPane').style.zIndex = 650;
+            }
+            if (carte.getPane('tooltipPane')) {
+                carte.getPane('tooltipPane').style.zIndex = 1000;
+            }
+            if (carte.getPane('popupPane')) {
+                carte.getPane('popupPane').style.zIndex = 1100;
             }
 
             // Afficher la légende interactive sur la carte uniquement suite à la simulation
@@ -4559,7 +4621,22 @@
                             </div>
                         `;
                         layer.bindPopup(popupHtml);
-                        layer.bindTooltip(`<b>${r.link_id || 'Conduite'}</b> (${u}&rarr;${d}) : Q/Qmax = <b>${qPct}%</b> (${r.label})`, { sticky: true });
+                        layer.bindTooltip(`<b>${r.link_id || 'Conduite'}</b> (${u}&rarr;${d}) : Q/Qmax = <b>${qPct}%</b> (${r.label})`, { sticky: true, opacity: 0.98 });
+                        
+                        // Interaction de survol au 1er plan pour les conduites simulées
+                        layer.on('mouseover', function() {
+                            const isS = (r.status === 'surcharge' || (r.depth_ratio >= 1.0) || (r.flow_ratio >= 1.0));
+                            const isC = (r.status === 'critique' || (r.depth_ratio >= 0.8));
+                            const hW = isS ? 8.0 : (isC ? 7.0 : 6.0);
+                            this.setStyle({ weight: hW, opacity: 1.0 });
+                            try { this.bringToFront(); } catch(e) {}
+                        });
+                        layer.on('mouseout', function() {
+                            const isS = (r.status === 'surcharge' || (r.depth_ratio >= 1.0) || (r.flow_ratio >= 1.0));
+                            const isC = (r.status === 'critique' || (r.depth_ratio >= 0.8));
+                            const initW = isS ? 6.0 : (isC ? 5.0 : 4.0);
+                            this.setStyle({ weight: initW, opacity: 1.0 });
+                        });
                     }
                 }).addTo(couches.res_conduites);
             }
@@ -4653,7 +4730,19 @@
                             </div>
                         `;
                         layer.bindPopup(popupHtml);
-                        layer.bindTooltip(`<b>${isFlooded ? '🚨 Débordement' : (isSurcharged ? '⚠️ Surcharge' : 'Regard')} : ${cleanNid}</b>${isFlooded ? ` (${(r.flood_volume_m3 || 0).toFixed(1)} m³)` : ''}`, { sticky: true });
+                        layer.bindTooltip(`<b>${isFlooded ? '🚨 Débordement' : (isSurcharged ? '⚠️ Surcharge' : 'Regard')} : ${cleanNid}</b>${isFlooded ? ` (${(r.flood_volume_m3 || 0).toFixed(1)} m³)` : ''}`, { sticky: true, opacity: 0.98 });
+                        
+                        // Interaction de survol au 1er plan pour les regards simulés
+                        layer.on('mouseover', function() {
+                            const curR = isFlooded ? 5.5 : (isSurcharged ? 4.0 : 2.5);
+                            this.setStyle({ radius: curR + 1.8, weight: 2.2 });
+                            try { this.bringToFront(); } catch(e) {}
+                        });
+                        layer.on('mouseout', function() {
+                            const curR = isFlooded ? 5.5 : (isSurcharged ? 4.0 : 2.5);
+                            const curW = isFlooded ? 1.5 : (isSurcharged ? 1.2 : 0.8);
+                            this.setStyle({ radius: curR, weight: curW });
+                        });
                     }
                 }).addTo(couches.res_regards);
             }
