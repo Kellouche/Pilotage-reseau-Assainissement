@@ -48,7 +48,14 @@ def _clean_node_id(val: Any, fallback: str = "") -> str:
     return txt
 
 
-SCENARIOS_PLUIE = {
+SCENARIOS_PLUIE = {}  # Remplacé dynamiquement ci-dessous
+try:
+    from src.domain.referentiel_pluvio import generer_scenarios_swmm_pour_station, obtenir_station
+    SCENARIOS_PLUIE = generer_scenarios_swmm_pour_station("chlef_anrh_siege")
+except Exception as _e_scen:
+    logger.warning("Erreur chargement scénarios pluviométriques Chlef : %s", _e_scen)
+
+_LEGACY_SCENARIOS = {
     "pluie_decennale": {
         "nom": "Station ANRH Mascara — Pluie Décennale (T = 10 ans) [Référence Validée]",
         "station": "Station ANRH Mascara-Ghriss (Bassin Macta - Réf. 040702)",
@@ -221,6 +228,9 @@ SCENARIOS_PLUIE = {
     }
 }
 
+if not SCENARIOS_PLUIE:
+    SCENARIOS_PLUIE = _LEGACY_SCENARIOS
+
 TYPOLOGIES_OCCUPATION_SOL = {
     "centre_urbain_dense": {
         "nom": "Centre urbain dense / Commercial (85%)",
@@ -293,6 +303,9 @@ TYPOLOGIES_OCCUPATION_SOL = {
         "c_ruissellement_ref": 0.15
     }
 }
+
+if not SCENARIOS_PLUIE:
+    SCENARIOS_PLUIE = _LEGACY_SCENARIOS
 
 
 def _resoudre_altimetrie_noeuds(
@@ -441,6 +454,7 @@ class MoteurSWMM:
         typologie_sol: Optional[str] = None,
         imperv_pct: Optional[float] = None,
         intensite_max_mmh: Optional[float] = None,
+        station_id: Optional[str] = "chlef_anrh_siege",
     ) -> Tuple[str, Dict[str, Any]]:
         """
         Génère l'intégralité du contenu textuel conforme au standard EPA SWMM 5.2 .inp.
@@ -482,10 +496,17 @@ class MoteurSWMM:
             d_store_imperv=d_store_imp,
             d_store_perv=d_store_perv,
         )
-        if scenario_key not in SCENARIOS_PLUIE:
+        st_id = station_id or "chlef_anrh_siege"
+        try:
+            from src.domain.referentiel_pluvio import generer_scenarios_swmm_pour_station
+            scenarios_actifs = generer_scenarios_swmm_pour_station(st_id)
+        except Exception:
+            scenarios_actifs = SCENARIOS_PLUIE
+
+        if scenario_key not in scenarios_actifs:
             scenario_key = "pluie_decennale"
 
-        scen = SCENARIOS_PLUIE[scenario_key]
+        scen = scenarios_actifs[scenario_key]
         duree_sim = duree_heures if (duree_heures and duree_heures > 0) else scen["duree_heures"]
 
         if regards_gdf is not None and canalisations_gdf is not None:
@@ -1060,15 +1081,18 @@ class MoteurSWMM:
             "typologie_sol": typologie_sol or "habitat_mixte",
             "typologie_nom": typ_nom,
             "imperv_pct": active_imperv,
-            # Métadonnées hydro-météorologiques certifiées (Station Mascara 040702)
-            "pluvio_station": scen.get("station", "Station ANRH Mascara-Ghriss (040702)"),
+            # Métadonnées hydro-météorologiques certifiées (UHBC / ANRH Chlef)
+            "pluvio_station": scen.get("station", "Station ANRH Chlef Siège (010501)"),
+            "pluvio_station_id": st_id,
+            "pluvio_code_anrh": scen.get("code_anrh", "010501"),
+            "pluvio_wilaya": scen.get("wilaya", "Wilaya de Chlef"),
             "pluvio_scenario_key": scenario_key,
             "pluvio_scenario_nom": scen.get("nom"),
             "pluvio_periode_retour": scen.get("periode_retour", "T = 10 ans"),
             "pluvio_intensite_max_mmh": active_i_max,
             "pluvio_montana": scen.get("formule_montana", ""),
             "pluvio_hauteur_totale_mm": hauteur_totale_cumul_mm,
-            "pluvio_p24_mm": scen.get("hauteur_p24_mm", 58.5),
+            "pluvio_p24_mm": scen.get("hauteur_p24_mm", 56.0),
             "pluvio_source": scen.get("source", ""),
             "pluvio_description": scen.get("description", ""),
         }
@@ -1155,6 +1179,7 @@ class MoteurSWMM:
         typologie_sol: Optional[str] = None,
         imperv_pct: Optional[float] = None,
         intensite_max_mmh: Optional[float] = None,
+        station_id: Optional[str] = "chlef_anrh_siege",
     ) -> Dict[str, Any]:
         """
         Exécute la simulation complète avec pyswmm et extrait les KPIs hydrauliques.
@@ -1173,6 +1198,7 @@ class MoteurSWMM:
             typologie_sol=typologie_sol,
             imperv_pct=imperv_pct,
             intensite_max_mmh=intensite_max_mmh,
+            station_id=station_id,
         )
 
         with tempfile.NamedTemporaryFile(suffix=".inp", mode="w", delete=False, encoding="utf-8") as f:
@@ -1505,6 +1531,9 @@ class MoteurSWMM:
 
         # Données hydro-météorologiques certifiées
         kpis["pluvio_station"] = meta.get("pluvio_station")
+        kpis["pluvio_station_id"] = meta.get("pluvio_station_id")
+        kpis["pluvio_code_anrh"] = meta.get("pluvio_code_anrh")
+        kpis["pluvio_wilaya"] = meta.get("pluvio_wilaya")
         kpis["pluvio_scenario_nom"] = meta.get("pluvio_scenario_nom")
         kpis["pluvio_periode_retour"] = meta.get("pluvio_periode_retour")
         kpis["pluvio_intensite_max_mmh"] = i_max

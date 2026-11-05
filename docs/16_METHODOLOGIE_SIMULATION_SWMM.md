@@ -72,16 +72,28 @@ Pour garantir une interopérabilité sans faille entre le SIG patrimonial de la 
 
 ---
 
-## 3. Scénarios Pluviométriques de Sollicitation
+## 3. Scénarios Pluviométriques de Sollicitation & Référentiel Certifié
 
-Le moteur SWMM 5.2 intègre les sollicitations sous forme de séries temporelles (`[TIMESERIES]`) associées à un pluviomètre numérique (`[RAINGAGES]`) :
+Le moteur SWMM 5.2 s'appuie désormais sur le **Référentiel National des Données Pluviométriques d'Algérie** certifié ANRH / UHBC / ONA (voir [`REFERENTIEL_PLUVIOMETRIE_ALGERIE.md`](REFERENTIEL_PLUVIOMETRIE_ALGERIE.md)).
 
-| Scénario | Période de Retour $T$ | Durée de Simulation | Intensité de Crête | Forme / Méthode |
-|---|---|---|---|---|
-| **Pluie Décennale** | $T = 10\text{ ans}$ | 4 heures | $92\text{ mm/h}$ | Montana / Chicago ($r=0.4$) |
-| **Pluie Cinquantennale** | $T = 50\text{ ans}$ | 6 heures | $145\text{ mm/h}$ | Crise majeure / Montana |
-| **Orage Brutal d'Été** | Événement convectif | 2 heures | $110\text{ mm/h}$ | Pluie courte d'intensité violente |
-| **Temps Sec Pur** | Étiage journalier | 24 heures | $0\text{ mm/h}$ | Transit des eaux usées sans ruissellement |
+Les sollicitations sont générées dynamiquement sous forme de séries temporelles (`[TIMESERIES]`) selon la loi de Montana $I(t) = 60 \cdot a \cdot t^{-b}$ et le modèle de Chicago centré ($r=0.40$), associées au pluviomètre numérique SWMM (`[RAINGAGES]`).
+
+### 3.1 Sollicitations de Référence — Station ANRH Chlef Siège (Code 010501 - UHBC)
+
+| Scénario | Période de Retour $T$ | Durée Simulation | Intensité Crête ($I_{\max}$) | Formule de Montana (UHBC / ANRH) | Hauteur $P_{24}$ |
+|---|---|---|---|---|---|
+| **Pluie Décennale** (Standard ONA) | $T = 10\text{ ans}$ | 4 heures | **$74.9\text{ mm/h}$** | $I(t) = 9.334 \cdot t^{-0.745}$ ($t_c = 15\text{ min}$) | $56.0\text{ mm}$ |
+| **Pluie Cinquantennale** (Crise Majeure) | $T = 50\text{ ans}$ | 4 heures | **$120.0\text{ mm/h}$** | $I(t) = 15.795 \cdot t^{-0.760}$ | $81.0\text{ mm}$ |
+| **Pluie Centennale** (Crue Historique) | $T = 100\text{ ans}$ | 4 heures | **$144.5\text{ mm/h}$** | $I(t) = 19.338 \cdot t^{-0.764}$ | $94.0\text{ mm}$ |
+| **Pluie Biennale** (Exploitation) | $T = 2\text{ ans}$ | 4 heures | **$45.0\text{ mm/h}$** | $I(t) = 5.250 \cdot t^{-0.720}$ | $34.0\text{ mm}$ |
+| **Orage Brutal d'Été** (Convectif) | $T \approx 20\text{ ans}$ | 2 heures | **$92.5\text{ mm/h}$** | Averse orageuse convective ($a=11.823$) | $66.5\text{ mm}$ |
+| **Temps Sec Pur** | Étiage DWF | 24 heures | **$0.0\text{ mm/h}$** | Transit exclusif des eaux usées sans ruissellement | $0.0\text{ mm}$ |
+
+### 3.2 Flexibilité & Saisie Manuelle Ingénieur
+
+* **Sélecteur de stations** : Couvre 7 stations de la Wilaya de Chlef (Chlef Siège, Oum Drou, Oued Fodda, Bénaïria, Domaine Si Tayeb, Ténès, Boukadir) et d'autres bassins régionaux.
+* **Surcharge de l'intensité ($I_{\max}$)** : L'ingénieur peut ajuster l'intensité de crête directement dans l'interface pour tester des scénarios d'inondation personnalisés.
+* **Traçabilité intégrale** : Chaque simulation conserve et affiche dans ses métadonnées et son rapport la station retenue, le code ANRH, les coefficients de Montana et la pluie journalière $P_{24}$.
 
 ---
 

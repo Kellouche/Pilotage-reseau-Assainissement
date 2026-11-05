@@ -144,6 +144,7 @@ class SimulationRunRequest(BaseModel):
     typologie_sol: Optional[str] = "habitat_mixte"
     imperv_pct: Optional[float] = None
     intensite_max_mmh: Optional[float] = None
+    station_id: Optional[str] = "chlef_anrh_siege"
 
 
 class ValidateBufferRequest(BaseModel):
@@ -169,17 +170,52 @@ def get_simulation_typologies_sol():
     }
 
 
-@router.get("/scenarios")
-def get_simulation_scenarios():
-    """Retourne les scénarios de pluie et de sollicitation disponibles."""
+@router.get("/pluviometrie/referentiel")
+def get_pluviometrie_referentiel():
+    """Retourne le référentiel pluviométrique complet certifié (Wilayas, Stations, Métadonnées)."""
+    from src.domain.referentiel_pluvio import charger_referentiel, lister_wilayas, lister_stations
+    ref = charger_referentiel()
     return {
+        "metadata": ref.get("metadata", {}),
+        "wilaya_active_recommandee": ref.get("wilaya_active_recommandee", "Chlef"),
+        "wilayas": lister_wilayas(),
+        "stations_chlef": lister_stations("Chlef"),
+        "total_stations": len(lister_stations()),
+    }
+
+
+@router.get("/pluviometrie/stations")
+def get_pluviometrie_stations(wilaya: Optional[str] = None):
+    """Retourne la liste des stations hydro-météorologiques (optionnellement filtrée par wilaya)."""
+    from src.domain.referentiel_pluvio import lister_stations
+    return {"stations": lister_stations(wilaya_key=wilaya)}
+
+
+@router.get("/scenarios")
+def get_simulation_scenarios(station_id: Optional[str] = "chlef_anrh_siege"):
+    """Retourne les scénarios de pluie et de sollicitation disponibles pour une station donnée."""
+    from src.domain.referentiel_pluvio import generer_scenarios_swmm_pour_station, obtenir_station
+    st_id = station_id or "chlef_anrh_siege"
+    scenarios_dict = generer_scenarios_swmm_pour_station(st_id)
+    if not scenarios_dict:
+        scenarios_dict = SCENARIOS_PLUIE
+
+    st_info = obtenir_station(st_id) or {}
+    default_i_max = scenarios_dict.get("pluie_decennale", {}).get("intensite_max_defaut", 74.9)
+
+    return {
+        "station": st_info,
+        "station_id": st_id,
         "scenarios": [
             {
                 "key": k,
                 "nom": v["nom"],
                 "station": v.get("station", "Station Hydro-Météo"),
+                "station_id": v.get("station_id", st_id),
+                "code_anrh": v.get("code_anrh", ""),
+                "wilaya": v.get("wilaya", "Wilaya de Chlef"),
                 "periode_retour": v.get("periode_retour", "T = 10 ans"),
-                "intensite_max_defaut": v.get("intensite_max_defaut", 62.0),
+                "intensite_max_defaut": v.get("intensite_max_defaut", default_i_max),
                 "duree_heures": v["duree_heures"],
                 "formule_montana": v.get("formule_montana", ""),
                 "hauteur_p24_mm": v.get("hauteur_p24_mm", 0.0),
@@ -187,10 +223,10 @@ def get_simulation_scenarios():
                 "source": v.get("source", ""),
                 "description": v["description"]
             }
-            for k, v in SCENARIOS_PLUIE.items()
+            for k, v in scenarios_dict.items()
         ],
         "default_scenario": "pluie_decennale",
-        "default_intensite_max": 62.0,
+        "default_intensite_max": default_i_max,
         "solver": "EPA SWMM 5.2 Dynamic Wave (DYNWAVE)",
         "infiltration_method": "Horton (f0=75 mm/h, fc=10 mm/h, k=4.0 1/h)",
     }
@@ -252,6 +288,7 @@ def run_native_swmm_simulation(
             typologie_sol=payload.typologie_sol,
             imperv_pct=payload.imperv_pct,
             intensite_max_mmh=payload.intensite_max_mmh,
+            station_id=payload.station_id,
         )
         resultat["source_gpkg"] = str(gpkg_path.resolve())
         _DERNIERE_SIMULATION = resultat
@@ -283,6 +320,9 @@ def run_native_swmm_simulation(
                 "typologie_nom": resultat.get("meta", {}).get("typologie_nom"),
                 "imperv_pct": resultat.get("meta", {}).get("imperv_pct"),
                 "pluvio_station": resultat.get("meta", {}).get("pluvio_station"),
+                "pluvio_station_id": resultat.get("meta", {}).get("pluvio_station_id"),
+                "pluvio_code_anrh": resultat.get("meta", {}).get("pluvio_code_anrh"),
+                "pluvio_wilaya": resultat.get("meta", {}).get("pluvio_wilaya"),
                 "pluvio_scenario_nom": resultat.get("meta", {}).get("pluvio_scenario_nom"),
                 "pluvio_periode_retour": resultat.get("meta", {}).get("pluvio_periode_retour"),
                 "pluvio_intensite_max_mmh": resultat.get("meta", {}).get("pluvio_intensite_max_mmh"),

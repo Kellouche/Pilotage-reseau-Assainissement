@@ -3,6 +3,7 @@
 ## 📚 Référentiel Documentaire SaaS 2.0 (Officiel)
 
 - **[Guide Master SaaS](docs/01_README.md)**
+- **[Référentiel National Pluviométrique & IDF Algérie (ANRH/UHBC/ONA)](docs/REFERENTIEL_PLUVIOMETRIE_ALGERIE.md)**
 - **[Feuille de Route SaaS (Phases 0 à 7)](docs/13_ROADMAP_SAAS.md)**
 - **[Fiche Produit & Cadrage Stratégique](docs/14_FICHE_PRODUIT_CADRAGE.md)**
 - **[Glossaire et Garanties Métier (Non-Régression)](docs/14_GLOSSAIRE_ET_GARANTIES.md)**
@@ -37,6 +38,8 @@ Outils de visualisation interactive et de génération de fichiers SWMM 5.2 à p
   - Suppression de tout "snapping" euclidien aveugle vers des exutoires distants.
 - **Moteur de Simulation Hydrodynamique SWMM 5.2** :
   - Sectorisation obligatoire par exutoire avant calcul.
+  - **Référentiel Pluviométrique National Certifié (ANRH / UHBC / ONA)** : intégration de 7 stations hydro-météorologiques dans la Wilaya de Chlef (Chlef Siège, Oum Drou, Oued Fodda, Bénaïria, Domaine Si Tayeb, Ténès, Boukadir) avec quantiles Gumbel $P_{24}$ et coefficients de Montana $a, b$ certifiés par l'Université Hassiba Ben Bouali de Chlef.
+  - Hyétogrammes de projet Chicago centrés ($r=0.40$), contrôle automatique pluie-débit (méthode rationnelle $Q_{\text{rat}} = C \cdot I \cdot A / 360$) et champ de saisie manuelle de l'intensité $I_{\max}$ pour scénarios personnalisés.
   - Sélecteur de typologie urbaine dominante (Centre urbain dense, Collectif, Pavillonnaire, Mixte, Périurbain) et surcharge manuelle du taux d'imperméabilisation (`% Imperv`).
   - Diagnostic hydraulique en temps réel : débits de pointe, erreurs de continuité, mise en charge des conduites ($Q/Q_{\max}$), identification des surcharges et des débordements en surface.
   - Restitution cartographique aux normes d'ingénierie : cercles nets et discrets (Débordement 5.5 px, Surcharge 4.0 px, Normal 2.5 px), sans animation pulsante invasive.

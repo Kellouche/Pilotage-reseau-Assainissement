@@ -320,4 +320,9 @@ def generer_scenarios_swmm_pour_station(station_id: str) -> Dict[str, Any]:
         "timeseries": ts10
     }
 
+    for s_key, s_data in scenarios.items():
+        s_data["code_anrh"] = code_anrh
+        s_data["wilaya"] = st.get("wilaya_nom", "Wilaya de Chlef")
+
     return scenarios
+

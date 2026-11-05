@@ -4865,13 +4865,13 @@
                 const ratioDrain = document.getElementById('kpi-ratio-drainage');
                 if (ratioDrain) ratioDrain.innerText = `(Ratio: ${data.meta && data.meta.ratio_drainage_pct ? data.meta.ratio_drainage_pct : 55} %)`;
 
-                // Données hydro-météorologiques certifiées (Station Mascara)
-                const pluvioStation = (data.kpis && data.kpis.pluvio_station) || (data.meta && data.meta.pluvio_station) || 'Station ANRH Mascara (Réf. 040702)';
-                const pluvioPeriode = (data.kpis && data.kpis.pluvio_periode_retour) || (data.meta && data.meta.pluvio_periode_retour) || 'T = 10 ans';
-                const pluvioImax = (data.kpis && data.kpis.pluvio_intensite_max_mmh) !== undefined ? data.kpis.pluvio_intensite_max_mmh : ((data.meta && data.meta.pluvio_intensite_max_mmh) || 62.0);
-                const pluvioPtot = (data.kpis && data.kpis.pluvio_hauteur_totale_mm) || (data.meta && data.meta.pluvio_hauteur_totale_mm) || 36.5;
-                const pluvioMontana = (data.kpis && data.kpis.pluvio_montana) || (data.meta && data.meta.pluvio_montana) || 'I(t) = 6.2 · t^(-0.58)';
-                const pluvioSource = (data.kpis && data.kpis.pluvio_source) || (data.meta && data.meta.pluvio_source) || 'Série statistique ANRH Direction Régionale Ouest (Mascara)';
+                // Données hydro-météorologiques certifiées (ANRH / UHBC)
+                const pluvioStation = (data.kpis && data.kpis.pluvio_station) || (data.meta && data.meta.pluvio_station) || 'Station ANRH Chlef Siège (010501)';
+                const pluvioPeriode = (data.kpis && data.kpis.pluvio_periode_retour) || (data.meta && data.meta.pluvio_periode_retour) || 'T = 10 ans (Décennale)';
+                const pluvioImax = (data.kpis && data.kpis.pluvio_intensite_max_mmh) !== undefined ? data.kpis.pluvio_intensite_max_mmh : ((data.meta && data.meta.pluvio_intensite_max_mmh) || 74.9);
+                const pluvioPtot = (data.kpis && data.kpis.pluvio_hauteur_totale_mm) || (data.meta && data.meta.pluvio_hauteur_totale_mm) || 42.8;
+                const pluvioMontana = (data.kpis && data.kpis.pluvio_montana) || (data.meta && data.meta.pluvio_montana) || 'I(t) = 9.334 · t^(-0.745)';
+                const pluvioSource = (data.kpis && data.kpis.pluvio_source) || (data.meta && data.meta.pluvio_source) || 'ANRH Antenne Chlef / UHBC Laboratoire Eau & Environnement (Code 010501)';
 
                 const badgeStEl = document.getElementById('kpi-pluvio-station-badge');
                 if (badgeStEl) badgeStEl.innerText = pluvioStation;
@@ -5233,38 +5233,38 @@
         };
 
         // ==========================================
-        // GESTION DYNAMIQUE DE LA PLUVIOMÉTRIE (Station ANRH Mascara 040702)
+        // GESTION DYNAMIQUE DE LA PLUVIOMÉTRIE (Référentiel ANRH / UHBC Chlef)
         // ==========================================
         window._scenariosPluieInfo = {
             'pluie_decennale': {
-                imax: 62.0,
-                station: 'Station ANRH Mascara (040702)',
+                imax: 74.9,
+                station: 'Station ANRH Chlef Siège (010501)',
                 duree: 4.0,
-                note: 'Paramétrage ANRH Mascara : Formule Montana $I(t) = 6.2 \\cdot t^{-0.58}$ &bull; Chicago centré ($t_c \\approx 15-30\\text{ min}$) &bull; $P_{24} = 58.5\\text{ mm}$ &bull; Hauteur cumulée $P = 36.5\\text{ mm}$.'
+                note: 'Paramétrage ANRH Chlef Siège (UHBC) : Formule Montana $I(t) = 9.334 \\cdot t^{-0.745}$ &bull; Chicago centré ($t_c = 15\\text{ min}$) &bull; $P_{24} = 56.0\\text{ mm}$ &bull; Hauteur cumulée $P = 42.8\\text{ mm}$ [Standard Réglementaire ONA].'
             },
             'pluie_cinquantennale': {
-                imax: 85.0,
-                station: 'Station ANRH Mascara (040702)',
+                imax: 120.0,
+                station: 'Station ANRH Chlef Siège (010501)',
                 duree: 4.0,
-                note: 'Crise Majeure Cinquantennale ANRH Mascara : Formule Montana $I(t) = 8.1 \\cdot t^{-0.56}$ &bull; $P_{24} = 82.0\\text{ mm}$ &bull; Hauteur cumulée $P = 54.0\\text{ mm}$.'
+                note: 'Crise Majeure Cinquantennale ANRH Chlef : Formule Montana $I(t) = 15.795 \\cdot t^{-0.760}$ &bull; $P_{24} = 81.0\\text{ mm}$ &bull; Hauteur cumulée $P = 67.5\\text{ mm}$.'
             },
             'pluie_centennale': {
-                imax: 110.0,
-                station: 'Station ANRH Mascara (040702)',
+                imax: 144.5,
+                station: 'Station ANRH Chlef Siège (010501)',
                 duree: 4.0,
-                note: 'Crue Historique Centennale ANRH Mascara : Formule Montana $I(t) = 9.8 \\cdot t^{-0.55}$ &bull; $P_{24} = 102.0\\text{ mm}$ &bull; Hauteur cumulée $P = 72.0\\text{ mm}$.'
+                note: 'Crue Historique Centennale ANRH Chlef : Formule Montana $I(t) = 19.338 \\cdot t^{-0.764}$ &bull; $P_{24} = 94.0\\text{ mm}$ &bull; Hauteur cumulée $P = 81.0\\text{ mm}$.'
             },
             'pluie_biennale': {
-                imax: 38.0,
-                station: 'Station ANRH Mascara (040702)',
+                imax: 45.0,
+                station: 'Station ANRH Chlef Siège (010501)',
                 duree: 4.0,
-                note: 'Pluie Courante Biennale ANRH Mascara : Formule Montana $I(t) = 4.2 \\cdot t^{-0.60}$ &bull; $P_{24} = 35.0\\text{ mm}$ &bull; Hauteur cumulée $P = 22.5\\text{ mm}$.'
+                note: 'Pluie Courante Biennale ANRH Chlef : Formule Montana $I(t) = 5.250 \\cdot t^{-0.720}$ &bull; $P_{24} = 34.0\\text{ mm}$ &bull; Hauteur cumulée $P = 26.0\\text{ mm}$.'
             },
             'pluie_orage_2h': {
-                imax: 92.0,
-                station: 'Station Synoptique Régionale Ouest',
+                imax: 92.5,
+                station: 'Station ANRH Chlef Siège (010501)',
                 duree: 2.0,
-                note: 'Orage d\'été brutal méditerranéen convectif concentré sur 60 min avec pic à 92.0 mm/h &bull; $P_{24} = 65.0\\text{ mm}$.'
+                note: 'Orage d\'été brutal méditerranéen convectif concentré sur 60 min avec pic à 92.5 mm/h ($T \\approx 20\\text{ ans}$) &bull; $P_{24} = 66.5\\text{ mm}$.'
             },
             'temps_sec_pur': {
                 imax: 0.0,
@@ -5273,11 +5273,43 @@
                 note: 'Temps Sec Pur : Transit exclusif du débit d\'étiage des eaux usées (DWF) sans apport pluvial &bull; $I = 0\\text{ mm/h}$.'
             },
             'personnalise': {
-                imax: 62.0,
+                imax: 74.9,
                 station: 'Profil Saisi par l\'Utilisateur',
                 duree: 4.0,
                 note: 'Pluie personnalisée proportionnelle : l\'hyétogramme est généré d\'après l\'intensité de pointe spécifiée par l\'ingénieur.'
             }
+        };
+
+        window.onChangementStationPluie = function(stationId) {
+            const badge = document.getElementById('sim-pluvio-station-badge');
+            if (badge) badge.innerText = 'Chargement station...';
+            
+            fetch(`/api/v1/simulations/scenarios?station_id=${encodeURIComponent(stationId)}`)
+                .then(r => r.ok ? r.json() : null)
+                .then(data => {
+                    if (data && data.scenarios) {
+                        const newScenInfo = {};
+                        const stName = (data.station && data.station.nom) ? data.station.nom : stationId;
+                        const stCode = (data.station && data.station.code_anrh) ? `(${data.station.code_anrh})` : '';
+                        
+                        data.scenarios.forEach(sc => {
+                            newScenInfo[sc.key] = {
+                                imax: sc.intensite_max_defaut || 74.9,
+                                station: `${stName} ${stCode}`,
+                                duree: sc.duree_heures || 4.0,
+                                note: sc.description || (sc.formule_montana ? `Formule Montana : ${sc.formule_montana}` : '')
+                            };
+                        });
+                        window._scenariosPluieInfo = newScenInfo;
+                        
+                        const scenSel = document.getElementById('sim-select-scenario');
+                        const curVal = scenSel ? scenSel.value : 'pluie_decennale';
+                        window.onChangementScenarioPluie(curVal);
+                    }
+                })
+                .catch(err => {
+                    console.warn("Erreur chargement scénarios station:", err);
+                });
         };
 
         window.onChangementScenarioPluie = function(scenKey) {
@@ -5376,6 +5408,9 @@
             const headers = { 'Content-Type': 'application/json' };
             if (token) headers['Authorization'] = `Bearer ${token}`;
 
+            const stSel = document.getElementById('sim-select-station');
+            const stationId = stSel ? stSel.value : 'chlef_anrh_siege';
+
             fetch('/api/v1/simulations/run', {
                 method: 'POST',
                 headers: headers,
@@ -5390,7 +5425,8 @@
                     valider_raccordement: validerRaccord,
                     typologie_sol: typoSolVal,
                     imperv_pct: impervVal,
-                    intensite_max_mmh: intensiteVal
+                    intensite_max_mmh: intensiteVal,
+                    station_id: stationId
                 })
             })
             .then(async r => {
@@ -5695,23 +5731,50 @@
                     </div>
                 </div>
 
-                <!-- Choix Scénario & Intensité Pluviométrique Réglable (Station ANRH Mascara) -->
+                <!-- Choix Station, Scénario & Intensité Pluviométrique Réglable (Référentiel ANRH / UHBC) -->
                 <div style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                         <label style="font-size: 0.82rem; font-weight: 700; color: #38bdf8; margin: 0;">
-                            <i class="fas fa-cloud-showers-heavy me-1"></i> Paramétrage Hydro-Météo &amp; Pluviométrie
+                            <i class="fas fa-cloud-showers-heavy me-1"></i> Référentiel Pluviométrique &amp; Sollicitation SWMM
                         </label>
-                        <span id="sim-pluvio-station-badge" style="font-size: 0.72rem; color: #38bdf8; background: rgba(56,189,248,0.12); padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(56,189,248,0.3); font-weight: 600;">Station ANRH Mascara (040702)</span>
+                        <span id="sim-pluvio-station-badge" style="font-size: 0.72rem; color: #38bdf8; background: rgba(56,189,248,0.12); padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(56,189,248,0.3); font-weight: 600;">Station ANRH Chlef Siège (010501)</span>
                     </div>
+
+                    <!-- Sélecteur de Station Hydro-Météo ANRH -->
+                    <div style="margin-bottom: 10px;">
+                        <label style="font-size: 0.75rem; color: #cbd5e1; display: block; margin-bottom: 4px;">
+                            <i class="fas fa-map-marker-alt me-1" style="color: #38bdf8;"></i> Station Hydro-Météorologique de Référence :
+                        </label>
+                        <select id="sim-select-station" onchange="onChangementStationPluie(this.value)" style="width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 6px; color: #f8fafc; font-size: 0.82rem; font-weight: 600;">
+                            <optgroup label="📍 Wilaya de Chlef (Bassin Versant 01 - Chélif) [ANRH / UHBC]">
+                                <option value="chlef_anrh_siege" selected>🏢 Station ANRH Chlef Siège (Ech-Cheliff) [Code 010501 - Alt. 154m - UHBC Réf.]</option>
+                                <option value="chlef_ponteba_oum_drou">🌾 Station Pontéba (Oum Drou) [Code 010502 - Alt. 142m]</option>
+                                <option value="chlef_oued_fodda">🌊 Station Oued Fodda (Vallée &amp; Barrage) [Code 010505 - Alt. 180m]</option>
+                                <option value="chlef_benairia_dahra">⛰️ Station Bénaïria (Massif du Dahra) [Code 010508 - Alt. 480m]</option>
+                                <option value="chlef_domaine_si_tayeb">🚜 Station Domaine Si Tayeb [Code 010512 - Alt. 165m]</option>
+                                <option value="chlef_tenes_littoral">⚓ Station Ténès (Côte Méditerranéenne) [Code 010520 - Alt. 15m]</option>
+                                <option value="chlef_boukadir">🏜️ Station Boukadir (Bas Chélif Ouest) [Code 010525 - Alt. 110m]</option>
+                            </optgroup>
+                            <optgroup label="🌍 Autres Bassins Régionaux">
+                                <option value="ain_defla_khemis">Station Khemis Miliana (Haut Chélif - 010403)</option>
+                                <option value="mascara_ghriss">Station ANRH Mascara-Ghriss (Bassin Macta - 040702)</option>
+                                <option value="alger_port">Station Alger Port / Cap Caxine (Côtiers Algérois - 020301)</option>
+                                <option value="oran_senia">Station Oran Es-Sénia (Oranie - 050201)</option>
+                                <option value="constantine_aeroport">Station Constantine Aïn El Bey (Bassin 03 - 030401)</option>
+                            </optgroup>
+                        </select>
+                    </div>
+
+                    <!-- Scénario et Intensité Réglable -->
                     <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 12px; align-items: start;">
                         <div>
                             <label style="font-size: 0.75rem; color: #cbd5e1; display: block; margin-bottom: 4px;">Scénario Pluviométrique Validé :</label>
                             <select id="sim-select-scenario" onchange="onChangementScenarioPluie(this.value)" style="width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #f8fafc; font-size: 0.82rem;">
-                                <option value="pluie_decennale" selected>🌧️ Pluie Décennale (T = 10 ans) [62.0 mm/h — Réf. ANRH Mascara]</option>
-                                <option value="pluie_cinquantennale">⛈️ Pluie Cinquantennale (T = 50 ans) [85.0 mm/h — Crise Majeure]</option>
-                                <option value="pluie_centennale">🌊 Pluie Centennale (T = 100 ans) [110.0 mm/h — Crue Historique]</option>
-                                <option value="pluie_biennale">🌦️ Pluie Biennale (T = 2 ans) [38.0 mm/h — Pluie Courante]</option>
-                                <option value="pluie_orage_2h">⚡ Orage d'Été Brutal Méditerranéen [92.0 mm/h — Convectif 2h]</option>
+                                <option value="pluie_decennale" selected>🌧️ Pluie Décennale (T = 10 ans) [Standard Réglementaire ONA]</option>
+                                <option value="pluie_cinquantennale">⛈️ Pluie Cinquantennale (T = 50 ans) [Crise Majeure / Inondations]</option>
+                                <option value="pluie_centennale">🌊 Pluie Centennale (T = 100 ans) [Crue Historique Exceptionnelle]</option>
+                                <option value="pluie_biennale">🌦️ Pluie Biennale (T = 2 ans) [Pluie Courante / Confort Urbain]</option>
+                                <option value="pluie_orage_2h">⚡ Orage d'Été Brutal Méditerranéen [Averse Convective 2h — 92.5 mm/h]</option>
                                 <option value="temps_sec_pur">☀️ Temps Sec Pur (Étiage / Eaux Usées sans pluie — 0 mm/h)</option>
                                 <option value="personnalise">✏️ Saisie Manuelle Ingénieur (Intensité Personnalisée)</option>
                             </select>
@@ -5719,14 +5782,14 @@
                         <div>
                             <label style="font-size: 0.75rem; color: #cbd5e1; display: block; margin-bottom: 4px;">Intensité Pointe Imax (mm/h) :</label>
                             <div style="display: flex; align-items: center; gap: 4px;">
-                                <input type="number" id="sim-input-intensite-max" min="0" max="300" step="0.5" value="62.0" oninput="onChangementIntensitePluie(this.value)" style="width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid rgba(56, 189, 248, 0.5); border-radius: 6px; color: #38bdf8; font-size: 0.88rem; font-weight: 700; text-align: center;">
+                                <input type="number" id="sim-input-intensite-max" min="0" max="300" step="0.5" value="74.9" oninput="onChangementIntensitePluie(this.value)" style="width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid rgba(56, 189, 248, 0.5); border-radius: 6px; color: #38bdf8; font-size: 0.88rem; font-weight: 700; text-align: center;">
                                 <span style="font-size: 0.82rem; color: #94a3b8; font-weight: bold;">mm/h</span>
                             </div>
                         </div>
                     </div>
                     <div id="sim-pluvio-info-note" style="color: #94a3b8; font-size: 0.72rem; margin-top: 8px; line-height: 1.4; background: rgba(15,23,42,0.5); padding: 6px 10px; border-radius: 6px; border-left: 3px solid #38bdf8;">
                         <i class="fas fa-info-circle me-1" style="color: #38bdf8;"></i>
-                        <span id="sim-pluvio-note-text">Paramétrage ANRH Mascara : Formule Montana $I(t) = 6.2 \cdot t^{-0.58}$ &bull; Hyétogramme Chicago centré ($t_c \approx 15-30\text{ min}$) &bull; $P_{24} = 58.5\text{ mm}$ &bull; Hauteur cumulée $P = 36.5\text{ mm}$.</span>
+                        <span id="sim-pluvio-note-text">Paramétrage ANRH Chlef Siège (UHBC) : Formule Montana $I(t) = 9.334 \cdot t^{-0.745}$ &bull; Hyétogramme Chicago centré ($t_c = 15\text{ min}$) &bull; $P_{24} = 56.0\text{ mm}$ &bull; Hauteur cumulée $P = 42.8\text{ mm}$.</span>
                     </div>
                 </div>
 
@@ -5841,7 +5904,7 @@
                             <span style="font-size: 0.82rem; font-weight: 700; color: #38bdf8; display: flex; align-items: center; gap: 7px;">
                                 <i class="fas fa-cloud-showers-heavy"></i> Sollicitation Pluviométrique &amp; Station de Référence
                             </span>
-                            <span id="kpi-pluvio-station-badge" style="font-size: 0.72rem; background: rgba(56, 189, 248, 0.18); color: #7dd3fc; border: 1px solid rgba(56, 189, 248, 0.35); padding: 2px 8px; border-radius: 4px; font-weight: 700;">Station ANRH Mascara (040702)</span>
+                            <span id="kpi-pluvio-station-badge" style="font-size: 0.72rem; background: rgba(56, 189, 248, 0.18); color: #7dd3fc; border: 1px solid rgba(56, 189, 248, 0.35); padding: 2px 8px; border-radius: 4px; font-weight: 700;">Station ANRH Chlef Siège (010501)</span>
                         </div>
                         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; font-size: 0.78rem;">
                             <div style="background: rgba(15, 23, 42, 0.65); padding: 8px 10px; border-radius: 6px; text-align: center; border: 1px solid rgba(255,255,255,0.05);">
@@ -5850,19 +5913,19 @@
                             </div>
                             <div style="background: rgba(15, 23, 42, 0.65); padding: 8px 10px; border-radius: 6px; text-align: center; border: 1px solid rgba(56, 189, 248, 0.35);">
                                 <div style="color: #94a3b8; font-size: 0.7rem; margin-bottom: 2px;">Intensité Pointe (Imax)</div>
-                                <b id="kpi-pluvio-imax" style="color: #38bdf8; font-size: 1.05rem; font-weight: 900;">62.0 mm/h</b>
+                                <b id="kpi-pluvio-imax" style="color: #38bdf8; font-size: 1.05rem; font-weight: 900;">74.9 mm/h</b>
                             </div>
                             <div style="background: rgba(15, 23, 42, 0.65); padding: 8px 10px; border-radius: 6px; text-align: center; border: 1px solid rgba(255,255,255,0.05);">
                                 <div style="color: #94a3b8; font-size: 0.7rem; margin-bottom: 2px;">Hauteur Cumulée (Ptot)</div>
-                                <b id="kpi-pluvio-ptot" style="color: #34d399; font-size: 0.86rem;">36.5 mm</b>
+                                <b id="kpi-pluvio-ptot" style="color: #34d399; font-size: 0.86rem;">42.8 mm</b>
                             </div>
                             <div style="background: rgba(15, 23, 42, 0.65); padding: 8px 10px; border-radius: 6px; text-align: center; border: 1px solid rgba(255,255,255,0.05);">
                                 <div style="color: #94a3b8; font-size: 0.7rem; margin-bottom: 2px;">Formule Montana</div>
-                                <b id="kpi-pluvio-montana" style="color: #fbbf24; font-size: 0.76rem;">I(t) = 6.2·t^(-0.58)</b>
+                                <b id="kpi-pluvio-montana" style="color: #fbbf24; font-size: 0.76rem;">I(t) = 9.334·t^(-0.745)</b>
                             </div>
                         </div>
                         <div id="kpi-pluvio-source-note" style="font-size: 0.72rem; color: #94a3b8; margin-top: 8px; line-height: 1.35;">
-                            <i class="fas fa-database me-1" style="color: #38bdf8;"></i> Série statistique ANRH Direction Régionale Ouest (Bassin Macta / Plaine de Ghriss - Séries 1970-2020).
+                            <i class="fas fa-database me-1" style="color: #38bdf8;"></i> Agence Nationale des Ressources Hydriques (ANRH Chlef Siège Hay Nasr / UHBC Master Assainissement - Séries 1970-2024).
                         </div>
                     </div>
 
