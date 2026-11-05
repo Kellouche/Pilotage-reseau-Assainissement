@@ -8,10 +8,10 @@ export default defineConfig({
     viewport: { width: 1280, height: 720 },
   },
   webServer: {
-    command: 'python run_server.py',
+    command: '.venv\\Scripts\\python.exe run_server.py',
     port: 5002,
     timeout: 120000,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: true,
   },
   projects: [
     {
