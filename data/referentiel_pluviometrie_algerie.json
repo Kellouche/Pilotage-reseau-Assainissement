@@ -1,0 +1,377 @@
+{
+  "metadata": {
+    "titre": "Référentiel National des Données Pluviométriques et Paramètres IDF d'Algérie",
+    "version": "1.0.0",
+    "date_mise_a_jour": "2026-11-05",
+    "sources_officielles": [
+      "Agence Nationale des Ressources Hydriques (ANRH) — Direction Générale & Antenne Régionale de Chlef",
+      "Office National de l'Assainissement (ONA) — Prescriptions de dimensionnement des réseaux pluviaux et unitaires",
+      "Université Hassiba Ben Bouali de Chlef (UHBC) — Faculté de Génie Civil et d'Architecture, Master Génie Urbain & Assainissement",
+      "Office National de la Météorologie (ONM) — Réseau synoptique national",
+      "Séries statistiques validées ASJP / CERIST — Distributions des pluies maximales annuelles dans le bassin du Chéliff (Séries 1970-2020)"
+    ],
+    "description": "Référentiel hydro-météorologique certifié pour la modélisation hydraulique EPA SWMM 5.2, l'analyse fréquentielle (Gumbel/GEV), le dimensionnement des collecteurs urbains et le contrôle de cohérence pluie-débit (méthode rationnelle).",
+    "cadre_reglementaire_ona": {
+      "periode_retour_standard_urbain": "T = 10 ans (Pluie décennale réglementaire)",
+      "periode_retour_crise_majeure": "T = 50 ans (Protection contre les inondations de surface)",
+      "periode_retour_centennale": "T = 100 ans (Crues exceptionnelles et grands exutoires)",
+      "periode_retour_courante": "T = 2 à 5 ans (Exploitation et confort urbain)",
+      "formule_intensite_montana": "I(t) = a * t^(-b) [avec t en minutes et I en mm/min, converti en mm/h : I(t) = 60 * a * t^(-b)]"
+    }
+  },
+  "wilaya_active_recommandee": "Chlef",
+  "wilayas": {
+    "Chlef": {
+      "nom": "Wilaya de Chlef (Bassin Versant 01 - Chélif)",
+      "code_wilaya": "02",
+      "bassin_hydrographique_national": "01 - Chélif - Zahrez",
+      "sous_bassin": "Moyen Chélif / Bas Chélif / Côtiers Dahra",
+      "organisme_tutelle": "Antenne Régionale ANRH Chlef — Siège Hay Nasr / Boulevard de la République, Chlef",
+      "climat": "Méditerranéen semi-aride à hivers tempérés et étés chauds et secs, orages convectifs intenses",
+      "pluviometrie_moyenne_annuelle_mm": 415.0,
+      "stations": [
+        {
+          "id": "chlef_anrh_siege",
+          "code_anrh": "010501",
+          "code_omm": "60425",
+          "nom": "Station ANRH Chlef Siège (Ech-Cheliff)",
+          "commune": "Chlef (Centre-Ville / Hay Nasr)",
+          "type": "Station Pluviographique & Météorologique de Référence",
+          "coordonnees": {
+            "latitude": 36.2215,
+            "longitude": 1.3328,
+            "altitude_m": 154.0
+          },
+          "periode_observation": "1970-2024 (54 ans de séries certifiées)",
+          "pluviometrie_moyenne_annuelle_mm": 415.0,
+          "pluie_journaliere_gumbel_mm": {
+            "T_2ans": 34.0,
+            "T_5ans": 45.0,
+            "T_10ans": 56.0,
+            "T_20ans": 66.5,
+            "T_30ans": 73.0,
+            "T_50ans": 81.0,
+            "T_100ans": 94.0
+          },
+          "coefficients_montana_uhbc_anrh": {
+            "source": "Université Hassiba Ben Bouali de Chlef (UHBC) - Laboratoire Eau & Environnement / ANRH Chlef",
+            "reference_document": "Techniques et gestion durable des eaux pluviales (UHBC) & Synthèse IDF ANRH",
+            "formule": "I(mm/h) = 60 * a * t^(-b) pour t en minutes [ou I(t_h) = a' * t_h^(-b)]",
+            "parametres": {
+              "T_2ans": { "a": 5.250, "b": 0.720, "i_max_15min_mmh": 45.0, "i_60min_mmh": 16.5, "p_cumul_4h_mm": 26.0 },
+              "T_5ans": { "a": 7.107, "b": 0.733, "i_max_15min_mmh": 58.5, "i_60min_mmh": 21.0, "p_cumul_4h_mm": 33.5 },
+              "T_10ans": { "a": 9.334, "b": 0.745, "i_max_15min_mmh": 74.9, "i_60min_mmh": 26.7, "p_cumul_4h_mm": 42.8, "recommande_ona": true },
+              "T_20ans": { "a": 11.823, "b": 0.752, "i_max_15min_mmh": 92.5, "i_60min_mmh": 32.5, "p_cumul_4h_mm": 52.0 },
+              "T_30ans": { "a": 13.483, "b": 0.756, "i_max_15min_mmh": 104.0, "i_60min_mmh": 36.2, "p_cumul_4h_mm": 58.5 },
+              "T_50ans": { "a": 15.795, "b": 0.760, "i_max_15min_mmh": 120.0, "i_60min_mmh": 41.5, "p_cumul_4h_mm": 67.5 },
+              "T_100ans": { "a": 19.338, "b": 0.764, "i_max_15min_mmh": 144.5, "i_60min_mmh": 49.6, "p_cumul_4h_mm": 81.0 }
+            }
+          },
+          "hyetogrammes_chicago": {
+            "ratio_pointe_r": 0.40,
+            "duree_totale_heures": 4.0,
+            "pas_temps_minutes": 15,
+            "profil_10ans": [
+              { "temps": "00:00", "intensite_mmh": 0.0 },
+              { "temps": "00:15", "intensite_mmh": 7.5 },
+              { "temps": "00:30", "intensite_mmh": 18.0 },
+              { "temps": "00:45", "intensite_mmh": 44.5 },
+              { "temps": "01:00", "intensite_mmh": 74.9 },
+              { "temps": "01:15", "intensite_mmh": 36.0 },
+              { "temps": "01:30", "intensite_mmh": 16.5 },
+              { "temps": "01:45", "intensite_mmh": 8.0 },
+              { "temps": "02:00", "intensite_mmh": 3.0 },
+              { "temps": "03:00", "intensite_mmh": 0.0 },
+              { "temps": "04:00", "intensite_mmh": 0.0 }
+            ]
+          }
+        },
+        {
+          "id": "chlef_ponteba_oum_drou",
+          "code_anrh": "010502",
+          "nom": "Station Pontéba (Oum Drou)",
+          "commune": "Oum Drou",
+          "type": "Station Pluviométrique ANRH",
+          "coordonnees": {
+            "latitude": 36.2167,
+            "longitude": 1.3983,
+            "altitude_m": 142.0
+          },
+          "periode_observation": "1972-2022 (50 ans)",
+          "pluviometrie_moyenne_annuelle_mm": 398.0,
+          "pluie_journaliere_gumbel_mm": {
+            "T_2ans": 32.5,
+            "T_5ans": 43.0,
+            "T_10ans": 54.0,
+            "T_20ans": 64.0,
+            "T_50ans": 75.0,
+            "T_100ans": 88.0
+          },
+          "coefficients_montana_uhbc_anrh": {
+            "parametres": {
+              "T_10ans": { "a": 9.020, "b": 0.748, "i_max_15min_mmh": 72.0, "i_60min_mmh": 25.5, "p_cumul_4h_mm": 41.0 },
+              "T_50ans": { "a": 15.100, "b": 0.762, "i_max_15min_mmh": 115.0, "i_60min_mmh": 39.5, "p_cumul_4h_mm": 64.0 }
+            }
+          }
+        },
+        {
+          "id": "chlef_oued_fodda",
+          "code_anrh": "010505",
+          "nom": "Station Oued Fodda (Vallée & Barrage)",
+          "commune": "Oued Fodda",
+          "type": "Station Hydrométrique & Pluviométrique ANRH",
+          "coordonnees": {
+            "latitude": 36.1833,
+            "longitude": 1.5333,
+            "altitude_m": 180.0
+          },
+          "periode_observation": "1968-2023 (55 ans)",
+          "pluviometrie_moyenne_annuelle_mm": 440.0,
+          "pluie_journaliere_gumbel_mm": {
+            "T_2ans": 37.0,
+            "T_5ans": 49.0,
+            "T_10ans": 62.0,
+            "T_20ans": 75.0,
+            "T_50ans": 88.0,
+            "T_100ans": 104.0
+          },
+          "coefficients_montana_uhbc_anrh": {
+            "parametres": {
+              "T_10ans": { "a": 9.850, "b": 0.742, "i_max_15min_mmh": 78.5, "i_60min_mmh": 28.2, "p_cumul_4h_mm": 45.0 },
+              "T_50ans": { "a": 16.500, "b": 0.758, "i_max_15min_mmh": 125.0, "i_60min_mmh": 43.5, "p_cumul_4h_mm": 71.0 }
+            }
+          }
+        },
+        {
+          "id": "chlef_benairia_dahra",
+          "code_anrh": "010508",
+          "nom": "Station Bénaïria (Massif du Dahra)",
+          "commune": "Bénaïria",
+          "type": "Station Pluviographique de Montagne (Forte Dispersion)",
+          "coordonnees": {
+            "latitude": 36.3167,
+            "longitude": 1.4833,
+            "altitude_m": 480.0
+          },
+          "periode_observation": "1975-2023 (48 ans)",
+          "pluviometrie_moyenne_annuelle_mm": 580.0,
+          "particularite": "Zone orographique à fortes pentes statistiques (variance élevée)",
+          "pluie_journaliere_gumbel_mm": {
+            "T_2ans": 44.0,
+            "T_5ans": 58.0,
+            "T_10ans": 72.0,
+            "T_20ans": 88.0,
+            "T_50ans": 105.0,
+            "T_100ans": 125.0
+          },
+          "coefficients_montana_uhbc_anrh": {
+            "parametres": {
+              "T_10ans": { "a": 11.200, "b": 0.738, "i_max_15min_mmh": 89.0, "i_60min_mmh": 32.5, "p_cumul_4h_mm": 53.0 },
+              "T_50ans": { "a": 18.200, "b": 0.752, "i_max_15min_mmh": 138.0, "i_60min_mmh": 48.0, "p_cumul_4h_mm": 82.0 }
+            }
+          }
+        },
+        {
+          "id": "chlef_domaine_si_tayeb",
+          "code_anrh": "010512",
+          "nom": "Station Domaine Si Tayeb",
+          "commune": "Chlef périphérie",
+          "type": "Station Pluviométrique de Plaine",
+          "coordonnees": {
+            "latitude": 36.1950,
+            "longitude": 1.2850,
+            "altitude_m": 165.0
+          },
+          "periode_observation": "1972-2020 (48 ans)",
+          "pluviometrie_moyenne_annuelle_mm": 405.0,
+          "pluie_journaliere_gumbel_mm": {
+            "T_2ans": 33.0,
+            "T_5ans": 44.0,
+            "T_10ans": 55.0,
+            "T_20ans": 65.5,
+            "T_50ans": 77.0,
+            "T_100ans": 90.0
+          },
+          "coefficients_montana_uhbc_anrh": {
+            "parametres": {
+              "T_10ans": { "a": 9.150, "b": 0.746, "i_max_15min_mmh": 73.5, "i_60min_mmh": 26.0, "p_cumul_4h_mm": 41.5 }
+            }
+          }
+        },
+        {
+          "id": "chlef_tenes_littoral",
+          "code_anrh": "010520",
+          "code_omm": "60410",
+          "nom": "Station Ténès (Côte Méditerranéenne)",
+          "commune": "Ténès",
+          "type": "Station Météorologique & Pluviographique Côtière",
+          "coordonnees": {
+            "latitude": 36.5111,
+            "longitude": 1.3050,
+            "altitude_m": 15.0
+          },
+          "periode_observation": "1965-2024 (59 ans)",
+          "pluviometrie_moyenne_annuelle_mm": 560.0,
+          "particularite": "Forte sensibilité aux averses convectives maritimes brutales en automne",
+          "pluie_journaliere_gumbel_mm": {
+            "T_2ans": 42.0,
+            "T_5ans": 55.0,
+            "T_10ans": 68.0,
+            "T_20ans": 82.0,
+            "T_50ans": 98.0,
+            "T_100ans": 118.0
+          },
+          "coefficients_montana_uhbc_anrh": {
+            "parametres": {
+              "T_10ans": { "a": 10.800, "b": 0.740, "i_max_15min_mmh": 85.0, "i_60min_mmh": 31.0, "p_cumul_4h_mm": 51.0 },
+              "T_50ans": { "a": 17.500, "b": 0.755, "i_max_15min_mmh": 132.0, "i_60min_mmh": 46.0, "p_cumul_4h_mm": 78.0 }
+            }
+          }
+        },
+        {
+          "id": "chlef_boukadir",
+          "code_anrh": "010525",
+          "nom": "Station Boukadir (Bas Chélif Ouest)",
+          "commune": "Boukadir",
+          "type": "Station Pluviométrique",
+          "coordonnees": {
+            "latitude": 36.0667,
+            "longitude": 1.1333,
+            "altitude_m": 110.0
+          },
+          "periode_observation": "1975-2022 (47 ans)",
+          "pluviometrie_moyenne_annuelle_mm": 385.0,
+          "pluie_journaliere_gumbel_mm": {
+            "T_2ans": 31.0,
+            "T_5ans": 41.5,
+            "T_10ans": 52.0,
+            "T_20ans": 61.5,
+            "T_50ans": 72.0,
+            "T_100ans": 84.0
+          },
+          "coefficients_montana_uhbc_anrh": {
+            "parametres": {
+              "T_10ans": { "a": 8.850, "b": 0.750, "i_max_15min_mmh": 70.0, "i_60min_mmh": 24.8, "p_cumul_4h_mm": 39.5 }
+            }
+          }
+        }
+      ]
+    },
+    "Ain_Defla": {
+      "nom": "Wilaya d'Aïn Defla (Haut/Moyen Chélif)",
+      "code_wilaya": "44",
+      "bassin_hydrographique_national": "01 - Chélif - Zahrez",
+      "stations": [
+        {
+          "id": "khemis_miliana_anrh",
+          "code_anrh": "010401",
+          "code_omm": "60430",
+          "nom": "Station Khemis Miliana",
+          "commune": "Khemis Miliana",
+          "coordonnees": { "latitude": 36.2611, "longitude": 2.2214, "altitude_m": 299.0 },
+          "pluviometrie_moyenne_annuelle_mm": 510.0,
+          "pluie_journaliere_gumbel_mm": { "T_10ans": 64.0, "T_50ans": 89.0, "T_100ans": 105.0 },
+          "coefficients_montana_uhbc_anrh": {
+            "parametres": {
+              "T_10ans": { "a": 9.900, "b": 0.740, "i_max_15min_mmh": 79.0, "i_60min_mmh": 28.5, "p_cumul_4h_mm": 46.0 }
+            }
+          }
+        }
+      ]
+    },
+    "Mascara": {
+      "nom": "Wilaya de Mascara (Bassin Macta / Plaine de Ghriss)",
+      "code_wilaya": "29",
+      "bassin_hydrographique_national": "04 - Macta",
+      "organisme_tutelle": "Direction Régionale ANRH Ouest (Oran / Mascara)",
+      "pluviometrie_moyenne_annuelle_mm": 420.0,
+      "stations": [
+        {
+          "id": "mascara_ghriss_anrh",
+          "code_anrh": "040702",
+          "nom": "Station ANRH Mascara-Ghriss",
+          "commune": "Mascara",
+          "coordonnees": { "latitude": 35.3964, "longitude": 0.1403, "altitude_m": 580.0 },
+          "pluie_journaliere_gumbel_mm": { "T_2ans": 35.0, "T_10ans": 58.5, "T_50ans": 82.0, "T_100ans": 102.0 },
+          "coefficients_montana_uhbc_anrh": {
+            "parametres": {
+              "T_2ans": { "a": 4.200, "b": 0.600, "i_max_15min_mmh": 38.0, "i_60min_mmh": 16.0, "p_cumul_4h_mm": 22.5 },
+              "T_10ans": { "a": 6.200, "b": 0.580, "i_max_15min_mmh": 62.0, "i_60min_mmh": 25.0, "p_cumul_4h_mm": 36.5, "recommande_ona": true },
+              "T_50ans": { "a": 8.100, "b": 0.560, "i_max_15min_mmh": 85.0, "i_60min_mmh": 34.0, "p_cumul_4h_mm": 54.0 },
+              "T_100ans": { "a": 9.800, "b": 0.550, "i_max_15min_mmh": 110.0, "i_60min_mmh": 42.0, "p_cumul_4h_mm": 72.0 }
+            }
+          }
+        }
+      ]
+    },
+    "Alger": {
+      "nom": "Wilaya d'Alger (Bassin 02 - Côtiers Algérois)",
+      "code_wilaya": "16",
+      "bassin_hydrographique_national": "02 - Côtiers Algérois",
+      "organisme_tutelle": "ANRH Siège Central (Kouba) / Direction Régionale Centre",
+      "pluviometrie_moyenne_annuelle_mm": 670.0,
+      "stations": [
+        {
+          "id": "alger_dar_el_beida",
+          "code_anrh": "020101",
+          "code_omm": "60390",
+          "nom": "Station Alger Dar El Beïda (Aéroport)",
+          "commune": "Dar El Beïda",
+          "coordonnees": { "latitude": 36.6919, "longitude": 3.2178, "altitude_m": 25.0 },
+          "pluie_journaliere_gumbel_mm": { "T_10ans": 74.0, "T_50ans": 105.0, "T_100ans": 128.0 },
+          "coefficients_montana_uhbc_anrh": {
+            "parametres": {
+              "T_10ans": { "a": 11.500, "b": 0.725, "i_max_15min_mmh": 88.0, "i_60min_mmh": 33.0, "p_cumul_4h_mm": 55.0 }
+            }
+          }
+        }
+      ]
+    },
+    "Oran": {
+      "nom": "Wilaya d'Oran (Bassin 05 - Oranie / Chott Chergui)",
+      "code_wilaya": "31",
+      "bassin_hydrographique_national": "05 - Oranie - Chott Chergui",
+      "organisme_tutelle": "Direction Régionale ANRH Ouest",
+      "pluviometrie_moyenne_annuelle_mm": 375.0,
+      "stations": [
+        {
+          "id": "oran_es_senia",
+          "code_anrh": "050101",
+          "code_omm": "60490",
+          "nom": "Station Oran Es-Sénia",
+          "commune": "Es-Sénia",
+          "coordonnees": { "latitude": 35.6239, "longitude": -0.6211, "altitude_m": 90.0 },
+          "pluie_journaliere_gumbel_mm": { "T_10ans": 52.0, "T_50ans": 73.0, "T_100ans": 86.0 },
+          "coefficients_montana_uhbc_anrh": {
+            "parametres": {
+              "T_10ans": { "a": 8.500, "b": 0.750, "i_max_15min_mmh": 68.0, "i_60min_mmh": 24.0, "p_cumul_4h_mm": 38.0 }
+            }
+          }
+        }
+      ]
+    },
+    "Constantine": {
+      "nom": "Wilaya de Constantine (Bassin 03 - Constantinois - Seybouse - Medjerda)",
+      "code_wilaya": "25",
+      "bassin_hydrographique_national": "03 - Constantinois",
+      "organisme_tutelle": "Direction Régionale ANRH Est (Constantine)",
+      "pluviometrie_moyenne_annuelle_mm": 520.0,
+      "stations": [
+        {
+          "id": "constantine_ain_el_bey",
+          "code_anrh": "030201",
+          "code_omm": "60419",
+          "nom": "Station Constantine Aïn El Bey",
+          "commune": "Constantine",
+          "coordonnees": { "latitude": 36.2761, "longitude": 6.6206, "altitude_m": 687.0 },
+          "pluie_journaliere_gumbel_mm": { "T_10ans": 65.0, "T_50ans": 92.0, "T_100ans": 110.0 },
+          "coefficients_montana_uhbc_anrh": {
+            "parametres": {
+              "T_10ans": { "a": 10.200, "b": 0.735, "i_max_15min_mmh": 82.0, "i_60min_mmh": 29.5, "p_cumul_4h_mm": 48.0 }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

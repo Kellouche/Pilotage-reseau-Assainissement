@@ -19,6 +19,7 @@ temp_test.txt
 
 # Local Data & Overrides
 data/*.json
+!data/referentiel_pluviometrie_algerie.json
 data/*.sqlite
 data/*.db
 
@@ -59,6 +60,7 @@ swmm_mobile_flutter/build/
 
 output/
 exports/
+uploads/
 .playwright-mcp/
 
 # Windows system files
