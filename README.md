@@ -24,14 +24,27 @@
 
 Outils de visualisation interactive et de génération de fichiers SWMM 5.2 à partir de données GeoPackage.
 
-## Fonctionnalités
+## Fonctionnalités Clés du Moteur SWMM 5.2 & SIG
 
-- **Visualisation cartographique** interactive (Leaflet.js)
-- **Génération de fichiers SWMM** .inp à partir de données géospatiales
-- **Reprojection automatique** UTM Zone 31N (EPSG:32631) → WGS84 (EPSG:4326)
-- **Architecture MVC** modulaire avec en-têtes de module standardisés
-- **Analyse de qualité réseau** : détection d'anomalies, scores de qualité, rapports détaillés
-- **Synchronisation mobile** avec gestion des conflits et traçabilité
+- **Visualisation cartographique interactive** (Leaflet.js) avec gestion multi-couches (conduites, regards, exutoires, sous-bassins Voronoï, éléments orphelins).
+- **Partitionnement topologique hydraulique strict** :
+  - Découpage automatique des bassins versants d'exutoires physiques sans chevauchement.
+  - Détermination des sous-bassins élémentaires par cellules de Voronoï bornées par le rayon de drainage urbain et le corridor de conduite (15 m).
+  - Résolution anti-collision d'identifiants entre couches hétérogènes (regards, rejets, ouvrages) et validation géométrique de proximité amont/aval ($\le 25\text{ m}$) éliminant tout raccordement aberrant ou "trou de ver".
+  - Garantie de contiguïté stricte : élimination des MultiPolygones disjoints, chaque bassin constitue un polygone unique compact et connexe.
+- **Gestion des éléments orphelins (déconnectés)** :
+  - Isolation rigoureuse des tronçons et regards sans exutoire physique documenté dans une couche dédiée (`elements_orphelins_regards`) et export GeoJSON indépendant (`elements_orphelins.geojson`).
+  - Suppression de tout "snapping" euclidien aveugle vers des exutoires distants.
+- **Moteur de Simulation Hydrodynamique SWMM 5.2** :
+  - Sectorisation obligatoire par exutoire avant calcul.
+  - Sélecteur de typologie urbaine dominante (Centre urbain dense, Collectif, Pavillonnaire, Mixte, Périurbain) et surcharge manuelle du taux d'imperméabilisation (`% Imperv`).
+  - Diagnostic hydraulique en temps réel : débits de pointe, erreurs de continuité, mise en charge des conduites ($Q/Q_{\max}$), identification des surcharges et des débordements en surface.
+  - Restitution cartographique aux normes d'ingénierie : cercles nets et discrets (Débordement 5.5 px, Surcharge 4.0 px, Normal 2.5 px), sans animation pulsante invasive.
+- **Gestion dynamique des jeux de données & caches multi-tenants** :
+  - Invalidation et synchronisation immédiate des mémoires caches (graphe, clusters, sous-bassins, dernière simulation) lors du téléversement ou du changement de jeu de données.
+  - Actualisation dynamique des statistiques d'en-tête et du panneau latéral selon la zone ou le projet sélectionné.
+- **Reprojection automatique** UTM Zone 31N (EPSG:32631) → WGS84 (EPSG:4326).
+- **Analyse de qualité réseau** : détection d'anomalies topologiques, scores de qualité et rapports d'expertise.
 
 ## Installation
 

@@ -99,6 +99,13 @@ class ConstructeurGrapheReseau:
                 )
             )).lower()
 
+            # Anti-collision d'identifiants entre couches distinctes (ex: regard vs rejet partageant le même ID)
+            if noeud_id in G:
+                old_x = G.nodes[noeud_id].get('x', 0.0)
+                old_y = G.nodes[noeud_id].get('y', 0.0)
+                if Point(x, y).distance(Point(old_x, old_y)) > 2.0:
+                    noeud_id = f"{noeud_id}_{type_noeud}_{int(x)}"
+
             G.add_node(
                 noeud_id,
                 geometry=geom,
@@ -129,7 +136,13 @@ class ConstructeurGrapheReseau:
             type_conduite = str(row.get('type', row.get('nature', row.get('Fonction_1', 'gravitaire')))).lower()
 
             point_depart, point_arrivee = self._extremites(geom)
-            if u_init not in G and point_depart is not None:
+
+            # Validation géométrique amont : rejeter les raccordements aberrants à des centaines de mètres
+            if u_init in G and point_depart is not None:
+                d_u = point_depart.distance(Point(G.nodes[u_init].get('x', 0), G.nodes[u_init].get('y', 0)))
+                if d_u > self.tolerance_raccordement:
+                    u_init = self._noeud_proche(point_depart, G)
+            elif u_init not in G and point_depart is not None:
                 u_snapped = self._noeud_proche(point_depart, G)
                 if u_snapped is not None:
                     u_init = u_snapped
@@ -138,7 +151,13 @@ class ConstructeurGrapheReseau:
                         'type': 'raccordement_geometrique',
                         'detail': f"Extrémité amont raccordée au nœud '{u_snapped}'."
                     })
-            if v_init not in G and point_arrivee is not None:
+
+            # Validation géométrique aval : rejeter les raccordements aberrants à des centaines de mètres
+            if v_init in G and point_arrivee is not None:
+                d_v = point_arrivee.distance(Point(G.nodes[v_init].get('x', 0), G.nodes[v_init].get('y', 0)))
+                if d_v > self.tolerance_raccordement:
+                    v_init = self._noeud_proche(point_arrivee, G)
+            elif v_init not in G and point_arrivee is not None:
                 v_snapped = self._noeud_proche(point_arrivee, G)
                 if v_snapped is not None:
                     v_init = v_snapped

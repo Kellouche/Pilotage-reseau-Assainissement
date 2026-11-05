@@ -308,22 +308,24 @@ def partitionner_79_bassins_versants(
 
         if geoms:
             geom_union = unary_union(geoms)
-            # Nettoyage anti-parasite : si MultiPolygon, éliminer les fragments aberrants distants de l'exutoire (> 1500m)
+            # Nettoyage anti-parasite : garantir la contiguïté stricte du bassin versant autour de son exutoire
             if isinstance(geom_union, MultiPolygon):
                 ex_x = ex_info.get('x')
                 ex_y = ex_info.get('y')
                 if ex_x is not None and ex_y is not None:
                     ex_pt = Point(float(ex_x), float(ex_y))
-                    proches = [p for p in geom_union.geoms if p.distance(ex_pt) <= 1500.0]
-                    if proches:
-                        geom_union = unary_union(proches)
-                    else:
-                        geom_union = max(geom_union.geoms, key=lambda p: p.area)
+                    main_poly = min(geom_union.geoms, key=lambda p: p.distance(ex_pt))
+                    proches = [p for p in geom_union.geoms if p.distance(main_poly) <= 25.0]
+                    geom_union = unary_union(proches) if proches else main_poly
+                if isinstance(geom_union, MultiPolygon):
+                    geom_union = max(geom_union.geoms, key=lambda p: p.area)
+
             # Comblement systématique des cavités intérieures des îlots urbains
             if isinstance(geom_union, Polygon):
                 geom_union = Polygon(geom_union.exterior)
             elif isinstance(geom_union, MultiPolygon):
-                geom_union = MultiPolygon([Polygon(p.exterior) for p in geom_union.geoms if p.area > 50.0])
+                largest = max(geom_union.geoms, key=lambda p: p.area)
+                geom_union = Polygon(largest.exterior)
             area_m2 = round(float(geom_union.area), 2)
             area_ha = round(area_m2 / 10000.0, 2)
         else:

@@ -66,14 +66,9 @@
             display: block !important;
         }
 
-        /* Animation visuelle des regards débordés en surface */
-        @keyframes swmm-pulse-flooded {
-            0% { stroke-width: 2.5px; stroke-opacity: 1; fill-opacity: 1; }
-            50% { stroke-width: 6px; stroke-opacity: 0.7; fill-opacity: 0.85; }
-            100% { stroke-width: 2.5px; stroke-opacity: 1; fill-opacity: 1; }
-        }
+        /* Regards surchargés et débordés : cercles nets et stables sans pulsation */
         .swmm-node-flooded {
-            animation: swmm-pulse-flooded 1.4s infinite ease-in-out;
+            animation: none !important;
         }
 
         #app-workspace {
@@ -1240,10 +1235,26 @@
             // Montrer l'overlay de chargement
             montrerChargement(true);
 
-            // Réinitialiser systématiquement l'affichage de la simulation précédente
+            // Réinitialiser systématiquement l'affichage et les caches de données du modèle précédent
             if (typeof reinitialiserAffichageSimulation === 'function') {
                 reinitialiserAffichageSimulation();
             }
+            window._dernierResultatSimulation = null;
+            window._clustersData = null;
+            window._bassinNoms = {};
+            window._bassinBounds = {};
+            _selectedClusterId = null;
+            if (typeof clusterCouche !== 'undefined' && clusterCouche) clusterCouche.clearLayers();
+            if (typeof _activeClusterLayer !== 'undefined' && _activeClusterLayer) _activeClusterLayer.clearLayers();
+            
+            const bSel = document.getElementById('bassin-select');
+            if (bSel) bSel.innerHTML = '<option value="">-- Réseau complet ou choisir un bassin --</option>';
+            const bInfo = document.getElementById('bassin-info');
+            if (bInfo) bInfo.innerHTML = '';
+            const simBSel = document.getElementById('sim-select-bassin');
+            if (simBSel) simBSel.innerHTML = '<option value="" disabled selected>-- Sélectionnez un bassin versant sectorisé --</option>';
+            const badgeSb = document.getElementById('badge-subcatchments-count');
+            if (badgeSb) { badgeSb.innerHTML = '-- SB'; badgeSb.style.background = ''; }
             
             fetch('/api/v1/layers')
                 .then(r => r.json())
@@ -1274,13 +1285,11 @@
                         document.getElementById('modal-project-status').textContent = `Réseau actif : ${d.project_name || 'Chargé'} (${totalObj} éléments)`;
                     }
                     document.getElementById('stat-total').textContent = d.compteurs.conduites || 0;
+                    const pName = d.project_name || 'Réseau Actif';
                     document.getElementById('mini-stats').innerHTML =
-                        'Conduites: ' + (d.compteurs.conduites || 0) +
-                        ' | Regards: ' + (d.compteurs.regards || 0) +
-                        ' | Rejets: ' + (d.compteurs.rejets || 0) +
-                        ' | Stations: ' + (d.compteurs.stations || 0) +
-                        ' | STEP: ' + (d.compteurs.step || 0) +
-                        ' | Ouvrages: ' + (d.compteurs.ouvrages || 0);
+                        `<span style="color: #38bdf8; font-weight: 700;">Zone : ${pName}</span> | ` +
+                        'Conduites: <b>' + (d.compteurs.conduites || 0) + '</b>' +
+                        ' | Regards: <b>' + (d.compteurs.regards || 0) + '</b>';
 
                     window.conduitProperties = [];
                     // Conduites (lignes)
@@ -2283,7 +2292,17 @@
         function afficherInfoBassin(clusterId) {
             const infoDiv = document.getElementById('bassin-info');
             if (!_activeClusterLayer || clusterId === null || clusterId === undefined || clusterId === '') {
-                infoDiv.innerHTML = ''; return;
+                infoDiv.innerHTML = '';
+                const miniStatsEl = document.getElementById('mini-stats');
+                if (miniStatsEl && window._rawNetworkData && window._rawNetworkData.compteurs) {
+                    const c = window._rawNetworkData.compteurs;
+                    const pName = window._rawNetworkData.project_name || 'Réseau Actif';
+                    miniStatsEl.innerHTML = `<span style="color: #38bdf8; font-weight: 700;">Zone : ${pName}</span> | Conduites: <b>${c.conduites || 0}</b> | Regards: <b>${c.regards || 0}</b>`;
+                    miniStatsEl.style.background = 'rgba(255, 255, 255, 0.06)';
+                    miniStatsEl.style.border = 'none';
+                    miniStatsEl.style.color = '#94a3b8';
+                }
+                return;
             }
             let nb = 0;
             let longueur = 0;
@@ -2309,6 +2328,15 @@
             const nbOrph = (bassinProperties && bassinProperties.nb_regards_orphelins !== undefined && bassinProperties.nb_regards_orphelins !== null) ? bassinProperties.nb_regards_orphelins : 0;
             const typEx = (bassinProperties && bassinProperties.exutoire_type) ? bassinProperties.exutoire_type.toUpperCase() : 'EXUTOIRE';
             const bColor = (bassinProperties && bassinProperties.couleur) ? bassinProperties.couleur : '#38bdf8';
+
+            // Mise à jour synchrone du bandeau haut latéral avec la zone sélectionnée
+            const miniStatsEl = document.getElementById('mini-stats');
+            if (miniStatsEl) {
+                miniStatsEl.innerHTML = `<span style="color: #38bdf8; font-weight: 700;">Zone : ${nom}</span> | Conduites: <b>${nb}</b> | Regards: <b>${nbReg}</b>`;
+                miniStatsEl.style.background = 'rgba(56, 189, 248, 0.15)';
+                miniStatsEl.style.border = '1px solid rgba(56, 189, 248, 0.3)';
+                miniStatsEl.style.color = '#f8fafc';
+            }
 
             const isIsole = (nb === 0 && (nbReg === 0 || nbReg === '0'));
 
@@ -4563,33 +4591,32 @@
                         if (isFlooded) {
                             return L.circleMarker(latlng, {
                                 pane: 'swmmNodesPane',
-                                radius: 9.0,
+                                radius: 5.5,
                                 color: '#ffffff',
                                 fillColor: '#dc2626',
-                                weight: 2.5,
+                                weight: 1.5,
                                 opacity: 1,
-                                fillOpacity: 1.0,
-                                className: 'swmm-node-flooded'
+                                fillOpacity: 0.95
                             });
                         } else if (isSurcharged) {
                             return L.circleMarker(latlng, {
                                 pane: 'swmmNodesPane',
-                                radius: 7.0,
+                                radius: 4.0,
                                 color: '#ffffff',
                                 fillColor: '#ea580c',
-                                weight: 2.0,
+                                weight: 1.2,
                                 opacity: 1,
-                                fillOpacity: 0.95
+                                fillOpacity: 0.9
                             });
                         } else {
                             return L.circleMarker(latlng, {
                                 pane: 'swmmNodesPane',
-                                radius: 4.0,
+                                radius: 2.5,
                                 color: '#ffffff',
                                 fillColor: '#0284c7',
-                                weight: 1.2,
-                                opacity: 0.9,
-                                fillOpacity: 0.8
+                                weight: 0.8,
+                                opacity: 0.85,
+                                fillOpacity: 0.75
                             });
                         }
                     },
@@ -4798,15 +4825,10 @@
             // Rétablir les statistiques globales du Panneau d'Ingénierie
             if (window._rawNetworkData && window._rawNetworkData.compteurs) {
                 const c = window._rawNetworkData.compteurs;
+                const pName = window._rawNetworkData.project_name || 'Réseau Actif';
                 const miniStatsEl = document.getElementById('mini-stats');
                 if (miniStatsEl) {
-                    miniStatsEl.innerHTML =
-                        'Conduites: ' + (c.conduites || 0) +
-                        ' | Regards: ' + (c.regards || 0) +
-                        ' | Rejets: ' + (c.rejets || 0) +
-                        ' | Stations: ' + (c.stations || 0) +
-                        ' | STEP: ' + (c.step || 0) +
-                        ' | Ouvrages: ' + (c.ouvrages || 0);
+                    miniStatsEl.innerHTML = `<span style="color: #38bdf8; font-weight: 700;">Zone : ${pName}</span> | Conduites: <b>${c.conduites || 0}</b> | Regards: <b>${c.regards || 0}</b>`;
                     miniStatsEl.style.background = 'rgba(255,255,255,0.06)';
                     miniStatsEl.style.border = 'none';
                     miniStatsEl.style.color = '#94a3b8';

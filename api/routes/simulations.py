@@ -322,8 +322,11 @@ def get_latest_simulation(
             active_gpkg = str(Path("data/demo_reseau.gpkg").resolve())
 
     sim_gpkg = _DERNIERE_SIMULATION.get("source_gpkg")
-    if active_gpkg and sim_gpkg and active_gpkg != sim_gpkg:
-        # La simulation en mémoire appartenait à un autre modèle/démo
+    norm_active = str(Path(active_gpkg).resolve()).lower() if active_gpkg else ""
+    norm_sim = str(Path(sim_gpkg).resolve()).lower() if sim_gpkg else ""
+
+    if not norm_active or not norm_sim or norm_active != norm_sim:
+        # La simulation en mémoire appartenait à un autre modèle/démo ou le fichier a changé
         _DERNIERE_SIMULATION = {}
         return {"status": "none", "message": "Aucune simulation enregistrée pour le réseau actif."}
 

@@ -567,6 +567,15 @@ async def upload_network_gpkg(
     with open(target_path, "wb") as f:
         f.write(content)
 
+    # Invalidation des anciens fichiers caches associés à ce fichier
+    for ext in [".clusters_cache.json", ".subcatchments_cache.json", ".qualite_cache.json"]:
+        cp = target_path.with_suffix(ext)
+        if cp.exists():
+            try:
+                cp.unlink()
+            except Exception:
+                pass
+
     project = db.query(Project).filter(
         Project.org_id == tenant_ctx.org_id,
         Project.is_archived.is_(False)
