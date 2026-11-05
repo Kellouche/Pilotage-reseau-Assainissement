@@ -1692,9 +1692,11 @@
                             }
                         });
 
-                        // Alimenter la couche dédiée des tronçons orphelins (déconnectés)
+                        // Alimenter la couche dédiée des tronçons et regards orphelins (déconnectés)
                         const orphelinsGeo = clusterData.orphelins_conduites;
+                        const orphelinsRegGeo = clusterData.orphelins_regards;
                         const nbOrphelins = clusterData.nb_troncons_orphelins || (orphelinsGeo && orphelinsGeo.features ? orphelinsGeo.features.length : 0);
+                        const nbRegOrphelins = clusterData.nb_regards_orphelins || (orphelinsRegGeo && orphelinsRegGeo.features ? orphelinsRegGeo.features.length : 0);
                         if (orphelinsGeo && orphelinsGeo.features && orphelinsGeo.features.length > 0) {
                             L.geoJSON(orphelinsGeo, {
                                 style: {
@@ -1716,8 +1718,33 @@
                                 }
                             }).addTo(couches.orphelins);
                         }
+                        if (orphelinsRegGeo && orphelinsRegGeo.features && orphelinsRegGeo.features.length > 0) {
+                            L.geoJSON(orphelinsRegGeo, {
+                                pointToLayer: (feature, latlng) => {
+                                    return L.circleMarker(latlng, {
+                                        radius: 3.5,
+                                        fillColor: '#f59e0b',
+                                        color: '#78350f',
+                                        weight: 1,
+                                        opacity: 0.9,
+                                        fillOpacity: 0.85
+                                    });
+                                },
+                                onEachFeature: (feature, layer) => {
+                                    const p = feature.properties || {};
+                                    layer.bindTooltip(
+                                        `<b>⚠️ Regard orphelin (déconnecté)</b><br>` +
+                                        `Code: ${p.code_regard || 'N/A'}<br>` +
+                                        `Voie: ${p.nom_voie || 'N/A'}<br>` +
+                                        `Commune: ${p.commune || 'N/A'}<br>` +
+                                        `Distance au réseau: ${p.distance_rattachement_m || p.distance_reseau_m || 'N/A'} m`,
+                                        { sticky: true }
+                                    );
+                                }
+                            }).addTo(couches.orphelins);
+                        }
                         const badgeOrph = document.getElementById('badge-orphelins-count');
-                        if (badgeOrph) badgeOrph.textContent = `(${nbOrphelins})`;
+                        if (badgeOrph) badgeOrph.textContent = `(${nbOrphelins} tr. • ${nbRegOrphelins} reg.)`;
 
                         _activeClusterLayer = clusterLayer;
                         
@@ -1730,7 +1757,7 @@
                                     <div style="color: #38bdf8; font-weight: 600; margin-bottom: 3px;"><i class="fas fa-check-circle me-1"></i> Partitionnement terminé</div>
                                     <div style="color: #f8fafc;"><b>${nbBassins}</b> bassins versants d'exutoires</div>
                                     <div style="color: #cbd5e1;"><b>${nbTroncons}</b> tronçons reliés aux exutoires</div>
-                                    ${nbOrphelins > 0 ? `<div style="color: #f59e0b;"><b>${nbOrphelins}</b> tronçons orphelins (déconnectés)</div>` : ''}
+                                    ${nbOrphelins > 0 ? `<div style="color: #f59e0b;"><b>${nbOrphelins}</b> tronçons & <b>${nbRegOrphelins}</b> regards orphelins (déconnectés)</div>` : ''}
                                 </div>
                             `;
                         }
@@ -1979,6 +2006,32 @@
                     }
                 }
             });
+
+            // Harmoniser également la couche des sous-bassins Voronoï avec la sélection
+            if (typeof couches !== 'undefined' && couches.subcatchments && typeof couches.subcatchments.eachLayer === 'function') {
+                couches.subcatchments.eachLayer(sbLayer => {
+                    const feat = sbLayer.feature;
+                    if (!feat || !feat.properties) return;
+                    const sbBassinId = (feat.properties.id_bassin !== undefined && feat.properties.id_bassin !== null) ? String(feat.properties.id_bassin) : null;
+                    const isOrph = feat.properties.is_orphelin === 1 || feat.properties.is_orphelin === true || !sbBassinId;
+                    
+                    if (_selectedClusterId === null) {
+                        // Vue globale : style standard
+                        if (isOrph) {
+                            sbLayer.setStyle({ color: '#f59e0b', fillColor: '#f59e0b', fillOpacity: 0.15, weight: 1.0, dashArray: '3, 3' });
+                        } else {
+                            sbLayer.setStyle({ color: '#059669', fillColor: '#10b981', fillOpacity: 0.18, weight: 1.5, dashArray: '4, 4' });
+                        }
+                    } else if (sbBassinId === _selectedClusterId) {
+                        // Sous-bassin du bassin sélectionné : mise en valeur
+                        sbLayer.setStyle({ color: '#10b981', fillColor: '#10b981', fillOpacity: 0.38, weight: 2.2, dashArray: null });
+                        try { sbLayer.bringToFront(); } catch(e) {}
+                    } else {
+                        // Autre sous-bassin : estompé
+                        sbLayer.setStyle({ color: '#64748b', fillColor: '#334155', fillOpacity: 0.02, opacity: 0.12, weight: 0.5, dashArray: '4, 4' });
+                    }
+                });
+            }
         }
 
         function peuplerDropdownBassins(geojsonData, clusterLayer) {

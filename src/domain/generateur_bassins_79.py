@@ -125,14 +125,16 @@ def partitionner_79_bassins_versants(
     pipes_gdf = gpd.read_file(str(gpkg_p), layer=pipe_layer) if pipe_layer else gpd.GeoDataFrame()
     crs_metrique = regards_gdf.crs or "EPSG:32631"
 
-    # Index spatial des regards connectés pour le rattachement des orphelins
+    # Index spatial des regards connectés pour l'audit des distances orphelins
     connected_points = []
     connected_ex_ids = []
+    connected_nodes = []
     for idx, row in regards_gdf.iterrows():
         c = str(row.get('Code', row.get('id', idx)))
         if c in node_to_exutoire:
             connected_points.append(row.geometry)
             connected_ex_ids.append(node_to_exutoire[c])
+            connected_nodes.append(c)
 
     if not connected_points:
         # Fallback si aucun regard n'est connecté par code : utiliser la position des exutoires
@@ -140,6 +142,7 @@ def partitionner_79_bassins_versants(
             if 'x' in ex_data and 'y' in ex_data:
                 connected_points.append(Point(float(ex_data['x']), float(ex_data['y'])))
                 connected_ex_ids.append(ex_id)
+                connected_nodes.append(str(ex_id))
 
     conn_tree = STRtree(connected_points)
 
@@ -198,15 +201,18 @@ def partitionner_79_bassins_versants(
             assigned_ex = cand_ex
 
         if not assigned_ex:
-            # Orphelin -> Snapper au regard connecté le plus proche
+            # Regard orphelin : aucune connexion topologique amont-aval vers un exutoire
+            # NE JAMAIS snapper artificiellement un orphelin dans un bassin versant connecté !
             is_orphelin = True
             n_idx = conn_tree.nearest(pt)
-            assigned_ex = connected_ex_ids[n_idx]
+            nearest_ex = connected_ex_ids[n_idx]
+            nearest_node = connected_nodes[n_idx] if connected_nodes else str(nearest_ex)
             dist_snap = round(float(pt.distance(connected_points[n_idx])), 2)
             orphelins_regards_records.append({
                 "code_regard": str_code,
-                "exutoire_rattache": assigned_ex,
-                "nom_exutoire": exutoires_physiques.get(assigned_ex, {}).get('nom', str(assigned_ex)),
+                "exutoire_proche": nearest_ex,
+                "nom_exutoire_proche": exutoires_physiques.get(nearest_ex, {}).get('nom', str(nearest_ex)),
+                "noeud_proche": str(nearest_node),
                 "distance_rattachement_m": dist_snap,
                 "commune": row.get('COMMUNE', ''),
                 "nom_voie": row.get('NOMVOIE', ''),
@@ -226,34 +232,67 @@ def partitionner_79_bassins_versants(
         area_ha = round(area_m2 / 10000.0, 4)
         width_m = round(max(math.sqrt(area_m2), 5.0), 2)
 
-        ex_info = exutoires_physiques.get(assigned_ex, {})
-        b_num = ex_to_num.get(assigned_ex, 1)
-        b_color = ex_to_color.get(assigned_ex, "#3498db")
+        if not is_orphelin and assigned_ex is not None:
+            ex_info = exutoires_physiques.get(assigned_ex, {})
+            b_num = ex_to_num.get(assigned_ex, 1)
+            b_color = ex_to_color.get(assigned_ex, "#3498db")
 
-        voronoi_records.append({
-            "subcatchment_id": f"SB_{str_code}",
-            "outlet": str_code,
-            "id_bassin": b_num,
-            "exutoire_id": str(assigned_ex),
-            "nom_bassin": ex_info.get('nom', f"Bassin_{b_num}"),
-            "type_exutoire": ex_info.get('type', 'exutoire'),
-            "nom_voie": str(row.get('NOMVOIE', '') or (G.nodes.get(str_code, {}).get('nom_voie', '') if str_code in G.nodes else '')),
-            "area_ha": area_ha,
-            "area_m2": area_m2,
-            "imperv_pct": 70.0,
-            "width_m": width_m,
-            "slope_pct": 0.5,
-            # Infiltration Horton
-            "f0": 75.0,
-            "fc": 10.0,
-            "decay_k": 4.0,
-            "is_orphelin": 1 if is_orphelin else 0,
-            "dist_snap_m": dist_snap,
-            "couleur": b_color,
-            "geometry": clipped_cell
-        })
+            voronoi_records.append({
+                "subcatchment_id": f"SB_{str_code}",
+                "outlet": str_code,
+                "id_bassin": b_num,
+                "exutoire_id": str(assigned_ex),
+                "nom_bassin": ex_info.get('nom', f"Bassin_{b_num}"),
+                "type_exutoire": ex_info.get('type', 'exutoire'),
+                "nom_voie": str(row.get('NOMVOIE', '') or (G.nodes.get(str_code, {}).get('nom_voie', '') if str_code in G.nodes else '')),
+                "area_ha": area_ha,
+                "area_m2": area_m2,
+                "imperv_pct": 70.0,
+                "width_m": width_m,
+                "slope_pct": 0.5,
+                # Infiltration Horton
+                "f0": 75.0,
+                "fc": 10.0,
+                "decay_k": 4.0,
+                "is_orphelin": 0,
+                "dist_snap_m": 0.0,
+                "couleur": b_color,
+                "geometry": clipped_cell
+            })
 
-        bassin_polygons_map[assigned_ex].append(clipped_cell)
+            bassin_polygons_map[assigned_ex].append(clipped_cell)
+        else:
+            # Regard orphelin : sa cellule Voronoï est isolée hors des 79 bassins versants d'exutoires
+            voronoi_records.append({
+                "subcatchment_id": f"SB_{str_code}",
+                "outlet": str_code,
+                "id_bassin": None,
+                "exutoire_id": "orphelin",
+                "nom_bassin": "Éléments orphelins (déconnectés)",
+                "type_exutoire": "orphelin",
+                "nom_voie": str(row.get('NOMVOIE', '') or (G.nodes.get(str_code, {}).get('nom_voie', '') if str_code in G.nodes else '')),
+                "area_ha": area_ha,
+                "area_m2": area_m2,
+                "imperv_pct": 70.0,
+                "width_m": width_m,
+                "slope_pct": 0.5,
+                # Infiltration Horton
+                "f0": 75.0,
+                "fc": 10.0,
+                "decay_k": 4.0,
+                "is_orphelin": 1,
+                "dist_snap_m": dist_snap,
+                "couleur": "#f59e0b",
+                "geometry": clipped_cell
+            })
+
+    # Continuité hydraulique : intégrer le fuseau tampon (15m) des conduites connectées
+    for u, v, data in G.edges(data=True):
+        geom_metric = data.get('geometry')
+        if geom_metric is not None and not geom_metric.is_empty:
+            assigned_pipe_ex = node_to_exutoire.get(v) or node_to_exutoire.get(u)
+            if assigned_pipe_ex and assigned_pipe_ex in bassin_polygons_map:
+                bassin_polygons_map[assigned_pipe_ex].append(geom_metric.buffer(15.0))
 
     gdf_voronoi = gpd.GeoDataFrame(voronoi_records, crs=crs_metrique)
     print(f"[bassins_79] {len(gdf_voronoi)} sous-bassins Voronoï générés et typés.", flush=True)
@@ -467,9 +506,9 @@ def partitionner_79_bassins_versants(
 
     # 9. Export du fichier isolé des orphelins (GeoJSON) dans le dossier upload
     orphelins_geojson_path = gpkg_p.parent / "elements_orphelins.geojson"
-    if not gdf_orphelins_regards.empty:
+    gdf_orph_wgs84 = gdf_orphelins_regards.to_crs("EPSG:4326") if not gdf_orphelins_regards.empty else gpd.GeoDataFrame()
+    if not gdf_orph_wgs84.empty:
         try:
-            gdf_orph_wgs84 = gdf_orphelins_regards.to_crs("EPSG:4326")
             gdf_orph_wgs84.to_file(str(orphelins_geojson_path), driver="GeoJSON")
             print(f"[bassins_79] Fichier d'isolation exporté : {orphelins_geojson_path.name}", flush=True)
         except Exception as e:
@@ -577,6 +616,7 @@ def partitionner_79_bassins_versants(
     # Sauvegarde du cache disque pour rapidité web instantanée (< 50ms)
     cache_clusters_path = gpkg_p.with_suffix(".clusters_cache.json")
     try:
+        orph_reg_geojson = json.loads(gdf_orph_wgs84.to_json(na="drop")) if not gdf_orph_wgs84.empty else {"type": "FeatureCollection", "features": []}
         clusters_cache_data = {
             "status": "success",
             "exutoires_physiques": nb_exutoires,
@@ -591,6 +631,7 @@ def partitionner_79_bassins_versants(
                 "type": "FeatureCollection",
                 "features": orphelins_pipes_features
             },
+            "orphelins_regards": orph_reg_geojson,
             "resultats": results_formatted
         }
         with open(cache_clusters_path, "w", encoding="utf-8") as f:
