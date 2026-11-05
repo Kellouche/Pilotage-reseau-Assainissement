@@ -143,6 +143,7 @@ class SimulationRunRequest(BaseModel):
     valider_raccordement: Optional[bool] = True
     typologie_sol: Optional[str] = "habitat_mixte"
     imperv_pct: Optional[float] = None
+    intensite_max_mmh: Optional[float] = None
 
 
 class ValidateBufferRequest(BaseModel):
@@ -176,12 +177,20 @@ def get_simulation_scenarios():
             {
                 "key": k,
                 "nom": v["nom"],
+                "station": v.get("station", "Station Hydro-Météo"),
+                "periode_retour": v.get("periode_retour", "T = 10 ans"),
+                "intensite_max_defaut": v.get("intensite_max_defaut", 62.0),
                 "duree_heures": v["duree_heures"],
+                "formule_montana": v.get("formule_montana", ""),
+                "hauteur_p24_mm": v.get("hauteur_p24_mm", 0.0),
+                "hauteur_totale_mm": v.get("hauteur_totale_mm", 0.0),
+                "source": v.get("source", ""),
                 "description": v["description"]
             }
             for k, v in SCENARIOS_PLUIE.items()
         ],
         "default_scenario": "pluie_decennale",
+        "default_intensite_max": 62.0,
         "solver": "EPA SWMM 5.2 Dynamic Wave (DYNWAVE)",
         "infiltration_method": "Horton (f0=75 mm/h, fc=10 mm/h, k=4.0 1/h)",
     }
@@ -242,6 +251,7 @@ def run_native_swmm_simulation(
             valider_raccordement_deporte=payload.valider_raccordement if payload.valider_raccordement is not None else True,
             typologie_sol=payload.typologie_sol,
             imperv_pct=payload.imperv_pct,
+            intensite_max_mmh=payload.intensite_max_mmh,
         )
         resultat["source_gpkg"] = str(gpkg_path.resolve())
         _DERNIERE_SIMULATION = resultat
@@ -272,6 +282,14 @@ def run_native_swmm_simulation(
                 "typologie_sol": resultat.get("meta", {}).get("typologie_sol"),
                 "typologie_nom": resultat.get("meta", {}).get("typologie_nom"),
                 "imperv_pct": resultat.get("meta", {}).get("imperv_pct"),
+                "pluvio_station": resultat.get("meta", {}).get("pluvio_station"),
+                "pluvio_scenario_nom": resultat.get("meta", {}).get("pluvio_scenario_nom"),
+                "pluvio_periode_retour": resultat.get("meta", {}).get("pluvio_periode_retour"),
+                "pluvio_intensite_max_mmh": resultat.get("meta", {}).get("pluvio_intensite_max_mmh"),
+                "pluvio_montana": resultat.get("meta", {}).get("pluvio_montana"),
+                "pluvio_hauteur_totale_mm": resultat.get("meta", {}).get("pluvio_hauteur_totale_mm"),
+                "pluvio_p24_mm": resultat.get("meta", {}).get("pluvio_p24_mm"),
+                "pluvio_source": resultat.get("meta", {}).get("pluvio_source"),
                 "flooded_nodes_count": resultat.get("flooded_nodes_count"),
                 "surcharged_nodes_count": resultat.get("surcharged_nodes_count", 0),
                 "flooded_nodes": resultat.get("flooded_nodes", [])[:15],
@@ -343,6 +361,14 @@ def get_latest_simulation(
             "flooded_nodes_count": resultat.get("flooded_nodes_count", 0),
             "surcharged_nodes_count": resultat.get("surcharged_nodes_count", 0),
             "flooded_nodes": resultat.get("flooded_nodes", [])[:15],
+            "pluvio_station": resultat.get("meta", {}).get("pluvio_station"),
+            "pluvio_scenario_nom": resultat.get("meta", {}).get("pluvio_scenario_nom"),
+            "pluvio_periode_retour": resultat.get("meta", {}).get("pluvio_periode_retour"),
+            "pluvio_intensite_max_mmh": resultat.get("meta", {}).get("pluvio_intensite_max_mmh"),
+            "pluvio_montana": resultat.get("meta", {}).get("pluvio_montana"),
+            "pluvio_hauteur_totale_mm": resultat.get("meta", {}).get("pluvio_hauteur_totale_mm"),
+            "pluvio_p24_mm": resultat.get("meta", {}).get("pluvio_p24_mm"),
+            "pluvio_source": resultat.get("meta", {}).get("pluvio_source"),
             "compliance_continuity": resultat.get("compliance_continuity", True),
         },
         "buffer_sensitivity": resultat.get("buffer_sensitivity", {}),
