@@ -24,7 +24,7 @@ def test_public_landing_page_unauthenticated():
     resp = read_root(req, db)
     assert isinstance(resp, HTMLResponse)
     assert resp.status_code == 200
-    assert "SWMM Platform" in resp.body.decode("utf-8")
+    assert "DrainPilot" in resp.body.decode("utf-8")
     assert "Fascicule 70" in resp.body.decode("utf-8")
     assert "NP 650" in resp.body.decode("utf-8")
 
@@ -68,7 +68,7 @@ def test_login_and_register_pages():
     resp_reg = page_register(req, db)
     assert isinstance(resp_reg, HTMLResponse)
     assert resp_reg.status_code == 200
-    assert "SWMM Platform" in resp_reg.body.decode("utf-8")
+    assert "DrainPilot" in resp_reg.body.decode("utf-8")
 
 
 def test_logout_clears_cookies_and_redirects():

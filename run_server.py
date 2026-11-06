@@ -40,7 +40,7 @@ if __name__ == "__main__":
     kill_process_on_port(API_PORT)
 
     print("=" * 60)
-    print("Démarrage SWMM Platform POC - API Server (Mode Résilient)")
+    print("Démarrage DrainPilot - API Server (Mode Résilient)")
     print(f"  URL: http://{API_HOST}:{API_PORT}")
     print(f"  Docs: http://{API_HOST}:{API_PORT}/docs")
     print("  Appuyez sur Ctrl+C pour arrêter")

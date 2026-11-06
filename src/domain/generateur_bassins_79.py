@@ -30,6 +30,7 @@ from src.domain.detecteur_clusters import (
     extraire_adresse_reelle_bassin,
     classifier_type_hydraulique,
 )
+from src.domain.moteur_swmm import _clean_node_id
 from collections import Counter
 import re
 
@@ -402,7 +403,7 @@ def partitionner_79_bassins_versants(
     bassins_records.sort(key=lambda x: x['id_bassin'])
     gdf_bassins_79 = gpd.GeoDataFrame(bassins_records, crs=crs_metrique)
 
-    # 7. Identifier et colorier les canalisations par bassin versant depuis le graphe topologique G
+    # 7. Identifier et colorier les canalisations par bassin versant
     pipes_by_exutoire: Dict[str, List[Dict[str, Any]]] = {ex_id: [] for ex_id in exutoire_id_list}
     orphelins_pipes_features: List[Dict[str, Any]] = []
 
@@ -410,68 +411,146 @@ def partitionner_79_bassins_versants(
     try:
         transformer_to_wgs84 = pyproj.Transformer.from_crs(crs_metrique, "EPSG:4326", always_xy=True).transform
 
-        for u, v, data in G.edges(data=True):
-            geom_metric = data.get('geometry')
-            if geom_metric is None or geom_metric.is_empty:
-                continue
+        if not pipes_gdf.empty:
+            for idx, row in pipes_gdf.iterrows():
+                geom_metric = row.geometry
+                if geom_metric is None or geom_metric.is_empty:
+                    continue
 
-            pipe_id = str(data.get('id', f"{u}_{v}"))
-            raw_len = data.get('length')
-            if raw_len is None or (isinstance(raw_len, float) and (math.isnan(raw_len) or raw_len <= 0)):
-                longueur = float(geom_metric.length)
-            else:
-                longueur = float(raw_len)
-            longueur = round(longueur, 1)
+                pipe_id = str(row.get('id', row.get('id_troncon', row.get('ID_TRONCON', idx))))
+                u = _clean_node_id(row.get('noeud_amont', row.get('amont', row.get('ID_AMONT'))))
+                v = _clean_node_id(row.get('noeud_aval', row.get('aval', row.get('ID_AVAL'))))
 
-            raw_diam = data.get('diametre_mm', 300)
-            diametre = int(raw_diam) if raw_diam and not (isinstance(raw_diam, float) and math.isnan(raw_diam)) else 300
-            materiau = str(data.get('materiau', data.get('type', 'Béton')))
+                raw_len = row.get('longueur', row.get('length', row.get('LONGUEUR', row.get('Longeur'))))
+                if raw_len is None or (isinstance(raw_len, (int, float)) and (math.isnan(raw_len) or raw_len <= 0)):
+                    longueur = float(geom_metric.length)
+                else:
+                    try:
+                        longueur = float(raw_len)
+                    except (ValueError, TypeError):
+                        longueur = float(geom_metric.length)
+                longueur = round(longueur, 1)
 
-            try:
-                geom_wgs84 = transform(transformer_to_wgs84, geom_metric)
-            except Exception:
-                geom_wgs84 = None
+                raw_diam = row.get('diametre', row.get('diametre_mm', row.get('DIAMETRE', 300)))
+                try:
+                    diametre = int(raw_diam) if raw_diam and not (isinstance(raw_diam, float) and math.isnan(raw_diam)) else 300
+                except (ValueError, TypeError):
+                    diametre = 300
 
-            if geom_wgs84 is None or geom_wgs84.is_empty:
-                continue
+                materiau = str(row.get('materiau', row.get('type', row.get('MATERIAU', 'Béton'))))
 
-            # Priorité à l'exutoire du nœud aval, sinon amont
-            assigned_pipe_ex = node_to_exutoire.get(v) or node_to_exutoire.get(u)
+                try:
+                    geom_wgs84 = transform(transformer_to_wgs84, geom_metric)
+                except Exception:
+                    geom_wgs84 = None
 
-            if assigned_pipe_ex and assigned_pipe_ex in pipes_by_exutoire:
-                b_num = ex_to_num.get(assigned_pipe_ex, 1)
-                b_color = ex_to_color.get(assigned_pipe_ex, "#3498db")
-                feat_pipe = {
-                    "type": "Feature",
-                    "geometry": mapping(geom_wgs84),
-                    "properties": {
-                        "conduit_id": pipe_id,
-                        "cluster_id": b_num,
-                        "couleur": b_color,
-                        "diametre": diametre,
-                        "longueur": longueur,
-                        "materiau": materiau,
-                        "type": "conduite",
-                        "is_orphelin": 0
+                if geom_wgs84 is None or geom_wgs84.is_empty:
+                    continue
+
+                # Règle hydraulique stricte : l'eau s'écoule vers le nœud aval v.
+                # La conduite appartient au bassin versant auquel son nœud aval v est rattaché.
+                # Si v n'est pas encore attribué mais u l'est (et n'est pas lui-même un exutoire d'évacuation),
+                # rattacher au bassin de u.
+                assigned_pipe_ex = node_to_exutoire.get(v)
+                if not assigned_pipe_ex and u and u not in ex_set:
+                    assigned_pipe_ex = node_to_exutoire.get(u)
+
+                if assigned_pipe_ex and assigned_pipe_ex in pipes_by_exutoire:
+                    b_num = ex_to_num.get(assigned_pipe_ex, 1)
+                    b_color = ex_to_color.get(assigned_pipe_ex, "#3498db")
+                    feat_pipe = {
+                        "type": "Feature",
+                        "geometry": mapping(geom_wgs84),
+                        "properties": {
+                            "conduit_id": pipe_id,
+                            "cluster_id": b_num,
+                            "couleur": b_color,
+                            "diametre": diametre,
+                            "longueur": longueur,
+                            "materiau": materiau,
+                            "type": "conduite",
+                            "is_orphelin": 0
+                        }
                     }
-                }
-                pipes_by_exutoire[assigned_pipe_ex].append(feat_pipe)
-            else:
-                feat_pipe = {
-                    "type": "Feature",
-                    "geometry": mapping(geom_wgs84),
-                    "properties": {
-                        "conduit_id": pipe_id,
-                        "cluster_id": "orphelin",
-                        "couleur": "#f59e0b",
-                        "diametre": diametre,
-                        "longueur": longueur,
-                        "materiau": materiau,
-                        "type": "conduite_orpheline",
-                        "is_orphelin": 1
+                    pipes_by_exutoire[assigned_pipe_ex].append(feat_pipe)
+                else:
+                    feat_pipe = {
+                        "type": "Feature",
+                        "geometry": mapping(geom_wgs84),
+                        "properties": {
+                            "conduit_id": pipe_id,
+                            "cluster_id": "orphelin",
+                            "couleur": "#f59e0b",
+                            "diametre": diametre,
+                            "longueur": longueur,
+                            "materiau": materiau,
+                            "type": "conduite_orpheline",
+                            "is_orphelin": 1
+                        }
                     }
-                }
-                orphelins_pipes_features.append(feat_pipe)
+                    orphelins_pipes_features.append(feat_pipe)
+        else:
+            for u, v, data in G.edges(data=True):
+                geom_metric = data.get('geometry')
+                if geom_metric is None or geom_metric.is_empty:
+                    continue
+
+                pipe_id = str(data.get('id', f"{u}_{v}"))
+                raw_len = data.get('length')
+                if raw_len is None or (isinstance(raw_len, float) and (math.isnan(raw_len) or raw_len <= 0)):
+                    longueur = float(geom_metric.length)
+                else:
+                    longueur = float(raw_len)
+                longueur = round(longueur, 1)
+
+                raw_diam = data.get('diametre_mm', 300)
+                diametre = int(raw_diam) if raw_diam and not (isinstance(raw_diam, float) and math.isnan(raw_diam)) else 300
+                materiau = str(data.get('materiau', data.get('type', 'Béton')))
+
+                try:
+                    geom_wgs84 = transform(transformer_to_wgs84, geom_metric)
+                except Exception:
+                    geom_wgs84 = None
+
+                if geom_wgs84 is None or geom_wgs84.is_empty:
+                    continue
+
+                assigned_pipe_ex = node_to_exutoire.get(v) or node_to_exutoire.get(u)
+
+                if assigned_pipe_ex and assigned_pipe_ex in pipes_by_exutoire:
+                    b_num = ex_to_num.get(assigned_pipe_ex, 1)
+                    b_color = ex_to_color.get(assigned_pipe_ex, "#3498db")
+                    feat_pipe = {
+                        "type": "Feature",
+                        "geometry": mapping(geom_wgs84),
+                        "properties": {
+                            "conduit_id": pipe_id,
+                            "cluster_id": b_num,
+                            "couleur": b_color,
+                            "diametre": diametre,
+                            "longueur": longueur,
+                            "materiau": materiau,
+                            "type": "conduite",
+                            "is_orphelin": 0
+                        }
+                    }
+                    pipes_by_exutoire[assigned_pipe_ex].append(feat_pipe)
+                else:
+                    feat_pipe = {
+                        "type": "Feature",
+                        "geometry": mapping(geom_wgs84),
+                        "properties": {
+                            "conduit_id": pipe_id,
+                            "cluster_id": "orphelin",
+                            "couleur": "#f59e0b",
+                            "diametre": diametre,
+                            "longueur": longueur,
+                            "materiau": materiau,
+                            "type": "conduite_orpheline",
+                            "is_orphelin": 1
+                        }
+                    }
+                    orphelins_pipes_features.append(feat_pipe)
 
         print(f"[bassins_79] {sum(len(p) for p in pipes_by_exutoire.values())} conduites connectées réparties sur les 79 bassins.", flush=True)
         print(f"[bassins_79] {len(orphelins_pipes_features)} tronçons orphelins isolés.", flush=True)

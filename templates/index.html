@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>SWMM Platform - Hydraulic Expert</title>
+    <title>DrainPilot — Expert Hydraulique & Assainissement SWMM 5.2</title>
     <!-- FontAwesome & Polices -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -411,7 +411,7 @@
         <div style="display: flex; align-items: center; gap: 14px;">
             <div class="nav-brand-title" style="cursor: default; user-select: none;">
                 <i class="fas fa-water" style="color: #38bdf8;"></i>
-                <span>SWMM Platform</span>
+                <span>DrainPilot</span>
                 <span style="font-size: 0.62rem; background: rgba(56, 189, 248, 0.18); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.35); padding: 1px 6px; border-radius: 4px; font-weight: 700;">5.2</span>
             </div>
 
@@ -2377,6 +2377,12 @@
                 nb = bassinProperties.nb_conduites !== undefined ? bassinProperties.nb_conduites : (bassinProperties.nb_troncons ?? nb);
                 longueur = bassinProperties.longueur_totale_m !== undefined ? bassinProperties.longueur_totale_m : longueur;
             }
+            // Synchronisation stricte avec la simulation active si ce bassin est le périmètre simulé
+            if (window._dernierResultatSimulation && window._dernierResultatSimulation.meta && String(window._dernierResultatSimulation.meta.cluster_id) === String(clusterId)) {
+                if (window._dernierResultatSimulation.meta.conduits_count !== undefined) {
+                    nb = window._dernierResultatSimulation.meta.conduits_count;
+                }
+            }
             const nom = _bassinNoms && _bassinNoms[clusterId] ? _bassinNoms[clusterId] : `Bassin ${clusterId}`;
             const surfHa = (bassinProperties && bassinProperties.surface_ha !== undefined && bassinProperties.surface_ha !== null) ? `${bassinProperties.surface_ha} ha` : 'N/A';
             const nbReg = (bassinProperties && bassinProperties.nb_regards !== undefined && bassinProperties.nb_regards !== null) ? bassinProperties.nb_regards : 'N/A';
@@ -3309,7 +3315,7 @@
     </table>
 
     <div class="footer">
-        <span>SWMM Platform SaaS 5.2 &bull; Certification Hydraulique Conforme EPA DYNWAVE</span>
+        <span>DrainPilot SaaS 5.2 &bull; Certification Hydraulique Conforme EPA DYNWAVE</span>
         <span>Dossier d'expertise confidentiel &bull; Édité le ${dateStr}</span>
         <span>Page 1 / 1 (Document Synthétique A4)</span>
     </div>

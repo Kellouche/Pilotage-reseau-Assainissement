@@ -127,3 +127,4 @@ Le cartouche de résultats SWMM consacre un bloc dédié à la sollicitation plu
 * `GET /api/v1/simulations/pluviometrie/stations?wilaya=Chlef` : Liste des stations et de leurs coordonnées.
 * `GET /api/v1/simulations/scenarios?station_id=chlef_anrh_siege` : Scénarios SWMM calibrés pour la station spécifiée.
 * `POST /api/v1/simulations/run` : Lancement de simulation prenant en compte `station_id` et `intensite_max_mmh`.
+
