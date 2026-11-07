@@ -33,9 +33,12 @@ Outils de visualisation interactive et de génération de fichiers SWMM 5.2 à p
   - Détermination des sous-bassins élémentaires par cellules de Voronoï bornées par le rayon de drainage urbain et le corridor de conduite (15 m).
   - Résolution anti-collision d'identifiants entre couches hétérogènes (regards, rejets, ouvrages) et validation géométrique de proximité amont/aval ($\le 25\text{ m}$) éliminant tout raccordement aberrant ou "trou de ver".
   - Garantie de contiguïté stricte : élimination des MultiPolygones disjoints, chaque bassin constitue un polygone unique compact et connexe.
-- **Gestion des éléments orphelins (déconnectés)** :
+- **Gestion des éléments orphelins & Raccordement Pré-Simulation (Variante 0 Opportuniste)** :
   - Isolation rigoureuse des tronçons et regards sans exutoire physique documenté dans une couche dédiée (`elements_orphelins_regards`) et export GeoJSON indépendant (`elements_orphelins.geojson`).
   - Suppression de tout "snapping" euclidien aveugle vers des exutoires distants.
+  - **Détection Automatique d'Ouvrages Spéciaux Proches (< 120 m)** : identification des déversoirs d'orage (DVO), trop-pleins de réseau, stations de relevage (SR) et rejets oueds isolés dans le SIG à proximité des regards du bassin.
+  - **Panneau Pré-Simulation Interactif & Tracé Dynamique** : sélection interactive par cases à cocher avec coût unitaire BPU (45 000 DZD/ml) et rendu cartographique dynamique en tiretés cyan (`dashArray: 8, 8`) reliant le regard amont à l'ouvrage déporté.
+  - **Injection Hydrodynamique SWMM 5.2 & Évaluation Multi-Agents** : raccordement physique des ouvrages validés dans le fichier `.inp` (`[OUTFALLS]`, `[CONDUITS]`, `[XSECTIONS]`, `[COORDINATES]`), soulageant les mises en charge du réseau amont et intégré au rapport d'expertise en **Variante 0 : Raccordement Opportuniste Immédiat** (économie de > 90% par rapport aux travaux lourds sous voirie).
 - **Moteur de Simulation Hydrodynamique SWMM 5.2** :
   - Sectorisation obligatoire par exutoire avant calcul.
   - **Référentiel Pluviométrique National Certifié (ANRH / UHBC / ONA)** : intégration de 7 stations hydro-météorologiques dans la Wilaya de Chlef (Chlef Siège, Oum Drou, Oued Fodda, Bénaïria, Domaine Si Tayeb, Ténès, Boukadir) avec quantiles Gumbel $P_{24}$ et coefficients de Montana $a, b$ certifiés par l'Université Hassiba Ben Bouali de Chlef.

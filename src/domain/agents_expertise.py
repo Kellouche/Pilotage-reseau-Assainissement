@@ -834,7 +834,49 @@ class AgentFinancierEtVariantes:
             }
         ]
 
+        # Variante 0 : Raccordement opportuniste immédiat vers ouvrages orphelins (si applicable)
+        racc_orph = meta.get("raccordements_orphelins") or []
+        note_v0_prefix = ""
+        if racc_orph:
+            ml_v0 = round(sum(float(ro.get("distance_m", 15.0)) for ro in racc_orph), 1)
+            cout_v0 = round(sum(float(ro.get("cout_estime_dzd", 150000.0)) for ro in racc_orph), 0)
+            noms_v0 = ", ".join(ro.get("nom", "Ouvrage spécial") for ro in racc_orph)
+            nb_v0 = len(racc_orph)
+            gain_v0_pct = round((1.0 - (cout_v0 / max(cout_gc, 1.0))) * 100.0, 1)
+
+            variante_0 = {
+                "id": "V0",
+                "nom": "Variante 0 : Raccordement Opportuniste Immédiat (Ouvrages Spéciaux Proches)",
+                "description": f"Raccordement direct par collecteur court ({ml_v0} ml au total) vers les {nb_v0} ouvrages spéciaux existants ({noms_v0}).",
+                "recalibrage_ml": ml_v0,
+                "nb_troncons": nb_v0,
+                "volume_retention_m3": 0,
+                "cout_reseau_dzd": cout_v0,
+                "cout_retention_dzd": 0,
+                "cout_total_dzd": cout_v0,
+                "gain_hydraulique": "Soulagement hydraulique immédiat et suppression des mises en charge continues",
+                "emprise_fonciere": "Quasi-nulle (liaisons courtes de 15 à 45m sur domaine public)",
+                "impact_voirie": "MINIME (tranchées locales ponctuelles sans perturbation du trafic majeur)",
+                "risque_aval": "Faible (valorisation du réseau de décharge et de pompage existant ONA)",
+                "delai_mois": "15 à 30 jours (Urgence immédiate)",
+                "score_resilience": 9.6,
+                "statut": "ACTION PRIORITAIRE IMMÉDIATE (PHASE 0)",
+                "avis_expert": (
+                    f"Solution d'urgence hautement rentable : pour seulement {cout_v0:,.0f} DZD "
+                    f"({gain_v0_pct}% d'économie par rapport au recalibrage lourd de {cout_gc:,.0f} DZD), "
+                    f"ce raccordement opportuniste valorise le patrimoine existant et soulage le bassin en moins d'un mois."
+                )
+            }
+            variantes.insert(0, variante_0)
+            note_v0_prefix = (
+                f"⚡ OPPORTUNITÉ VALORISÉE (Variante 0) : Le raccordement opportuniste de {nb_v0} ouvrage(s) spécial(aux) "
+                f"situé(s) à moins de {max(float(ro.get('distance_m', 0)) for ro in racc_orph):.1f} m du réseau a été validé. "
+                f"Ce raccordement court ({ml_v0} ml pour {cout_v0:,.0f} DZD) dégage une économie de {gain_v0_pct}% "
+                f"par rapport aux travaux lourds de renouvellement de voirie ({cout_gc:,.0f} DZD). "
+            )
+
         note_financiere = (
+            note_v0_prefix +
             f"L'analyse multi-critères démontre la supériorité technico-économique de la Variante 3 (Mixte Optimisée). "
             f"En limitant le renouvellement de conduites aux 97 tronçons à déficit capacitaire avéré ({ml_recalibre:.1f} ml) "
             f"et en intégrant un bassin d'écrêtement amont de {vol_lid:.0f} m³, le coût global du projet est ramené à "

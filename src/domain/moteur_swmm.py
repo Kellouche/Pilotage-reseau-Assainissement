@@ -455,6 +455,7 @@ class MoteurSWMM:
         imperv_pct: Optional[float] = None,
         intensite_max_mmh: Optional[float] = None,
         station_id: Optional[str] = "chlef_anrh_siege",
+        raccordements_orphelins: Optional[List[Dict[str, Any]]] = None,
     ) -> Tuple[str, Dict[str, Any]]:
         """
         Génère l'intégralité du contenu textuel conforme au standard EPA SWMM 5.2 .inp.
@@ -939,6 +940,19 @@ class MoteurSWMM:
         lines.append("[OUTFALLS]")
         lines.append(";;Name           Elevation  Type       Stage Data       Gated    Route To")
         lines.append(f"{actual_outfall_name:<16} {terminal_outfall_elev:<10.3f} FREE                        NO")
+
+        # Raccordements opportunistes d'ouvrages orphelins validés par l'ingénieur
+        racc_orph_valides = []
+        if raccordements_orphelins:
+            for ro in raccordements_orphelins:
+                reg_id = _clean_node_id(ro.get("regard_proche_id"))
+                ouv_id = _clean_node_id(ro.get("ouvrage_id", "orph"))
+                if reg_id:
+                    out_orph_name = f"OUT_{ouv_id}"
+                    z_reg = node_elevs.get(reg_id, 100.0)
+                    z_out_orph = round(z_reg - 0.20, 3)
+                    lines.append(f"{out_orph_name:<16} {z_out_orph:<10.3f} FREE                        NO")
+                    racc_orph_valides.append((ro, out_orph_name, reg_id, z_out_orph))
         lines.append("")
 
         # Section conduites (Conduits)
@@ -982,6 +996,25 @@ class MoteurSWMM:
             diam_out_m = max(1.2, max_inlet_d / 1000.0)
             conduit_lines.append(f"{cid_out:<16} {outfall_code:<16} {actual_outfall_name:<16} 5.00       0.0130     0.000      0.000      0.000      0.000")
             xsec_lines.append(f"{cid_out:<16} CIRCULAR     {diam_out_m:<16.3f} 0.000      0.000      0.000      1")
+
+        # Conduites de raccordement des ouvrages orphelins validés par l'ingénieur
+        for ro, out_orph_name, reg_id, _ in racc_orph_valides:
+            ouv_id = _clean_node_id(ro.get("ouvrage_id", "orph"))
+            cid_orph = f"C_RACC_{ouv_id}"
+            dist_orph = max(1.0, float(ro.get("distance_m", 15.0)))
+            dn_orph_mm = float(ro.get("diametre_recommande_mm", 600.0))
+            dn_orph_m = max(0.3, dn_orph_mm / 1000.0)
+            nom_o = ro.get("nom", "Ouvrage spécial")
+            conduit_lines.append(f"{cid_orph:<16} {reg_id:<16} {out_orph_name:<16} {dist_orph:<10.2f} 0.0130     0.000      0.000      0.000      0.000")
+            xsec_lines.append(f"{cid_orph:<16} CIRCULAR     {dn_orph_m:<16.3f} 0.000      0.000      0.000      1")
+            conduit_endpoints[cid_orph] = {
+                "u": reg_id,
+                "d": out_orph_name,
+                "length": dist_orph,
+                "diam_mm": dn_orph_mm,
+                "material": "Béton armé 135A",
+                "nom_voie": f"Raccordement opportuniste ({nom_o})"
+            }
 
         lines.extend(conduit_lines)
         lines.append("")
@@ -1028,6 +1061,27 @@ class MoteurSWMM:
             if out_coord:
                 lines.append(f"{actual_outfall_name:<16} {out_coord[0]:<18.3f} {out_coord[1]:<18.3f}")
                 coords_traitees.add(actual_outfall_name)
+
+        # Coordonnées des exutoires orphelins raccordés
+        for ro, out_orph_name, reg_id, _ in racc_orph_valides:
+            if out_orph_name not in coords_traitees:
+                pt_orph = None
+                coords_wgs = ro.get("ouvrage_coord_wgs84")
+                if coords_wgs and len(coords_wgs) == 2:
+                    try:
+                        from src.domain.ouvrages_orphelins import _obtenir_reprojecteurs
+                        _, to_utm = _obtenir_reprojecteurs("EPSG:32631", "EPSG:4326")
+                        if to_utm:
+                            pt_orph = to_utm(coords_wgs[1], coords_wgs[0])
+                    except Exception:
+                        pass
+                if not pt_orph and reg_id in noeuds_regards:
+                    g = noeuds_regards[reg_id].geometry
+                    pt_orph = (g.x + 10.0, g.y + 10.0)
+                if not pt_orph:
+                    pt_orph = (100.0, 100.0)
+                lines.append(f"{out_orph_name:<16} {pt_orph[0]:<18.3f} {pt_orph[1]:<18.3f}")
+                coords_traitees.add(out_orph_name)
         lines.append("")
 
         # Polygones des sous-bassins
@@ -1095,6 +1149,7 @@ class MoteurSWMM:
             "pluvio_p24_mm": scen.get("hauteur_p24_mm", 56.0),
             "pluvio_source": scen.get("source", ""),
             "pluvio_description": scen.get("description", ""),
+            "raccordements_orphelins": [ro for ro, _, _, _ in racc_orph_valides],
         }
 
         return "\n".join(lines), meta
@@ -1196,6 +1251,7 @@ class MoteurSWMM:
         imperv_pct: Optional[float] = None,
         intensite_max_mmh: Optional[float] = None,
         station_id: Optional[str] = "chlef_anrh_siege",
+        raccordements_orphelins: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """
         Exécute la simulation complète avec pyswmm et extrait les KPIs hydrauliques.
@@ -1215,6 +1271,7 @@ class MoteurSWMM:
             imperv_pct=imperv_pct,
             intensite_max_mmh=intensite_max_mmh,
             station_id=station_id,
+            raccordements_orphelins=raccordements_orphelins,
         )
 
         with tempfile.NamedTemporaryFile(suffix=".inp", mode="w", delete=False, encoding="utf-8") as f:

@@ -145,6 +145,8 @@ class SimulationRunRequest(BaseModel):
     imperv_pct: Optional[float] = None
     intensite_max_mmh: Optional[float] = None
     station_id: Optional[str] = "chlef_anrh_siege"
+    raccordements_orphelins: Optional[List[Dict[str, Any]]] = None
+
 
 
 class ValidateBufferRequest(BaseModel):
@@ -232,6 +234,46 @@ def get_simulation_scenarios(station_id: Optional[str] = "chlef_anrh_siege"):
     }
 
 
+@router.get("/ouvrages-proches")
+def get_simulation_ouvrages_proches(
+    cluster_id: int,
+    rayon_m: float = 120.0,
+    db: Session = Depends(get_db),
+    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
+):
+    """
+    Retourne les ouvrages spéciaux orphelins (déversoirs d'orage, trop-pleins, stations de relevage)
+    détectés à proximité (< rayon_m) du bassin sélectionné pour validation interactive avant simulation.
+    """
+    from src.domain.ouvrages_orphelins import detecter_ouvrages_orphelins_proches
+    from api.models import Project
+    from api.routes.clusters import _get_graph
+
+    gpkg_path = None
+    if tenant and hasattr(tenant, "org_id") and tenant.org_id:
+        proj = db.query(Project).filter(
+            Project.org_id == tenant.org_id,
+            Project.is_archived.is_(False)
+        ).first()
+        if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
+            gpkg_path = Path(proj.source_gpkg_key)
+
+    if not gpkg_path:
+        proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
+        if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
+            gpkg_path = Path(proj.source_gpkg_key)
+        else:
+            cand = Path("data/demo_reseau.gpkg")
+            if cand.exists():
+                gpkg_path = cand
+
+    if not gpkg_path or not gpkg_path.exists():
+        raise HTTPException(status_code=404, detail="Réseau hydraulique introuvable pour ce projet.")
+
+    G = _get_graph(str(gpkg_path))
+    return detecter_ouvrages_orphelins_proches(str(gpkg_path), cluster_id, rayon_max_m=rayon_m, G_topo=G)
+
+
 @router.post("/run")
 def run_native_swmm_simulation(
     payload: SimulationRunRequest,
@@ -247,7 +289,7 @@ def run_native_swmm_simulation(
 
     # 1. Identifier le fichier réseau GeoPackage du projet actif
     gpkg_path = None
-    if tenant and tenant.org_id:
+    if tenant and hasattr(tenant, "org_id") and tenant.org_id:
         proj = db.query(Project).filter(
             Project.org_id == tenant.org_id,
             Project.is_archived.is_(False)
@@ -289,6 +331,7 @@ def run_native_swmm_simulation(
             imperv_pct=payload.imperv_pct,
             intensite_max_mmh=payload.intensite_max_mmh,
             station_id=payload.station_id,
+            raccordements_orphelins=payload.raccordements_orphelins,
         )
         resultat["source_gpkg"] = str(gpkg_path.resolve())
         _DERNIERE_SIMULATION = resultat

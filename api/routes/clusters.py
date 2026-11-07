@@ -662,6 +662,45 @@ def export_cluster_geojson(cluster_id: int, db: Session = Depends(get_db)):
     }
 
 
+def _trouver_chemin_gpkg(db: Session, request: Optional[Request] = None) -> Optional[str]:
+    """Résout le chemin absolu du fichier GeoPackage du projet actif."""
+    user = _get_current_user_from_request(request, db) if request else None
+    if user and user.memberships:
+        proj = db.query(Project).filter(
+            Project.org_id == user.memberships[0].org_id,
+            Project.is_archived.is_(False)
+        ).first()
+        if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
+            return str(Path(proj.source_gpkg_key))
+    proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
+    if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
+        return str(Path(proj.source_gpkg_key))
+    cand = Path("data/demo_reseau.gpkg")
+    if cand.exists():
+        return str(cand)
+    return None
+
+
+@router.get("/{cluster_id}/ouvrages-proches")
+def get_cluster_ouvrages_proches(
+    cluster_id: int,
+    rayon_m: float = 120.0,
+    request: Request = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Retourne la liste des ouvrages spéciaux, stations de relevage, déversoirs d'orage
+    et rejets orphelins situés à proximité (< rayon_m) du bassin versant.
+    Permet la validation interactive avant simulation hydrodynamique.
+    """
+    from src.domain.ouvrages_orphelins import detecter_ouvrages_orphelins_proches
+    chemin = _trouver_chemin_gpkg(db, request)
+    if not chemin:
+        raise HTTPException(status_code=404, detail="GeoPackage réseau introuvable.")
+    G = _get_graph(chemin)
+    return detecter_ouvrages_orphelins_proches(chemin, cluster_id, rayon_max_m=rayon_m, G_topo=G)
+
+
 # ============================================================
 # BASSINS MANUELS (CRÉATION / SUPPRESSION / LECTURE)
 # ============================================================
