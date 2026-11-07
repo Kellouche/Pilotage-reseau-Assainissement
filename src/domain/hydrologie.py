@@ -253,16 +253,29 @@ class GenerateurHydrologie:
             )
 
             # 2. SUBAREAS
+            n_imp = row.get('n_imperv', 0.015) if hasattr(row, 'get') else getattr(row, 'n_imperv', 0.015)
+            n_perv = row.get('n_perv', 0.25) if hasattr(row, 'get') else getattr(row, 'n_perv', 0.25)
+            d_imp = row.get('d_store_imperv', 1.5) if hasattr(row, 'get') else getattr(row, 'd_store_imperv', 1.5)
+            d_perv = row.get('d_store_perv', 5.0) if hasattr(row, 'get') else getattr(row, 'd_store_perv', 5.0)
+            pct_zero = row.get('pct_zero_imperv', 25.0) if hasattr(row, 'get') else getattr(row, 'pct_zero_imperv', 25.0)
+            sub_route = str(row.get('subarea_route', 'OUTLET') if hasattr(row, 'get') else getattr(row, 'subarea_route', 'OUTLET'))
+
             sections["SUBAREAS"].append(
-                f"{sb_id:<16} {row['n_imperv']:<10.3f} {row['n_perv']:<10.3f} "
-                f"{row['d_store_imperv']:<10.2f} {row['d_store_perv']:<10.2f} "
-                f"{row['pct_zero_imperv']:<10.1f} {row['subarea_route']:<10}"
+                f"{sb_id:<16} {n_imp:<10.3f} {n_perv:<10.3f} "
+                f"{d_imp:<10.2f} {d_perv:<10.2f} "
+                f"{pct_zero:<10.1f} {sub_route:<10}"
             )
 
             # 3. INFILTRATION (Horton)
+            f0_val = row.get('f0', 75.0) if hasattr(row, 'get') else getattr(row, 'f0', 75.0)
+            fc_val = row.get('fc', 10.0) if hasattr(row, 'get') else getattr(row, 'fc', 10.0)
+            k_val = row.get('decay_k', 4.0) if hasattr(row, 'get') else getattr(row, 'decay_k', 4.0)
+            dry_val = row.get('dry_time', 7.0) if hasattr(row, 'get') else getattr(row, 'dry_time', 7.0)
+            max_inf = row.get('max_infil', 0.0) if hasattr(row, 'get') else getattr(row, 'max_infil', 0.0)
+
             sections["INFILTRATION"].append(
-                f"{sb_id:<16} {row['f0']:<10.2f} {row['fc']:<10.2f} "
-                f"{row['decay_k']:<10.2f} {row['dry_time']:<10.1f} {row['max_infil']:<10.2f}"
+                f"{sb_id:<16} {f0_val:<10.2f} {fc_val:<10.2f} "
+                f"{k_val:<10.2f} {dry_val:<10.1f} {max_inf:<10.2f}"
             )
 
             # 4. POLYGONS (sommet par sommet)

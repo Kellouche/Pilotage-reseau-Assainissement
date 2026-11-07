@@ -407,18 +407,25 @@ def _resoudre_altimetrie_noeuds(
                 outfall_geom = rj.geometry
                 break
 
+    try:
+        lengths_dict = nx.single_source_dijkstra_path_length(G, source=outfall_code, weight="weight") if (G.has_node(outfall_code)) else {}
+    except Exception:
+        lengths_dict = {}
+
     for idx, r in regards.iterrows():
         nid = _clean_node_id(r.get("Code"), fallback=f"REG_{idx+1}")
         if nid == outfall_code:
             elevations[nid] = outfall_z
         else:
-            try:
-                dist = nx.shortest_path_length(G, source=nid, target=outfall_code, weight="weight")
-            except Exception:
-                if outfall_geom:
+            if nid in lengths_dict:
+                dist = lengths_dict[nid]
+            elif outfall_geom and hasattr(r, 'geometry') and r.geometry:
+                try:
                     dist = float(r.geometry.distance(outfall_geom)) * 1.25
-                else:
+                except Exception:
                     dist = 100.0
+            else:
+                dist = 100.0
             elevations[nid] = round(outfall_z + (dist * pente_fraction), 3)
 
     elevations[outfall_code] = outfall_z
@@ -797,7 +804,23 @@ class MoteurSWMM:
         self._last_canalisations = canalisations.copy()
 
         # Génération des sous-bassins versants Voronoï / Thiessen
-        sb_gdf = gh_local.generer_sous_bassins(regards, canalisations)
+        sb_gdf = None
+        # Accélération instantanée : réutiliser le cache de sous-bassins pré-calculé si disponible
+        cache_sub_path = Path(str(gpkg_path)).with_suffix(".subcatchments_cache.json")
+        if cluster_id is None and cache_sub_path.exists():
+            try:
+                import json
+                with open(cache_sub_path, "r", encoding="utf-8") as f_sub:
+                    cached_sub = json.load(f_sub)
+                features_sub = cached_sub.get("features", [])
+                if len(features_sub) == len(regards):
+                    sb_gdf = gpd.GeoDataFrame.from_features(features_sub)
+            except Exception as e_csub:
+                logger.warning(f"Impossible de réutiliser subcatchments_cache.json: {e_csub}")
+                sb_gdf = None
+
+        if sb_gdf is None or sb_gdf.empty:
+            sb_gdf = gh_local.generer_sous_bassins(regards, canalisations)
         swmm_sec = gh_local.formater_sections_swmm(sb_gdf, rain_gage_name="RG1")
 
         # Formatage des durées SWMM
