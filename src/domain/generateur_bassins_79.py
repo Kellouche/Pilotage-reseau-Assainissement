@@ -341,6 +341,12 @@ def partitionner_79_bassins_versants(
         nb_regards_total = len(regards_in_bassin)
         nb_regards_orphelins = sum(1 for r in regards_in_bassin if r['is_orphelin'] == 1)
 
+        # Harmonisation hydrologique : la surface drainée est la somme exacte des sous-bassins Voronoï
+        sum_sb_ha = round(sum(r.get('area_ha', 0.0) for r in regards_in_bassin), 2)
+        if sum_sb_ha > 0:
+            area_ha = sum_sb_ha
+            area_m2 = round(sum_sb_ha * 10000.0, 2)
+
         # Collecter les noms de voie des regards du bassin
         voies_bassin = [r.get('nom_voie') for r in regards_in_bassin if r.get('nom_voie')]
         compteur_voies = Counter([
