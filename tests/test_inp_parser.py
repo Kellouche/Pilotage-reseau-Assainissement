@@ -124,3 +124,4 @@ def test_convertir_inp_vers_gpkg(tmp_path):
     assert "ID_AMONT" in info_c["fields"]
     assert "ID_AVAL" in info_c["fields"]
     assert "DIAMETRE" in info_c["fields"]
+
