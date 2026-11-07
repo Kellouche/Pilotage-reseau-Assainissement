@@ -137,7 +137,7 @@ class SimulationRunRequest(BaseModel):
     scenario_key: str = "pluie_decennale"
     duree_heures: Optional[float] = None
     pas_routage_sec: int = 5
-    cluster_id: Optional[int] = None
+    cluster_id: Optional[Union[int, str]] = None
     pente_moyenne_pct: Optional[float] = 1.0
     buffer_m: Optional[float] = 35.0
     valider_raccordement: Optional[bool] = True

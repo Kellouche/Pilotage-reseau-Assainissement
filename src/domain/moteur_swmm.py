@@ -21,7 +21,7 @@ import math
 import tempfile
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional, Tuple, List
+from typing import Dict, Any, Optional, Tuple, List, Union
 import geopandas as gpd
 import pandas as pd
 import networkx as nx
@@ -444,7 +444,7 @@ class MoteurSWMM:
         duree_heures: Optional[float] = None,
         pas_routage_sec: int = 5,
         pente_moyenne_pct: Optional[float] = None,
-        cluster_id: Optional[int] = None,
+        cluster_id: Optional[Union[int, str]] = None,
         tampon_buffer_m: Optional[float] = None,
         G_topo: Optional[Any] = None,
         exutoires_map: Optional[Dict[Any, Any]] = None,
@@ -542,6 +542,14 @@ class MoteurSWMM:
             if not exutoires_map:
                 from src.domain.detecteur_clusters import trouver_exutoires_physiques
                 exutoires_map = trouver_exutoires_physiques(G_topo)
+            # Résolution robuste de cluster_id (support int ou str type '11_ouvrages_speciaux_349848')
+            cid_str = str(cluster_id).strip()
+            cid_int = None
+            try:
+                cid_int = int(cid_str)
+            except ValueError:
+                cid_int = None
+
             # Tenter de lire directement depuis la couche bassins_versants_79 si présente
             try:
                 import sqlite3
@@ -549,7 +557,10 @@ class MoteurSWMM:
                 cur_meta = con_meta.cursor()
                 has_b79 = cur_meta.execute("SELECT count(*) FROM gpkg_contents WHERE table_name = 'bassins_versants_79'").fetchone()[0] > 0
                 if has_b79:
-                    row_b79 = cur_meta.execute("SELECT nom_exutoire, exutoire_id FROM bassins_versants_79 WHERE id_bassin = ?", (int(cluster_id),)).fetchone()
+                    if cid_int is not None:
+                        row_b79 = cur_meta.execute("SELECT nom_exutoire, exutoire_id FROM bassins_versants_79 WHERE id_bassin = ?", (cid_int,)).fetchone()
+                    else:
+                        row_b79 = cur_meta.execute("SELECT nom_exutoire, exutoire_id FROM bassins_versants_79 WHERE nom_exutoire = ? OR exutoire_id = ?", (cid_str, cid_str)).fetchone()
                     if row_b79:
                         if row_b79[0]:
                             bassin_nom = str(row_b79[0])
@@ -567,13 +578,28 @@ class MoteurSWMM:
             except Exception as e_b79:
                 logger.warning(f"Lecture bassins_versants_79: {e_b79}")
 
+            # Recherche dans exutoires_map par identifiant ou par nom
+            if not target_ex_id:
+                if cid_str in exutoires_map:
+                    target_ex_id = cid_str
+                    bassin_nom = exutoires_map[cid_str].get("nom") or cid_str
+                else:
+                    for ex_k, ex_v in exutoires_map.items():
+                        if str(ex_v.get("nom", "")).strip().lower() == cid_str.lower():
+                            target_ex_id = ex_k
+                            bassin_nom = ex_v.get("nom") or cid_str
+                            break
+                        if str(ex_k).strip().lower() == cid_str.lower():
+                            target_ex_id = ex_k
+                            bassin_nom = ex_v.get("nom") or cid_str
+                            break
+
             ex_list = list(exutoires_map.items())
-            cid_int = int(cluster_id)
-            if not target_ex_id and 1 <= cid_int <= len(ex_list):
+            if not target_ex_id and cid_int is not None and 1 <= cid_int <= len(ex_list):
                 target_ex_id, ex_info = ex_list[cid_int - 1]
                 if not bassin_nom:
                     bassin_nom = ex_info.get("nom") or f"Bassin {cid_int}"
-            elif not bassin_nom and 1 <= cid_int <= len(ex_list):
+            elif not bassin_nom and cid_int is not None and 1 <= cid_int <= len(ex_list):
                 bassin_nom = ex_list[cid_int - 1][1].get("nom") or f"Bassin {cid_int}"
 
             if target_ex_id:
@@ -944,15 +970,36 @@ class MoteurSWMM:
         # Raccordements opportunistes d'ouvrages orphelins validés par l'ingénieur
         racc_orph_valides = []
         if raccordements_orphelins:
-            for ro in raccordements_orphelins:
-                reg_id = _clean_node_id(ro.get("regard_proche_id"))
-                ouv_id = _clean_node_id(ro.get("ouvrage_id", "orph"))
+            for ro_idx, ro in enumerate(raccordements_orphelins):
+                raw_reg_id = _clean_node_id(ro.get("regard_proche_id"))
+                ouv_id = _clean_node_id(ro.get("ouvrage_id") or ro.get("id") or f"orph_{ro_idx+1}")
+                if not ouv_id:
+                    ouv_id = f"orph_{ro_idx+1}"
+
+                reg_id = raw_reg_id
+                # Si le regard cible n'est pas dans le sous-réseau simulé, trouver le regard du bassin le plus proche
+                if (not reg_id or reg_id not in clean_target_nodes) and len(regards) > 0:
+                    o_pt = ro.get("ouvrage_coord_wgs84") or ro.get("regard_coord_wgs84")
+                    if o_pt and len(o_pt) == 2:
+                        try:
+                            from shapely.geometry import Point
+                            import pyproj
+                            proj_to_utm = pyproj.Transformer.from_crs("EPSG:4326", "EPSG:32631", always_xy=True).transform
+                            pt_m = Point(proj_to_utm(float(o_pt[1]), float(o_pt[0])))
+                            dists_r = regards.geometry.distance(pt_m)
+                            min_idx = dists_r.idxmin()
+                            reg_id = _clean_node_id(regards.loc[min_idx].get("Code"), fallback=raw_reg_id)
+                        except Exception as e_remap:
+                            logger.warning(f"Remap regard orphelin {ouv_id}: {e_remap}")
+                    if not reg_id or reg_id not in clean_target_nodes:
+                        reg_id = _clean_node_id(regards.iloc[0].get("Code"), fallback="REG_1")
+
                 if reg_id:
                     out_orph_name = f"OUT_{ouv_id}"
                     z_reg = node_elevs.get(reg_id, 100.0)
                     z_out_orph = round(z_reg - 0.20, 3)
                     lines.append(f"{out_orph_name:<16} {z_out_orph:<10.3f} FREE                        NO")
-                    racc_orph_valides.append((ro, out_orph_name, reg_id, z_out_orph))
+                    racc_orph_valides.append((ro, out_orph_name, reg_id, z_out_orph, ouv_id))
         lines.append("")
 
         # Section conduites (Conduits)
@@ -998,8 +1045,7 @@ class MoteurSWMM:
             xsec_lines.append(f"{cid_out:<16} CIRCULAR     {diam_out_m:<16.3f} 0.000      0.000      0.000      1")
 
         # Conduites de raccordement des ouvrages orphelins validés par l'ingénieur
-        for ro, out_orph_name, reg_id, _ in racc_orph_valides:
-            ouv_id = _clean_node_id(ro.get("ouvrage_id", "orph"))
+        for ro, out_orph_name, reg_id, _, ouv_id in racc_orph_valides:
             cid_orph = f"C_RACC_{ouv_id}"
             dist_orph = max(1.0, float(ro.get("distance_m", 15.0)))
             dn_orph_mm = float(ro.get("diametre_recommande_mm", 600.0))
@@ -1063,7 +1109,7 @@ class MoteurSWMM:
                 coords_traitees.add(actual_outfall_name)
 
         # Coordonnées des exutoires orphelins raccordés
-        for ro, out_orph_name, reg_id, _ in racc_orph_valides:
+        for ro, out_orph_name, reg_id, _, _ in racc_orph_valides:
             if out_orph_name not in coords_traitees:
                 pt_orph = None
                 coords_wgs = ro.get("ouvrage_coord_wgs84")
@@ -1149,7 +1195,7 @@ class MoteurSWMM:
             "pluvio_p24_mm": scen.get("hauteur_p24_mm", 56.0),
             "pluvio_source": scen.get("source", ""),
             "pluvio_description": scen.get("description", ""),
-            "raccordements_orphelins": [ro for ro, _, _, _ in racc_orph_valides],
+            "raccordements_orphelins": [ro for ro, _, _, _, _ in racc_orph_valides],
         }
 
         return "\n".join(lines), meta
@@ -1244,7 +1290,7 @@ class MoteurSWMM:
         duree_heures: Optional[float] = None,
         pas_routage_sec: int = 5,
         pente_moyenne_pct: Optional[float] = None,
-        cluster_id: Optional[int] = None,
+        cluster_id: Optional[Union[int, str]] = None,
         tampon_buffer_m: Optional[float] = None,
         valider_raccordement_deporte: bool = True,
         typologie_sol: Optional[str] = None,

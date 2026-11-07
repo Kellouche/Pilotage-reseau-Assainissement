@@ -16,7 +16,7 @@ from typing import Dict, Any, List, Optional, Tuple, Union
 import geopandas as gpd
 import pyproj
 from shapely.geometry import Point, shape
-from shapely.ops import transform
+from shapely.ops import transform, unary_union
 
 logger = logging.getLogger(__name__)
 
@@ -106,17 +106,28 @@ def detecter_ouvrages_orphelins_proches(
         logger.error("Erreur lecture regards: %s", e)
         return {"cluster_id": cluster_id, "nb_ouvrages_trouves": 0, "ouvrages": []}
 
-    # 3. Filtrer rapidement les regards du cluster par son polygone géographique
-    poly_feats = [f for f in target_c.get("geojson", {}).get("features", []) if f.get("geometry", {}).get("type") == "Polygon"]
-    if poly_feats:
+    # 3. Filtrer précisément les regards du cluster par les conduites réelles du sous-bassin
+    line_feats = [f for f in target_c.get("geojson", {}).get("features", []) if f.get("geometry", {}).get("type") in ("LineString", "MultiLineString")]
+    gdf_r_cluster = None
+    if line_feats:
         try:
-            poly_wgs = shape(poly_feats[0]["geometry"])
-            poly_utm = transform(to_utm, poly_wgs)
-            gdf_r_cluster = gdf_r[gdf_r.geometry.within(poly_utm.buffer(8.0))]
-        except Exception:
+            line_geoms = [transform(to_utm, shape(f["geometry"])) for f in line_feats]
+            network_geom = unary_union(line_geoms)
+            gdf_r_cluster = gdf_r[gdf_r.geometry.distance(network_geom) <= 2.5]
+        except Exception as e_tr:
+            logger.warning("Erreur filtrage regards par conduites: %s", e_tr)
+
+    if gdf_r_cluster is None or gdf_r_cluster.empty:
+        poly_feats = [f for f in target_c.get("geojson", {}).get("features", []) if f.get("geometry", {}).get("type") == "Polygon"]
+        if poly_feats:
+            try:
+                poly_wgs = shape(poly_feats[0]["geometry"])
+                poly_utm = transform(to_utm, poly_wgs)
+                gdf_r_cluster = gdf_r[gdf_r.geometry.within(poly_utm.buffer(2.0))]
+            except Exception:
+                gdf_r_cluster = gdf_r
+        else:
             gdf_r_cluster = gdf_r
-    else:
-        gdf_r_cluster = gdf_r
 
     if gdf_r_cluster.empty:
         gdf_r_cluster = gdf_r
@@ -208,6 +219,7 @@ def detecter_ouvrages_orphelins_proches(
                 cout_estime = max(int(min_d * PRIX_UNITAIRE_RACCORDEMENT_DZD_ML), 150000)
 
                 ouvrages_detectes.append({
+                    "id": f"orph_{cat_resolved}_{idx+1}",
                     "ouvrage_id": f"orph_{cat_resolved}_{idx+1}",
                     "nom": f"{type_label} ({nom_str})",
                     "code_ouvrage": nom_str,
