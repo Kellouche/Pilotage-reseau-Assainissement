@@ -5,7 +5,7 @@ Lancement asynchrone via Celery, suivi de jobs et récupération des résultats.
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
 from sqlalchemy.orm import Session
-from typing import List, Optional, Any, Dict
+from typing import List, Optional, Any, Dict, Union
 from pathlib import Path
 import logging
 
@@ -147,10 +147,13 @@ class SimulationRunRequest(BaseModel):
     station_id: Optional[str] = "chlef_anrh_siege"
     raccordements_orphelins: Optional[List[Dict[str, Any]]] = None
 
+SimulationRunRequest.model_rebuild()
 
 
 class ValidateBufferRequest(BaseModel):
     buffer_m: float = 45.0
+
+ValidateBufferRequest.model_rebuild()
 
 
 @router.get("/typologies-sol")
