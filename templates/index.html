@@ -1625,7 +1625,12 @@
                         chargerEtAfficherSousBassins();
                     }
 
-                    // 2. Charger et afficher la dernière simulation persistée (Point 3)
+                    // 2. Pré-charger silencieusement les bassins versants sectorisés
+                    if (typeof prechargerBassinsVersantsSilencieux === 'function') {
+                        prechargerBassinsVersantsSilencieux();
+                    }
+
+                    // 3. Charger et afficher la dernière simulation persistée (Point 3)
                     if (typeof chargerDerniereSimulation === 'function') {
                         chargerDerniereSimulation();
                     }
@@ -1640,8 +1645,37 @@
                 });
         }
 
+        // Préchargement silencieux des bassins versants sectorisés (disque instantané)
+        window.prechargerBassinsVersantsSilencieux = function() {
+            if (window._clustersData && (
+                (window._clustersData.clusters_crees && window._clustersData.clusters_crees > 0) ||
+                (window._clustersData.resultats && window._clustersData.resultats.length > 0)
+            )) return;
+            fetch('/api/v1/clusters/recalculate-all?persist=false', { method: 'POST' })
+                .then(r => r.ok ? r.json() : null)
+                .then(clusterData => {
+                    if (!clusterData) return;
+                    window._clustersData = clusterData;
+                    clusterData.features = (clusterData.resultats || []).flatMap(result =>
+                        result.geojson && Array.isArray(result.geojson.features)
+                            ? result.geojson.features
+                            : []
+                    );
+                    if (clusterData.features && clusterData.features.length > 0) {
+                        peuplerDropdownBassins(clusterData, null);
+                    }
+                })
+                .catch(e => console.log('[clusters] Préchargement silencieux:', e));
+        };
+
         // Gestion et fonction globale de sectorisation / détection des clusters
+        window._isPartitioningInProgress = false;
         window.lancerPartitionnementBassins = function(onSuccessCallback, messageOverlay) {
+            if (window._isPartitioningInProgress) {
+                console.warn('[clusters] Partitionnement déjà en cours, ignorer appel concurrent.');
+                return;
+            }
+            window._isPartitioningInProgress = true;
             const btn = document.getElementById('detect-cluster-btn');
             const statusDiv = document.getElementById('cluster-status');
             
@@ -1940,6 +1974,7 @@
                     if (statusDiv) statusDiv.textContent = 'Erreur lors de la détection';
                 })
                 .finally(() => {
+                    window._isPartitioningInProgress = false;
                     montrerChargement(false);
                     if (btn) {
                         btn.disabled = false;
@@ -2258,20 +2293,22 @@
                 sel.appendChild(grpIso);
             }
 
-            // Calculer les bounds de chaque bassin depuis le layer Leaflet
-            clusterLayer.eachLayer(layer => {
-                const feature = layer.feature;
-                if (!feature || feature.properties.type !== 'bassin_urbain') return;
-                const cid = feature.properties.cluster_id;
-                try {
-                    const b = (typeof layer.getBounds === 'function') ? layer.getBounds() : null;
-                    if (b && typeof b.isValid === 'function' && b.isValid()) {
-                        _bassinBounds[cid] = b;
-                        _bassinBounds[String(cid)] = b;
-                        if (!isNaN(parseInt(cid))) _bassinBounds[parseInt(cid)] = b;
-                    }
-                } catch(e) {}
-            });
+            // Calculer les bounds de chaque bassin depuis le layer Leaflet (si disponible)
+            if (clusterLayer && typeof clusterLayer.eachLayer === 'function') {
+                clusterLayer.eachLayer(layer => {
+                    const feature = layer.feature;
+                    if (!feature || feature.properties.type !== 'bassin_urbain') return;
+                    const cid = feature.properties.cluster_id;
+                    try {
+                        const b = (typeof layer.getBounds === 'function') ? layer.getBounds() : null;
+                        if (b && typeof b.isValid === 'function' && b.isValid()) {
+                            _bassinBounds[cid] = b;
+                            _bassinBounds[String(cid)] = b;
+                            if (!isNaN(parseInt(cid))) _bassinBounds[parseInt(cid)] = b;
+                        }
+                    } catch(e) {}
+                });
+            }
             window._bassinBounds = _bassinBounds;
             window._bassinNoms = _bassinNoms;
 
@@ -5840,22 +5877,34 @@
         // ==========================================
         // MODALE DE SIMULATION & DÉCLENCHEMENT SWMM
         // ==========================================
-        window.ouvrirModalSimulation = function() {
-            // Règle hydraulique d'ingénierie : Si sectorisation alors continuer sinon sectoriser
-            const isSectorise = (window._clustersData && window._clustersData.clusters_crees > 0) || 
-                                (window._bassinNoms && Object.keys(window._bassinNoms).length > 0) || 
-                                (document.getElementById('bassin-select') && document.getElementById('bassin-select').options.length > 1);
+        window.ouvrirModalSimulation = function(forceOpen = false) {
+            // Vérifier si des bassins ou clusters sont déjà disponibles
+            const mainBassinSel = document.getElementById('bassin-select');
+            const simBassinSel = document.getElementById('sim-select-bassin');
+            const hasOptions = (mainBassinSel && mainBassinSel.options.length > 1) || 
+                               (simBassinSel && simBassinSel.options.length > 1);
+            const hasClusters = (window._clustersData && (
+                (window._clustersData.clusters_crees && window._clustersData.clusters_crees > 0) ||
+                (window._clustersData.resultats && window._clustersData.resultats.length > 0)
+            ));
+            const hasBassinNoms = (window._bassinNoms && Object.keys(window._bassinNoms).length > 0);
+
+            const isSectorise = (forceOpen === true) || hasOptions || hasClusters || hasBassinNoms;
 
             if (!isSectorise) {
+                if (window._isPartitioningInProgress) {
+                    console.log("[Simulation] Partitionnement des bassins déjà en cours, attente...");
+                    return;
+                }
                 window.lancerPartitionnementBassins(function() {
-                    window.ouvrirModalSimulation();
+                    window.ouvrirModalSimulation(true);
                 }, 'Règle hydraulique : Sectorisation préalable obligatoire avant simulation...');
                 return;
             }
 
             const m = document.getElementById('modal-simulation');
             if (m) {
-                // Synchroniser les options de bassin depuis #bassin-select
+                // Synchroniser les options de bassin depuis #bassin-select ou window._clustersData
                 const simBassinSel = document.getElementById('sim-select-bassin');
                 const mainBassinSel = document.getElementById('bassin-select');
                 if (simBassinSel) {
@@ -5865,6 +5914,23 @@
                             simBassinSel.options[0].textContent = '-- Sélectionnez un bassin versant sectorisé --';
                             simBassinSel.options[0].disabled = true;
                         }
+                        if (_selectedClusterId) {
+                            simBassinSel.value = _selectedClusterId;
+                        } else if (simBassinSel.options.length > 1) {
+                            simBassinSel.selectedIndex = 1;
+                        }
+                    } else if (window._clustersData && window._clustersData.resultats && window._clustersData.resultats.length > 0) {
+                        simBassinSel.innerHTML = '<option value="" disabled selected>-- Sélectionnez un bassin versant sectorisé --</option>';
+                        window._clustersData.resultats.forEach(res => {
+                            const cl = res.cluster || {};
+                            const cid = cl.id !== undefined ? cl.id : (res.cluster_id || '');
+                            const nom = cl.nom || res.nom || `Bassin ${cid}`;
+                            const surf = cl.surface_ha ? ` (${Number(cl.surface_ha).toFixed(1)} ha)` : '';
+                            const newOpt = document.createElement('option');
+                            newOpt.value = cid;
+                            newOpt.textContent = `${nom}${surf}`;
+                            simBassinSel.appendChild(newOpt);
+                        });
                         if (_selectedClusterId) {
                             simBassinSel.value = _selectedClusterId;
                         } else if (simBassinSel.options.length > 1) {

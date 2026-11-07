@@ -2,6 +2,7 @@ import ast
 import json
 import logging
 import math
+import threading
 import networkx as nx
 from functools import lru_cache
 from pathlib import Path
@@ -77,6 +78,7 @@ def _get_graph(chemin_gpkg: Optional[str] = None):
     return _GRAPH_CACHES[cache_key]
 
 _CLUSTERS_CACHE = {}
+_CLUSTERS_LOCK = threading.Lock()
 
 
 def _get_clusters_disk_cache_path(chemin_gpkg: Optional[str]) -> Optional[Path]:
@@ -215,7 +217,9 @@ def _calculate_clusters_background():
     """Background worker that creates its own DB session and runs the calculation."""
     db = SessionLocal()
     try:
-        result = _calculate_clusters(db)
+        proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
+        chemin_gpkg = proj.source_gpkg_key if (proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists()) else None
+        result = _calculate_clusters(db, persist=True, chemin_gpkg=chemin_gpkg)
         print("[cluster][background] Recalculation completed", flush=True)
         # Optionally log result summary
         print(f"[cluster][background] {result.get('clusters_crees', 0)} clusters créés", flush=True)
@@ -242,13 +246,17 @@ def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional
         tracer_cluster_depuis_exutoire,
     )
 
-    global _CLUSTERS_CACHE
+    global _CLUSTERS_CACHE, _CLUSTERS_LOCK
+    norm_key = str(Path(chemin_gpkg).resolve()).replace("\\", "/") if chemin_gpkg else "default"
     cache_key = str(chemin_gpkg) if chemin_gpkg else "default"
 
     if not persist:
         if cache_key in _CLUSTERS_CACHE:
             print(f"[clusters] Cache mémoire hit pour {cache_key}", flush=True)
             return _CLUSTERS_CACHE[cache_key]
+        if norm_key in _CLUSTERS_CACHE:
+            print(f"[clusters] Cache mémoire hit pour {norm_key}", flush=True)
+            return _CLUSTERS_CACHE[norm_key]
 
         disk_path = _get_clusters_disk_cache_path(chemin_gpkg)
         if disk_path and disk_path.exists():
@@ -258,22 +266,42 @@ def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional
                     cached_res = json.load(f)
                 if cached_res.get("clusters_crees") and cached_res.get("resultats"):
                     _CLUSTERS_CACHE[cache_key] = cached_res
+                    _CLUSTERS_CACHE[norm_key] = cached_res
                     return cached_res
             except Exception as e:
                 print(f"[clusters] Erreur lecture cache disque: {e}", flush=True)
 
-        # Si le cache n'a pas les 79 bassins, lancer le partitionnement des 79 bassins
-        if chemin_gpkg and Path(chemin_gpkg).exists():
-            try:
-                from src.domain.generateur_bassins_79 import partitionner_79_bassins_versants
-                partitionner_79_bassins_versants(chemin_gpkg, sauvegarder_gpkg=False)
-                if disk_path and disk_path.exists():
+        # Protection concurrence : un seul thread exécute le partitionnement à la fois
+        with _CLUSTERS_LOCK:
+            # Double-check après acquisition du verrou
+            if cache_key in _CLUSTERS_CACHE:
+                return _CLUSTERS_CACHE[cache_key]
+            if norm_key in _CLUSTERS_CACHE:
+                return _CLUSTERS_CACHE[norm_key]
+            if disk_path and disk_path.exists():
+                try:
                     with open(disk_path, "r", encoding="utf-8") as f:
                         cached_res = json.load(f)
-                    _CLUSTERS_CACHE[cache_key] = cached_res
-                    return cached_res
-            except Exception as e:
-                print(f"[clusters] Erreur partitionnement 79: {e}", flush=True)
+                    if cached_res.get("clusters_crees") and cached_res.get("resultats"):
+                        _CLUSTERS_CACHE[cache_key] = cached_res
+                        _CLUSTERS_CACHE[norm_key] = cached_res
+                        return cached_res
+                except Exception as e:
+                    print(f"[clusters] Erreur lecture cache disque sous verrou: {e}", flush=True)
+
+            # Si le cache n'a pas les 79 bassins, lancer le partitionnement des 79 bassins (une seule fois)
+            if chemin_gpkg and Path(chemin_gpkg).exists():
+                try:
+                    from src.domain.generateur_bassins_79 import partitionner_79_bassins_versants
+                    partitionner_79_bassins_versants(chemin_gpkg, sauvegarder_gpkg=False)
+                    if disk_path and disk_path.exists():
+                        with open(disk_path, "r", encoding="utf-8") as f:
+                            cached_res = json.load(f)
+                        _CLUSTERS_CACHE[cache_key] = cached_res
+                        _CLUSTERS_CACHE[norm_key] = cached_res
+                        return cached_res
+                except Exception as e:
+                    print(f"[clusters] Erreur partitionnement 79: {e}", flush=True)
 
     # Récupérer le graphe (depuis le cache ou construit pour ce gpkg)
     G = _get_graph(chemin_gpkg)
