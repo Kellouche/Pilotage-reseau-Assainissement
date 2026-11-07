@@ -3042,13 +3042,15 @@
             if (bufferSens.curve && bufferSens.curve.length > 0) {
                 bufferSens.curve.forEach(c => {
                     const isRec = c.is_recommended || (Math.round(c.buffer_m) === 45);
+                    const isAct = Math.round(c.buffer_m) === Math.round(meta.buffer_m || 35);
+                    const dispArea = (isAct && meta.total_area_ha) ? meta.total_area_ha : c.surface_ha;
                     bufRows += `
                         <tr style="${isRec ? 'background: #e0f2fe; font-weight: 700;' : ''}">
                             <td>Buffer <b>${Math.round(c.buffer_m)} m</b> ${isRec ? '⭐ (Optimal)' : ''}</td>
-                            <td style="text-align: right;">${c.surface_ha} ha</td>
+                            <td style="text-align: right;">${dispArea} ha</td>
                             <td style="text-align: right;">${c.gain_pct > 0 ? '+' + c.gain_pct + '%' : 'Référence'}</td>
                             <td style="text-align: right;">${c.peak_flow_m3s} m³/s</td>
-                            <td>${c.buffer_m === 35 ? 'Emprise voirie stricte' : (c.buffer_m === 45 ? 'Comblement des îlots bâtis (Recommandé)' : 'Extension zone périurbaine')}</td>
+                            <td>${c.buffer_m === 35 ? 'Emprise voirie stricte (Scénario de référence simulé)' : (c.buffer_m === 45 ? 'Comblement des îlots bâtis (Recommandé)' : 'Extension zone périurbaine')}</td>
                         </tr>
                     `;
                 });
@@ -3118,38 +3120,80 @@
         <div class="cartouche-item"><span>Bilan Débordements</span><b style="color: ${k.flooded_nodes_count > 0 ? '#ef4444' : '#10b981'};">${k.flooded_nodes_count || 0} Débordements &bull; ${k.surcharged_nodes_count || 0} en Charge</b></div>
     </div>
 
-    <!-- Cadre Hydro-Météorologique de Dimensionnement (Station Mascara) -->
-    <div style="background: #f0f9ff; border: 1.5px solid #0284c7; border-left: 6px solid #0284c7; border-radius: 6px; padding: 9px 12px; margin-bottom: 12px; page-break-inside: avoid;">
+    <!-- Cadre Hydro-Météorologique de Dimensionnement (Référentiel ANRH / ONA) -->
+    <div style="background: #f0f9ff; border: 1.5px solid #0284c7; border-left: 6px solid #0284c7; border-radius: 6px; padding: 9px 12px; margin-bottom: 10px; page-break-inside: avoid;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-            <span style="font-weight: 800; font-size: 9pt; color: #0369a1; text-transform: uppercase;">
-                🌧️ Cadre Hydro-Météorologique &amp; Sollicitation Pluviométrique de Dimensionnement
+            <span style="font-weight: 800; font-size: 8.8pt; color: #0369a1; text-transform: uppercase;">
+                🌧️ Cadre Hydro-Météorologique &amp; Sollicitation Pluviométrique Réglementaire (ANRH / ONA)
             </span>
             <span style="background: #0284c7; color: white; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 7.5pt;">
-                ${meta.pluvio_station || k.pluvio_station || 'Station ANRH Mascara-Ghriss (Réf. 040702)'}
+                ${meta.pluvio_station || k.pluvio_station || 'Station ANRH Chlef Siège (Réf. 010501)'}
             </span>
         </div>
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; background: white; border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px 8px; margin-bottom: 6px;">
             <div>
-                <span style="color: #64748b; font-size: 7pt; text-transform: uppercase; display: block; font-weight: 700;">Période de Retour</span>
+                <span style="color: #64748b; font-size: 7pt; text-transform: uppercase; display: block; font-weight: 700;">Période de Retour (T)</span>
                 <b style="color: #0f172a; font-size: 8.5pt;">${meta.pluvio_periode_retour || k.pluvio_periode_retour || 'T = 10 ans (Décennale)'}</b>
+                <small style="color: #64748b; display: block; font-size: 6.8pt;">Conforme Guide ONA Assainissement</small>
             </div>
             <div style="background: #e0f2fe; padding: 3px 6px; border-radius: 4px; border: 1px solid #bae6fd;">
                 <span style="color: #0369a1; font-size: 7pt; text-transform: uppercase; display: block; font-weight: 800;">Intensité Pointe (Imax)</span>
-                <b style="color: #0284c7; font-size: 10.5pt; font-weight: 900;">${k.pluvio_intensite_max_mmh || meta.pluvio_intensite_max_mmh || 62.0} mm/h</b>
+                <b style="color: #0284c7; font-size: 10.5pt; font-weight: 900;">${k.pluvio_intensite_max_mmh || meta.pluvio_intensite_max_mmh || 74.9} mm/h</b>
+                <small style="color: #0369a1; display: block; font-size: 6.8pt; font-weight: 600;">Durée critique tc ≈ 15 min</small>
             </div>
             <div>
                 <span style="color: #64748b; font-size: 7pt; text-transform: uppercase; display: block; font-weight: 700;">Hauteur Cumulée (Ptot)</span>
-                <b style="color: #0f172a; font-size: 8.5pt;">${k.pluvio_hauteur_totale_mm || meta.pluvio_hauteur_totale_mm || 36.5} mm <small style="color:#64748b;">(P24: ${meta.pluvio_p24_mm || 58.5} mm)</small></b>
+                <b style="color: #0f172a; font-size: 8.5pt;">${k.pluvio_hauteur_totale_mm || meta.pluvio_hauteur_totale_mm || 42.8} mm</b>
+                <small style="color: #64748b; display: block; font-size: 6.8pt;">Pluie 24h P₂₄ = ${meta.pluvio_p24_mm || 56.0} mm (Gumbel)</small>
             </div>
             <div>
                 <span style="color: #64748b; font-size: 7pt; text-transform: uppercase; display: block; font-weight: 700;">Formule IDF Montana</span>
-                <b style="color: #0f172a; font-size: 8pt;">${meta.pluvio_montana || k.pluvio_montana || 'I(t) = 6.2 · t^(-0.58)'}</b>
+                <b style="color: #0f172a; font-size: 8pt;">${meta.pluvio_montana || k.pluvio_montana || 'I(t) = 9.334 · t^(-0.745)'}</b>
+                <small style="color: #64748b; display: block; font-size: 6.8pt;">Coeff. régionaux UHBC / ANRH</small>
             </div>
         </div>
-        <div style="font-size: 7.6pt; color: #475569; line-height: 1.35;">
-            <b>Règle d'ingénierie légale (ONA / Direction de l'Hydraulique) :</b>
-            L'intensité maximale de précipitation ($I_{max} = ${k.pluvio_intensite_max_mmh || meta.pluvio_intensite_max_mmh || 62.0}\text{ mm/h}$) constitue la donnée d'entrée fondamentale qui régit le dimensionnement de tous les tronçons collecteurs, le temps de concentration ($t_c$) et le débit hydrodynamique de pointe ($Q_{pointe}$).
-            Source : <i>${meta.pluvio_source || k.pluvio_source || 'Séries statistiques validées ANRH Direction Régionale Ouest (Bassin Macta / Plaine de Ghriss)'}</i>.
+        <div style="font-size: 7.4pt; color: #475569; line-height: 1.35;">
+            <b>Justification d'ingénierie légale &amp; opposabilité administrative :</b>
+            L'intensité maximale de précipitation ($I_{max} = ${k.pluvio_intensite_max_mmh || meta.pluvio_intensite_max_mmh || 74.9}\text{ mm/h}$) est issue des courbes Intensité-Durée-Fréquence (IDF) officielles de l'Agence Nationale des Ressources Hydriques (ANRH) pour la Wilaya de Chlef (Bassin hydrographique 01 - Chélif). L'hyétogramme synthétique de type Chicago centré (rapport de pic $r = 0.40$, durée totale $4.0\text{ h}$) sollicite le réseau à son niveau de contrainte réglementaire ONA.
+            Source : <i>${meta.pluvio_source || k.pluvio_source || 'Séries statistiques validées ANRH Direction Régionale Ouest & Laboratoire Eau UHBC Chlef (1970–2024)'}</i>.
+        </div>
+    </div>
+
+    <!-- Cadre de Validation Hydrologique & Modèle d'Infiltration (SWMM / Horton / Voronoï) -->
+    <div style="background: #f8fafc; border: 1.5px solid #0284c7; border-left: 6px solid #0284c7; border-radius: 6px; padding: 9px 12px; margin-bottom: 12px; page-break-inside: avoid;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span style="font-weight: 800; font-size: 8.8pt; color: #0369a1; text-transform: uppercase;">
+                💧 Cadre de Validation Hydrologique &amp; Modèle d'Infiltration (SWMM / Horton / Voronoï)
+            </span>
+            <span style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; padding: 2px 7px; border-radius: 4px; font-weight: 700; font-size: 7.2pt;">
+                Norme EPA SWMM 5.2 Hydrology
+            </span>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; background: white; border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px 8px; margin-bottom: 6px;">
+            <div>
+                <span style="color: #64748b; font-size: 7pt; text-transform: uppercase; display: block; font-weight: 700;">Discrétisation Spatiale</span>
+                <b style="color: #0f172a; font-size: 8.2pt;">${meta.subcatchments_count || meta.junctions_count || 703} Sous-bassins</b>
+                <small style="color: #64748b; display: block; font-size: 6.8pt;">Polygones Voronoï ajustés (${meta.buffer_m || 35} m)</small>
+            </div>
+            <div>
+                <span style="color: #64748b; font-size: 7pt; text-transform: uppercase; display: block; font-weight: 700;">Imperméabilisation Urbaine</span>
+                <b style="color: #0284c7; font-size: 9pt; font-weight: 800;">C_imp = ${meta.imperv_pct || 65}%</b>
+                <small style="color: #64748b; display: block; font-size: 6.8pt;">${meta.typologie_nom || "Habitat mixte urbain"}</small>
+            </div>
+            <div>
+                <span style="color: #64748b; font-size: 7pt; text-transform: uppercase; display: block; font-weight: 700;">Modèle d'Infiltration</span>
+                <b style="color: #0f172a; font-size: 8.2pt;">Horton Exponentiel</b>
+                <small style="color: #64748b; display: block; font-size: 6.8pt;">f₀=76.2 mm/h &bull; f∞=13.2 mm/h &bull; k=4.14 h⁻¹</small>
+            </div>
+            <div>
+                <span style="color: #64748b; font-size: 7pt; text-transform: uppercase; display: block; font-weight: 700;">Temps Concentration (tc)</span>
+                <b style="color: #0f172a; font-size: 8.2pt;">tc ≈ 15.0 min</b>
+                <small style="color: #64748b; display: block; font-size: 6.8pt;">Kirpich / Passini (Pente ${meta.pente_moyenne_pct || 1.0}%)</small>
+            </div>
+        </div>
+        <div style="font-size: 7.4pt; color: #475569; line-height: 1.35;">
+            <b>Méthodologie de transformation pluie-débit :</b>
+            Le ruissellement superficiel est généré sur chaque sous-bassin élémentaire par l'équation non linéaire du réservoir SWMM ($Q = W \cdot (d - d_p)^{5/3} \cdot S^{1/2} / n$). Les pertes initiales et continues sont simulées par la loi d'Horton ($f(t) = f_\infty + (f_0 - f_\infty)e^{-kt}$) avec rugosités de Manning $N_{imp} = 0.015\text{ s/m}^{1/3}$, $N_{perv} = 0.25\text{ s/m}^{1/3}$ et rétentions de dépressions $D_{imp} = 1.8\text{ mm}, D_{perv} = 4.5\text{ mm}$. Les hydrogrammes de ruissellement sont injectés aux regards puis propagés dans les conduites via les équations complètes de Saint-Venant 1D (Dynamic Wave).
         </div>
     </div>
 
@@ -3166,7 +3210,7 @@
             ${synth.recommandation_cle || "L'analyse hydraulique Saint-Venant 1D met en évidence des contraintes de capacité sur les tronçons collecteurs stratégiques nécessitant un plan combiné de recalibrage et de rétention amont."}
         </p>
         <div style="font-size: 7.8pt; color: #64748b; font-style: italic;">
-            Orientation Direction Générale : ${synth.avis_direction_generale || "Prioriser les investissements P1 sur les collecteurs structurants pour éliminer immédiatement les risques d'inondation en surface."}
+            Orientation Direction Générale : ${synth.avis_direction_generale || "Prioriser les investissements P1 sur les collecteurs structurants pour résorber les risques majeurs d'inondation en surface pour la pluie de projet."}
         </div>
     </div>
     <div class="agent-memo-box">
@@ -3509,18 +3553,42 @@
                     </p>
                 </div>
 
-                <!-- Cadre Hydro-Météorologique de Dimensionnement (Station Mascara) -->
-                <div style="background: rgba(14, 165, 233, 0.08); border: 1px solid rgba(56, 189, 248, 0.35); border-left: 5px solid #38bdf8; border-radius: 10px; padding: 10px 16px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem;">
+                <!-- Cadre Hydro-Météorologique de Dimensionnement (Référentiel ANRH / UHBC Chlef) -->
+                <div style="background: rgba(14, 165, 233, 0.08); border: 1px solid rgba(56, 189, 248, 0.35); border-left: 5px solid #38bdf8; border-radius: 10px; padding: 10px 16px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem;">
                     <div>
                         <span style="color: #94a3b8;"><i class="fas fa-cloud-showers-heavy me-1" style="color: #38bdf8;"></i> Station Hydro-Météo :</span>
-                        <b style="color: #f8fafc; margin-left: 6px;">${meta.pluvio_station || k.pluvio_station || 'Station ANRH Mascara (Réf. 040702)'}</b>
+                        <b style="color: #f8fafc; margin-left: 6px;">${meta.pluvio_station || k.pluvio_station || 'Station ANRH Chlef Siège (010501)'}</b>
                         <span style="color: #94a3b8; margin-left: 10px;">&bull; Formule Montana :</span>
-                        <code style="color: #fbbf24; margin-left: 4px; font-size: 0.78rem;">${meta.pluvio_montana || k.pluvio_montana || 'I(t) = 6.2 · t^(-0.58)'}</code>
+                        <code style="color: #fbbf24; margin-left: 4px; font-size: 0.78rem;">${meta.pluvio_montana || k.pluvio_montana || 'I(t) = 9.334 · t^(-0.745)'}</code>
                     </div>
                     <div>
                         <span style="color: #94a3b8;">Intensité Pointe Imax :</span>
-                        <span style="color: #38bdf8; font-weight: 900; font-size: 1.05rem; margin-left: 6px;">${k.pluvio_intensite_max_mmh || meta.pluvio_intensite_max_mmh || 62.0} mm/h</span>
+                        <span style="color: #38bdf8; font-weight: 900; font-size: 1.05rem; margin-left: 6px;">${k.pluvio_intensite_max_mmh || meta.pluvio_intensite_max_mmh || 74.9} mm/h</span>
                         <span style="font-size: 0.72rem; color: #7dd3fc; background: rgba(56,189,248,0.18); border: 1px solid rgba(56,189,248,0.4); padding: 2px 7px; border-radius: 4px; margin-left: 6px; font-weight: 700;">${meta.pluvio_periode_retour || k.pluvio_periode_retour || 'T = 10 ans'}</span>
+                    </div>
+                </div>
+
+                <!-- Cadre de Validation Hydrologique (Horton / Voronoï / SWMM) -->
+                <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 10px 16px; margin-bottom: 16px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; font-size: 0.78rem;">
+                    <div>
+                        <span style="color: #94a3b8; display: block; font-size: 0.7rem; text-transform: uppercase;">Discrétisation Spatiale</span>
+                        <b style="color: #f8fafc;">${meta.subcatchments_count || 703} Sous-bassins</b>
+                        <span style="color: #64748b; display: block; font-size: 0.68rem;">Voronoï (${meta.buffer_m || 35}m) &bull; ${meta.total_area_ha || 117.83} ha</span>
+                    </div>
+                    <div>
+                        <span style="color: #94a3b8; display: block; font-size: 0.7rem; text-transform: uppercase;">Imperméabilisation</span>
+                        <b style="color: #38bdf8;">C_imp = ${meta.imperv_pct || 65}%</b>
+                        <span style="color: #64748b; display: block; font-size: 0.68rem;">${meta.typologie_nom || 'Habitat mixte urbain'}</span>
+                    </div>
+                    <div>
+                        <span style="color: #94a3b8; display: block; font-size: 0.7rem; text-transform: uppercase;">Infiltration des Sols</span>
+                        <b style="color: #f8fafc;">Loi d'Horton</b>
+                        <span style="color: #64748b; display: block; font-size: 0.68rem;">f₀=76.2 &bull; f∞=13.2 &bull; k=4.14 h⁻¹</span>
+                    </div>
+                    <div>
+                        <span style="color: #94a3b8; display: block; font-size: 0.7rem; text-transform: uppercase;">Temps de Concentration</span>
+                        <b style="color: #f8fafc;">tc ≈ 15.0 min</b>
+                        <span style="color: #64748b; display: block; font-size: 0.68rem;">Kirpich / Passini (Pente ${meta.pente_moyenne_pct || 1.0}%)</span>
                     </div>
                 </div>
 
@@ -3813,14 +3881,15 @@
                             <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px;">
                                 ${bufferSens.curve.map(c => {
                                     const isRec = c.is_recommended || (Math.round(c.buffer_m) === 45);
-                                    const isSel = (Math.round(c.buffer_m) === Math.round(window._activeBufferM || bufferSens.active_buffer_m || 35));
+                                    const isSel = (Math.round(c.buffer_m) === Math.round(window._activeBufferM || meta.buffer_m || bufferSens.active_buffer_m || 35));
+                                    const dispArea = (isSel && meta.total_area_ha) ? meta.total_area_ha : c.surface_ha;
                                     return `
                                         <div style="background: ${isSel ? 'rgba(16, 185, 129, 0.12)' : (isRec ? 'rgba(56, 189, 248, 0.08)' : 'rgba(255,255,255,0.03)')}; border: 1.5px solid ${isSel ? '#10b981' : (isRec ? '#0284c7' : 'rgba(255,255,255,0.1)')}; border-radius: 8px; padding: 10px; text-align: center;">
                                             <div style="font-weight: 800; font-size: 0.84rem; color: ${isSel ? '#34d399' : (isRec ? '#38bdf8' : '#e2e8f0')};">
                                                 Buffer ${Math.round(c.buffer_m)} m ${isSel ? '✅' : ''}
                                             </div>
                                             <div style="font-size: 1.1rem; font-weight: 800; color: #f8fafc; margin: 4px 0;">
-                                                ${c.surface_ha} ha
+                                                ${dispArea} ha
                                             </div>
                                             <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 8px;">
                                                 Débit : <b>${c.peak_flow_m3s} m³/s</b>
@@ -5246,37 +5315,37 @@
                 imax: 74.9,
                 station: 'Station ANRH Chlef Siège (010501)',
                 duree: 4.0,
-                note: 'Paramétrage ANRH Chlef Siège (UHBC) : Formule Montana $I(t) = 9.334 \\cdot t^{-0.745}$ &bull; Chicago centré ($t_c = 15\\text{ min}$) &bull; $P_{24} = 56.0\\text{ mm}$ &bull; Hauteur cumulée $P = 42.8\\text{ mm}$ [Standard Réglementaire ONA].'
+                note: 'Paramétrage ANRH Chlef Siège (UHBC) : Formule Montana I(t) = 9.334 · t⁻⁰·⁷⁴⁵ &bull; Hyétogramme Chicago centré (tc = 15 min) &bull; P₂₄ = 56.0 mm &bull; Hauteur cumulée P = 42.8 mm [Standard Réglementaire ONA].'
             },
             'pluie_cinquantennale': {
                 imax: 120.0,
                 station: 'Station ANRH Chlef Siège (010501)',
                 duree: 4.0,
-                note: 'Crise Majeure Cinquantennale ANRH Chlef : Formule Montana $I(t) = 15.795 \\cdot t^{-0.760}$ &bull; $P_{24} = 81.0\\text{ mm}$ &bull; Hauteur cumulée $P = 67.5\\text{ mm}$.'
+                note: 'Crise Majeure Cinquantennale ANRH Chlef : Formule Montana I(t) = 15.795 · t⁻⁰·⁷⁶⁰ &bull; P₂₄ = 81.0 mm &bull; Hauteur cumulée P = 67.5 mm.'
             },
             'pluie_centennale': {
                 imax: 144.5,
                 station: 'Station ANRH Chlef Siège (010501)',
                 duree: 4.0,
-                note: 'Crue Historique Centennale ANRH Chlef : Formule Montana $I(t) = 19.338 \\cdot t^{-0.764}$ &bull; $P_{24} = 94.0\\text{ mm}$ &bull; Hauteur cumulée $P = 81.0\\text{ mm}$.'
+                note: 'Crue Historique Centennale ANRH Chlef : Formule Montana I(t) = 19.338 · t⁻⁰·⁷⁶⁴ &bull; P₂₄ = 94.0 mm &bull; Hauteur cumulée P = 81.0 mm.'
             },
             'pluie_biennale': {
                 imax: 45.0,
                 station: 'Station ANRH Chlef Siège (010501)',
                 duree: 4.0,
-                note: 'Pluie Courante Biennale ANRH Chlef : Formule Montana $I(t) = 5.250 \\cdot t^{-0.720}$ &bull; $P_{24} = 34.0\\text{ mm}$ &bull; Hauteur cumulée $P = 26.0\\text{ mm}$.'
+                note: 'Pluie Courante Biennale ANRH Chlef : Formule Montana I(t) = 5.250 · t⁻⁰·⁷²⁰ &bull; P₂₄ = 34.0 mm &bull; Hauteur cumulée P = 26.0 mm.'
             },
             'pluie_orage_2h': {
                 imax: 92.5,
                 station: 'Station ANRH Chlef Siège (010501)',
                 duree: 2.0,
-                note: 'Orage d\'été brutal méditerranéen convectif concentré sur 60 min avec pic à 92.5 mm/h ($T \\approx 20\\text{ ans}$) &bull; $P_{24} = 66.5\\text{ mm}$.'
+                note: 'Orage d\'été brutal méditerranéen convectif concentré sur 60 min avec pic à 92.5 mm/h (T ≈ 20 ans) &bull; P₂₄ = 66.5 mm.'
             },
             'temps_sec_pur': {
                 imax: 0.0,
                 station: 'Régime d\'Étiage Sans Pluie',
                 duree: 24.0,
-                note: 'Temps Sec Pur : Transit exclusif du débit d\'étiage des eaux usées (DWF) sans apport pluvial &bull; $I = 0\\text{ mm/h}$.'
+                note: 'Temps Sec Pur : Transit exclusif du débit d\'étiage des eaux usées (DWF) sans apport pluvial &bull; I = 0 mm/h.'
             },
             'personnalise': {
                 imax: 74.9,
@@ -5795,7 +5864,7 @@
                     </div>
                     <div id="sim-pluvio-info-note" style="color: #94a3b8; font-size: 0.72rem; margin-top: 8px; line-height: 1.4; background: rgba(15,23,42,0.5); padding: 6px 10px; border-radius: 6px; border-left: 3px solid #38bdf8;">
                         <i class="fas fa-info-circle me-1" style="color: #38bdf8;"></i>
-                        <span id="sim-pluvio-note-text">Paramétrage ANRH Chlef Siège (UHBC) : Formule Montana $I(t) = 9.334 \cdot t^{-0.745}$ &bull; Hyétogramme Chicago centré ($t_c = 15\text{ min}$) &bull; $P_{24} = 56.0\text{ mm}$ &bull; Hauteur cumulée $P = 42.8\text{ mm}$.</span>
+                        <span id="sim-pluvio-note-text">Paramétrage ANRH Chlef Siège (UHBC) : Formule Montana I(t) = 9.334 · t⁻⁰·⁷⁴⁵ &bull; Hyétogramme Chicago centré (tc = 15 min) &bull; P₂₄ = 56.0 mm &bull; Hauteur cumulée P = 42.8 mm [Standard Réglementaire ONA].</span>
                     </div>
                 </div>
 

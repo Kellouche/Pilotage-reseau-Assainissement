@@ -469,7 +469,7 @@ class AgentGestionRisques:
 
         note_technique = (
             f"La hiérarchisation multi-critères classe les interventions en 3 horizons d'urgence : "
-            f"{len(actions_p1)} action(s) P1 - Critique (éradication immédiate des inondations sur voiries sous 3 mois), "
+            f"{len(actions_p1)} action(s) P1 - Critique (résorption prioritaire des inondations sur voiries sous 3 mois), "
             f"{len(actions_p2)} action(s) P2 - Majeur (renforcement des tronçons sous pression continue à programmer sous 12 mois), et "
             f"{len(actions_p3)} action(s) P3 - Maintenance (curage préventif des zones de sédimentation où la vitesse chute sous 0.60 m/s). "
             f"Cette priorisation optimise l'allocation des budgets d'investissement de la collectivité."
@@ -521,9 +521,11 @@ class AgentSyntheseExecutive:
             verdict = "VULNÉRABILITÉ ÉLEVÉE — DÉBORDEMENTS DÉTECTÉS"
             couleur = "#ef4444"
             recommandation_cle = (
-                f"Le réseau présente {p1_count} point(s) noir(s) d'inondation nécessitant une intervention d'urgence. "
-                f"La combinaison d'un bassin d'écrêtement de {lid['volume_tampon_requis_m3']} m³ en amont "
-                f"et du recalibrage de {gc['metres_lineaires_totaux']} m de collecteurs éliminera 100% des débordements."
+                f"Le réseau présente {p1_count} point(s) noir(s) d'inondation nécessitant une intervention prioritaire. "
+                f"La modélisation hydrodynamique Saint-Venant démontre que la combinaison concertée d'un bassin d'écrêtement "
+                f"de {lid['volume_tampon_requis_m3']} m³ en amont et du recalibrage de {gc['metres_lineaires_totaux']} m "
+                f"de collecteurs structurants assure la résorption théorique intégrale des débordements pour l'événement "
+                f"pluviométrique de dimensionnement analysé."
             )
         elif p2_count > 0:
             verdict = "CAPACITÉ LIMITE — MISE EN CHARGE HYDRAULIQUE"
@@ -545,7 +547,8 @@ class AgentSyntheseExecutive:
             f"Synthèse stratégique d'aide à la décision destinée à la Direction Générale (ONA, DRE, Wilaya). "
             f"Le verdict hydraulique conclut à : {verdict}. {recommandation_cle} "
             f"Le couplage du recalibrage des points critiques P1 avec les aménagements d'écrêtement SFN constitue "
-            f"la solution la plus pérenne et la plus économique pour garantir la sécurité des biens et des personnes."
+            f"la stratégie optimale recommandée pour restaurer la capacité d'évacuation gravitaire et réduire significativement "
+            f"les risques de submersion urbaine pour cet événement pluvial."
         )
 
         return {

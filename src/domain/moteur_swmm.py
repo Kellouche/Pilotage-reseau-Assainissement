@@ -1115,6 +1115,7 @@ class MoteurSWMM:
         base_area = None
         q_base = base_kpis.get("peak_outflow_m3s", 0.5) or 0.5
         v_base = base_kpis.get("total_outflow_m3", 2000.0) or 2000.0
+        exact_active_area = base_kpis.get("meta", {}).get("total_area_ha") or base_kpis.get("meta", {}).get("surface_totale_ha")
 
         # Échantillonnage si le réseau dépasse 500 regards pour garantir un temps d'exécution < 1 sec
         regards_sub = regards
@@ -1126,15 +1127,30 @@ class MoteurSWMM:
             canals_sub = canalisations[canalisations["ID_AMONT"].astype(str).isin(node_ids) & canalisations["ID_AVAL"].astype(str).isin(node_ids)]
             scale_factor = len(regards) / len(regards_sub)
 
+        raw_sampled_areas = {}
         for b in buffers:
             try:
                 gh_b = GenerateurHydrologie(tampon_buffer_m=b, imperv_defaut=self.gh.imperv_defaut)
                 sb_b = gh_b.generer_sous_bassins(regards_sub, canals_sub)
-                raw_area = float(sb_b["area_ha"].sum()) if not sb_b.empty else 0.0
-                area = round(raw_area * scale_factor, 2)
+                raw_sampled_areas[b] = float(sb_b["area_ha"].sum()) if not sb_b.empty else 0.0
             except Exception as e:
                 logger.warning(f"Erreur calcul buffer {b}m: {e}")
-                area = round((base_area or 15.0) * ((b / 35.0) ** 0.68), 2)
+                raw_sampled_areas[b] = 0.0
+
+        ref_buf = active_buffer_m if active_buffer_m in buffers else 35.0
+        ref_sample = raw_sampled_areas.get(ref_buf, 0.0)
+
+        for b in buffers:
+            sample_b = raw_sampled_areas.get(b, 0.0)
+            if exact_active_area and exact_active_area > 0:
+                if abs(b - ref_buf) < 0.1:
+                    area = round(float(exact_active_area), 2)
+                elif ref_sample > 0 and sample_b > 0:
+                    area = round(float(exact_active_area) * (sample_b / ref_sample), 2)
+                else:
+                    area = round(float(exact_active_area) * ((b / ref_buf) ** 0.55), 2)
+            else:
+                area = round(sample_b * scale_factor, 2)
 
             if base_area is None:
                 base_area = max(area, 0.01)
