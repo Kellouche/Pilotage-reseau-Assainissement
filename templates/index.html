@@ -1915,18 +1915,26 @@
             if (state.status === 'simulated') {
                 const nom = (window._bassinNoms && cidStr && window._bassinNoms[cidStr]) ? window._bassinNoms[cidStr] : `Bassin ${cidStr || ''}`;
                 const qPeak = state.peak_flow ? `${parseFloat(state.peak_flow).toFixed(3)} m³/s` : 'SUCCÈS';
+                const qDelesteLs = parseFloat(state.q_deleste_ls || 0);
+                const nbRacc = parseInt(state.nb_ouvrages_raccordes || 0, 10);
+
+                let infoMeta = `Débit exutoire : <b>${qPeak}</b>`;
+                if (qDelesteLs > 0) {
+                    infoMeta += ` &bull; <span style="color:#06b6d4; font-weight:700;"><i class="fas fa-bolt"></i> Délesté : +${qDelesteLs.toFixed(0)} L/s (${nbRacc} ouv.)</span>`;
+                }
+
                 if (topIcon) topIcon.innerHTML = '<i class="fas fa-check-circle" style="color: #34d399;"></i>';
                 if (topText) topText.innerHTML = `Bassin simulé : <span style="color: #34d399; font-weight: 700;">${nom}</span>`;
                 if (topBadge) {
-                    topBadge.innerText = qPeak;
-                    topBadge.style.background = 'rgba(16, 185, 129, 0.2)';
-                    topBadge.style.color = '#34d399';
+                    topBadge.innerText = qDelesteLs > 0 ? `Délesté +${qDelesteLs.toFixed(0)} L/s` : qPeak;
+                    topBadge.style.background = qDelesteLs > 0 ? 'rgba(6, 182, 212, 0.2)' : 'rgba(16, 185, 129, 0.2)';
+                    topBadge.style.color = qDelesteLs > 0 ? '#06b6d4' : '#34d399';
                 }
                 if (topReset) topReset.style.display = 'inline-block';
 
                 if (mapIcon) mapIcon.innerHTML = '<i class="fas fa-check-circle" style="color: #34d399;"></i>';
                 if (mapTitle) mapTitle.innerHTML = `Bassin simulé : <b style="color: #34d399;">${nom}</b>`;
-                if (mapMeta) mapMeta.innerHTML = `<span style="color: #34d399; font-weight: 600;">Débit pointe : ${qPeak}</span>`;
+                if (mapMeta) mapMeta.innerHTML = `<span style="color: #34d399;">${infoMeta}</span>`;
                 if (mapReset) mapReset.style.display = 'inline-flex';
                 return;
             }
@@ -5070,6 +5078,29 @@
                 const el = document.getElementById('f-regards');
                 if (el) el.checked = false;
             }
+            // Masquer les exutoires, ouvrages spéciaux et STEP globaux à l'échelle de la ville pour ne pas encombrer la vue du cluster
+            if (couches.rejets && carte.hasLayer(couches.rejets)) {
+                carte.removeLayer(couches.rejets);
+                const el = document.getElementById('f-rejets');
+                if (el) el.checked = false;
+            }
+            if (couches.ouvrages_speciaux && carte.hasLayer(couches.ouvrages_speciaux)) {
+                carte.removeLayer(couches.ouvrages_speciaux);
+                const el = document.getElementById('f-ouvrages');
+                if (el) el.checked = false;
+            }
+            if (couches.step && carte.hasLayer(couches.step)) {
+                carte.removeLayer(couches.step);
+                const el = document.getElementById('f-step');
+                if (el) el.checked = false;
+            }
+
+            // Retirer la couche de prévisualisation en pointillés (remplacée par les résultats de simulation)
+            if (window._coucheRaccordementsOrphelins && window.carte) {
+                window.carte.removeLayer(window._coucheRaccordementsOrphelins);
+                window._coucheRaccordementsOrphelins.clearLayers();
+            }
+
             if (!carte.hasLayer(couches.res_conduites)) couches.res_conduites.addTo(carte);
             if (!carte.hasLayer(couches.res_regards)) couches.res_regards.addTo(carte);
 
@@ -5277,7 +5308,9 @@
             }
 
             // 2bis. Intégration cartographique des collecteurs de délestage et ouvrages spéciaux mis en eau (Variante 0)
-            const raccOrph = (data && data.meta && data.meta.raccordements_orphelins) || window._ouvragesOrphelinsCandidatsSelectionnes || [];
+            const raccOrph = (data && data.meta && Array.isArray(data.meta.raccordements_orphelins))
+                ? data.meta.raccordements_orphelins
+                : (window._ouvragesOrphelinsCandidatsSelectionnes || []);
             if (Array.isArray(raccOrph) && raccOrph.length > 0) {
                 raccOrph.forEach((ro) => {
                     if (ro.regard_coord_wgs84 && ro.ouvrage_coord_wgs84) {
@@ -5350,13 +5383,22 @@
             try {
                 if (couches.res_conduites && couches.res_conduites.bringToFront) couches.res_conduites.bringToFront();
                 if (couches.res_regards && couches.res_regards.bringToFront) couches.res_regards.bringToFront();
-                if (window._coucheRaccordementsOrphelins && window.carte && !window.carte.hasLayer(window._coucheRaccordementsOrphelins)) {
-                    window._coucheRaccordementsOrphelins.addTo(window.carte);
-                }
-                if (window._coucheRaccordementsOrphelins && window._coucheRaccordementsOrphelins.bringToFront) {
-                    window._coucheRaccordementsOrphelins.bringToFront();
-                }
             } catch(e) {}
+
+            // Cadrage automatique et centrage optimal sur le sous-bassin / réseau simulé
+            try {
+                let boundsToFit = null;
+                if (couches.res_conduites && couches.res_conduites.getLayers().length > 0) {
+                    boundsToFit = couches.res_conduites.getBounds();
+                } else if (window._activeClusterLayer && window._activeClusterLayer.getBounds && window._activeClusterLayer.getBounds().isValid()) {
+                    boundsToFit = window._activeClusterLayer.getBounds();
+                }
+                if (boundsToFit && boundsToFit.isValid()) {
+                    carte.fitBounds(boundsToFit, { padding: [40, 40], maxZoom: 17 });
+                }
+            } catch(e) {
+                console.warn("Erreur cadrage zoom simulation:", e);
+            }
 
             // 3. Mettre à jour les indicateurs KPIs dans la modale
             if (data.kpis) {
@@ -5411,6 +5453,24 @@
                     if (qRatEl) qRatEl.innerText = `${coh.q_rationnel_m3s} m³/s (Ratio: ${coh.ratio})`;
                     const msgEl = document.getElementById('kpi-coherence-msg');
                     if (msgEl) msgEl.innerText = coh.message;
+                }
+
+                // Module Variante 0 : Mise à jour indicateur délestage secours dans la modale
+                const orphBox = document.getElementById('sim-orphelin-kpi-box');
+                if (orphBox) {
+                    const qDeleste = (data.kpis && typeof data.kpis.q_deleste_ls === 'number') ? data.kpis.q_deleste_ls : 0.0;
+                    const nbOrph = (data.kpis && data.kpis.nb_ouvrages_raccordes) || 0;
+                    if (qDeleste > 0) {
+                        orphBox.style.display = 'block';
+                        const bEl = document.getElementById('kpi-orphelin-badge');
+                        if (bEl) bEl.innerText = `+${Math.round(qDeleste)} L/s évacués`;
+                        const qEl = document.getElementById('kpi-orphelin-qdeleste');
+                        if (qEl) qEl.innerText = `${(qDeleste / 1000.0).toFixed(3)} m³/s (${Math.round(qDeleste)} L/s)`;
+                        const nEl = document.getElementById('kpi-orphelin-nb');
+                        if (nEl) nEl.innerText = `${nbOrph} ouvrage(s) raccordé(s)`;
+                    } else {
+                        orphBox.style.display = 'none';
+                    }
                 }
 
                 // Double Échelle de Surface : Urbaine Drainée vs Impluvium Convexe
@@ -6179,9 +6239,13 @@
                 
                 if (typeof window.mettreAJourIndicateurBassin === 'function') {
                     const qMax = (data && data.kpis && typeof data.kpis.peak_outflow_m3s === 'number') ? data.kpis.peak_outflow_m3s : 0.0;
+                    const qDelesteLs = (data && data.kpis && typeof data.kpis.q_deleste_ls === 'number') ? data.kpis.q_deleste_ls : 0.0;
+                    const nbRacc = (data && data.kpis && data.kpis.nb_ouvrages_raccordes) || 0;
                     window.mettreAJourIndicateurBassin(clusterId, { 
                         status: 'simulated', 
-                        peak_flow: qMax
+                        peak_flow: qMax,
+                        q_deleste_ls: qDelesteLs,
+                        nb_ouvrages_raccordes: nbRacc
                     });
                 }
 
@@ -6678,6 +6742,20 @@
                         </div>
                         <div id="kpi-pluvio-source-note" style="font-size: 0.72rem; color: #94a3b8; margin-top: 8px; line-height: 1.35;">
                             <i class="fas fa-database me-1" style="color: #38bdf8;"></i> Agence Nationale des Ressources Hydriques (ANRH Chlef Siège Hay Nasr / UHBC Master Assainissement - Séries 1970-2024).
+                        </div>
+                    </div>
+
+                    <!-- Module Variante 0 : Délestage Hydraulique sur Ouvrages de Secours -->
+                    <div id="sim-orphelin-kpi-box" style="display: none; background: rgba(6, 182, 212, 0.12); border: 1px solid rgba(6, 182, 212, 0.4); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <div style="font-size: 0.82rem; font-weight: 800; color: #22d3ee; display: flex; align-items: center; gap: 7px;">
+                                <i class="fas fa-bolt"></i> Variante 0 Active : Délestage Immédiat sur Ouvrages de Secours
+                            </div>
+                            <span id="kpi-orphelin-badge" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; font-weight: 800; background: rgba(6, 182, 212, 0.25); color: #22d3ee; border: 1px solid rgba(6, 182, 212, 0.5);">--</span>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.78rem; background: rgba(0,0,0,0.25); border-radius: 6px; padding: 8px 10px;">
+                            <div><span style="color: #94a3b8;">Débit total délesté :</span> <b id="kpi-orphelin-qdeleste" style="color: #22d3ee; font-size: 0.95rem;">--</b></div>
+                            <div><span style="color: #94a3b8;">Ouvrages mobilisés :</span> <b id="kpi-orphelin-nb" style="color: #34d399; font-size: 0.95rem;">--</b></div>
                         </div>
                     </div>
 

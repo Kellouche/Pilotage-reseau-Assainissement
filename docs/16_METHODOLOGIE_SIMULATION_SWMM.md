@@ -258,7 +258,27 @@ Ce comportement n'est pas une anomalie de calcul, mais la conséquence directe d
 
 ---
 
-## 8. Guide d'Environnement & Stabilisation Technique
+## 9. Variante 0 : Raccordements Opportunistes & Ouvrages Spéciaux Orphelins
+
+Lors de l'analyse cartographique d'un sous-bassin saturé, le système détecte automatiquement les **ouvrages spéciaux orphelins** présents dans le SIG à proximité immédiate (Stations de relevage, Déversoirs d'orage DVO, Trop-pleins de secours) qui ne sont pas topologiquement reliés au réseau principal.
+
+### 9.1 Règles de Génie Civil & Hydraulique Automatisées
+
+1. **Non-cisaillement des canalisations existantes** :
+   Le tracé de raccordement candidat est analysé spatialement contre la géométrie du réseau (`cand_line.crosses(network_geom)`). Tout tracé traversant une canalisation existante est rejeté au profit du regard d'accès direct le plus proche sans cisaillement.
+
+2. **Appariement Station de Relevage + Trop-plein de secours** :
+   Lorsqu'un trop-plein est situé à moins de 30 m d'une station de relevage, ils forment un complexe unitaire. Le système aligne automatiquement le regard de tête du trop-plein sur celui de la station (ex. Regard 7197 à Hay Houria) afin d'éviter tout croisement en ciseaux et d'assurer une évacuation gravitaire des pointes de crue sans refoulement.
+
+3. **Cadrage cartographique et clarté décisionnelle** :
+   Lors de la restitution des résultats SWMM :
+   * Le zoom de la carte Leaflet est automatiquement verrouillé et centré sur le périmètre exact du cluster simulé (`fitBounds(res_conduites.getBounds())`).
+   * Les couches SIG globales de la ville (rejets directs distants, ouvrages hors zone, STEP) sont masquées pour éviter toute confusion visuelle.
+   * Si l'ingénieur décoche les raccordements, aucun collecteur de secours n'est injecté dans le modèle `.INP` et aucun tracé n'apparaît sur la carte.
+
+4. **Indicateurs clés de délestage (KPIs)** :
+   Le cockpit et le bandeau supérieur affichent distinctement le débit délesté par les ouvrages de secours (`+XXX L/s`), permettant au décideur d'évaluer immédiatement l'efficacité de la Variante 0 face au goulot d'étranglement de l'exutoire principal.
+
 
 ### 7.1 Exécution native sans virtualenv
 L'application fonctionne directement sur l'environnement Python standard du système sans exiger l'activation d'un environnement virtuel (`.venv`).

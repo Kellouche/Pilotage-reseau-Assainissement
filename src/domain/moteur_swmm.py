@@ -1661,5 +1661,16 @@ class MoteurSWMM:
         kpis["pluvio_p24_mm"] = meta.get("pluvio_p24_mm")
         kpis["pluvio_source"] = meta.get("pluvio_source")
 
+        # Débit total délesté par les ouvrages de secours / orphelins raccordés
+        q_deleste_tot = sum(
+            float(c.get("max_flow_cms", 0.0))
+            for cid, c in kpis["conduit_results"].items()
+            if cid.startswith("C_RACC_") or "RACC" in cid or "orph" in cid.lower()
+        )
+        racc_list = meta.get("raccordements_orphelins", [])
+        kpis["q_deleste_m3s"] = round(q_deleste_tot, 3)
+        kpis["q_deleste_ls"] = round(q_deleste_tot * 1000.0, 1)
+        kpis["nb_ouvrages_raccordes"] = len(racc_list) if racc_list else len([cid for cid in kpis["conduit_results"].keys() if cid.startswith("C_RACC_")])
+
         kpis["compliance_continuity"] = abs(kpis["routing_continuity_error_pct"]) <= 5.0
         return kpis
