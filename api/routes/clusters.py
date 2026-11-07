@@ -683,7 +683,7 @@ def _trouver_chemin_gpkg(db: Session, request: Optional[Request] = None) -> Opti
 
 @router.get("/{cluster_id}/ouvrages-proches")
 def get_cluster_ouvrages_proches(
-    cluster_id: int,
+    cluster_id: str,
     rayon_m: float = 120.0,
     request: Request = None,
     db: Session = Depends(get_db)
@@ -697,8 +697,7 @@ def get_cluster_ouvrages_proches(
     chemin = _trouver_chemin_gpkg(db, request)
     if not chemin:
         raise HTTPException(status_code=404, detail="GeoPackage réseau introuvable.")
-    G = _get_graph(chemin)
-    return detecter_ouvrages_orphelins_proches(chemin, cluster_id, rayon_max_m=rayon_m, G_topo=G)
+    return detecter_ouvrages_orphelins_proches(chemin, cluster_id, rayon_max_m=rayon_m)
 
 
 # ============================================================

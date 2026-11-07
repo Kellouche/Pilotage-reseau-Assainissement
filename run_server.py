@@ -53,11 +53,12 @@ if __name__ == "__main__":
 
     while True:
         try:
+            reload_mode = os.getenv("API_RELOAD", "true").lower() in ("true", "1", "yes")
             config = uvicorn.Config(
                 "api.main:app",
                 host=API_HOST,
                 port=API_PORT,
-                reload=False,
+                reload=reload_mode,
                 log_level="info",
                 access_log=True
             )

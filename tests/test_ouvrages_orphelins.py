@@ -14,9 +14,11 @@ def test_detecter_ouvrages_orphelins_cluster_85():
     if not gpkg_cand.exists():
         pytest.skip("GeoPackage complet non disponible dans cet environnement.")
 
-    res = detecter_ouvrages_orphelins_proches(str(gpkg_cand), cluster_id=85, rayon_max_m=120.0)
-    assert res["cluster_id"] == 85
-    assert res["nb_ouvrages_trouves"] >= 3
+    # Vérifier avec ID numérique (85) et nom alphanumérique ("11_ouvrages_speciaux_349848")
+    for cid in [85, "11_ouvrages_speciaux_349848"]:
+        res = detecter_ouvrages_orphelins_proches(str(gpkg_cand), cluster_id=cid, rayon_max_m=120.0)
+        assert res["cluster_id"] == cid
+        assert res["nb_ouvrages_trouves"] >= 3
 
     types_trouves = [o["type"] for o in res["ouvrages"]]
     assert any("refoulement" in t.lower() or "station" in t.lower() for t in types_trouves)

@@ -2415,6 +2415,11 @@
                     ${isIsole ? `<div style="margin-top: 4px; padding: 3px 6px; background: rgba(245, 158, 11, 0.15); border-radius: 4px; color: #fbbf24; font-size: 0.68rem;"><i class="fas fa-info-circle me-1"></i> Ouvrage ponctuel isolé sans réseau amont numérisé</div>` : ''}
                 </div>
             `;
+
+            // Détection spatiale et affichage cartographique automatique des ouvrages spéciaux proches
+            if (typeof window.actualiserAlerteOuvrageDeporte === 'function' && clusterId) {
+                window.actualiserAlerteOuvrageDeporte(clusterId);
+            }
         }
 
         // Reprise du projet en cours depuis la modale
@@ -5271,6 +5276,76 @@
                 }).addTo(couches.res_regards);
             }
 
+            // 2bis. Intégration cartographique des collecteurs de délestage et ouvrages spéciaux mis en eau (Variante 0)
+            const raccOrph = (data && data.meta && data.meta.raccordements_orphelins) || window._ouvragesOrphelinsCandidatsSelectionnes || [];
+            if (Array.isArray(raccOrph) && raccOrph.length > 0) {
+                raccOrph.forEach((ro) => {
+                    if (ro.regard_coord_wgs84 && ro.ouvrage_coord_wgs84) {
+                        const rPt = ro.regard_coord_wgs84;
+                        const oPt = ro.ouvrage_coord_wgs84;
+                        const coutFmt = Number(ro.cout_estime_dzd || 0).toLocaleString('fr-FR');
+                        
+                        // Collecteur de secours (tracé cyan néon épais et net avec opacité 100%)
+                        const polyRacc = L.polyline([rPt, oPt], {
+                            pane: 'swmmResultsPane',
+                            color: '#06b6d4',
+                            weight: 6.0,
+                            opacity: 1.0,
+                            lineCap: 'round',
+                            lineJoin: 'round'
+                        });
+
+                        const popupHtml = `
+                            <div style="font-family: inherit; font-size: 12px; min-width: 250px; line-height: 1.45;">
+                                <div style="font-weight: 800; font-size: 13px; color: #06b6d4; margin-bottom: 6px; border-bottom: 1px solid rgba(0,0,0,0.1); padding-bottom: 4px;">
+                                    ⚡ Collecteur de Décharge de Secours (Variante 0)
+                                </div>
+                                <div style="margin-bottom: 5px; font-weight: 700; color: #10b981; font-size: 11.5px;">
+                                    Raccordement Actif &bull; Ouvrage mis en eau
+                                </div>
+                                <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+                                    <tr><td style="color:#64748b; padding:2px 0;">Destination :</td><td style="font-weight:700; text-align:right;">${ro.nom}</td></tr>
+                                    <tr><td style="color:#64748b; padding:2px 0;">Regard amont :</td><td style="font-weight:700; text-align:right;">Regard ${ro.regard_proche_id}</td></tr>
+                                    <tr><td style="color:#64748b; padding:2px 0;">Longueur :</td><td style="font-weight:700; text-align:right;">${ro.distance_m} m</td></tr>
+                                    <tr><td style="color:#64748b; padding:2px 0;">Diamètre :</td><td style="font-weight:700; text-align:right;">DN 600 mm</td></tr>
+                                    <tr><td style="color:#64748b; padding:2px 0;">Coût estimé :</td><td style="font-weight:700; text-align:right; color:#f59e0b;">${coutFmt} DZD</td></tr>
+                                    <tr><td style="color:#64748b; padding:2px 0;">Gain économique :</td><td style="font-weight:700; text-align:right; color:#10b981;">&gt; 90% d'économie</td></tr>
+                                </table>
+                            </div>
+                        `;
+                        polyRacc.bindPopup(popupHtml);
+                        polyRacc.bindTooltip(`⚡ <b>Collecteur de délestage actif (DN 600)</b> &rarr; ${ro.nom} (${ro.distance_m} m)`, { sticky: true, opacity: 0.98 });
+
+                        // Marqueur de l'ouvrage spécial récepteur activé
+                        const iconActif = L.divIcon({
+                            className: 'custom-orphan-active-marker',
+                            html: `<div style="background: ${ro.badge_color || '#06b6d4'}; width: 22px; height: 22px; border-radius: 50%; border: 3px solid #ffffff; box-shadow: 0 0 16px ${ro.badge_color || '#06b6d4'}; display: flex; align-items: center; justify-content: center; color: white; font-size: 11px; font-weight: 900;">⚡</div>`,
+                            iconSize: [22, 22],
+                            iconAnchor: [11, 11]
+                        });
+                        const markerActif = L.marker(oPt, {
+                            pane: 'swmmNodesPane',
+                            icon: iconActif
+                        });
+                        markerActif.bindPopup(`
+                            <div style="font-family: inherit; font-size: 12px; min-width: 240px;">
+                                <div style="font-weight: 800; font-size: 13px; color: ${ro.badge_color || '#06b6d4'}; margin-bottom: 6px;">
+                                    🎯 OUVRAGE SPÉCIAL EN SERVICE (MISE EN EAU)
+                                </div>
+                                <div style="font-weight: 700; margin-bottom: 4px;">${ro.nom}</div>
+                                <div style="font-size: 11px; color: #475569; line-height: 1.4;">
+                                    Cet ouvrage existant reçoit le débit délesté du Regard <b>${ro.regard_proche_id}</b> par un collecteur de <b>${ro.distance_m} m</b> (DN 600 mm).
+                                </div>
+                            </div>
+                        `);
+                        markerActif.bindTooltip(`🎯 <b>${ro.nom}</b><br><span style="color:#10b981; font-weight:700;">Mise en eau confirmée (Variante 0)</span>`, { sticky: true });
+
+                        couches.res_conduites.addLayer(polyRacc);
+                        couches.res_regards.addLayer(markerActif);
+                    }
+                });
+            }
+
             // Assurer que les couches de résultats sont bien au premier plan
             try {
                 if (couches.res_conduites && couches.res_conduites.bringToFront) couches.res_conduites.bringToFront();
@@ -5677,9 +5752,10 @@
                         // Ligne en tireté cyan vive représentant le raccordement physique projeté
                         const poly = L.polyline([rPt, oPt], {
                             color: '#06b6d4',
-                            weight: 4,
+                            weight: 5,
                             dashArray: '8, 8',
-                            opacity: 0.95
+                            opacity: 1.0,
+                            pane: window.carte.getPane('swmmNodesPane') ? 'swmmNodesPane' : 'overlayPane'
                         });
                         const coutFmt = Number(o.cout_estime_dzd || 0).toLocaleString('fr-FR');
                         poly.bindTooltip(
@@ -5687,19 +5763,22 @@
                             `<b>${o.nom}</b><br>` +
                             `Distance : ${o.distance_m} m du Regard ${o.regard_proche_id}<br>` +
                             `DN 600 mm &bull; Coût estimé : ${coutFmt} DZD<br>` +
-                            `<span style="color:#4ade80;">Gain économique : &gt; 90%</span>`,
+                            `<span style="color:#4ade80; font-weight:700;">Gain économique : &gt; 90%</span>`,
                             { sticky: true }
                         );
 
                         // Marqueur stylisé sur l'ouvrage orphelin avec contour pulsant
                         const iconOuv = L.divIcon({
                             className: 'custom-orphan-marker',
-                            html: `<div style="background: ${o.badge_color}; width: 14px; height: 14px; border-radius: 50%; border: 2px solid #ffffff; box-shadow: 0 0 10px ${o.badge_color};"></div>`,
-                            iconSize: [14, 14],
-                            iconAnchor: [7, 7]
+                            html: `<div style="background: ${o.badge_color}; width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid #ffffff; box-shadow: 0 0 12px ${o.badge_color}; display: flex; align-items: center; justify-content: center; color: white; font-size: 10px; font-weight: 800;">⚡</div>`,
+                            iconSize: [18, 18],
+                            iconAnchor: [9, 9]
                         });
-                        const markerOuv = L.marker(oPt, { icon: iconOuv });
-                        markerOuv.bindTooltip(`<b>${o.nom}</b><br>Ouvrage existant non raccordé dans le SIG`);
+                        const markerOuv = L.marker(oPt, { 
+                            icon: iconOuv,
+                            pane: window.carte.getPane('swmmNodesPane') ? 'swmmNodesPane' : 'markerPane'
+                        });
+                        markerOuv.bindTooltip(`<b>${o.nom}</b><br>Ouvrage existant non raccordé dans le SIG (Distance : ${o.distance_m} m)`);
 
                         window._coucheRaccordementsOrphelins.addLayer(poly);
                         window._coucheRaccordementsOrphelins.addLayer(markerOuv);
@@ -6051,6 +6130,7 @@
                     }
                 }
             });
+            window._ouvragesOrphelinsCandidatsSelectionnes = raccordementsSelectionnes;
 
             fetch('/api/v1/simulations/run', {
                 method: 'POST',

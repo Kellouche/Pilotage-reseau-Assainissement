@@ -236,7 +236,7 @@ def get_simulation_scenarios(station_id: Optional[str] = "chlef_anrh_siege"):
 
 @router.get("/ouvrages-proches")
 def get_simulation_ouvrages_proches(
-    cluster_id: int,
+    cluster_id: str,
     rayon_m: float = 120.0,
     db: Session = Depends(get_db),
     tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
@@ -247,7 +247,6 @@ def get_simulation_ouvrages_proches(
     """
     from src.domain.ouvrages_orphelins import detecter_ouvrages_orphelins_proches
     from api.models import Project
-    from api.routes.clusters import _get_graph
 
     gpkg_path = None
     if tenant and hasattr(tenant, "org_id") and tenant.org_id:
@@ -270,8 +269,7 @@ def get_simulation_ouvrages_proches(
     if not gpkg_path or not gpkg_path.exists():
         raise HTTPException(status_code=404, detail="Réseau hydraulique introuvable pour ce projet.")
 
-    G = _get_graph(str(gpkg_path))
-    return detecter_ouvrages_orphelins_proches(str(gpkg_path), cluster_id, rayon_max_m=rayon_m, G_topo=G)
+    return detecter_ouvrages_orphelins_proches(str(gpkg_path), cluster_id, rayon_max_m=rayon_m)
 
 
 @router.post("/run")
