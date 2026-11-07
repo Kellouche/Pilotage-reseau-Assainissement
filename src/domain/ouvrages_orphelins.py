@@ -15,7 +15,7 @@ from typing import Dict, Any, List, Optional, Tuple, Union
 
 import geopandas as gpd
 import pyproj
-from shapely.geometry import Point, shape
+from shapely.geometry import Point, shape, LineString
 from shapely.ops import transform, unary_union
 
 logger = logging.getLogger(__name__)
@@ -109,6 +109,7 @@ def detecter_ouvrages_orphelins_proches(
     # 3. Filtrer précisément les regards du cluster par les conduites réelles du sous-bassin
     line_feats = [f for f in target_c.get("geojson", {}).get("features", []) if f.get("geometry", {}).get("type") in ("LineString", "MultiLineString")]
     gdf_r_cluster = None
+    network_geom = None
     if line_feats:
         try:
             line_geoms = [transform(to_utm, shape(f["geometry"])) for f in line_feats]
@@ -161,79 +162,130 @@ def detecter_ouvrages_orphelins_proches(
             if coord_key in seen_coords:
                 continue
 
-            # Calcul de distance minimale aux regards réels du cluster
+            # Calcul de distance aux regards admissibles du cluster
             dists_to_cluster = gdf_r_cluster.geometry.distance(pt)
-            if dists_to_cluster.empty:
+            regards_cands = gdf_r_cluster[dists_to_cluster <= rayon_max_m].copy()
+            if regards_cands.empty:
                 continue
 
-            min_d = float(dists_to_cluster.min())
-            if min_d <= rayon_max_m:
-                seen_coords.add(coord_key)
-                closest_idx = dists_to_cluster.idxmin()
-                closest_r = gdf_r_cluster.loc[closest_idx]
+            seen_coords.add(coord_key)
 
-                r_code = str(closest_r.get("Code", closest_r.get("code", closest_r.get("id", f"R_{closest_idx}")))).replace(".0", "")
-                r_lon, r_lat = to_wgs(closest_r.geometry.x, closest_r.geometry.y)
-                ouv_lon, ouv_lat = to_wgs(pt.x, pt.y)
+            # Règle de génie civil universelle : Privilégier les tracés sans cisaillement de canalisation existante
+            meilleur_r = None
+            meilleur_dist = 999999.0
+            meilleur_crosses = True
 
-                raw_nom = str(row.get("Nom", row.get("nom", row.get("Code", row.get("code", ""))))).strip()
-                type_label = str(row.get("type_ouvrage", row.get("Type", row.get("type", default_label)))).strip()
-                if "nan" in type_label.lower() or not type_label:
-                    type_label = default_label
+            for r_idx, cand_r in regards_cands.iterrows():
+                d_c = float(cand_r.geometry.distance(pt))
+                c_line = LineString([cand_r.geometry, pt])
+                crosses = False
+                if network_geom is not None and c_line.length > 2.0:
+                    try:
+                        s_line = LineString([c_line.interpolate(0.5), c_line.interpolate(c_line.length - 0.5)])
+                        crosses = bool(s_line.intersects(network_geom))
+                    except Exception:
+                        crosses = False
 
-                # Résolution sémantique des noms usuels d'ouvrages
-                if "nan" in raw_nom.lower() or not raw_nom:
-                    if cat_key == "station_relevage":
-                        nom_str = "Hay Houria N°01"
-                    else:
-                        nom_str = f"Ouvrage #{idx+1}"
+                if meilleur_r is None:
+                    meilleur_r = cand_r
+                    meilleur_dist = d_c
+                    meilleur_crosses = crosses
                 else:
-                    nom_str = raw_nom
+                    if not crosses and meilleur_crosses:
+                        meilleur_r = cand_r
+                        meilleur_dist = d_c
+                        meilleur_crosses = False
+                    elif crosses == meilleur_crosses and d_c < meilleur_dist:
+                        meilleur_r = cand_r
+                        meilleur_dist = d_c
 
-                # Détermination du badge et de la catégorie
-                current_badge = badge_color
-                cat_resolved = cat_key
-                if "déversoir" in type_label.lower() or "dvo" in type_label.lower() or "10" in nom_str:
-                    current_badge = "#06b6d4"  # cyan
-                    cat_resolved = "deversoir_orage"
-                    type_label = "Déversoir d'orage (DVO)"
-                    if nom_str == "10":
-                        nom_str = "Code 10"
-                elif "trop" in type_label.lower() or "11" in nom_str:
-                    current_badge = "#a855f7"  # violet
-                    cat_resolved = "trop_plein"
-                    type_label = "Trop-plein de réseau"
-                    if nom_str == "11":
-                        nom_str = "Code 11"
-                elif "station" in type_label.lower() or "refoulement" in type_label.lower() or cat_key == "station_relevage":
-                    current_badge = "#f97316"  # orange
-                    cat_resolved = "station_relevage"
-                    type_label = "Station de relevage (SR)"
-                    if nom_str.startswith("Ouvrage"):
-                        nom_str = "Hay Houria N°01"
-                elif "rejet" in type_label.lower() or cat_key == "rejets":
-                    current_badge = "#22c55e"  # vert
-                    cat_resolved = "rejet"
-                    type_label = "Exutoire / Rejet direct"
+            if meilleur_r is None:
+                continue
 
-                cout_estime = max(int(min_d * PRIX_UNITAIRE_RACCORDEMENT_DZD_ML), 150000)
+            closest_r = meilleur_r
+            min_d = meilleur_dist
+            closest_idx = closest_r.name
 
-                ouvrages_detectes.append({
-                    "id": f"orph_{cat_resolved}_{idx+1}",
-                    "ouvrage_id": f"orph_{cat_resolved}_{idx+1}",
-                    "nom": f"{type_label} ({nom_str})",
-                    "code_ouvrage": nom_str,
-                    "type": cat_resolved,
-                    "type_label": type_label,
-                    "badge_color": current_badge,
-                    "distance_m": round(min_d, 1),
-                    "regard_proche_id": r_code,
-                    "regard_coord_wgs84": [round(r_lat, 6), round(r_lon, 6)],
-                    "ouvrage_coord_wgs84": [round(ouv_lat, 6), round(ouv_lon, 6)],
-                    "diametre_recommande_mm": 600,
-                    "cout_estime_dzd": cout_estime,
-                    "recommandation": f"Raccordement court ({round(min_d, 1)} m) recommandé vers {type_label} ({nom_str}) pour décharger immédiatement le réseau amont."
-                })
+            r_code = str(closest_r.get("Code", closest_r.get("code", closest_r.get("id", f"R_{closest_idx}")))).replace(".0", "")
+            r_lon, r_lat = to_wgs(closest_r.geometry.x, closest_r.geometry.y)
+            ouv_lon, ouv_lat = to_wgs(pt.x, pt.y)
+
+            raw_nom = str(row.get("Nom", row.get("nom", row.get("Code", row.get("code", ""))))).strip()
+            type_label = str(row.get("type_ouvrage", row.get("Type", row.get("type", default_label)))).strip()
+            if "nan" in type_label.lower() or not type_label:
+                type_label = default_label
+
+            # Résolution sémantique des noms usuels d'ouvrages
+            if "nan" in raw_nom.lower() or not raw_nom:
+                if cat_key == "station_relevage":
+                    nom_str = "Hay Houria N°01"
+                else:
+                    nom_str = f"Ouvrage #{idx+1}"
+            else:
+                nom_str = raw_nom
+
+            # Détermination du badge et de la catégorie
+            current_badge = badge_color
+            cat_resolved = cat_key
+            if "déversoir" in type_label.lower() or "dvo" in type_label.lower() or "10" in nom_str:
+                current_badge = "#06b6d4"  # cyan
+                cat_resolved = "deversoir_orage"
+                type_label = "Déversoir d'orage (DVO)"
+                if nom_str == "10":
+                    nom_str = "Code 10"
+            elif "trop" in type_label.lower() or "11" in nom_str:
+                current_badge = "#a855f7"  # violet
+                cat_resolved = "trop_plein"
+                type_label = "Trop-plein de réseau"
+                if nom_str == "11":
+                    nom_str = "Code 11"
+            elif "station" in type_label.lower() or "refoulement" in type_label.lower() or cat_key == "station_relevage":
+                current_badge = "#f97316"  # orange
+                cat_resolved = "station_relevage"
+                type_label = "Station de relevage (SR)"
+                if nom_str.startswith("Ouvrage"):
+                    nom_str = "Hay Houria N°01"
+            elif "rejet" in type_label.lower() or cat_key == "rejets":
+                current_badge = "#22c55e"  # vert
+                cat_resolved = "rejet"
+                type_label = "Exutoire / Rejet direct"
+
+            cout_estime = max(int(min_d * PRIX_UNITAIRE_RACCORDEMENT_DZD_ML), 150000)
+
+            ouvrages_detectes.append({
+                "id": f"orph_{cat_resolved}_{idx+1}",
+                "ouvrage_id": f"orph_{cat_resolved}_{idx+1}",
+                "nom": f"{type_label} ({nom_str})",
+                "code_ouvrage": nom_str,
+                "type": cat_resolved,
+                "type_label": type_label,
+                "badge_color": current_badge,
+                "distance_m": round(min_d, 1),
+                "regard_proche_id": r_code,
+                "regard_coord_wgs84": [round(r_lat, 6), round(r_lon, 6)],
+                "ouvrage_coord_wgs84": [round(ouv_lat, 6), round(ouv_lon, 6)],
+                "diametre_recommande_mm": 600,
+                "cout_estime_dzd": cout_estime,
+                "recommandation": f"Raccordement court ({round(min_d, 1)} m) recommandé vers {type_label} ({nom_str}) pour décharger immédiatement le réseau amont."
+            })
+
+    # Règle de génie civil universelle : Appariement Station de Relevage + Trop-plein de sécurité
+    # Si un trop-plein est situé à moins de 30 m d'une station de relevage, ils forment un complexe unique
+    sr_ouvrages = [o for o in ouvrages_detectes if o["type"] == "station_relevage"]
+    if sr_ouvrages:
+        for sr in sr_ouvrages:
+            sr_lat, sr_lon = sr["ouvrage_coord_wgs84"]
+            for o in ouvrages_detectes:
+                if o["type"] == "trop_plein":
+                    tp_lat, tp_lon = o["ouvrage_coord_wgs84"]
+                    d_sr_tp = ((sr_lat - tp_lat)**2 + (sr_lon - tp_lon)**2)**0.5 * 111320.0
+                    if d_sr_tp <= 30.0:
+                        # Aligner le regard amont du trop-plein sur celui de la station (évite les tracés en ciseaux)
+                        o["regard_proche_id"] = sr["regard_proche_id"]
+                        o["regard_coord_wgs84"] = sr["regard_coord_wgs84"]
+                        o["nom"] = f"Trop-plein de secours (By-pass {sr['code_ouvrage']})"
+                        o["type_label"] = "Trop-plein de secours (SR)"
+                        o["recommandation"] = f"Trop-plein de sécurité apparié à la {sr['nom']} pour évacuation gravitaire des pointes de crue sans cisaillement de voirie."
 
     # Trier par distance croissante
     ouvrages_detectes.sort(key=lambda x: x["distance_m"])
