@@ -873,3 +873,75 @@ def get_network_orphelins_geojson(
 
     return {"type": "FeatureCollection", "features": [], "message": "Aucun orphelin trouvé"}
 
+
+@router.get("/export/inp")
+def export_network_inp(
+    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context_optional),
+    db: Session = Depends(get_db)
+):
+    """Exporte l'intégralité du réseau actif au format standard EPA SWMM 5.2 (.inp) avec le nom du réseau."""
+    from fastapi.responses import PlainTextResponse
+    import re
+    import unicodedata
+    from src.domain.moteur_swmm import MoteurSWMM
+
+    gpkg_path = None
+    project_name = None
+    if tenant_ctx and tenant_ctx.org_id:
+        project = db.query(Project).filter(
+            Project.org_id == tenant_ctx.org_id,
+            Project.is_archived.is_(False)
+        ).first()
+        if project:
+            project_name = project.name
+            if project.source_gpkg_key and Path(project.source_gpkg_key).exists():
+                gpkg_path = Path(project.source_gpkg_key)
+
+    if not gpkg_path or not gpkg_path.exists():
+        project = db.query(Project).filter(Project.is_archived.is_(False)).first()
+        if project:
+            if not project_name:
+                project_name = project.name
+            if project.source_gpkg_key and Path(project.source_gpkg_key).exists():
+                gpkg_path = Path(project.source_gpkg_key)
+
+    if not gpkg_path or not gpkg_path.exists():
+        cand = Path("data/demo_reseau.gpkg")
+        if cand.exists():
+            gpkg_path = cand
+            project_name = "demo_reseau"
+
+    if not gpkg_path or not gpkg_path.exists():
+        raise HTTPException(status_code=404, detail="Aucun réseau hydraulique actif trouvé pour l'export.")
+
+    # 1. Si le fichier .inp original existe à côté du GPKG, le renvoyer directement (100% fidèle et instantané)
+    original_inp = gpkg_path.with_suffix(".inp")
+    if original_inp.exists():
+        with open(original_inp, "r", encoding="utf-8", errors="ignore") as f:
+            inp_content = f.read()
+    else:
+        moteur = MoteurSWMM()
+        inp_content, _ = moteur.assembler_modele_inp(
+            gpkg_path=gpkg_path,
+            cluster_id=None,
+            pente_moyenne_pct=1.0
+        )
+        try:
+            with open(original_inp, "w", encoding="utf-8") as f:
+                f.write(inp_content)
+        except Exception:
+            pass
+
+    nom_reseau = project_name or gpkg_path.stem
+    r = re.sub(r'\.(gpkg|inp)$', '', str(nom_reseau).strip(), flags=re.I)
+    sans_accent = unicodedata.normalize('NFKD', r).encode('ASCII', 'ignore').decode('utf-8')
+    clean = re.sub(r'[^\w\-_.]+', '_', sans_accent)
+    clean = re.sub(r'_+', '_', clean).strip('_') or "reseau_swmm"
+    filename = f"{clean}.inp"
+
+    return PlainTextResponse(
+        inp_content,
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+

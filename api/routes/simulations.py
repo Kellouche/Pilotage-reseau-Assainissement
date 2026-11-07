@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 from typing import List, Optional, Any, Dict, Union
 from pathlib import Path
 import logging
+import re
+import unicodedata
 
 logger = logging.getLogger(__name__)
 
@@ -290,22 +292,29 @@ def run_native_swmm_simulation(
 
     # 1. Identifier le fichier réseau GeoPackage du projet actif
     gpkg_path = None
+    project_name = None
     if tenant and hasattr(tenant, "org_id") and tenant.org_id:
         proj = db.query(Project).filter(
             Project.org_id == tenant.org_id,
             Project.is_archived.is_(False)
         ).first()
-        if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
-            gpkg_path = Path(proj.source_gpkg_key)
+        if proj:
+            project_name = proj.name
+            if proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
+                gpkg_path = Path(proj.source_gpkg_key)
 
     if not gpkg_path:
         proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
-        if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
-            gpkg_path = Path(proj.source_gpkg_key)
+        if proj:
+            if not project_name:
+                project_name = proj.name
+            if proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
+                gpkg_path = Path(proj.source_gpkg_key)
         else:
             cand = Path("data/demo_reseau.gpkg")
             if cand.exists():
                 gpkg_path = cand
+                project_name = "demo_reseau"
 
     if not gpkg_path or not gpkg_path.exists():
         raise HTTPException(status_code=404, detail="Réseau hydraulique introuvable pour ce projet.")
@@ -335,6 +344,7 @@ def run_native_swmm_simulation(
             raccordements_orphelins=payload.raccordements_orphelins,
         )
         resultat["source_gpkg"] = str(gpkg_path.resolve())
+        resultat["project_name"] = project_name or gpkg_path.stem
         _DERNIERE_SIMULATION = resultat
 
         return {
@@ -522,29 +532,80 @@ def get_agents_interpretation():
 
 
 
+def _formater_nom_fichier_export(nom_reseau: Optional[str], nom_bassin: Optional[str] = None, ext: str = "inp") -> str:
+    """Génère un nom de fichier normalisé et compatible pour EPA SWMM 5.2."""
+    parties = []
+    if nom_reseau:
+        r = re.sub(r'\.(gpkg|inp)$', '', str(nom_reseau).strip(), flags=re.I)
+        if r:
+            parties.append(r)
+    if nom_bassin:
+        b = str(nom_bassin).strip()
+        if b:
+            parties.append(b)
+
+    base = "_".join(parties) if parties else "modele_swmm"
+    sans_accent = unicodedata.normalize('NFKD', base).encode('ASCII', 'ignore').decode('utf-8')
+    clean = re.sub(r'[^\w\-_.]+', '_', sans_accent)
+    clean = re.sub(r'_+', '_', clean).strip('_')
+    if not clean:
+        clean = "modele_swmm"
+    return f"{clean}.{ext.lstrip('.')}"
+
+
 @router.get("/download/inp")
-def download_latest_inp():
-    """Télécharge le fichier d'entrée (.inp) généré pour la dernière simulation."""
+def download_latest_inp(db: Session = Depends(get_db)):
+    """Télécharge le fichier d'entrée (.inp) généré pour la dernière simulation portant le nom du réseau."""
     content = _DERNIERE_SIMULATION.get("inp_content")
     if not content:
         raise HTTPException(status_code=404, detail="Aucun fichier de modèle disponible. Veuillez d'abord exécuter une simulation.")
+
+    nom_reseau = _DERNIERE_SIMULATION.get("project_name")
+    if not nom_reseau:
+        from api.models import Project
+        proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
+        if proj and proj.name:
+            nom_reseau = proj.name
+        elif _DERNIERE_SIMULATION.get("source_gpkg"):
+            nom_reseau = Path(_DERNIERE_SIMULATION["source_gpkg"]).stem
+        else:
+            nom_reseau = "modele_swmm"
+
+    bassin_nom = _DERNIERE_SIMULATION.get("meta", {}).get("bassin_nom") or _DERNIERE_SIMULATION.get("meta", {}).get("cluster_nom")
+    filename = _formater_nom_fichier_export(nom_reseau, nom_bassin=bassin_nom, ext="inp")
+
     return PlainTextResponse(
         content,
-        media_type="text/plain",
-        headers={"Content-Disposition": "attachment; filename=modele_swmm_52.inp"}
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
 
 
 @router.get("/download/rpt")
-def download_latest_rpt():
-    """Télécharge le rapport officiel (.rpt) généré par la dernière simulation."""
+def download_latest_rpt(db: Session = Depends(get_db)):
+    """Télécharge le rapport officiel (.rpt) généré par la dernière simulation portant le nom du réseau."""
     content = _DERNIERE_SIMULATION.get("rpt_content")
     if not content:
         raise HTTPException(status_code=404, detail="Aucun rapport de simulation disponible. Veuillez d'abord exécuter une simulation.")
+
+    nom_reseau = _DERNIERE_SIMULATION.get("project_name")
+    if not nom_reseau:
+        from api.models import Project
+        proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
+        if proj and proj.name:
+            nom_reseau = proj.name
+        elif _DERNIERE_SIMULATION.get("source_gpkg"):
+            nom_reseau = Path(_DERNIERE_SIMULATION["source_gpkg"]).stem
+        else:
+            nom_reseau = "rapport_swmm"
+
+    bassin_nom = _DERNIERE_SIMULATION.get("meta", {}).get("bassin_nom") or _DERNIERE_SIMULATION.get("meta", {}).get("cluster_nom")
+    filename = _formater_nom_fichier_export(nom_reseau, nom_bassin=bassin_nom, ext="rpt")
+
     return PlainTextResponse(
         content,
-        media_type="text/plain",
-        headers={"Content-Disposition": "attachment; filename=rapport_swmm_52.rpt"}
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
 
 

@@ -502,6 +502,11 @@
                         <i class="fas fa-play" style="color: #38bdf8; width: 16px; font-size: 12px;"></i>
                         <span>Simuler</span>
                     </button>
+                    <!-- Action : Exporter le modèle complet (.inp) -->
+                    <a href="/api/v1/network/export/inp" target="_blank" download onclick="fermerMenuActions();" style="width: 100%; text-align: left; padding: 8px 14px; font-size: 12px; font-weight: 600; color: #f8fafc; background: transparent; border: none; cursor: pointer; display: flex; align-items: center; gap: 9px; text-decoration: none; box-sizing: border-box; transition: background 0.15s;" onmouseover="this.style.background='rgba(56, 189, 248, 0.15)'" onmouseout="this.style.background='transparent'">
+                        <i class="fas fa-file-code" style="color: #38bdf8; width: 16px; font-size: 12px;"></i>
+                        <span>Exporter le modèle (.inp)</span>
+                    </a>
                     <!-- Action : Contrôle Qualité Réseau -->
                     <button onclick="fermerMenuActions(); basculerVueCockpit('qualite');" style="width: 100%; text-align: left; padding: 8px 14px; font-size: 12px; font-weight: 600; color: #f8fafc; background: transparent; border: none; cursor: pointer; display: flex; align-items: center; gap: 9px; transition: background 0.15s;" onmouseover="this.style.background='rgba(16, 185, 129, 0.15)'" onmouseout="this.style.background='transparent'">
                         <i class="fas fa-clipboard-check" style="color: #10b981; width: 16px; font-size: 12px;"></i>
@@ -5712,6 +5717,22 @@
                     }
                 }
                 resultsCard.style.display = 'block';
+
+                // Personnaliser le nom du fichier .INP et .RPT à télécharger avec le nom du réseau
+                const projNom = (window._rawNetworkData && window._rawNetworkData.project_name) || (data.meta && data.meta.project_name) || 'modele_swmm';
+                const bassinNom = (data.meta && (data.meta.bassin_nom || data.meta.cluster_nom)) || '';
+                const baseNomFichier = (projNom + (bassinNom ? '_' + bassinNom : '')).replace(/[^\w\-_.]+/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+                
+                const btnInp = document.getElementById('btn-download-inp');
+                if (btnInp) {
+                    btnInp.setAttribute('download', `${baseNomFichier}.inp`);
+                    btnInp.setAttribute('title', `Télécharger le fichier modèle SWMM : ${baseNomFichier}.inp`);
+                }
+                const btnRpt = document.getElementById('btn-download-rpt');
+                if (btnRpt) {
+                    btnRpt.setAttribute('download', `${baseNomFichier}.rpt`);
+                    btnRpt.setAttribute('title', `Télécharger le rapport de calcul : ${baseNomFichier}.rpt`);
+                }
             }
 
             // Afficher l'analyse de sensibilité du buffer Voronoï
