@@ -418,6 +418,15 @@ def extraire_adresse_reelle_bassin(
 
 def determiner_nom_bassin(edges: Set[Tuple], G: nx.DiGraph, exutoire_info: Dict, exutoire_node: Any = None) -> str:
     """Produit l'adresse urbaine réelle du bassin pour l'utilisateur final."""
+    if exutoire_info and "nom" in exutoire_info and edges:
+        voies = []
+        for e in edges:
+            edata = G.edges[e] if e in G.edges else (G.edges[e[0], e[1], e[2]] if G.is_multigraph() else (G.edges.get((e[0], e[1])) or {}))
+            v = edata.get('nom_voie')
+            if v and str(v).strip():
+                voies.append(str(v).strip())
+        if voies and exutoire_info.get("nom"):
+            return f"Bassin hydraulique ({exutoire_info['nom']}) — {voies[0]}"
     return extraire_adresse_reelle_bassin(edges, G, exutoire_node, exutoire_info)
 
 

@@ -3,7 +3,7 @@ Routes pour la gestion du réseau (regards, canalisations, rejets).
 Endpoints CRUD complets avec validation Pydantic.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Response
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pathlib import Path
@@ -320,10 +320,14 @@ AVAILABLE_DATASETS = [
 
 @router.get("/datasets")
 def list_available_datasets(
+    response: Response,
     tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context_optional),
     db: Session = Depends(get_db)
 ):
     """Retourne la liste des jeux de données et modèles de référence disponibles ainsi que le projet en cours."""
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
     active_project = None
     try:
         org_id = tenant_ctx.org_id if tenant_ctx else None

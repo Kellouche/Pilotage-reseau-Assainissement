@@ -33,6 +33,7 @@ except ImportError:
     Simulation = None
 
 logger = logging.getLogger("swmm_platform.moteur_swmm")
+_EXUTOIRES_MAP_CACHE: Dict[str, Dict[str, Any]] = {}
 
 
 def _clean_node_id(val: Any, fallback: str = "") -> str:
@@ -537,11 +538,20 @@ class MoteurSWMM:
         # Filtrage ciblé par bassin versant urbain (Cluster d'exutoire)
         if cluster_id is not None:
             if G_topo is None:
-                from src.domain.graphe_reseau import construire_graphe
-                G_topo = construire_graphe(str(gpkg_path))
+                try:
+                    from api.routes.clusters import _get_graph
+                    G_topo = _get_graph(str(gpkg_path))
+                except Exception:
+                    from src.domain.graphe_reseau import construire_graphe
+                    G_topo = construire_graphe(str(gpkg_path))
             if not exutoires_map:
-                from src.domain.detecteur_clusters import trouver_exutoires_physiques
-                exutoires_map = trouver_exutoires_physiques(G_topo)
+                cache_key = str(gpkg_path)
+                if cache_key in _EXUTOIRES_MAP_CACHE:
+                    exutoires_map = _EXUTOIRES_MAP_CACHE[cache_key]
+                else:
+                    from src.domain.detecteur_clusters import trouver_exutoires_physiques
+                    exutoires_map = trouver_exutoires_physiques(G_topo)
+                    _EXUTOIRES_MAP_CACHE[cache_key] = exutoires_map
             # Résolution robuste de cluster_id (support int ou str type '11_ouvrages_speciaux_349848')
             cid_str = str(cluster_id).strip()
             cid_int = None
@@ -1332,6 +1342,15 @@ class MoteurSWMM:
         Intègre la typologie d'occupation du sol et le % d'imperméabilisation dynamique.
         """
         current_buf = tampon_buffer_m if (tampon_buffer_m and tampon_buffer_m > 0) else self.tampon_buffer_m
+        
+        G_topo_cached = None
+        if cluster_id is not None:
+            try:
+                from api.routes.clusters import _get_graph
+                G_topo_cached = _get_graph(str(gpkg_path))
+            except Exception:
+                pass
+
         inp_content, meta = self.assembler_modele_inp(
             gpkg_path=gpkg_path,
             scenario_key=scenario_key,
@@ -1340,6 +1359,7 @@ class MoteurSWMM:
             pente_moyenne_pct=pente_moyenne_pct,
             cluster_id=cluster_id,
             tampon_buffer_m=current_buf,
+            G_topo=G_topo_cached,
             valider_raccordement_deporte=valider_raccordement_deporte,
             typologie_sol=typologie_sol,
             imperv_pct=imperv_pct,
@@ -1365,8 +1385,11 @@ class MoteurSWMM:
         try:
             logger.info("Lancement du moteur EPA SWMM 5.2 via pyswmm sur %s", tmp_inp)
             with Simulation(tmp_inp) as sim:
-                for _ in sim:
-                    pass
+                try:
+                    sim.execute()
+                except Exception:
+                    for _ in sim:
+                        pass
 
             rpt_text = ""
             if os.path.exists(rpt_path):
