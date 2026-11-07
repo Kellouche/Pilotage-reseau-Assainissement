@@ -660,14 +660,14 @@
         <div class="sidebar-section">
             <div class="section-title">
                 <span><i class="fas fa-draw-polygon text-emerald me-1"></i> 2. Hydrologie &amp; Surfaces</span>
-                <span id="badge-subcatchments-count" class="badge-pill">79 BV &bull; 10538 SB</span>
+                <span id="badge-subcatchments-count" class="badge-pill">-- SB</span>
             </div>
-            <!-- Checkbox Couche Bassins Versants 79 (Point 4) -->
+            <!-- Checkbox Couche Bassins Versants (Exutoires) -->
             <div class="layer-list" style="margin-bottom: 6px;">
                 <label class="layer-item" id="label-bassins" style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 6px; padding: 6px 10px;">
                     <input type="checkbox" id="f-bassins" checked onchange="basculerCoucheBassins(this.checked)">
                     <span class="layer-indicator" style="background: #38bdf8;"></span>
-                    <span style="font-weight: 600; color: #38bdf8;">Bassins Versants (79 Exutoires)</span>
+                    <span style="font-weight: 600; color: #38bdf8;">Bassins Versants (Exutoires)</span>
                 </label>
             </div>
             <!-- Checkbox Sous-bassins versants Voronoï (Point 1) -->
@@ -1680,14 +1680,14 @@
             const statusDiv = document.getElementById('cluster-status');
             
             // Geler l'interface et verrouiller toute interaction ou navigation utilisateur
-            montrerChargement(true, messageOverlay || 'Sectorisation et partitionnement des 79 bassins versants...');
+            montrerChargement(true, messageOverlay || 'Analyse topologique et partitionnement des bassins versants...');
             if (btn) {
                 btn.disabled = true;
                 btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Partitionnement...';
             }
             if (statusDiv) {
                 statusDiv.style.display = 'block';
-                statusDiv.innerHTML = '<span style="color:#38bdf8;"><i class="fas fa-spinner fa-spin me-1"></i> Partitionnement topologique des bassins versants (79 exutoires)...</span>';
+                statusDiv.innerHTML = '<span style="color:#38bdf8;"><i class="fas fa-spinner fa-spin me-1"></i> Analyse topologique et détection des bassins versants...</span>';
             }
             
             // Effacer les anciens clusters
@@ -2311,6 +2311,16 @@
             }
             window._bassinBounds = _bassinBounds;
             window._bassinNoms = _bassinNoms;
+
+            // Mettre à jour dynamiquement le badge avec le nombre exact de bassins détectés
+            const totalBassins = bassins.length;
+            const badge = document.getElementById('badge-subcatchments-count');
+            if (badge && totalBassins > 0) {
+                const curText = badge.innerText || '';
+                const parts = curText.split('•');
+                const sbPart = parts.length > 1 ? parts[parts.length - 1].trim() : (curText.includes('SB') ? curText : '');
+                badge.innerText = `${totalBassins} BV${sbPart ? ' • ' + sbPart : ''}`;
+            }
 
             // Afficher la section
             document.getElementById('bassin-section').style.display = 'block';
@@ -4890,10 +4900,13 @@
                     
                     const count = fc.subcatchments_count || fc.features.length;
                     const totArea = (fc.total_area_ha || 0).toFixed(2);
+                    const nbBv = (window._clustersData && (window._clustersData.clusters_crees || (window._clustersData.resultats && window._clustersData.resultats.length))) || null;
+                    const bvPrefix = nbBv ? `${nbBv} BV • ` : '';
+                    const bvSuffix = nbBv ? ` (${nbBv} bassins d'exutoires)` : '';
                     const badge = document.getElementById('badge-subcatchments-count');
-                    if (badge) badge.innerText = `79 BV • ${count} SB (${totArea} ha)`;
+                    if (badge) badge.innerText = `${bvPrefix}${count} SB (${totArea} ha)`;
                     const legend = document.getElementById('subcatchments-legend');
-                    if (legend) legend.innerHTML = `Surface drainée : <b>${totArea} ha</b> sur <b>${count} sous-bassins</b> (79 BV d'exutoires).`;
+                    if (legend) legend.innerHTML = `Surface drainée : <b>${totArea} ha</b> sur <b>${count} sous-bassins</b>${bvSuffix}.`;
 
                     L.geoJSON(fc, {
                         pane: 'voronoiPane',
@@ -5802,7 +5815,9 @@
             // Rétablir le badge et la légende des sous-bassins
             const badgeSb = document.getElementById('badge-subcatchments-count');
             if (badgeSb && window._rawNetworkData && window._rawNetworkData.compteurs) {
-                badgeSb.innerHTML = `79 BV &bull; ${window._rawNetworkData.compteurs.regards || 10538} SB`;
+                const nbBv = (window._clustersData && (window._clustersData.clusters_crees || (window._clustersData.resultats && window._clustersData.resultats.length))) || null;
+                const bvStr = nbBv ? `${nbBv} BV &bull; ` : '';
+                badgeSb.innerHTML = `${bvStr}${window._rawNetworkData.compteurs.regards || 0} SB`;
                 badgeSb.style.background = '';
                 badgeSb.style.color = '';
             }

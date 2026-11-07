@@ -289,7 +289,7 @@ def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional
                 except Exception as e:
                     print(f"[clusters] Erreur lecture cache disque sous verrou: {e}", flush=True)
 
-            # Si le cache n'a pas les 79 bassins, lancer le partitionnement des 79 bassins (une seule fois)
+            # Si le cache n'a pas les bassins, lancer le partitionnement topologique
             if chemin_gpkg and Path(chemin_gpkg).exists():
                 try:
                     from src.domain.generateur_bassins_79 import partitionner_79_bassins_versants
@@ -301,7 +301,7 @@ def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional
                         _CLUSTERS_CACHE[norm_key] = cached_res
                         return cached_res
                 except Exception as e:
-                    print(f"[clusters] Erreur partitionnement 79: {e}", flush=True)
+                    print(f"[clusters] Erreur partitionnement: {e}", flush=True)
 
     # Récupérer le graphe (depuis le cache ou construit pour ce gpkg)
     G = _get_graph(chemin_gpkg)

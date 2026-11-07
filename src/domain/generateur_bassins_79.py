@@ -80,11 +80,11 @@ def partitionner_79_bassins_versants(
     if not gpkg_p.exists():
         raise FileNotFoundError(f"GeoPackage introuvable : {gpkg_path}")
 
-    print(f"[bassins_79] Construction du graphe depuis {gpkg_p.name}...", flush=True)
+    print(f"[partitionnement] Construction du graphe depuis {gpkg_p.name}...", flush=True)
     G = construire_graphe(str(gpkg_p))
     exutoires_physiques = trouver_exutoires_physiques(G)
     nb_exutoires = len(exutoires_physiques)
-    print(f"[bassins_79] {nb_exutoires} exutoires physiques identifiés.", flush=True)
+    print(f"[partitionnement] {nb_exutoires} exutoires physiques identifiés.", flush=True)
 
     # 1. Neutraliser les boucles / cycles pour un parcours amont strict
     try:
@@ -112,7 +112,7 @@ def partitionner_79_bassins_versants(
                     node_to_exutoire[pred] = ex_id
                     queue.append(pred)
 
-    print(f"[bassins_79] {len(node_to_exutoire)} nœuds connectés directement aux {nb_exutoires} exutoires.", flush=True)
+    print(f"[partitionnement] {len(node_to_exutoire)} nœuds connectés directement aux {nb_exutoires} exutoires.", flush=True)
 
     # 3. Charger les couches Regards et Canalisations du GPKG
     layers = gpd.list_layers(str(gpkg_p))['name'].tolist()
@@ -296,11 +296,11 @@ def partitionner_79_bassins_versants(
                 bassin_polygons_map[assigned_pipe_ex].append(geom_metric.buffer(15.0))
 
     gdf_voronoi = gpd.GeoDataFrame(voronoi_records, crs=crs_metrique)
-    print(f"[bassins_79] {len(gdf_voronoi)} sous-bassins Voronoï générés et typés.", flush=True)
+    print(f"[partitionnement] {len(gdf_voronoi)} sous-bassins Voronoï générés et typés.", flush=True)
 
-    # 6. Fusion géométrique (unary_union) pour créer les 79 macro-bassins versants
+    # 6. Fusion géométrique (unary_union) pour créer les macro-bassins versants
     bassins_records = []
-    print("[bassins_79] Fusion spatiale des 79 macro-bassins versants urbains...", flush=True)
+    print(f"[partitionnement] Fusion spatiale des macro-bassins versants urbains ({len(bassin_polygons_map)} exutoires)...", flush=True)
 
     for ex_id, geoms in bassin_polygons_map.items():
         ex_info = exutoires_physiques.get(ex_id, {})
@@ -405,7 +405,7 @@ def partitionner_79_bassins_versants(
             "geometry": geom_union
         })
 
-    # Trier par numéro de bassin 1..79
+    # Trier par numéro de bassin
     bassins_records.sort(key=lambda x: x['id_bassin'])
     gdf_bassins_79 = gpd.GeoDataFrame(bassins_records, crs=crs_metrique)
 
@@ -413,7 +413,7 @@ def partitionner_79_bassins_versants(
     pipes_by_exutoire: Dict[str, List[Dict[str, Any]]] = {ex_id: [] for ex_id in exutoire_id_list}
     orphelins_pipes_features: List[Dict[str, Any]] = []
 
-    print("[bassins_79] Classification topologique des conduites par exutoire...", flush=True)
+    print("[partitionnement] Classification topologique des conduites par exutoire...", flush=True)
     try:
         transformer_to_wgs84 = pyproj.Transformer.from_crs(crs_metrique, "EPSG:4326", always_xy=True).transform
 
@@ -558,38 +558,38 @@ def partitionner_79_bassins_versants(
                     }
                     orphelins_pipes_features.append(feat_pipe)
 
-        print(f"[bassins_79] {sum(len(p) for p in pipes_by_exutoire.values())} conduites connectées réparties sur les 79 bassins.", flush=True)
-        print(f"[bassins_79] {len(orphelins_pipes_features)} tronçons orphelins isolés.", flush=True)
+        print(f"[partitionnement] {sum(len(p) for p in pipes_by_exutoire.values())} conduites connectées réparties sur les {len(gdf_bassins_79)} bassins.", flush=True)
+        print(f"[partitionnement] {len(orphelins_pipes_features)} tronçons orphelins isolés.", flush=True)
     except Exception as e:
-        print(f"[bassins_79] Erreur classification conduites: {e}", flush=True)
+        print(f"[partitionnement] Erreur classification conduites: {e}", flush=True)
 
     gdf_orphelins_regards = gpd.GeoDataFrame(orphelins_regards_records, crs=crs_metrique) if orphelins_regards_records else gpd.GeoDataFrame()
 
     total_surface_ha = round(float(gdf_bassins_79['surface_ha'].sum()), 2)
-    print(f"[bassins_79] {len(gdf_bassins_79)} bassins versants créés (Surface totale : {total_surface_ha} ha).", flush=True)
-    print(f"[bassins_79] Regards orphelins isolés : {len(gdf_orphelins_regards)}.", flush=True)
+    print(f"[partitionnement] {len(gdf_bassins_79)} bassins versants créés (Surface totale : {total_surface_ha} ha).", flush=True)
+    print(f"[partitionnement] Regards orphelins isolés : {len(gdf_orphelins_regards)}.", flush=True)
 
     # 8. Persistance dans le GeoPackage (si demandé)
     if sauvegarder_gpkg:
-        print(f"[bassins_79] Écriture des nouvelles couches dans {gpkg_p.name}...", flush=True)
+        print(f"[partitionnement] Écriture des nouvelles couches dans {gpkg_p.name}...", flush=True)
         try:
             gdf_bassins_79.to_file(str(gpkg_p), layer="bassins_versants_79", driver="GPKG")
-            print("[bassins_79] Couche 'bassins_versants_79' sauvegardée.", flush=True)
+            print("[partitionnement] Couche 'bassins_versants_79' sauvegardée.", flush=True)
         except Exception as e:
-            print(f"[bassins_79] Erreur sauvegarde bassins_versants_79: {e}", flush=True)
+            print(f"[partitionnement] Erreur sauvegarde bassins_versants_79: {e}", flush=True)
 
         try:
             gdf_voronoi.to_file(str(gpkg_p), layer="sous_bassins_voronoi", driver="GPKG")
-            print("[bassins_79] Couche 'sous_bassins_voronoi' sauvegardée.", flush=True)
+            print("[partitionnement] Couche 'sous_bassins_voronoi' sauvegardée.", flush=True)
         except Exception as e:
-            print(f"[bassins_79] Erreur sauvegarde sous_bassins_voronoi: {e}", flush=True)
+            print(f"[partitionnement] Erreur sauvegarde sous_bassins_voronoi: {e}", flush=True)
 
         if not gdf_orphelins_regards.empty:
             try:
                 gdf_orphelins_regards.to_file(str(gpkg_p), layer="elements_orphelins_regards", driver="GPKG")
-                print("[bassins_79] Couche 'elements_orphelins_regards' sauvegardée.", flush=True)
+                print("[partitionnement] Couche 'elements_orphelins_regards' sauvegardée.", flush=True)
             except Exception as e:
-                print(f"[bassins_79] Erreur sauvegarde orphelins: {e}", flush=True)
+                print(f"[partitionnement] Erreur sauvegarde orphelins: {e}", flush=True)
 
     # 9. Export du fichier isolé des orphelins (GeoJSON) dans le dossier upload
     orphelins_geojson_path = gpkg_p.parent / "elements_orphelins.geojson"
@@ -597,9 +597,9 @@ def partitionner_79_bassins_versants(
     if not gdf_orph_wgs84.empty:
         try:
             gdf_orph_wgs84.to_file(str(orphelins_geojson_path), driver="GeoJSON")
-            print(f"[bassins_79] Fichier d'isolation exporté : {orphelins_geojson_path.name}", flush=True)
+            print(f"[partitionnement] Fichier d'isolation exporté : {orphelins_geojson_path.name}", flush=True)
         except Exception as e:
-            print(f"[bassins_79] Erreur export orphelins.geojson: {e}", flush=True)
+            print(f"[partitionnement] Erreur export orphelins.geojson: {e}", flush=True)
 
     # 10. Préparation des structures GeoJSON WGS84 pour l'API et le cache Web
     gdf_bassins_wgs84 = gdf_bassins_79.to_crs("EPSG:4326")
@@ -723,9 +723,9 @@ def partitionner_79_bassins_versants(
         }
         with open(cache_clusters_path, "w", encoding="utf-8") as f:
             json.dump(clusters_cache_data, f, ensure_ascii=False)
-        print(f"[bassins_79] Cache disque des clusters mis à jour : {cache_clusters_path.name}", flush=True)
+        print(f"[partitionnement] Cache disque des clusters mis à jour : {cache_clusters_path.name}", flush=True)
     except Exception as e:
-        print(f"[bassins_79] Erreur écriture cache clusters: {e}", flush=True)
+        print(f"[partitionnement] Erreur écriture cache clusters: {e}", flush=True)
 
     cache_subcatchments_path = gpkg_p.with_suffix(".subcatchments_cache.json")
     try:
@@ -737,12 +737,12 @@ def partitionner_79_bassins_versants(
         }
         with open(cache_subcatchments_path, "w", encoding="utf-8") as f:
             json.dump(sub_cache_data, f, ensure_ascii=False)
-        print(f"[bassins_79] Cache disque subcatchments mis à jour : {cache_subcatchments_path.name}", flush=True)
+        print(f"[partitionnement] Cache disque subcatchments mis à jour : {cache_subcatchments_path.name}", flush=True)
     except Exception as e:
-        print(f"[bassins_79] Erreur écriture cache subcatchments: {e}", flush=True)
+        print(f"[partitionnement] Erreur écriture cache subcatchments: {e}", flush=True)
 
     elapsed = round(time.time() - t0, 2)
-    print(f"[bassins_79] Traitement complet terminé en {elapsed} secondes.", flush=True)
+    print(f"[partitionnement] Traitement complet terminé en {elapsed} secondes.", flush=True)
 
     return {
         "status": "success",
