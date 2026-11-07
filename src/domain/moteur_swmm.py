@@ -1135,6 +1135,34 @@ class MoteurSWMM:
         lines.extend(swmm_sec["POLYGONS"])
         lines.append("")
 
+        # Section MAP pour cadrage automatique et affichage direct dans EPA SWMM Desktop GUI
+        try:
+            pts_x = []
+            pts_y = []
+            if not regards.empty:
+                pts_x.extend([g.x for g in regards.geometry if g and not g.is_empty])
+                pts_y.extend([g.y for g in regards.geometry if g and not g.is_empty])
+            if not canalisations.empty:
+                for g in canalisations.geometry:
+                    if g and not g.is_empty:
+                        minx_c, miny_c, maxx_c, maxy_c = g.bounds
+                        pts_x.extend([minx_c, maxx_c])
+                        pts_y.extend([miny_c, maxy_c])
+
+            if pts_x and pts_y:
+                min_x = min(pts_x)
+                max_x = max(pts_x)
+                min_y = min(pts_y)
+                max_y = max(pts_y)
+                dx = max(max_x - min_x, 50.0) * 0.08
+                dy = max(max_y - min_y, 50.0) * 0.08
+                lines.append("[MAP]")
+                lines.append(f"DIMENSIONS {min_x - dx:<14.3f} {min_y - dy:<14.3f} {max_x + dx:<14.3f} {max_y + dy:<14.3f}")
+                lines.append("Units      Meters")
+                lines.append("")
+        except Exception as e_map:
+            logger.warning(f"Impossible de générer la section [MAP] SWMM: {e_map}")
+
         # Section rapport détaillée
         lines.append("[REPORT]")
         lines.append("INPUT      NO")

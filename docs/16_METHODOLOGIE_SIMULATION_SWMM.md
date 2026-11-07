@@ -279,6 +279,26 @@ Lors de l'analyse cartographique d'un sous-bassin saturé, le système détecte 
 4. **Indicateurs clés de délestage (KPIs)** :
    Le cockpit et le bandeau supérieur affichent distinctement le débit délesté par les ouvrages de secours (`+XXX L/s`), permettant au décideur d'évaluer immédiatement l'efficacité de la Variante 0 face au goulot d'étranglement de l'exutoire principal.
 
+---
+
+## 10. Interopérabilité Universelle EPA SWMM 5.2 (.INP)
+
+### 10.1 Export Calibré pour EPA SWMM Desktop GUI
+Afin de garantir une ouverture directe et sans manipulation dans le logiciel officiel EPA SWMM 5.2 Desktop (`epaswmm5.exe`), l'exportateur `.inp` injecte automatiquement la section cartographique :
+```ini
+[MAP]
+DIMENSIONS  xmin  ymin  xmax  ymax
+Units       Meters
+```
+Les dimensions sont calculées dynamiquement sur l'emprise UTM du réseau avec une marge de 8%, permettant un centrage immédiat dès l'ouverture du fichier dans le logiciel officiel.
+
+### 10.2 Ingestion Universelle de Fichiers .INP Externes
+DrainPilot accepte le téléversement direct de fichiers `.inp` externes provenant de n'importe quel bureau d'études ou outil de CAO/SIG (EPA SWMM, PCSWMM, Civil 3D, InfoWorks) :
+* **Parsing modulaire** (`src/domain/inp_parser.py`) : Extraction des sections `[JUNCTIONS]`, `[OUTFALLS]`, `[STORAGE]`, `[CONDUITS]`, `[XSECTIONS]`, `[SUBCATCHMENTS]`, `[COORDINATES]`, `[VERTICES]`, `[POLYGONS]`.
+* **Détection automatique du CRS** : Reconnaissance des projections métriques (UTM Zone 31N Algérie - EPSG:32631) ou géographiques (WGS84).
+* **Génération GeoPackage standardisée** : Conversion instantanée en couches exploitables par l'ensemble des modules DrainPilot (carte interactive, découpage Voronoï, simulation native, graphes de pente et audit IA).
+
+
 
 ### 7.1 Exécution native sans virtualenv
 L'application fonctionne directement sur l'environnement Python standard du système sans exiger l'activation d'un environnement virtuel (`.venv`).

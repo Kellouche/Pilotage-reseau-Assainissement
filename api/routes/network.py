@@ -552,20 +552,38 @@ async def upload_network_gpkg(
     tenant_ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db)
 ):
-    """Téléverse un fichier GeoPackage (.gpkg) pour le projet actif."""
-    if not file.filename.lower().endswith(".gpkg"):
+    """Téléverse un fichier GeoPackage (.gpkg) ou EPA SWMM (.inp) pour le projet actif."""
+    fname_lower = (file.filename or "").lower()
+    if not (fname_lower.endswith(".gpkg") or fname_lower.endswith(".inp")):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Format non supporté. Veuillez téléverser un fichier .gpkg (GeoPackage)."
+            detail="Format non supporté. Veuillez téléverser un fichier .gpkg (GeoPackage) ou .inp (EPA SWMM)."
         )
 
     upload_dir = Path(f"uploads/{tenant_ctx.org_id}")
     upload_dir.mkdir(parents=True, exist_ok=True)
-    target_path = upload_dir / f"network_{file.filename}"
+    raw_target_path = upload_dir / f"network_{file.filename}"
 
     content = await file.read()
-    with open(target_path, "wb") as f:
+    with open(raw_target_path, "wb") as f:
         f.write(content)
+
+    conv_summary = None
+    if fname_lower.endswith(".inp"):
+        # Conversion transparente du fichier EPA SWMM .inp vers GeoPackage (.gpkg)
+        from src.domain.inp_parser import convertir_inp_vers_gpkg
+        gpkg_target_path = raw_target_path.with_suffix(".gpkg")
+        try:
+            conv_summary = convertir_inp_vers_gpkg(raw_target_path, gpkg_target_path)
+            target_path = gpkg_target_path
+        except Exception as e_conv:
+            logger.exception("Échec de la conversion du fichier .inp : %s", e_conv)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Erreur lors de l'analyse du fichier SWMM .inp : {str(e_conv)}"
+            )
+    else:
+        target_path = raw_target_path
 
     # Invalidation des anciens fichiers caches associés à ce fichier
     for ext in [".clusters_cache.json", ".subcatchments_cache.json", ".qualite_cache.json"]:
@@ -614,9 +632,12 @@ async def upload_network_gpkg(
     except Exception:
         pass
 
+    msg = conv_summary.get("message") if (conv_summary and "message" in conv_summary) else f"Fichier {file.filename} téléversé et associé à votre projet avec succès."
+
     return {
         "status": "ok",
-        "message": f"Fichier {file.filename} téléversé et associé à votre projet avec succès.",
+        "message": msg,
+        "conversion": conv_summary,
         "project": {
             "id": project.id,
             "name": project.name,
