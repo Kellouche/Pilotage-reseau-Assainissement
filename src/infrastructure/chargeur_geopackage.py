@@ -12,6 +12,7 @@ et le calcul du centre de la zone d'étude.
 """
 
 import json
+import os
 import sqlite3
 from pathlib import Path
 
@@ -22,7 +23,12 @@ from src.infrastructure.config import TARGET_CRS
 from src.infrastructure.orientation_conduites import orienter_conduites
 from src.infrastructure.labels_rues import construire_labels_rues
 
-GPKG_PATH = Path(r"D:\IA Water Data Analysis\Assainissement\Assainissement_Ville.gpkg")
+GPKG_PATH = Path(
+    os.getenv(
+        "GPKG_PATH",
+        r"D:\IA Water Data Analysis\Assainissement\Assainissement_Ville.gpkg",
+    )
+)
 WGS84 = "EPSG:4326"
 
 LAYER_PATTERNS = {
