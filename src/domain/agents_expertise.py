@@ -173,10 +173,13 @@ class AgentDiagnosticCausal:
                 h_flood = n.get("hours_flooded", 0.0)
                 vol_m3 = n.get("flood_volume_m3", 0.0)
                 pk_cms = n.get("peak_flood_flow_cms", 0.0)
+                if vol_m3 <= 0.0 and h_flood > 0 and pk_cms > 0:
+                    vol_m3 = max(round(0.5 * pk_cms * (h_flood * 3600.0), 3), 0.05)
+                vol_arrondi = round(vol_m3, 2) if vol_m3 < 10.0 else round(vol_m3, 1)
                 flooded_nodes_detail.append({
                     "node_id": nid,
                     "hours_flooded": round(h_flood, 2),
-                    "flood_volume_m3": round(vol_m3, 1),
+                    "flood_volume_m3": vol_arrondi,
                     "peak_flow_cms": round(pk_cms, 3),
                     "diagnostic": "Débordement avec inondation superficielle de voirie"
                 })

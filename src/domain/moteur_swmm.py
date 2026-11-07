@@ -1557,6 +1557,14 @@ class MoteurSWMM:
                         pk_flood = float(parts[2])
                         vol_flood = float(parts[5]) * 1000.0
                         if h_flood > 0:
+                            # Reconstitution hydrodynamique si EPA SWMM a tronqué le volume à 0.000
+                            # (car EPA SWMM exprime le volume en 10^6 Litres avec 3 décimales, soit tout volume < 500 L affiché à 0.000)
+                            if vol_flood <= 0.0 and pk_flood > 0:
+                                vol_estime = round(0.5 * pk_flood * (h_flood * 3600.0), 3)
+                                vol_flood = max(vol_estime, 0.05)
+                            else:
+                                vol_flood = round(vol_flood, 3)
+
                             if nid not in kpis["node_results"]:
                                 kpis["node_results"][nid] = {"node": nid, "hours_surcharged": h_flood}
                             kpis["node_results"][nid].update({
