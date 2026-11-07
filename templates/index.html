@@ -3334,7 +3334,7 @@
         <thead>
             <tr>
                 <th style="width: 50px; text-align: center;">Priorité</th>
-                <th style="width: 90px;">Conduite</th>
+                <th style="width: 120px;">Ouvrage / Conduite</th>
                 <th style="width: 140px;">Risque Identifié</th>
                 <th>Action Prescrite</th>
                 <th style="width: 95px; text-align: right;">Coût Estimé</th>
@@ -4047,15 +4047,22 @@
 
                         <!-- Priorité 1 : Critique -->
                         <div style="margin-bottom: 12px;">
-                            <div style="font-size: 0.78rem; font-weight: 800; color: #ef4444; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
-                                <span style="background: #ef4444; color: white; padding: 1px 6px; border-radius: 4px; font-size: 0.68rem;">P1</span>
-                                Priorité 1 — Urgence Critique (Submersion Voirie &amp; Habitations)
+                            <div style="font-size: 0.78rem; font-weight: 800; color: #ef4444; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <span style="background: #ef4444; color: white; padding: 1px 6px; border-radius: 4px; font-size: 0.68rem;">P1</span>
+                                    Priorité 1 — Urgence Critique (Submersion Voirie &amp; Habitations)
+                                </div>
+                                <span style="font-size: 0.72rem; color: #f87171; font-weight: 700;">${((risk.synthese && risk.synthese.cout_p1_dzd) || 0).toLocaleString('fr-FR')} DZD</span>
                             </div>
                             ${(risk.actions_priorisees && risk.actions_priorisees.P1 && risk.actions_priorisees.P1.length > 0) ? `
                                 <div style="display: grid; gap: 6px;">
                                     ${risk.actions_priorisees.P1.map(a => `
                                         <div style="background: rgba(239, 68, 68, 0.08); border-left: 3px solid #ef4444; padding: 8px 12px; font-size: 0.78rem; color: #cbd5e1; border-radius: 4px;">
-                                            <strong style="color: #f87171;">${a.cible}</strong> : ${a.probleme} ➔ <i style="color: #f8fafc;">${a.action}</i>
+                                            <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px;">
+                                                <strong style="color: #f87171;">${a.conduite || a.cible}</strong>
+                                                <span style="font-weight: 800; color: #38bdf8; font-size: 0.78rem;">${(a.estimation_cout_dzd || 0).toLocaleString('fr-FR')} DZD</span>
+                                            </div>
+                                            <div style="font-size: 0.75rem; color: #94a3b8;">${a.type_risque || a.probleme} ➔ <i style="color: #f8fafc;">${a.action_requise || a.action}</i></div>
                                         </div>
                                     `).join('')}
                                 </div>
@@ -4064,15 +4071,22 @@
 
                         <!-- Priorité 2 : Majeur -->
                         <div style="margin-bottom: 12px;">
-                            <div style="font-size: 0.78rem; font-weight: 800; color: #f59e0b; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
-                                <span style="background: #f59e0b; color: white; padding: 1px 6px; border-radius: 4px; font-size: 0.68rem;">P2</span>
-                                Priorité 2 — Alerte Majeure (Mise en Charge Continue sans Inondation)
+                            <div style="font-size: 0.78rem; font-weight: 800; color: #f59e0b; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <span style="background: #f59e0b; color: white; padding: 1px 6px; border-radius: 4px; font-size: 0.68rem;">P2</span>
+                                    Priorité 2 — Alerte Majeure (Mise en Charge Continue sans Inondation)
+                                </div>
+                                <span style="font-size: 0.72rem; color: #fbbf24; font-weight: 700;">${((risk.synthese && risk.synthese.cout_p2_dzd) || 0).toLocaleString('fr-FR')} DZD</span>
                             </div>
                             ${(risk.actions_priorisees && risk.actions_priorisees.P2 && risk.actions_priorisees.P2.length > 0) ? `
                                 <div style="display: grid; gap: 6px;">
                                     ${risk.actions_priorisees.P2.map(a => `
                                         <div style="background: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; padding: 8px 12px; font-size: 0.78rem; color: #cbd5e1; border-radius: 4px;">
-                                            <strong style="color: #fbbf24;">${a.cible}</strong> : ${a.probleme} ➔ <i style="color: #f8fafc;">${a.action}</i>
+                                            <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px;">
+                                                <strong style="color: #fbbf24;">${a.conduite || a.cible}</strong>
+                                                <span style="font-weight: 800; color: #38bdf8; font-size: 0.78rem;">${(a.estimation_cout_dzd || 0).toLocaleString('fr-FR')} DZD</span>
+                                            </div>
+                                            <div style="font-size: 0.75rem; color: #94a3b8;">${a.type_risque || a.probleme} ➔ <i style="color: #f8fafc;">${a.action_requise || a.action}</i></div>
                                         </div>
                                     `).join('')}
                                 </div>
@@ -4081,15 +4095,22 @@
 
                         <!-- Priorité 3 : Maintenance -->
                         <div>
-                            <div style="font-size: 0.78rem; font-weight: 800; color: #38bdf8; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
-                                <span style="background: #0284c7; color: white; padding: 1px 6px; border-radius: 4px; font-size: 0.68rem;">P3</span>
-                                Priorité 3 — Maintenance Préventive (Auto-curage / Pentes)
+                            <div style="font-size: 0.78rem; font-weight: 800; color: #38bdf8; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <span style="background: #0284c7; color: white; padding: 1px 6px; border-radius: 4px; font-size: 0.68rem;">P3</span>
+                                    Priorité 3 — Maintenance Préventive (Auto-curage / Pentes)
+                                </div>
+                                <span style="font-size: 0.72rem; color: #38bdf8; font-weight: 700;">${((risk.synthese && risk.synthese.cout_p3_dzd) || 0).toLocaleString('fr-FR')} DZD</span>
                             </div>
                             ${(risk.actions_priorisees && risk.actions_priorisees.P3 && risk.actions_priorisees.P3.length > 0) ? `
                                 <div style="display: grid; gap: 6px;">
                                     ${risk.actions_priorisees.P3.map(a => `
                                         <div style="background: rgba(2, 132, 199, 0.08); border-left: 3px solid #0284c7; padding: 8px 12px; font-size: 0.78rem; color: #cbd5e1; border-radius: 4px;">
-                                            <strong style="color: #38bdf8;">${a.cible}</strong> : ${a.probleme} ➔ <i style="color: #f8fafc;">${a.action}</i>
+                                            <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px;">
+                                                <strong style="color: #38bdf8;">${a.conduite || a.cible}</strong>
+                                                <span style="font-weight: 800; color: #38bdf8; font-size: 0.78rem;">${(a.estimation_cout_dzd || 0).toLocaleString('fr-FR')} DZD</span>
+                                            </div>
+                                            <div style="font-size: 0.75rem; color: #94a3b8;">${a.type_risque || a.probleme} ➔ <i style="color: #f8fafc;">${a.action_requise || a.action}</i></div>
                                         </div>
                                     `).join('')}
                                 </div>
