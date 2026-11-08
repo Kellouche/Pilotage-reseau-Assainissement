@@ -11,7 +11,20 @@ Objet : Fixtures Pytest globales, base de données de test et client HTTP
 
 import os
 import sys
+import pytest
 
 os.environ["TESTING"] = "true"
 os.environ["DATABASE_URL"] = "sqlite:///./test_swmm_platform.db"
+
+from api.database import Base, engine
+from api.models import *  # noqa: F401, F403
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_test_database():
+    """Initialise automatiquement les tables dans la base SQLite de test."""
+    Base.metadata.create_all(bind=engine)
+    yield
+
+
 

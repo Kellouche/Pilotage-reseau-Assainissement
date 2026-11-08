@@ -15,8 +15,6 @@ from api.main import app
 from api.database import SessionLocal, engine, Base
 from api.models import User, Organization, Membership, Project
 
-client = TestClient(app)
-
 @pytest.fixture(autouse=True)
 def clean_test_env():
     Base.metadata.create_all(bind=engine)
@@ -29,7 +27,9 @@ def clean_test_env():
     db.close()
     yield
 
+
 def test_load_demo_and_detect_clusters():
+    client = TestClient(app)
     # 1. Register and verify user
     reg_resp = client.post("/api/v1/auth/register", json={
         "email": "demo.tester@example.com",
@@ -41,12 +41,13 @@ def test_load_demo_and_detect_clusters():
     assert reg_resp.status_code == 201
     dev_code = reg_resp.json()["dev_code"]
 
-    verify_resp = client.post("/api/v1/auth/verify-code", json={
+    verify_resp = client.post("/api/v1/auth/verify-email", json={
         "email": "demo.tester@example.com",
         "code": dev_code
     })
     assert verify_resp.status_code == 200
-    token = verify_resp.json()["tokens"]["access_token"]
+    vdata = verify_resp.json()
+    token = vdata.get("access_token") or vdata.get("tokens", {}).get("access_token")
     headers = {"Authorization": f"Bearer {token}"}
 
     # 2. Initially layers should report virgin workspace
@@ -76,6 +77,9 @@ def test_load_demo_and_detect_clusters():
     assert cdata["clusters_crees"] >= 1
     assert len(cdata["resultats"]) >= 1
     first_bassin = cdata["resultats"][0]
-    assert first_bassin["nb_troncons"] == 58
-    assert first_bassin["nb_noeuds"] == 59
+    nb_troncons = first_bassin.get("troncons") or first_bassin.get("infrastructures", {}).get("conduites", 0)
+    nb_noeuds = first_bassin.get("infrastructures", {}).get("regards", 0)
+    assert nb_troncons == 58
+    assert nb_noeuds == 59
+
 

@@ -83,12 +83,13 @@ def test_endpoint_subcatchments_with_demo():
     assert reg.status_code == 201
     dev_code = reg.json()["dev_code"]
 
-    ver = client.post("/api/v1/auth/verify-code", json={
+    ver = client.post("/api/v1/auth/verify-email", json={
         "email": "hydro.tester@example.com",
         "code": dev_code
     })
     assert ver.status_code == 200
-    token = ver.json()["tokens"]["access_token"]
+    vdata = ver.json()
+    token = vdata.get("access_token") or vdata.get("tokens", {}).get("access_token")
     headers = {"Authorization": f"Bearer {token}"}
 
     # 2. Avant chargement du réseau : retour vide

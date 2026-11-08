@@ -318,3 +318,4 @@ La stratégie retenue garantit :
 1. **Zéro régression** grâce au respect strict de l'interdiction de tout développement anticipé avant 2027.
 2. **Une transition fluide du bureau d'études au chantier**, avec l'intégration native de la passerelle DAO/AutoCAD et la génération automatique du dossier réglementaire ONA.
 3. **Une supériorité technique et scientifique incontestable** face aux logiciels propriétaires fermés.
+

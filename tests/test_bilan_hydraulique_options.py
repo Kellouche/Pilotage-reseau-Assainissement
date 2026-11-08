@@ -244,7 +244,9 @@ def test_assembler_inp_filtrage_spatial_ouvrages_distants(tmp_path):
     """
     moteur = MoteurSWMM()
     from pathlib import Path
-    gpkg_cands = list(Path("uploads").glob("**/*.gpkg"))
+    gpkg_cands = [p for p in Path("uploads").glob("**/*.gpkg") if "network_Assainissement_Ville" in p.name]
+    if not gpkg_cands:
+        gpkg_cands = list(Path("uploads").glob("**/*.gpkg"))
     if not gpkg_cands:
         pytest.skip("Aucun GPKG disponible dans uploads/ pour ce test.")
     gpkg = gpkg_cands[0]

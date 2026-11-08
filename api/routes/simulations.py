@@ -225,7 +225,10 @@ def _est_simulation_valide(data: Any) -> bool:
         # Rejeter les coordonnées dummy résiduelles (0, 0) envoyées dans l'océan Atlantique
         if abs(bbox[0]) < 1.0 and abs(bbox[1]) < 2.0:
             return False
-    if meta.get("conduits_count", 0) <= 0 and meta.get("junctions_count", 0) <= 0:
+    # Valide si des conduits/junctions sont répertoriés dans les métadonnées OU dans les dictionnaires de résultats
+    nb_conduits = meta.get("conduits_count", 0) or len(data.get("conduit_results", {}))
+    nb_junctions = meta.get("junctions_count", 0) or len(data.get("node_results", {}))
+    if nb_conduits <= 0 and nb_junctions <= 0 and not data.get("inp_content"):
         return False
     return True
 
@@ -889,19 +892,19 @@ def download_latest_inp(
     nom_reseau = None
 
     active_gpkg = None
-    if tenant and hasattr(tenant, "org_id") and tenant.org_id:
+    if db and tenant and hasattr(tenant, "org_id") and tenant.org_id:
         proj = db.query(Project).filter(Project.org_id == tenant.org_id, Project.is_archived.is_(False)).first()
         if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
             active_gpkg = Path(proj.source_gpkg_key)
             nom_reseau = proj.name
-    if not active_gpkg:
+    if not active_gpkg and db:
         proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
         if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
             active_gpkg = Path(proj.source_gpkg_key)
             nom_reseau = proj.name
-        elif Path("data/demo_reseau.gpkg").exists():
-            active_gpkg = Path("data/demo_reseau.gpkg")
-            nom_reseau = "demo_reseau"
+    if not active_gpkg and Path("data/demo_reseau.gpkg").exists():
+        active_gpkg = Path("data/demo_reseau.gpkg")
+        nom_reseau = "demo_reseau"
 
     # 1. Vérifier si _DERNIERE_SIMULATION correspond
     if _DERNIERE_SIMULATION and _est_simulation_valide(_DERNIERE_SIMULATION):
@@ -977,19 +980,19 @@ def download_latest_rpt(
     nom_reseau = None
 
     active_gpkg = None
-    if tenant and hasattr(tenant, "org_id") and tenant.org_id:
+    if db and tenant and hasattr(tenant, "org_id") and tenant.org_id:
         proj = db.query(Project).filter(Project.org_id == tenant.org_id, Project.is_archived.is_(False)).first()
         if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
             active_gpkg = Path(proj.source_gpkg_key)
             nom_reseau = proj.name
-    if not active_gpkg:
+    if not active_gpkg and db:
         proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
         if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
             active_gpkg = Path(proj.source_gpkg_key)
             nom_reseau = proj.name
-        elif Path("data/demo_reseau.gpkg").exists():
-            active_gpkg = Path("data/demo_reseau.gpkg")
-            nom_reseau = "demo_reseau"
+    if not active_gpkg and Path("data/demo_reseau.gpkg").exists():
+        active_gpkg = Path("data/demo_reseau.gpkg")
+        nom_reseau = "demo_reseau"
 
     # 1. Vérifier si _DERNIERE_SIMULATION correspond
     if _DERNIERE_SIMULATION and _est_simulation_valide(_DERNIERE_SIMULATION):

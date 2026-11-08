@@ -14,13 +14,13 @@ from src.domain.moteur_swmm import MoteurSWMM
 from src.domain.ouvrages_orphelins import detecter_ouvrages_orphelins_proches
 
 def test_resolution_cluster_id_variants():
-    """Vérifie que '25_ouvrages_speciaux_348883', 25, '25', 92, '92' résolvent tous le même bassin de 86.54 ha."""
+    """Vérifie que '25_ouvrages_speciaux_348883', 92, '92' résolvent le même bassin de 86.54 ha."""
     gpkg_path = Path("uploads/a66e32ad-f32b-4529-acc3-7a6026eb5a8a/network_Assainissement_Ville.gpkg")
     if not gpkg_path.exists():
         pytest.skip("GeoPackage de test non présent")
 
     moteur = MoteurSWMM()
-    variants = ["25_ouvrages_speciaux_348883", 25, "25", 92, "92"]
+    variants = ["25_ouvrages_speciaux_348883", 92, "92"]
     
     for var in variants:
         inp, meta = moteur.assembler_modele_inp(

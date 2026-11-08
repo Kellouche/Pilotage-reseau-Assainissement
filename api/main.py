@@ -422,8 +422,8 @@ def get_layers(
                     if cand.exists():
                         gpkg_target = cand
 
-    # Si aucun réseau n'est chargé pour ce compte/projet -> Fallback projet actif local ou démo
-    if not gpkg_target and db:
+    # Si aucun réseau n'est chargé et qu'aucun utilisateur n'est connecté -> Fallback projet actif local ou démo
+    if not gpkg_target and not user and db:
         project = db.query(Project).filter(Project.is_archived.is_(False)).first()
         if project:
             project_name = project.name
