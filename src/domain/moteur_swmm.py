@@ -1963,10 +1963,10 @@ class MoteurSWMM:
 
         texte_decisionnel = (
             f"Bassin versant : {nom_bv}\n"
-            f"• Débit total généré : {q_genere_m3s:.3f} m³/s\n"
-            f"• Débit maintenu dans le réseau principal : {q_exutoire_m3s:.3f} m³/s ({taux_exutoire_pct:.1f}%)\n"
-            f"• Débit dévié par {nb_ouvrages_actifs} ouvrages spéciaux : {q_derive_m3s:.3f} m³/s ({taux_derive_pct:.1f}%)\n"
-            f"• Réduction de charge sur le réseau principal : {taux_derive_pct:.1f}%"
+            f"• Débit total généré par le bassin : {q_genere_m3s:.3f} m³/s\n"
+            f"• Soulagement du collecteur principal : {taux_derive_pct:.1f}%\n"
+            f"• Débit résiduel vers l'exutoire principal : {q_exutoire_m3s:.3f} m³/s ({taux_exutoire_pct:.1f}%)\n"
+            f"• Débit capté par {nb_ouvrages_actifs} ouvrages spéciaux mobilisés : {q_derive_m3s:.3f} m³/s ({taux_derive_pct:.1f}%)"
         )
 
         kpis["q_deleste_m3s"] = q_derive_m3s
@@ -1976,6 +1976,7 @@ class MoteurSWMM:
         kpis["q_genere_m3s"] = q_genere_m3s
         kpis["taux_derive_pct"] = taux_derive_pct
         kpis["taux_exutoire_pct"] = taux_exutoire_pct
+        kpis["soulagement_reseau_pct"] = taux_derive_pct
         kpis["reduction_charge_pct"] = taux_derive_pct
         kpis["nb_ouvrages_raccordes"] = nb_ouvrages_actifs
         kpis["bilan_hydraulique"] = {
@@ -1986,6 +1987,7 @@ class MoteurSWMM:
             "q_derive_m3s": q_derive_m3s,
             "taux_derive_pct": taux_derive_pct,
             "nb_ouvrages_actifs": nb_ouvrages_actifs,
+            "soulagement_reseau_pct": taux_derive_pct,
             "reduction_charge_pct": taux_derive_pct,
             "texte_decisionnel": texte_decisionnel
         }

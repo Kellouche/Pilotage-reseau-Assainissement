@@ -978,10 +978,10 @@ class AgentSyntheseExecutive:
 
         texte_decisionnel = kpis.get("bilan_hydraulique_decisionnel") or (
             f"Bassin versant : {nom_bv}\n"
-            f"• Débit total généré : {q_genere:.3f} m³/s\n"
-            f"• Débit maintenu dans le réseau principal : {q_exutoire:.3f} m³/s ({taux_exutoire_pct:.1f}%)\n"
-            f"• Débit dévié par {nb_ouvrages_actifs} ouvrages spéciaux : {q_derive:.3f} m³/s ({taux_derive_pct:.1f}%)\n"
-            f"• Réduction de charge sur le réseau principal : {taux_derive_pct:.1f}%"
+            f"• Débit total généré par le bassin : {q_genere:.3f} m³/s\n"
+            f"• Soulagement du collecteur principal : {taux_derive_pct:.1f}%\n"
+            f"• Débit résiduel vers l'exutoire principal : {q_exutoire:.3f} m³/s ({taux_exutoire_pct:.1f}%)\n"
+            f"• Débit capté par {nb_ouvrages_actifs} ouvrages spéciaux mobilisés : {q_derive:.3f} m³/s ({taux_derive_pct:.1f}%)"
         )
 
         note_technique = (
@@ -996,8 +996,8 @@ class AgentSyntheseExecutive:
             note_technique += (
                 f"\n\nBilan de transfert hydraulique : "
                 f"Sur les {q_genere:.3f} m³/s générés par le bassin versant, {q_derive:.3f} m³/s ({taux_derive_pct:.1f}%) "
-                f"sont déviés vers {nb_ouvrages_actifs} ouvrage(s) spécial(aux), réduisant d'autant la charge "
-                f"sur le réseau principal et son exutoire ({q_exutoire:.3f} m³/s conservés)."
+                f"sont captés par {nb_ouvrages_actifs} ouvrage(s) spécial(aux) mobilisé(s), assurant un soulagement "
+                f"de {taux_derive_pct:.1f}% du collecteur principal et réduisant le flux résiduel à l'exutoire à {q_exutoire:.3f} m³/s."
             )
 
         indicateurs = {
@@ -1007,6 +1007,7 @@ class AgentSyntheseExecutive:
             "debit_maintenu_reseau_principal_m3s": q_exutoire,
             "taux_exutoire_pct": taux_exutoire_pct,
             "debit_devie_ouvrages_speciaux_m3s": q_derive,
+            "taux_soulagement_reseau_pct": taux_derive_pct,
             "taux_reduction_charge_pct": taux_derive_pct,
             "nb_ouvrages_speciaux_actifs": nb_ouvrages_actifs,
             "points_critiques_p1": p1_count,
@@ -1041,6 +1042,7 @@ class AgentSyntheseExecutive:
                 "q_derive_m3s": q_derive,
                 "taux_derive_pct": taux_derive_pct,
                 "nb_ouvrages_actifs": nb_ouvrages_actifs,
+                "soulagement_reseau_pct": taux_derive_pct,
                 "reduction_charge_pct": taux_derive_pct,
                 "texte_decisionnel": texte_decisionnel
             },

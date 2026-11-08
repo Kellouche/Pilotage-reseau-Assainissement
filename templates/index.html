@@ -2090,16 +2090,16 @@
 
                 let infoMeta = `Débit généré : <b style="color: #38bdf8;">${qGenere.toFixed(3)} m³/s</b>`;
                 if (qDerive > 0) {
-                    infoMeta += ` &bull; <span style="color: #cbd5e1;">Vers exutoire principal :</span> <b>${qExutoire.toFixed(3)} m³/s</b> (${tauxExutoire.toFixed(1)}%)`;
+                    infoMeta += ` &bull; <span style="color: #cbd5e1;">Exutoire principal :</span> <b>${qExutoire.toFixed(3)} m³/s</b> (${tauxExutoire.toFixed(1)}%)`;
                     infoMeta += ` &bull; <span style="color:#06b6d4; font-weight:700;"><i class="fas fa-random"></i> Dérivé par ${nbRacc} ouv. spéc. : <b>${qDerive.toFixed(3)} m³/s</b> (${tauxDerive.toFixed(1)}%)</span>`;
                 } else {
-                    infoMeta += ` &bull; <span style="color: #cbd5e1;">Vers exutoire principal :</span> <b>${qExutoire.toFixed(3)} m³/s</b> (100%)`;
+                    infoMeta += ` &bull; <span style="color: #cbd5e1;">Exutoire principal :</span> <b>${qExutoire.toFixed(3)} m³/s</b> (100%)`;
                 }
 
                 if (topIcon) topIcon.innerHTML = '<i class="fas fa-check-circle" style="color: #34d399;"></i>';
                 if (topText) topText.innerHTML = `Bassin simulé : <span style="color: #34d399; font-weight: 700;">${nom}</span>`;
                 if (topBadge) {
-                    topBadge.innerText = qDerive > 0 ? `-${tauxDerive.toFixed(1)}% charge (${qDerive.toFixed(3)} m³/s)` : `${qGenere.toFixed(3)} m³/s`;
+                    topBadge.innerText = qDerive > 0 ? `Soulagement réseau : ${tauxDerive.toFixed(1)}% (${qDerive.toFixed(3)} m³/s)` : `${qGenere.toFixed(3)} m³/s`;
                     topBadge.style.background = qDerive > 0 ? 'rgba(6, 182, 212, 0.2)' : 'rgba(16, 185, 129, 0.2)';
                     topBadge.style.color = qDerive > 0 ? '#06b6d4' : '#34d399';
                 }
@@ -3624,12 +3624,10 @@
         </div>
         <div style="background: white; border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px 12px; font-size: 8.5pt; color: #1e293b; line-height: 1.6;">
             <div><b>Bassin versant :</b> <b>${meta.cluster_nom || ('Bassin ' + meta.cluster_id) || 'Réseau Principal'}</b></div>
-            <div>&bull; <b>Débit total généré :</b> <b style="color: #0369a1;">${(k.q_genere_m3s || ((k.peak_outflow_m3s || 0) + (k.q_derive_m3s || k.q_deleste_m3s || 0))).toFixed(3)} m³/s</b></div>
-            <div>&bull; <b>Débit maintenu dans le réseau principal :</b> <b>${(k.q_exutoire_m3s || k.peak_outflow_m3s || 0).toFixed(3)} m³/s</b> (${(k.taux_exutoire_pct !== undefined ? k.taux_exutoire_pct : 100.0).toFixed(1)}%)</div>
-            <div>&bull; <b>Débit dévié par ${(k.nb_ouvrages_raccordes || 0)} ouvrages spéciaux :</b> <b style="color: #0284c7;">${(k.q_derive_m3s || k.q_deleste_m3s || 0).toFixed(3)} m³/s</b> (${(k.taux_derive_pct || 0).toFixed(1)}%)</div>
-            <div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed #cbd5e1; color: #16a34a; font-weight: 800;">
-                &bull; <b>Réduction de charge sur le réseau principal :</b> ${(k.taux_derive_pct || 0).toFixed(1)}%
-            </div>
+            <div>&bull; <b>Débit total généré par le bassin :</b> <b style="color: #0369a1;">${(k.q_genere_m3s || ((k.peak_outflow_m3s || 0) + (k.q_derive_m3s || k.q_deleste_m3s || 0))).toFixed(3)} m³/s</b></div>
+            <div style="color: #16a34a; font-weight: 700;">&bull; <b>Soulagement du collecteur principal :</b> ${(k.soulagement_reseau_pct !== undefined ? k.soulagement_reseau_pct : (k.taux_derive_pct || 0)).toFixed(1)}%</div>
+            <div>&bull; <b>Débit résiduel vers l'exutoire principal :</b> <b>${(k.q_exutoire_m3s || k.peak_outflow_m3s || 0).toFixed(3)} m³/s</b> (${(k.taux_exutoire_pct !== undefined ? k.taux_exutoire_pct : 100.0).toFixed(1)}%)</div>
+            <div>&bull; <b>Débit capté par ${(k.nb_ouvrages_raccordes || 0)} ouvrages spéciaux mobilisés :</b> <b style="color: #0284c7;">${(k.q_derive_m3s || k.q_deleste_m3s || 0).toFixed(3)} m³/s</b> (${(k.taux_derive_pct || 0).toFixed(1)}%)</div>
         </div>
     </div>
 
@@ -4583,12 +4581,10 @@
                             </div>
                             <div style="display: grid; gap: 4px; color: #cbd5e1; line-height: 1.5;">
                                 <div><b>Bassin versant :</b> <span style="color: #f8fafc;">${meta.cluster_nom || ('Bassin ' + meta.cluster_id) || 'Réseau Principal'}</span></div>
-                                <div>&bull; <b>Débit total généré :</b> <span style="color: #38bdf8; font-weight: 800;">${(k.q_genere_m3s || ((k.peak_outflow_m3s || 0) + (k.q_derive_m3s || k.q_deleste_m3s || 0))).toFixed(3)} m³/s</span></div>
-                                <div>&bull; <b>Débit maintenu dans le réseau principal :</b> <span style="color: #f8fafc;">${(k.q_exutoire_m3s || k.peak_outflow_m3s || 0).toFixed(3)} m³/s</span> <span style="color: #94a3b8;">(${(k.taux_exutoire_pct !== undefined ? k.taux_exutoire_pct : 100.0).toFixed(1)}%)</span></div>
-                                <div>&bull; <b>Débit dévié par ${(k.nb_ouvrages_raccordes || 0)} ouvrages spéciaux :</b> <span style="color: #22d3ee; font-weight: 700;">${(k.q_derive_m3s || k.q_deleste_m3s || 0).toFixed(3)} m³/s</span> <span style="color: #94a3b8;">(${(k.taux_derive_pct || 0).toFixed(1)}%)</span></div>
-                                <div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed rgba(255,255,255,0.1); color: #34d399; font-weight: 800;">
-                                    &bull; Réduction de charge sur le réseau principal : ${(k.taux_derive_pct || 0).toFixed(1)}%
-                                </div>
+                                <div>&bull; <b>Débit total généré par le bassin :</b> <span style="color: #38bdf8; font-weight: 800;">${(k.q_genere_m3s || ((k.peak_outflow_m3s || 0) + (k.q_derive_m3s || k.q_deleste_m3s || 0))).toFixed(3)} m³/s</span></div>
+                                <div style="color: #34d399; font-weight: 700;">&bull; <b>Soulagement du collecteur principal :</b> ${(k.soulagement_reseau_pct !== undefined ? k.soulagement_reseau_pct : (k.taux_derive_pct || 0)).toFixed(1)}%</div>
+                                <div>&bull; <b>Débit résiduel vers l'exutoire principal :</b> <span style="color: #f8fafc;">${(k.q_exutoire_m3s || k.peak_outflow_m3s || 0).toFixed(3)} m³/s</span> <span style="color: #94a3b8;">(${(k.taux_exutoire_pct !== undefined ? k.taux_exutoire_pct : 100.0).toFixed(1)}%)</span></div>
+                                <div>&bull; <b>Débit capté par ${(k.nb_ouvrages_raccordes || 0)} ouvrages spéciaux mobilisés :</b> <span style="color: #22d3ee; font-weight: 700;">${(k.q_derive_m3s || k.q_deleste_m3s || 0).toFixed(3)} m³/s</span> <span style="color: #94a3b8;">(${(k.taux_derive_pct || 0).toFixed(1)}%)</span></div>
                             </div>
                         </div>
 
@@ -5855,7 +5851,7 @@
                     if (qDerive > 0) {
                         orphBox.style.display = 'block';
                         const bEl = document.getElementById('kpi-orphelin-badge');
-                        if (bEl) bEl.innerText = `-${tauxDerive.toFixed(1)}% charge réseau`;
+                        if (bEl) bEl.innerText = `Soulagement réseau : ${tauxDerive.toFixed(1)}%`;
                         const gEl = document.getElementById('kpi-orphelin-qgenere');
                         if (gEl) gEl.innerText = `${qGenere.toFixed(3)} m³/s`;
                         const eEl = document.getElementById('kpi-orphelin-qexutoire');
@@ -5863,7 +5859,7 @@
                         const qEl = document.getElementById('kpi-orphelin-qdeleste');
                         if (qEl) qEl.innerText = `${qDerive.toFixed(3)} m³/s (${tauxDerive.toFixed(1)}%)`;
                         const dEl = document.getElementById('kpi-orphelin-desc');
-                        if (dEl) dEl.innerHTML = `<i class="fas fa-check-circle text-emerald-400 me-1"></i> <b>${nbOrph} ouvrage(s) spécial(aux) actif(s)</b> : ${qDerive.toFixed(3)} m³/s déviés (${tauxDerive.toFixed(1)}% du débit produit) soulageant le collecteur principal.`;
+                        if (dEl) dEl.innerHTML = `<i class="fas fa-check-circle text-emerald-400 me-1"></i> <b>${nbOrph} ouvrage(s) spécial(aux) actif(s)</b> : ${qDerive.toFixed(3)} m³/s captés (${tauxDerive.toFixed(1)}% du débit produit), soulageant d'autant le collecteur principal.`;
                     } else {
                         orphBox.style.display = 'none';
                     }

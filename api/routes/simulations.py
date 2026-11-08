@@ -377,6 +377,7 @@ def _construire_reponse_simulation(resultat: Dict[str, Any], cached: bool = Fals
             "q_genere_m3s": resultat.get("q_genere_m3s", round(float(resultat.get("peak_outflow_m3s") or 0.0) + float(resultat.get("q_deleste_m3s") or 0.0), 3)),
             "taux_derive_pct": resultat.get("taux_derive_pct", 0.0),
             "taux_exutoire_pct": resultat.get("taux_exutoire_pct", 100.0),
+            "soulagement_reseau_pct": resultat.get("soulagement_reseau_pct", resultat.get("taux_derive_pct", 0.0)),
             "reduction_charge_pct": resultat.get("reduction_charge_pct", resultat.get("taux_derive_pct", 0.0)),
             "nb_ouvrages_raccordes": resultat.get("nb_ouvrages_raccordes", 0),
             "bilan_hydraulique": resultat.get("bilan_hydraulique", {}),

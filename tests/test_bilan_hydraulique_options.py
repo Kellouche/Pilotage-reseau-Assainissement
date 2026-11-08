@@ -76,15 +76,16 @@ def test_moteur_swmm_bilan_hydraulique_options():
     assert kpis["taux_derive_pct"] == 45.6
     # 100 - 45.6 = 54.4%
     assert kpis["taux_exutoire_pct"] == 54.4
+    assert kpis["soulagement_reseau_pct"] == 45.6
     assert kpis["reduction_charge_pct"] == 45.6
 
-    # 3. Vérification du texte décisionnel Option 3
+    # 3. Vérification du texte décisionnel Option 3 (Option Décideur bonifiée)
     decisionnel = kpis["bilan_hydraulique_decisionnel"]
     assert "Bassin versant : 30_ouvrages_speciaux_351607" in decisionnel
-    assert "Débit total généré : 2.905 m³/s" in decisionnel
-    assert "Débit maintenu dans le réseau principal : 1.580 m³/s (54.4%)" in decisionnel
-    assert "Débit dévié par 1 ouvrages spéciaux : 1.325 m³/s (45.6%)" in decisionnel
-    assert "Réduction de charge sur le réseau principal : 45.6%" in decisionnel
+    assert "Débit total généré par le bassin : 2.905 m³/s" in decisionnel
+    assert "Soulagement du collecteur principal : 45.6%" in decisionnel
+    assert "Débit résiduel vers l'exutoire principal : 1.580 m³/s (54.4%)" in decisionnel
+    assert "Débit capté par 1 ouvrages spéciaux mobilisés : 1.325 m³/s (45.6%)" in decisionnel
 
 
 def test_agent_synthese_executive_option_3():
@@ -96,14 +97,16 @@ def test_agent_synthese_executive_option_3():
         "q_genere_m3s": 2.905,
         "taux_derive_pct": 45.6,
         "taux_exutoire_pct": 54.4,
+        "soulagement_reseau_pct": 45.6,
+        "reduction_charge_pct": 45.6,
         "nb_ouvrages_raccordes": 4,
         "total_outflow_m3": 12450.0,
         "bilan_hydraulique_decisionnel": (
             "Bassin versant : 30_ouvrages_speciaux_351607\n"
-            "• Débit total généré : 2.905 m³/s\n"
-            "• Débit maintenu dans le réseau principal : 1.580 m³/s (54.4%)\n"
-            "• Débit dévié par 4 ouvrages spéciaux : 1.325 m³/s (45.6%)\n"
-            "• Réduction de charge sur le réseau principal : 45.6%"
+            "• Débit total généré par le bassin : 2.905 m³/s\n"
+            "• Soulagement du collecteur principal : 45.6%\n"
+            "• Débit résiduel vers l'exutoire principal : 1.580 m³/s (54.4%)\n"
+            "• Débit capté par 4 ouvrages spéciaux mobilisés : 1.325 m³/s (45.6%)"
         )
     }
     meta = {
@@ -155,5 +158,6 @@ def test_api_reponse_simulation_kpis_exposition():
     assert kpis["q_derive_m3s"] == 1.325
     assert kpis["taux_derive_pct"] == 45.6
     assert kpis["taux_exutoire_pct"] == 54.4
+    assert kpis["soulagement_reseau_pct"] == 45.6
     assert kpis["reduction_charge_pct"] == 45.6
     assert kpis["bilan_hydraulique_decisionnel"] == "Bassin versant : Test"
