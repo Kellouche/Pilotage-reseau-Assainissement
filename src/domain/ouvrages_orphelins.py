@@ -142,6 +142,7 @@ def detecter_ouvrages_orphelins_proches(
 
     ouvrages_detectes = []
     seen_coords = set()
+    seen_ouv_ids = set()
 
     for cat_key, default_label, badge_color, lyr_candidates in special_layer_defs:
         if not lyr_candidates:
@@ -252,9 +253,17 @@ def detecter_ouvrages_orphelins_proches(
 
             cout_estime = max(int(min_d * PRIX_UNITAIRE_RACCORDEMENT_DZD_ML), 150000)
 
+            base_id = f"orph_{cat_resolved}_{idx+1}"
+            cand_id = base_id
+            seq = 2
+            while cand_id in seen_ouv_ids:
+                cand_id = f"{base_id}_{seq}"
+                seq += 1
+            seen_ouv_ids.add(cand_id)
+
             ouvrages_detectes.append({
-                "id": f"orph_{cat_resolved}_{idx+1}",
-                "ouvrage_id": f"orph_{cat_resolved}_{idx+1}",
+                "id": cand_id,
+                "ouvrage_id": cand_id,
                 "nom": f"{type_label} ({nom_str})",
                 "code_ouvrage": nom_str,
                 "type": cat_resolved,

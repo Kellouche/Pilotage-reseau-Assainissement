@@ -432,6 +432,190 @@ def _resoudre_altimetrie_noeuds(
     return elevations, f"Pente moyenne utilisateur ({pente_moyenne_pct}%)"
 
 
+def _assainir_topologie_swmm(inp_text: str) -> str:
+    """
+    Garantit la conformité absolue avec le solveur Saint-Venant 1D (DYNWAVE) d'EPA SWMM 5.2 :
+    Règle DYNWAVE (Erreur 141) : Tout nœud [OUTFALLS] ne doit STRICTEMENT avoir :
+    - au maximum qu'UN SEUL tronçon entrant (inlet link <= 1)
+    - AUCUN tronçon sortant (outlet link == 0)
+    - aucune présence simultanée dans [JUNCTIONS]
+    Si un exutoire possède plusieurs tronçons entrants ou un tronçon sortant, il est automatiquement
+    converti en regard [JUNCTIONS] et déchargé via un tronçon court vers un exutoire terminal dédié.
+    """
+    lines = inp_text.splitlines()
+    sections: Dict[Optional[str], List[str]] = {}
+    current_sec: Optional[str] = None
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith('[') and stripped.endswith(']'):
+            current_sec = stripped.upper()
+            sections[current_sec] = []
+        elif current_sec:
+            sections[current_sec].append(line)
+        else:
+            if None not in sections:
+                sections[None] = []
+            sections[None].append(line)
+
+    if '[OUTFALLS]' not in sections or '[CONDUITS]' not in sections:
+        return inp_text
+
+    # 1. Recenser les nœuds de [OUTFALLS]
+    outfalls_info: Dict[str, Dict[str, Any]] = {}
+    for idx, l in enumerate(sections['[OUTFALLS]']):
+        st = l.strip()
+        if not st or st.startswith(';;'):
+            continue
+        parts = st.split()
+        if parts:
+            name = parts[0]
+            elev = float(parts[1]) if len(parts) > 1 else 100.0
+            outfalls_info[name] = {"idx": idx, "line": l, "elev": elev, "parts": parts}
+
+    # 2. Recenser les jonctions
+    junctions_info: Dict[str, Dict[str, Any]] = {}
+    if '[JUNCTIONS]' in sections:
+        for idx, l in enumerate(sections['[JUNCTIONS]']):
+            st = l.strip()
+            if not st or st.startswith(';;'):
+                continue
+            parts = st.split()
+            if parts:
+                name = parts[0]
+                elev = float(parts[1]) if len(parts) > 1 else 100.0
+                prof = float(parts[2]) if len(parts) > 2 else 2.0
+                junctions_info[name] = {"idx": idx, "line": l, "elev": elev, "prof": prof, "parts": parts}
+
+    # 3. Recenser les conduites
+    conduit_inlets: Dict[str, List[str]] = {}
+    conduit_outlets: Dict[str, List[str]] = {}
+    for l in sections['[CONDUITS]']:
+        st = l.strip()
+        if not st or st.startswith(';;'):
+            continue
+        parts = st.split()
+        if len(parts) >= 3:
+            cid, u, d = parts[0], parts[1], parts[2]
+            conduit_inlets.setdefault(d, []).append(cid)
+            conduit_outlets.setdefault(u, []).append(cid)
+
+    # 4. Détecter les violations d'exutoires
+    outfalls_to_convert: Dict[str, Dict[str, Any]] = {}
+    for out_name, odata in outfalls_info.items():
+        inlets = conduit_inlets.get(out_name, [])
+        outlets = conduit_outlets.get(out_name, [])
+        if len(inlets) > 1 or len(outlets) > 0:
+            outfalls_to_convert[out_name] = {
+                "inlets": inlets,
+                "outlets": outlets,
+                "elev": odata["elev"]
+            }
+
+    # 5. Dédupliquer [OUTFALLS] si des noms identiques apparaissent plusieurs fois
+    seen_out_names = set()
+    deduped_outfalls = []
+    for l in sections['[OUTFALLS]']:
+        st = l.strip()
+        if st and not st.startswith(';;'):
+            parts = st.split()
+            if parts:
+                o_n = parts[0]
+                if o_n in seen_out_names:
+                    continue
+                seen_out_names.add(o_n)
+        deduped_outfalls.append(l)
+    sections['[OUTFALLS]'] = deduped_outfalls
+
+    if not outfalls_to_convert:
+        # Nettoyer les doublons stricts entre [JUNCTIONS] et [OUTFALLS]
+        if '[JUNCTIONS]' in sections:
+            new_jlines = []
+            modified = False
+            for l in sections['[JUNCTIONS]']:
+                st = l.strip()
+                if st and not st.startswith(';;'):
+                    parts = st.split()
+                    if parts and parts[0] in outfalls_info:
+                        modified = True
+                        continue
+                new_jlines.append(l)
+            if modified:
+                sections['[JUNCTIONS]'] = new_jlines
+                rebuilt = []
+                for sec_name, sec_lines in sections.items():
+                    if sec_name is not None:
+                        rebuilt.append(sec_name)
+                    rebuilt.extend(sec_lines)
+                return "\n".join(rebuilt)
+        return inp_text
+
+    # Coordonnées
+    coords_dict: Dict[str, Tuple[str, str]] = {}
+    if '[COORDINATES]' in sections:
+        for idx, l in enumerate(sections['[COORDINATES]']):
+            st = l.strip()
+            if not st or st.startswith(';;'):
+                continue
+            parts = st.split()
+            if len(parts) >= 3:
+                coords_dict[parts[0]] = (parts[1], parts[2])
+
+    # Convertir chaque exutoire fautif en Junction + créer un Outfall terminal dédié
+    new_outfall_lines = []
+    removed_outfalls = set(outfalls_to_convert.keys())
+    for l in sections['[OUTFALLS]']:
+        st = l.strip()
+        if st and not st.startswith(';;'):
+            parts = st.split()
+            if parts and parts[0] in removed_outfalls:
+                continue
+        new_outfall_lines.append(l)
+
+    if '[JUNCTIONS]' not in sections:
+        sections['[JUNCTIONS]'] = [";;Name           Elevation  MaxDepth   InitDepth  SurDepth   Aponded"]
+
+    for out_name, info in outfalls_to_convert.items():
+        z_node = info["elev"]
+        # Ajouter le nœud converti dans [JUNCTIONS] s'il n'y est pas
+        if out_name not in junctions_info:
+            sections['[JUNCTIONS]'].append(f"{out_name:<16} {z_node:<10.3f} 2.000      0.000      0.000      0.000")
+            junctions_info[out_name] = {"elev": z_node}
+
+        # Créer le véritable exutoire terminal dédié
+        term_out_name = f"OUT_SAFE_{out_name}"
+        term_z = round(z_node - 0.05, 3)
+        new_outfall_lines.append(f"{term_out_name:<16} {term_z:<10.3f} FREE                        NO")
+
+        # Créer le tronçon court de décharge unique vers l'exutoire terminal
+        cid_out = f"C_SAFE_{out_name}"
+        sections['[CONDUITS]'].append(f"{cid_out:<16} {out_name:<16} {term_out_name:<16} 5.00       0.0130     0.000      0.000      0.000      0.000")
+
+        if '[XSECTIONS]' not in sections:
+            sections['[XSECTIONS]'] = [";;Link           Shape        Geom1            Geom2      Geom3      Geom4      Barrels    Culvert"]
+        sections['[XSECTIONS]'].append(f"{cid_out:<16} CIRCULAR     1.200            0.000      0.000      0.000      1")
+
+        # Coordonnées
+        if '[COORDINATES]' in sections and out_name in coords_dict:
+            cx, cy = coords_dict[out_name]
+            try:
+                nx = float(cx) + 5.0
+                ny = float(cy) + 5.0
+                sections['[COORDINATES]'].append(f"{term_out_name:<16} {nx:<18.3f} {ny:<18.3f}")
+            except Exception:
+                pass
+
+    sections['[OUTFALLS]'] = new_outfall_lines
+
+    # Reconstitution du texte INP
+    rebuilt = []
+    for sec_name, sec_lines in sections.items():
+        if sec_name is not None:
+            rebuilt.append(sec_name)
+        rebuilt.extend(sec_lines)
+    return "\n".join(rebuilt)
+
+
 class MoteurSWMM:
     """
     Orchestrateur de simulation hydrodynamique EPA SWMM 5.2.
@@ -958,16 +1142,12 @@ class MoteurSWMM:
 
         # Dans EPA SWMM 5.2 Dynamic Wave :
         # Un nœud [OUTFALLS] ne peut STRICTEMENT pas avoir plus d'un tronçon entrant, ni aucun tronçon sortant (Erreur 141).
-        # Si plus d'une conduite y converge ou s'il y a des conduites aval, le nœud physique doit être conservé
-        # comme un regard [JUNCTIONS], et relié à un exutoire terminal dédié [OUTFALLS] via un tronçon court de décharge.
-        creer_exutoire_dedie = (inlet_count != 1 or outlet_count > 0)
-
-        if creer_exutoire_dedie:
-            actual_outfall_name = f"OUT_{outfall_code}"
-            terminal_outfall_elev = round(outfall_elev - 0.05, 3)
-        else:
-            actual_outfall_name = outfall_code
-            terminal_outfall_elev = outfall_elev
+        # Le nœud physique (outfall_code) est TOUJOURS conservé comme un regard [JUNCTIONS],
+        # et relié à un exutoire terminal dédié [OUTFALLS] via un tronçon court de décharge (5 m).
+        # Cela garantit qu'aucun raccordement ultérieur, surverse ou conduite convergente ne violera la règle DYNWAVE.
+        creer_exutoire_dedie = True
+        actual_outfall_name = f"OUT_{outfall_code}"
+        terminal_outfall_elev = round(outfall_elev - 0.05, 3)
 
         # Section regards (Junctions)
         lines.append("[JUNCTIONS]")
@@ -975,7 +1155,7 @@ class MoteurSWMM:
         noeuds_traites = set()
         for idx, r in regards.iterrows():
             nid = _clean_node_id(r.get("Code"), fallback=f"REG_{idx+1}")
-            if (not creer_exutoire_dedie and nid == outfall_code) or nid in noeuds_traites:
+            if nid == actual_outfall_name or nid in noeuds_traites:
                 continue
             prof = float(r["Profondeur"]) if ("Profondeur" in r and r["Profondeur"] > 0) else 2.0
             z_rad = node_elevs.get(nid, 100.0)
@@ -984,13 +1164,13 @@ class MoteurSWMM:
 
         # Inclusion des nœuds de canalisations absents de regards
         for nid in conduit_nodes:
-            if (not creer_exutoire_dedie and nid == outfall_code) or nid in noeuds_traites:
+            if nid == actual_outfall_name or nid in noeuds_traites:
                 continue
             z_rad = node_elevs.get(nid, 100.0)
             lines.append(f"{nid:<16} {z_rad:<10.3f} 2.000      0.000      0.000      0.000")
             noeuds_traites.add(nid)
 
-        if creer_exutoire_dedie and outfall_code not in noeuds_traites:
+        if outfall_code not in noeuds_traites:
             lines.append(f"{outfall_code:<16} {outfall_elev:<10.3f} 2.000      0.000      0.000      0.000")
             noeuds_traites.add(outfall_code)
         lines.append("")
@@ -1002,6 +1182,7 @@ class MoteurSWMM:
 
         # Raccordements opportunistes d'ouvrages orphelins validés par l'ingénieur
         racc_orph_valides = []
+        seen_outfall_names = {actual_outfall_name}
         if raccordements_orphelins:
             for ro_idx, ro in enumerate(raccordements_orphelins):
                 raw_reg_id = _clean_node_id(ro.get("regard_proche_id"))
@@ -1010,8 +1191,9 @@ class MoteurSWMM:
                     ouv_id = f"orph_{ro_idx+1}"
 
                 reg_id = raw_reg_id
-                # Si le regard cible n'est pas dans le sous-réseau simulé, trouver le regard du bassin le plus proche
-                if (not reg_id or reg_id not in clean_target_nodes) and len(regards) > 0:
+                # Si le regard cible n'est pas dans le sous-réseau simulé OU s'il correspond à un exutoire terminal,
+                # trouver le regard du bassin le plus proche
+                if (not reg_id or reg_id not in clean_target_nodes or reg_id in seen_outfall_names) and len(regards) > 0:
                     o_pt = ro.get("ouvrage_coord_wgs84") or ro.get("regard_coord_wgs84")
                     if o_pt and len(o_pt) == 2:
                         try:
@@ -1024,15 +1206,24 @@ class MoteurSWMM:
                             reg_id = _clean_node_id(regards.loc[min_idx].get("Code"), fallback=raw_reg_id)
                         except Exception as e_remap:
                             logger.warning(f"Remap regard orphelin {ouv_id}: {e_remap}")
-                    if not reg_id or reg_id not in clean_target_nodes:
+                    if not reg_id or reg_id not in clean_target_nodes or reg_id in seen_outfall_names:
                         reg_id = _clean_node_id(regards.iloc[0].get("Code"), fallback="REG_1")
 
+                # Sécurité absolue : garantir que reg_id n'est JAMAIS un exutoire terminal
+                if reg_id in seen_outfall_names:
+                    reg_id = outfall_code
+
                 if reg_id:
-                    out_orph_name = f"OUT_{ouv_id}"
+                    cand_out_name = f"OUT_{ouv_id}"
+                    if cand_out_name in seen_outfall_names:
+                        cand_out_name = f"OUT_{ouv_id}_{ro_idx+1}"
+                    out_orph_name = cand_out_name
+                    seen_outfall_names.add(out_orph_name)
+
                     z_reg = node_elevs.get(reg_id, 100.0)
                     z_out_orph = round(z_reg - 0.20, 3)
                     lines.append(f"{out_orph_name:<16} {z_out_orph:<10.3f} FREE                        NO")
-                    racc_orph_valides.append((ro, out_orph_name, reg_id, z_out_orph, ouv_id))
+                    racc_orph_valides.append((ro, out_orph_name, reg_id, z_out_orph, ouv_id, ro_idx + 1))
         lines.append("")
 
         # Section conduites (Conduits)
@@ -1078,8 +1269,9 @@ class MoteurSWMM:
             xsec_lines.append(f"{cid_out:<16} CIRCULAR     {diam_out_m:<16.3f} 0.000      0.000      0.000      1")
 
         # Conduites de raccordement des ouvrages orphelins validés par l'ingénieur
-        for ro, out_orph_name, reg_id, _, ouv_id in racc_orph_valides:
-            cid_orph = f"C_RACC_{ouv_id}"
+        for item in racc_orph_valides:
+            ro, out_orph_name, reg_id, _, ouv_id, r_seq = item
+            cid_orph = f"C_RACC_{ouv_id}_{r_seq}"
             dist_orph = max(1.0, float(ro.get("distance_m", 15.0)))
             dn_orph_mm = float(ro.get("diametre_recommande_mm", 600.0))
             dn_orph_m = max(0.3, dn_orph_mm / 1000.0)
@@ -1142,7 +1334,8 @@ class MoteurSWMM:
                 coords_traitees.add(actual_outfall_name)
 
         # Coordonnées des exutoires orphelins raccordés
-        for ro, out_orph_name, reg_id, _, _ in racc_orph_valides:
+        for item in racc_orph_valides:
+            ro, out_orph_name, reg_id = item[0], item[1], item[2]
             if out_orph_name not in coords_traitees:
                 pt_orph = None
                 coords_wgs = ro.get("ouvrage_coord_wgs84")
@@ -1256,10 +1449,12 @@ class MoteurSWMM:
             "pluvio_p24_mm": scen.get("hauteur_p24_mm", 56.0),
             "pluvio_source": scen.get("source", ""),
             "pluvio_description": scen.get("description", ""),
-            "raccordements_orphelins": [ro for ro, _, _, _, _ in racc_orph_valides],
+            "raccordements_orphelins": [item[0] for item in racc_orph_valides],
         }
 
-        return "\n".join(lines), meta
+        contenu_inp = "\n".join(lines)
+        contenu_inp = _assainir_topologie_swmm(contenu_inp)
+        return contenu_inp, meta
 
     def calculer_sensibilite_buffers(
         self,
