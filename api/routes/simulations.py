@@ -213,6 +213,23 @@ def _get_cache_simulation_file(gpkg_path: Path, cluster_id: Any, param_hash: str
     return cache_dir / f"sim_{clean_stem}_cluster_{cluster_id}_{param_hash}.json"
 
 
+def _est_simulation_valide(data: Any) -> bool:
+    """Vérifie si les résultats de simulation sont valides et non un artefact corrompu ou factice."""
+    if not isinstance(data, dict):
+        return False
+    if "node_results" not in data or "conduit_results" not in data:
+        return False
+    meta = data.get("meta") or {}
+    bbox = meta.get("bbox")
+    if bbox and len(bbox) == 4:
+        # Rejeter les coordonnées dummy résiduelles (0, 0) envoyées dans l'océan Atlantique
+        if abs(bbox[0]) < 1.0 and abs(bbox[1]) < 2.0:
+            return False
+    if meta.get("conduits_count", 0) <= 0 and meta.get("junctions_count", 0) <= 0:
+        return False
+    return True
+
+
 def _charger_cache_simulation(gpkg_path: Path, cluster_id: Any, param_hash: str) -> Optional[Dict[str, Any]]:
     """Charge les résultats de la simulation si le fichier de cache existe."""
     cache_file = _get_cache_simulation_file(gpkg_path, cluster_id, param_hash)
@@ -220,7 +237,7 @@ def _charger_cache_simulation(gpkg_path: Path, cluster_id: Any, param_hash: str)
         try:
             with open(cache_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            if data and "node_results" in data and "conduit_results" in data:
+            if data and _est_simulation_valide(data):
                 return data
         except Exception as e:
             logger.warning("Échec de lecture du cache simulation %s: %s", cache_file, e)
@@ -304,7 +321,7 @@ def _charger_derniere_simulation_disque_ou_db(gpkg_path: Path, db: Session, proj
             if p.exists():
                 with open(p, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                if data and "node_results" in data:
+                if data and _est_simulation_valide(data):
                     return data
     except Exception as e:
         logger.warning("Erreur interrogation table simulations: %s", e)
@@ -320,7 +337,7 @@ def _charger_derniere_simulation_disque_ou_db(gpkg_path: Path, db: Session, proj
                 try:
                     with open(fpath, "r", encoding="utf-8") as f:
                         data = json.load(f)
-                    if data and "node_results" in data:
+                    if data and _est_simulation_valide(data):
                         return data
                 except Exception:
                     continue
@@ -676,11 +693,11 @@ def get_latest_simulation(
     norm_active = str(Path(active_gpkg).resolve()).lower() if active_gpkg else ""
     norm_sim = str(Path(sim_gpkg).resolve()).lower() if sim_gpkg else ""
 
-    if not _DERNIERE_SIMULATION or "node_results" not in _DERNIERE_SIMULATION or norm_active != norm_sim:
+    if not _DERNIERE_SIMULATION or not _est_simulation_valide(_DERNIERE_SIMULATION) or norm_active != norm_sim:
         # Tenter la restauration depuis la base ou le cache disque
         if active_gpkg and Path(active_gpkg).exists():
             restored = _charger_derniere_simulation_disque_ou_db(Path(active_gpkg), db, proj)
-            if restored and "node_results" in restored:
+            if restored and _est_simulation_valide(restored):
                 restored["source_gpkg"] = str(Path(active_gpkg).resolve())
                 restored["project_name"] = project_name or Path(active_gpkg).stem
                 _DERNIERE_SIMULATION = restored
@@ -778,7 +795,7 @@ def get_bassin_simulation(
             try:
                 with open(fpath, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                if data and "node_results" in data:
+                if data and _est_simulation_valide(data):
                     data["source_gpkg"] = str(gpkg_path.resolve())
                     data["project_name"] = project_name or gpkg_path.stem
                     _DERNIERE_SIMULATION = data
