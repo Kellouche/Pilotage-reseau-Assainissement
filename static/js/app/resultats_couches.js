@@ -443,11 +443,30 @@ window.addEventListener('DOMContentLoaded', initSaaSNavbar);
                         opacity: 0.98,
                         className: 'sim-bassin-tooltip'
                     });
-                    layer.off('mouseout.bassinFix');
+                    layer._isSimulatedBassin = true;
+                    layer.off('mouseout.bassinFix mouseover.simBassin mouseout.simBassin');
                     layer.on('mouseout.bassinFix', function() {
                         if (typeof this.closeTooltip === 'function') {
                             try { this.closeTooltip(); } catch(_) {}
                         }
+                    });
+                    layer.on('mouseover.simBassin', function() {
+                        this.setStyle({
+                            color: '#0284c7',
+                            weight: 3.5,
+                            fillColor: '#38bdf8',
+                            fillOpacity: 0.32,
+                            dashArray: '7, 4'
+                        });
+                    });
+                    layer.on('mouseout.simBassin', function() {
+                        this.setStyle({
+                            color: '#0284c7',
+                            weight: 3.5,
+                            fillColor: '#38bdf8',
+                            fillOpacity: 0.20,
+                            dashArray: '7, 4'
+                        });
                     });
                     layer.bindPopup(fullSimTooltip);
                     layer.options.pane = 'bassinsPane';

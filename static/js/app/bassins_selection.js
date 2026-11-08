@@ -373,14 +373,16 @@
                             dashArray: '5, 4'
                         });
                     } else if (fCid === _selectedClusterId) {
-                        // Bassin sélectionné : actif avec bordure nette et couleur soutenue
-                        layer.setStyle({
-                            color: '#ffffff',
-                            fillColor: bColor,
-                            fillOpacity: 0.45,
-                            weight: 3.5,
-                            dashArray: null
-                        });
+                        const isSim = (layer._isSimulatedBassin === true) ||
+                            (window._dernierResultatSimulation && window._dernierResultatSimulation.meta && String(window._dernierResultatSimulation.meta.cluster_id) === fCid) ||
+                            (window._simulationsCache && window._simulationsCache[fCid] && window._simulationsCache[fCid].status === 'success');
+                        if (isSim) {
+                            // Bassin simulé : maintien impératif de la teinte bleu ciel
+                            layer.setStyle({ color: '#0284c7', fillColor: '#38bdf8', fillOpacity: 0.20, weight: 3.5, dashArray: '7, 4' });
+                        } else {
+                            // Bassin non simulé : actif avec bordure nette et couleur du cluster
+                            layer.setStyle({ color: '#ffffff', fillColor: bColor, fillOpacity: 0.45, weight: 3.5, dashArray: null });
+                        }
                         try { layer.bringToFront(); } catch(e) {}
                     } else {
                         // Les 78 autres bassins versants : grisés

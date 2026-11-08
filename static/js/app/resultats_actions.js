@@ -129,6 +129,8 @@ window.reinitialiserAffichageSimulation = function() {
 
             // Rétablir les infobulles initiales des bassins
             const restoreBassinTooltip = (layer) => {
+                layer._isSimulatedBassin = false;
+                layer.off('mouseover.simBassin mouseout.simBassin');
                 const f = layer.feature;
                 if (f && f.properties && f.properties.type === 'bassin_urbain') {
                     const baseTip = window.genererTooltipBassinVersantHtml ? window.genererTooltipBassinVersantHtml(f.properties, null) : layer._originalTooltip;

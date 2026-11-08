@@ -222,7 +222,13 @@
 
                                     layer.on('mouseover', function() {
                                         const fCid = String(feature.properties.cluster_id);
-                                        if (_selectedClusterId !== null && fCid !== _selectedClusterId) {
+                                        const isSimule = (layer._isSimulatedBassin === true) ||
+                                            (window._dernierResultatSimulation && window._dernierResultatSimulation.meta && String(window._dernierResultatSimulation.meta.cluster_id) === fCid) ||
+                                            (window._simulationsCache && window._simulationsCache[fCid] && window._simulationsCache[fCid].status === 'success');
+
+                                        if (isSimule) {
+                                            this.setStyle({ color: '#0284c7', weight: 3.5, fillColor: '#38bdf8', fillOpacity: 0.32, dashArray: '7, 4' });
+                                        } else if (_selectedClusterId !== null && fCid !== _selectedClusterId) {
                                             this.setStyle({ fillOpacity: 0.22, weight: 1.8 });
                                         } else {
                                             this.setStyle({ fillOpacity: 0.55, weight: 3.5 });
@@ -230,6 +236,15 @@
                                     });
                                     layer.on('mouseout', function() {
                                         const fCid = String(feature.properties.cluster_id);
+                                        const isSimule = (layer._isSimulatedBassin === true) ||
+                                            (window._dernierResultatSimulation && window._dernierResultatSimulation.meta && String(window._dernierResultatSimulation.meta.cluster_id) === fCid) ||
+                                            (window._simulationsCache && window._simulationsCache[fCid] && window._simulationsCache[fCid].status === 'success');
+
+                                        if (isSimule) {
+                                            this.setStyle({ color: '#0284c7', weight: 3.5, fillColor: '#38bdf8', fillOpacity: 0.20, dashArray: '7, 4' });
+                                            return;
+                                        }
+
                                         const bColor = feature.properties.couleur || '#38bdf8';
                                         if (_selectedClusterId === null) {
                                             this.setStyle({ fillOpacity: 0.18, weight: 1.8, color: bColor, fillColor: bColor, dashArray: '5, 4' });

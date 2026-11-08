@@ -81,7 +81,7 @@ def test_anti_cache_et_cache_busting():
 
     assert "anti_cache_static_middleware" in main_py
     assert "no-store, must-revalidate" in main_py
-    assert "?v=5.2.4" in index_html
+    assert "?v=5.2.5" in index_html
 
 
 def test_bassin_non_simule_mention_et_masquage_legende():
@@ -112,3 +112,24 @@ def test_allegement_panneau_lateral_sans_pave_bassin_info():
 
     assert "infoDiv.innerHTML = ''" in edit_js
     assert 'display: none;' in sidebar_html
+
+
+def test_zone_simulee_survol_garde_bleu_ciel():
+    """Vérifie que le survol et la sortie de la zone simulée conservent le bleu ciel et évitent le marron."""
+    couches_js = Path("static/js/app/resultats_couches.js").read_text(encoding="utf-8")
+    det_js = Path("static/js/app/bassins_detection.js").read_text(encoding="utf-8")
+    sel_js = Path("static/js/app/bassins_selection.js").read_text(encoding="utf-8")
+
+    # resultats_couches.js
+    assert "mouseover.simBassin" in couches_js
+    assert "mouseout.simBassin" in couches_js
+    assert "fillColor: '#38bdf8'" in couches_js
+    assert "color: '#0284c7'" in couches_js
+
+    # bassins_detection.js
+    assert "isSimule" in det_js
+    assert "this.setStyle({ color: '#0284c7', weight: 3.5, fillColor: '#38bdf8'" in det_js
+
+    # bassins_selection.js
+    assert "Bassin simulé : maintien impératif de la teinte bleu ciel" in sel_js
+    assert "layer.setStyle({ color: '#0284c7', fillColor: '#38bdf8'" in sel_js
