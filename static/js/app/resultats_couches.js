@@ -211,9 +211,9 @@ window.addEventListener('DOMContentLoaded', initSaaSNavbar);
         };
 
         // ==========================================
-        // GESTION DU FOCUS SUR LA ZONE SIMULÉE (ZOOM & IHM)
+        // GESTION DU FOCUS SUR LA ZONE SIMULÉE (ZOOM À GRANDE ÉCHELLE & IHM)
         // ==========================================
-        function zoomerSurZoneSimulee(data) {
+        window.zoomerSurZoneSimulee = function(data, cibleMaxZoom = 19) {
             const map = window.carte || (typeof carte !== 'undefined' ? carte : null);
             if (!data || !map) return;
             const meta = data.meta || {};
@@ -254,15 +254,16 @@ window.addEventListener('DOMContentLoaded', initSaaSNavbar);
             if (bounds && bounds.isValid()) {
                 window._lastSimBounds = bounds;
                 map.invalidateSize(true);
-                // Effet de zoom fluide cinématographique (flyToBounds) sur la zone simulée
+                // Effet de zoom fluide cinématographique (flyToBounds) à grande échelle sur la zone simulée
                 map.flyToBounds(bounds, {
-                    padding: [50, 50],
-                    maxZoom: 16,
+                    padding: [35, 35],
+                    maxZoom: cibleMaxZoom || 19,
                     duration: 1.0,
                     easeLinearity: 0.25
                 });
             }
-        }
+        };
+        const zoomerSurZoneSimulee = window.zoomerSurZoneSimulee;
 
         function mettreAJourIHMZoneSimulee(data) {
             if (!data) return;

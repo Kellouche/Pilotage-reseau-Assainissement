@@ -379,7 +379,7 @@
                     boundsToFit = window._activeClusterLayer.getBounds();
                 }
                 if (boundsToFit && boundsToFit.isValid()) {
-                    carte.fitBounds(boundsToFit, { padding: [40, 40], maxZoom: 17 });
+                    carte.fitBounds(boundsToFit, { padding: [35, 35], maxZoom: 19 });
                 }
             } catch(e) {
                 console.warn("Erreur cadrage zoom simulation:", e);

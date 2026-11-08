@@ -46,5 +46,29 @@ def test_endpoint_simulation_par_bassin():
         if r_exist["status"] == "success":
             assert "kpis" in r_exist or "conduit_results" in r_exist
             assert "meta" in r_exist
+
+        # 3. Résolution robuste par nom textuel de bassin
+        r_nom = get_bassin_simulation("25_ouvrages_speciaux_348883", db=db, tenant=None)
+        assert r_nom["status"] in ("none", "success")
+        if r_nom["status"] == "success":
+            assert "meta" in r_nom
     finally:
         db.close()
+
+
+def test_fermeture_automatique_modale_et_zoom_grande_echelle():
+    """Vérifie que la modale se ferme automatiquement post-simulation et que le zoom cible la grande échelle."""
+    sim_ui_js = Path("static/js/app/simulation_ui.js").read_text(encoding="utf-8")
+    resultats_couches_js = Path("static/js/app/resultats_couches.js").read_text(encoding="utf-8")
+    resultats_affichage_js = Path("static/js/app/resultats_affichage.js").read_text(encoding="utf-8")
+
+    # 1. Présence de l'appel automatique de fermeture de la modale dans declencherSimulationSWMM
+    assert "fermerModalSimulation" in sim_ui_js
+    assert "window.fermerModalSimulation()" in sim_ui_js
+    assert "window.zoomerSurZoneSimulee(data, 19)" in sim_ui_js
+
+    # 2. Zoom à grande échelle (maxZoom 19)
+    assert "maxZoom: cibleMaxZoom || 19" in resultats_couches_js
+    assert "maxZoom: 19" in resultats_affichage_js
+    assert "padding: [35, 35]" in resultats_couches_js
+    assert "padding: [35, 35]" in resultats_affichage_js

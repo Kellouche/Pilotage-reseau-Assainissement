@@ -211,12 +211,16 @@ window.dessinerRaccordementsOrphelinsSurCarte = function() {
                 setTimeout(() => {
                     carte.invalidateSize(true);
                     if (window._dernierResultatSimulation) {
-                        zoomerSurZoneSimulee(window._dernierResultatSimulation);
+                        if (typeof window.zoomerSurZoneSimulee === 'function') {
+                            window.zoomerSurZoneSimulee(window._dernierResultatSimulation, 19);
+                        } else {
+                            zoomerSurZoneSimulee(window._dernierResultatSimulation);
+                        }
                         mettreAJourIHMZoneSimulee(window._dernierResultatSimulation);
                     } else if (window._lastSimBounds && window._lastSimBounds.isValid && window._lastSimBounds.isValid()) {
                         carte.flyToBounds(window._lastSimBounds, {
-                            padding: [50, 50],
-                            maxZoom: 16,
+                            padding: [35, 35],
+                            maxZoom: 19,
                             duration: 1.0,
                             easeLinearity: 0.25
                         });
@@ -540,6 +544,18 @@ window.dessinerRaccordementsOrphelinsSurCarte = function() {
 
                 // Mettre à jour et afficher les couches thématiques Leaflet
                 afficherResultatsSimulation(data);
+
+                // Fermeture automatique de la fenêtre modale de simulation
+                if (typeof window.fermerModalSimulation === 'function') {
+                    window.fermerModalSimulation();
+                }
+
+                // Déclencher le zoom automatique à grande échelle pour visualiser le résultat
+                if (typeof window.zoomerSurZoneSimulee === 'function') {
+                    setTimeout(() => {
+                        window.zoomerSurZoneSimulee(data, 19);
+                    }, 100);
+                }
             })
             .catch(err => {
                 arreterOverlaySimulation();

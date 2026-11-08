@@ -757,6 +757,22 @@ def get_bassin_simulation(
                 if f"_cluster_{clean_cid}_" in f.name.lower() or f"_{clean_cid}_ouvrages_" in f.name.lower() or f"_{clean_cid}_rejets_" in f.name.lower()
             ]
 
+        # Recherche de secours par inspection des métadonnées JSON internes (nom ou ID du bassin)
+        if not matching_files:
+            recent_files = sorted(all_files, key=lambda x: x.stat().st_mtime, reverse=True)[:35]
+            for candidate in recent_files:
+                try:
+                    with open(candidate, "r", encoding="utf-8") as cf:
+                        cd = json.load(cf)
+                    cm = cd.get("meta") or {}
+                    c_nom = str(cm.get("cluster_nom") or "").strip().lower()
+                    c_id = str(cm.get("cluster_id") or "").strip().lower()
+                    if clean_cid in (c_nom, c_id) or (c_nom and clean_cid in c_nom) or (c_id and clean_cid == c_id):
+                        matching_files.append(candidate)
+                        break
+                except Exception:
+                    continue
+
         matching_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
         for fpath in matching_files:
             try:

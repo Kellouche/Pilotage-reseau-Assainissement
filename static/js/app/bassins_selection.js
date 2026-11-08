@@ -198,7 +198,16 @@
                 }
             }
 
-            // 2. Vérifier si ce bassin a une simulation dans le cache client
+            // 2. Nettoyage immédiat : ne jamais laisser flotter la simulation d'un autre bassin
+            if (typeof reinitialiserAffichageSimulation === 'function') {
+                reinitialiserAffichageSimulation();
+            }
+            if (leg) {
+                leg.classList.remove('active-legend');
+                leg.style.display = 'none';
+            }
+
+            // 3. Vérifier si ce bassin a une simulation dans le cache client
             let cached = null;
             if (window._simulationsCache) {
                 cached = window._simulationsCache[cidStr] || (nomBassin && window._simulationsCache[nomBassin]);
