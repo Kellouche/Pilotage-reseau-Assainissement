@@ -719,7 +719,7 @@ def _trouver_chemin_gpkg(db: Session, request: Optional[Request] = None) -> Opti
 @router.get("/{cluster_id}/ouvrages-proches")
 def get_cluster_ouvrages_proches(
     cluster_id: str,
-    rayon_m: float = 120.0,
+    rayon_m: float = 45.0,
     request: Request = None,
     db: Session = Depends(get_db)
 ):

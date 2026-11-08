@@ -37,12 +37,12 @@ def _obtenir_reprojecteurs(src_crs: str = "EPSG:32631", dst_crs: str = "EPSG:432
 def detecter_ouvrages_orphelins_proches(
     gpkg_path: str,
     cluster_id: Union[int, str],
-    rayon_max_m: float = 120.0,
+    rayon_max_m: float = 45.0,
     G_topo: Optional[Any] = None
 ) -> Dict[str, Any]:
     """
     Détecte les ouvrages spéciaux, stations de relevage et déversoirs d'orage
-    situés à moins de rayon_max_m des regards du cluster sélectionné.
+    situés à moins de rayon_max_m (45 m par défaut) des regards du cluster sélectionné.
     Exécution spatiale ultra-rapide (< 1 seconde) sans charger le graphe complet de 10 000 nœuds.
     """
     gpkg_p = Path(gpkg_path)
@@ -126,12 +126,11 @@ def detecter_ouvrages_orphelins_proches(
                 poly_utm = transform(to_utm, poly_wgs)
                 gdf_r_cluster = gdf_r[gdf_r.geometry.within(poly_utm.buffer(2.0))]
             except Exception:
-                gdf_r_cluster = gdf_r
-        else:
-            gdf_r_cluster = gdf_r
+                gdf_r_cluster = None
 
-    if gdf_r_cluster.empty:
-        gdf_r_cluster = gdf_r
+    # Si aucun regard n'est rattaché à ce cluster, ne JAMAIS fallback sur tous les regards de la ville !
+    if gdf_r_cluster is None or gdf_r_cluster.empty:
+        return {"cluster_id": cluster_id, "nb_ouvrages_trouves": 0, "ouvrages": []}
 
     # 4. Parcourir les couches d'ouvrages spéciaux candidats
     special_layer_defs = [

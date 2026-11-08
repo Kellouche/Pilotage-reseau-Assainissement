@@ -6336,14 +6336,19 @@
             const headers = {};
             if (token) headers['Authorization'] = `Bearer ${token}`;
 
-            fetch(`/api/v1/clusters/${clusterId}/ouvrages-proches?rayon_m=120`, { headers: headers, credentials: 'include' })
+            fetch(`/api/v1/clusters/${clusterId}/ouvrages-proches?rayon_m=45`, { headers: headers, credentials: 'include' })
             .then(r => r.json())
             .then(data => {
                 const ouvrages = data.ouvrages || [];
                 window._ouvragesOrphelinsCandidats = ouvrages;
 
                 if (ouvrages.length === 0) {
-                    orphSection.style.display = 'none';
+                    window._ouvragesOrphelinsCandidatsSelectionnes = [];
+                    if (countBadge) {
+                        countBadge.textContent = '0 ouvrage adjacent';
+                    }
+                    orphListe.innerHTML = '<div style="font-size:0.75rem; color:#94a3b8; padding: 6px 2px;"><i class="fas fa-info-circle me-1 text-info"></i> Aucun ouvrage spécial adjacent (&le; 45 m) pour ce bassin. Le modèle simulera l\'écoulement gravitaire pur sans dérivation artificielle.</div>';
+                    orphSection.style.display = 'block';
                     if (window._coucheRaccordementsOrphelins && window.carte) {
                         window.carte.removeLayer(window._coucheRaccordementsOrphelins);
                     }

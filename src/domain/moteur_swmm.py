@@ -1181,6 +1181,8 @@ class MoteurSWMM:
         lines.append(f"{actual_outfall_name:<16} {terminal_outfall_elev:<10.3f} FREE                        NO")
 
         # Raccordements opportunistes d'ouvrages orphelins validés par l'ingénieur
+        # RÈGLE MÉTIER : Un ouvrage ne peut être raccordé que s'il est spatialement et topologiquement
+        # adjacent au bassin simulé (regard présent dans clean_target_nodes ou à distance <= 45 m).
         racc_orph_valides = []
         seen_outfall_names = {actual_outfall_name}
         if raccordements_orphelins:
@@ -1191,9 +1193,14 @@ class MoteurSWMM:
                     ouv_id = f"orph_{ro_idx+1}"
 
                 reg_id = raw_reg_id
-                # Si le regard cible n'est pas dans le sous-réseau simulé OU s'il correspond à un exutoire terminal,
-                # trouver le regard du bassin le plus proche
-                if (not reg_id or reg_id not in clean_target_nodes or reg_id in seen_outfall_names) and len(regards) > 0:
+                regard_valide = False
+
+                # 1. Vérifier si le regard cible fait directement partie du sous-réseau simulé
+                if reg_id and reg_id in clean_target_nodes and reg_id not in seen_outfall_names:
+                    regard_valide = True
+                elif len(regards) > 0:
+                    # 2. Si le regard cible n'est pas dans clean_target_nodes, vérifier si l'ouvrage est
+                    # réellement situé à proximité immédiate (<= 45 m) d'un regard appartenant au sous-réseau simulé
                     o_pt = ro.get("ouvrage_coord_wgs84") or ro.get("regard_coord_wgs84")
                     if o_pt and len(o_pt) == 2:
                         try:
@@ -1201,29 +1208,44 @@ class MoteurSWMM:
                             import pyproj
                             proj_to_utm = pyproj.Transformer.from_crs("EPSG:4326", "EPSG:32631", always_xy=True).transform
                             pt_m = Point(proj_to_utm(float(o_pt[1]), float(o_pt[0])))
-                            dists_r = regards.geometry.distance(pt_m)
-                            min_idx = dists_r.idxmin()
-                            reg_id = _clean_node_id(regards.loc[min_idx].get("Code"), fallback=raw_reg_id)
+                            
+                            # Filtrer strictement les regards appartenant au sous-réseau simulé
+                            regards_bassin = regards[regards["Code"].apply(_clean_node_id).isin(clean_target_nodes)]
+                            if not regards_bassin.empty:
+                                dists_r = regards_bassin.geometry.distance(pt_m)
+                                min_dist = float(dists_r.min())
+                                if min_dist <= 45.0:
+                                    min_idx = dists_r.idxmin()
+                                    cand_reg = _clean_node_id(regards_bassin.loc[min_idx].get("Code"), fallback=raw_reg_id)
+                                    if cand_reg and cand_reg in clean_target_nodes and cand_reg not in seen_outfall_names:
+                                        reg_id = cand_reg
+                                        regard_valide = True
+                                        logger.info(
+                                            f"Ouvrage orphelin {ouv_id} réassocié au regard adjacent {reg_id} "
+                                            f"du bassin simulé (distance {min_dist:.1f} m <= 45 m)"
+                                        )
                         except Exception as e_remap:
-                            logger.warning(f"Remap regard orphelin {ouv_id}: {e_remap}")
-                    if not reg_id or reg_id not in clean_target_nodes or reg_id in seen_outfall_names:
-                        reg_id = _clean_node_id(regards.iloc[0].get("Code"), fallback="REG_1")
+                            logger.warning(f"Contrôle proximité ouvrage orphelin {ouv_id}: {e_remap}")
 
-                # Sécurité absolue : garantir que reg_id n'est JAMAIS un exutoire terminal
-                if reg_id in seen_outfall_names:
-                    reg_id = outfall_code
+                # 3. Si aucun regard du sous-réseau simulé n'est adjacent à <= 45 m, IGNORER l'ouvrage
+                # INTERDICTION ABSOLUE de remap forcé sur un regard arbitraire d'un bassin distant !
+                if not regard_valide or not reg_id or reg_id in seen_outfall_names:
+                    logger.warning(
+                        f"Ouvrage orphelin {ouv_id} (regard proposé: {raw_reg_id}) IGNORÉ : "
+                        f"Non adjacent au sous-réseau simulé du bassin versant (distance > 45 m ou hors composante connectée)."
+                    )
+                    continue
 
-                if reg_id:
-                    cand_out_name = f"OUT_{ouv_id}"
-                    if cand_out_name in seen_outfall_names:
-                        cand_out_name = f"OUT_{ouv_id}_{ro_idx+1}"
-                    out_orph_name = cand_out_name
-                    seen_outfall_names.add(out_orph_name)
+                cand_out_name = f"OUT_{ouv_id}"
+                if cand_out_name in seen_outfall_names:
+                    cand_out_name = f"OUT_{ouv_id}_{ro_idx+1}"
+                out_orph_name = cand_out_name
+                seen_outfall_names.add(out_orph_name)
 
-                    z_reg = node_elevs.get(reg_id, 100.0)
-                    z_out_orph = round(z_reg - 0.20, 3)
-                    lines.append(f"{out_orph_name:<16} {z_out_orph:<10.3f} FREE                        NO")
-                    racc_orph_valides.append((ro, out_orph_name, reg_id, z_out_orph, ouv_id, ro_idx + 1))
+                z_reg = node_elevs.get(reg_id, 100.0)
+                z_out_orph = round(z_reg - 0.20, 3)
+                lines.append(f"{out_orph_name:<16} {z_out_orph:<10.3f} FREE                        NO")
+                racc_orph_valides.append((ro, out_orph_name, reg_id, z_out_orph, ouv_id, ro_idx + 1))
         lines.append("")
 
         # Section conduites (Conduits)
@@ -1950,11 +1972,22 @@ class MoteurSWMM:
         
         q_exutoire_m3s = round(float(kpis.get("peak_outflow_m3s", 0.0)), 3)
         q_derive_m3s = round(q_deleste_tot, 3)
-        q_genere_m3s = round(q_exutoire_m3s + q_derive_m3s, 3)
 
+        # RÈGLE D'INVARIANCE HYDROLOGIQUE :
+        # Le débit généré par le bassin versant (Q_généré) est une constante physique et hydrologique
+        # déterminée par la pluie décennale sur la surface du bassin (Méthode rationnelle Q = C*I*A / 360).
+        # Il ne dépend JAMAIS de la présence, de l'absence ou du raccordement d'ouvrages en aval !
+        q_rat_ref = round(float(kpis.get("coherence_pluie_debit", {}).get("q_rationnel_m3s") or ((c_eff * i_max * area_ha) / 360.0)), 3)
+        if q_rat_ref > 0:
+            q_genere_m3s = q_rat_ref
+        else:
+            q_genere_m3s = round(max(q_exutoire_m3s + q_derive_m3s, 0.001), 3)
+
+        # Bornage physique strict : le débit dérivé ne peut excéder le ruissellement produit par le bassin
         if q_genere_m3s > 0:
-            taux_derive_pct = round((q_derive_m3s / q_genere_m3s) * 100.0, 1)
-            taux_exutoire_pct = round(100.0 - taux_derive_pct, 1)
+            q_derive_m3s = min(q_derive_m3s, q_genere_m3s)
+            taux_derive_pct = round(min(100.0, (q_derive_m3s / q_genere_m3s) * 100.0), 1)
+            taux_exutoire_pct = round(min(100.0, (q_exutoire_m3s / q_genere_m3s) * 100.0), 1)
         else:
             taux_derive_pct = 0.0
             taux_exutoire_pct = 100.0

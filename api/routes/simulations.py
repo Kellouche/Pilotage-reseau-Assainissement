@@ -483,7 +483,7 @@ def get_simulation_scenarios(station_id: Optional[str] = "chlef_anrh_siege"):
 @router.get("/ouvrages-proches")
 def get_simulation_ouvrages_proches(
     cluster_id: str,
-    rayon_m: float = 120.0,
+    rayon_m: float = 45.0,
     db: Session = Depends(get_db),
     tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
 ):
