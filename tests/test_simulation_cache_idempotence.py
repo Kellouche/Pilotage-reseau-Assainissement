@@ -245,14 +245,14 @@ def test_route_run_simulation_cache_hit_et_force_recalculate():
             payload_new = SimulationRunRequest(
                 cluster_id=15,
                 scenario_key="pluie_decennale",
-                duree_heures=99.0,  # Paramètre inédit non en cache -> DOIT recalculer
+                duree_heures=99.0,
                 pas_routage_sec=5,
                 pente_moyenne_pct=1.0,
                 buffer_m=35.0,
                 valider_raccordement=True,
                 typologie_sol="habitat_mixte",
                 imperv_pct=65.0,
-                intensite_max_mmh=62.0,
+                intensite_max_mmh=round(1000.0 + (time.time() % 10000), 2),  # Paramètre dynamique inédit non en cache -> DOIT recalculer
                 station_id="chlef_anrh_siege",
                 force_recalculate=False
             )

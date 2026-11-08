@@ -1725,8 +1725,9 @@ class MoteurSWMM:
 
         # 5. Débit de pointe à l'exutoire (Outfall Loading Summary)
         if "Outfall Loading Summary" in rpt_text:
-            outfall_sec = rpt_text.split("Outfall Loading Summary")[1].split("\n\n")[0]
-            for line in outfall_sec.strip().splitlines():
+            m_out = re.search(r"Outfall Loading Summary.*?\n\s*-+\s*\n(.*?)(?:\n\s*\n|[A-Z][a-z]+ [A-Z]|\Z)", rpt_text, re.DOTALL)
+            outfall_lines = m_out.group(1).strip().splitlines() if m_out else rpt_text.split("Outfall Loading Summary")[1].split("\n\n")[0].splitlines()
+            for line in outfall_lines:
                 parts = line.split()
                 if len(parts) >= 4 and not parts[0].startswith("-") and parts[0] not in ("Outfall", "System", "Node"):
                     node_name = parts[0]
@@ -1938,16 +1939,57 @@ class MoteurSWMM:
         kpis["pluvio_p24_mm"] = meta.get("pluvio_p24_mm")
         kpis["pluvio_source"] = meta.get("pluvio_source")
 
-        # Débit total délesté par les ouvrages de secours / orphelins raccordés
+        # Bilan Hydraulique & Débit dérivé par les ouvrages spéciaux / secours raccordés
         q_deleste_tot = sum(
             float(c.get("max_flow_cms", 0.0))
             for cid, c in kpis["conduit_results"].items()
             if cid.startswith("C_RACC_") or "RACC" in cid or "orph" in cid.lower()
         )
         racc_list = meta.get("raccordements_orphelins", [])
-        kpis["q_deleste_m3s"] = round(q_deleste_tot, 3)
-        kpis["q_deleste_ls"] = round(q_deleste_tot * 1000.0, 1)
-        kpis["nb_ouvrages_raccordes"] = len(racc_list) if racc_list else len([cid for cid in kpis["conduit_results"].keys() if cid.startswith("C_RACC_")])
+        nb_ouvrages_actifs = len(racc_list) if racc_list else len([cid for cid in kpis["conduit_results"].keys() if cid.startswith("C_RACC_")])
+        
+        q_exutoire_m3s = round(float(kpis.get("peak_outflow_m3s", 0.0)), 3)
+        q_derive_m3s = round(q_deleste_tot, 3)
+        q_genere_m3s = round(q_exutoire_m3s + q_derive_m3s, 3)
+
+        if q_genere_m3s > 0:
+            taux_derive_pct = round((q_derive_m3s / q_genere_m3s) * 100.0, 1)
+            taux_exutoire_pct = round(100.0 - taux_derive_pct, 1)
+        else:
+            taux_derive_pct = 0.0
+            taux_exutoire_pct = 100.0
+
+        nom_bv = meta.get("bassin_nom") or meta.get("cluster_nom") or (f"Bassin {meta.get('cluster_id')}" if meta.get("cluster_id") is not None else "Bassin versant")
+
+        texte_decisionnel = (
+            f"Bassin versant : {nom_bv}\n"
+            f"• Débit total généré : {q_genere_m3s:.3f} m³/s\n"
+            f"• Débit maintenu dans le réseau principal : {q_exutoire_m3s:.3f} m³/s ({taux_exutoire_pct:.1f}%)\n"
+            f"• Débit dévié par {nb_ouvrages_actifs} ouvrages spéciaux : {q_derive_m3s:.3f} m³/s ({taux_derive_pct:.1f}%)\n"
+            f"• Réduction de charge sur le réseau principal : {taux_derive_pct:.1f}%"
+        )
+
+        kpis["q_deleste_m3s"] = q_derive_m3s
+        kpis["q_deleste_ls"] = round(q_derive_m3s * 1000.0, 1)
+        kpis["q_derive_m3s"] = q_derive_m3s
+        kpis["q_exutoire_m3s"] = q_exutoire_m3s
+        kpis["q_genere_m3s"] = q_genere_m3s
+        kpis["taux_derive_pct"] = taux_derive_pct
+        kpis["taux_exutoire_pct"] = taux_exutoire_pct
+        kpis["reduction_charge_pct"] = taux_derive_pct
+        kpis["nb_ouvrages_raccordes"] = nb_ouvrages_actifs
+        kpis["bilan_hydraulique"] = {
+            "bassin_nom": nom_bv,
+            "q_genere_m3s": q_genere_m3s,
+            "q_exutoire_m3s": q_exutoire_m3s,
+            "taux_exutoire_pct": taux_exutoire_pct,
+            "q_derive_m3s": q_derive_m3s,
+            "taux_derive_pct": taux_derive_pct,
+            "nb_ouvrages_actifs": nb_ouvrages_actifs,
+            "reduction_charge_pct": taux_derive_pct,
+            "texte_decisionnel": texte_decisionnel
+        }
+        kpis["bilan_hydraulique_decisionnel"] = texte_decisionnel
 
         kpis["compliance_continuity"] = abs(kpis["routing_continuity_error_pct"]) <= 5.0
         return kpis

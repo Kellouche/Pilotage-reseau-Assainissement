@@ -962,6 +962,28 @@ class AgentSyntheseExecutive:
                 "sans mise en charge critique ni débordement. Prévoir uniquement l'entretien courant."
             )
 
+        # Bilan Hydraulique Décisionnel (Option 3 - Lecture Décisionnelle)
+        nom_bv = meta.get("bassin_nom") or meta.get("cluster_nom") or (f"Bassin {meta.get('cluster_id')}" if meta.get("cluster_id") is not None else "Bassin versant")
+        q_exutoire = round(float(kpis.get("q_exutoire_m3s", kpis.get("peak_outflow_m3s", 0.0))), 3)
+        q_derive = round(float(kpis.get("q_derive_m3s", kpis.get("q_deleste_m3s", 0.0))), 3)
+        q_genere = round(float(kpis.get("q_genere_m3s", q_exutoire + q_derive)), 3)
+        nb_ouvrages_actifs = int(kpis.get("nb_ouvrages_raccordes", 0))
+
+        if q_genere > 0:
+            taux_derive_pct = round((q_derive / q_genere) * 100.0, 1)
+            taux_exutoire_pct = round(100.0 - taux_derive_pct, 1)
+        else:
+            taux_derive_pct = 0.0
+            taux_exutoire_pct = 100.0
+
+        texte_decisionnel = kpis.get("bilan_hydraulique_decisionnel") or (
+            f"Bassin versant : {nom_bv}\n"
+            f"• Débit total généré : {q_genere:.3f} m³/s\n"
+            f"• Débit maintenu dans le réseau principal : {q_exutoire:.3f} m³/s ({taux_exutoire_pct:.1f}%)\n"
+            f"• Débit dévié par {nb_ouvrages_actifs} ouvrages spéciaux : {q_derive:.3f} m³/s ({taux_derive_pct:.1f}%)\n"
+            f"• Réduction de charge sur le réseau principal : {taux_derive_pct:.1f}%"
+        )
+
         note_technique = (
             f"Synthèse stratégique d'aide à la décision destinée à la Direction Générale (ONA, DRE, Wilaya). "
             f"Le verdict hydraulique conclut à : {verdict}. {recommandation_cle} "
@@ -970,9 +992,23 @@ class AgentSyntheseExecutive:
             f"les risques de submersion urbaine pour cet événement pluvial."
         )
 
+        if q_derive > 0:
+            note_technique += (
+                f"\n\nBilan de transfert hydraulique : "
+                f"Sur les {q_genere:.3f} m³/s générés par le bassin versant, {q_derive:.3f} m³/s ({taux_derive_pct:.1f}%) "
+                f"sont déviés vers {nb_ouvrages_actifs} ouvrage(s) spécial(aux), réduisant d'autant la charge "
+                f"sur le réseau principal et son exutoire ({q_exutoire:.3f} m³/s conservés)."
+            )
+
         indicateurs = {
             "debit_pointe_m3s": kpis.get("peak_outflow_m3s", 0.0),
             "volume_total_m3": kpis.get("total_outflow_m3", 0.0),
+            "debit_total_genere_m3s": q_genere,
+            "debit_maintenu_reseau_principal_m3s": q_exutoire,
+            "taux_exutoire_pct": taux_exutoire_pct,
+            "debit_devie_ouvrages_speciaux_m3s": q_derive,
+            "taux_reduction_charge_pct": taux_derive_pct,
+            "nb_ouvrages_speciaux_actifs": nb_ouvrages_actifs,
             "points_critiques_p1": p1_count,
             "troncons_en_charge_p2": p2_count,
             "cout_travaux_gc_estime_dzd": gc.get("cout_global_estime_dzd", 0.0),
@@ -996,7 +1032,19 @@ class AgentSyntheseExecutive:
             "note_technique": note_technique,
             "avis_direction_generale": recommandation_cle,
             "score_resilience_reseau": 92 if p1_count > 0 else 98,
-            "indicateurs_marquants": indicateurs
+            "indicateurs_marquants": indicateurs,
+            "bilan_hydraulique": {
+                "bassin_nom": nom_bv,
+                "q_genere_m3s": q_genere,
+                "q_exutoire_m3s": q_exutoire,
+                "taux_exutoire_pct": taux_exutoire_pct,
+                "q_derive_m3s": q_derive,
+                "taux_derive_pct": taux_derive_pct,
+                "nb_ouvrages_actifs": nb_ouvrages_actifs,
+                "reduction_charge_pct": taux_derive_pct,
+                "texte_decisionnel": texte_decisionnel
+            },
+            "bilan_hydraulique_decisionnel": texte_decisionnel
         }
 
 
