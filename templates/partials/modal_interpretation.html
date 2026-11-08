@@ -1,0 +1,51 @@
+<!--
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Modale d'interprétation multi-agents et restitution décisionnelle
+================================================================================
+-->
+    <!-- Modal d'Interprétation Experte des Résultats SWMM 5.2 -->
+    <div id="modal-interpretation" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(6px); z-index: 3000; align-items: center; justify-content: center;">
+        <div style="background: #1e293b; color: #f8fafc; border-radius: 16px; width: 94%; max-width: 880px; max-height: 90vh; display: flex; flex-direction: column; border: 1px solid rgba(255, 255, 255, 0.15); box-shadow: 0 25px 50px rgba(0, 0, 0, 0.6); overflow: hidden;">
+            <!-- Entête -->
+            <div style="background: #0f172a; padding: 18px 24px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="width: 38px; height: 38px; border-radius: 10px; background: linear-gradient(135deg, #a855f7, #7c3aed); display: flex; align-items: center; justify-content: center; font-size: 18px; color: white;">
+                        <i class="fas fa-brain"></i>
+                    </div>
+                    <div>
+                        <h5 style="margin: 0; font-weight: 700; font-size: 1.05rem;">Interprétation Experte &amp; Diagnostic Hydraulique</h5>
+                        <small style="color: #94a3b8;">Analyse automatisée selon les règles de l'art du génie urbain et de l'EPA SWMM</small>
+                    </div>
+                </div>
+                <button onclick="fermerModalInterpretation()" style="background: transparent; border: none; color: #94a3b8; font-size: 24px; cursor: pointer; line-height: 1;">&times;</button>
+            </div>
+
+            <!-- Corps scrollable -->
+            <div style="padding: 22px 24px; overflow-y: auto; flex: 1;" id="interpretation-modal-body">
+                <div style="text-align: center; color: #94a3b8; padding: 30px;">
+                    <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+                    <p>Génération de l'analyse hydraulique en cours...</p>
+                </div>
+            </div>
+            
+            <!-- Pied de page -->
+            <div style="background: #0f172a; padding: 14px 24px; border-top: 1px solid rgba(255, 255, 255, 0.1); display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 0.78rem; color: #64748b;">
+                    <i class="fas fa-shield-alt me-1"></i> Résolution hydrodynamique 1D Saint-Venant (Dynamic Wave)
+                </span>
+                <div style="display: flex; gap: 10px;">
+                    <button onclick="fermerModalInterpretation()" style="padding: 6px 14px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #e2e8f0; border-radius: 8px; font-size: 0.82rem; font-weight: 600; cursor: pointer;">
+                        Fermer
+                    </button>
+                    <button onclick="imprimerDiagnosticTechniqueComplet()" style="padding: 7px 16px; background: linear-gradient(135deg, #a855f7, #7c3aed); border: none; color: white; border-radius: 8px; font-size: 0.84rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 7px; box-shadow: 0 4px 12px rgba(168, 85, 247, 0.4);">
+                        <i class="fas fa-file-pdf"></i> Imprimer le Rapport d'Expertise Complet (PDF)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+

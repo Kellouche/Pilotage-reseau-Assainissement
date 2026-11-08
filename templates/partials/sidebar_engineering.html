@@ -1,0 +1,107 @@
+<!--
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Panneau latéral d'ingénierie : calques réseau physique, hydrologie et sélection de bassin
+================================================================================
+-->
+    
+    <div id="sidebar">
+        <!-- En-tête Sidebar -->
+        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;">
+            <div style="font-weight: 800; font-size: 0.95rem; color: #f8fafc; display: flex; align-items: center; gap: 8px;">
+                <i class="fas fa-layer-group" style="color: #38bdf8;"></i> Panneau d'Ingénierie
+            </div>
+            <div id="mini-stats" style="font-size: 0.72rem; color: #94a3b8; background: rgba(255,255,255,0.06); padding: 2px 8px; border-radius: 4px;">Chargement...</div>
+        </div>
+        <div id="stat-total" style="display:none;">--</div>
+
+        <!-- ============================================== -->
+        <!-- VOLET 1 : DONNÉES SIG & RÉSEAU PHYSIQUE       -->
+        <!-- ============================================== -->
+        <div class="sidebar-section">
+            <div class="section-title">
+                <span><i class="fas fa-network-wired text-sky me-1"></i> 1. Réseau physique</span>
+            </div>
+            <div class="layer-list">
+                <label class="layer-item"><input type="checkbox" id="f-conduites" checked> <span class="layer-indicator" style="background: #38bdf8;"></span> Conduites</label>
+                <label class="layer-item"><input type="checkbox" id="f-sens-ecoulement" onchange="basculerSensEcoulement(this.checked)"> <span class="layer-indicator" style="background: transparent; color: #38bdf8; font-weight: bold; font-size: 11px; display: inline-flex; align-items: center; justify-content: center;">➤</span> Sens d'écoulement</label>
+                <label class="layer-item"><input type="checkbox" id="f-regards" checked> <span class="layer-indicator" style="background: #e2e8f0; border-radius: 50%;"></span> Regards de visite</label>
+                <label class="layer-item"><input type="checkbox" id="f-rejets" checked> <span class="layer-indicator" style="background: #ef4444; border-radius: 50%;"></span> Rejets vers le milieu naturel (oueds)</label>
+                <label class="layer-item"><input type="checkbox" id="f-stations" checked> <span class="layer-indicator" style="background: #f97316; border-radius: 50%;"></span> Stations de relevage et pompage</label>
+                <label class="layer-item"><input type="checkbox" id="f-step" checked> <span class="layer-indicator" style="background: #22c55e; border-radius: 50%;"></span> Station d'épuration (STEP)</label>
+                <label class="layer-item"><input type="checkbox" id="f-ouvrages" checked> <span class="layer-indicator" style="background: #06b6d4; border-radius: 50%;"></span> Ouvrages spéciaux</label>
+                <div id="subtypes-ouvrages" style="margin-left: 14px; margin-top: 2px; margin-bottom: 6px; padding-left: 8px; border-left: 2px solid rgba(255,255,255,0.12); display: flex; flex-direction: column; gap: 3px;">
+                    <div style="font-size: 0.72rem; color: #94a3b8; display: flex; align-items: center; gap: 6px;">
+                        <span class="layer-indicator" style="background: #06b6d4; width: 8px; height: 8px; border-radius: 50%;"></span> Déversoir d'orage (DVO, seuil $H_s$)
+                    </div>
+                    <div style="font-size: 0.72rem; color: #94a3b8; display: flex; align-items: center; gap: 6px;">
+                        <span class="layer-indicator" style="background: #a855f7; width: 8px; height: 8px; border-radius: 50%;"></span> Trop-plein de réseau
+                    </div>
+                    <div style="font-size: 0.72rem; color: #94a3b8; display: flex; align-items: center; gap: 6px;">
+                        <span class="layer-indicator" style="background: #10b981; width: 8px; height: 8px; border-radius: 50%;"></span> Bassin de rétention
+                    </div>
+                    <div style="font-size: 0.72rem; color: #94a3b8; display: flex; align-items: center; gap: 6px;">
+                        <span class="layer-indicator" style="background: #6366f1; width: 8px; height: 8px; border-radius: 50%;"></span> Ouvrage de régulation
+                    </div>
+                    <div style="font-size: 0.72rem; color: #94a3b8; display: flex; align-items: center; gap: 6px;">
+                        <span class="layer-indicator" style="background: #f59e0b; width: 8px; height: 8px; border-radius: 50%;"></span> Ouvrage de réception
+                    </div>
+                </div>
+                <label class="layer-item" id="label-orphelins" style="margin-top: 4px; border-top: 1px dashed rgba(255,255,255,0.08); padding-top: 5px;">
+                    <input type="checkbox" id="f-orphelins" onchange="basculerCoucheOrphelins(this.checked)">
+                    <span class="layer-indicator" style="background: #f59e0b; border: 1px dashed #d97706;"></span>
+                    <span>Tronçons orphelins (déconnectés)</span>
+                    <span id="badge-orphelins-count" style="font-size: 0.68rem; color: #f59e0b; margin-left: auto; font-weight: 600;">--</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- VOLET 2 : HYDROLOGIE & SECTORISATION SURFACES -->
+        <!-- ============================================== -->
+        <div class="sidebar-section">
+            <div class="section-title">
+                <span><i class="fas fa-draw-polygon text-emerald me-1"></i> 2. Hydrologie et surfaces</span>
+                <span id="badge-subcatchments-count" class="badge-pill">-- SB</span>
+            </div>
+            <!-- Checkbox Couche Bassins Versants (Exutoires) -->
+            <div class="layer-list" style="margin-bottom: 6px;">
+                <label class="layer-item" id="label-bassins" style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 6px; padding: 6px 10px;">
+                    <input type="checkbox" id="f-bassins" checked onchange="basculerCoucheBassins(this.checked)">
+                    <span class="layer-indicator" style="background: #38bdf8;"></span>
+                    <span style="font-weight: 600; color: #38bdf8;">Bassins versants (exutoires)</span>
+                </label>
+            </div>
+            <!-- Checkbox Sous-bassins versants Voronoï (Point 1) -->
+            <div class="layer-list" style="margin-bottom: 10px;">
+                <label class="layer-item" style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 6px; padding: 6px 10px;">
+                    <input type="checkbox" id="f-subcatchments" checked onchange="basculerCoucheSousBassins(this.checked)">
+                    <span class="layer-indicator" style="background: #10b981;"></span>
+                    <span style="font-weight: 600; color: #34d399;">Sous-bassins (Voronoï)</span>
+                </label>
+                <div id="subcatchments-legend" style="font-size: 0.72rem; color: #94a3b8; padding-left: 26px; line-height: 1.3;">
+                    Surfaces d'apport élémentaires par regard (Horton $f_0=75, f_c=10$).
+                </div>
+            </div>
+
+            <!-- Sélection des bassins versants sectorisés automatiquement -->
+            <div id="cluster-status" style="display: none;"></div>
+
+            <div id="bassin-section" style="display: block; margin-top: 6px;">
+                <label for="bassin-select" style="font-size: 0.75rem; color: #cbd5e1; margin-bottom: 4px; display: block;">🗺 Bassin versant sélectionné :</label>
+                <select id="bassin-select" style="width: 100%; font-size: 0.82rem; padding: 6px; background: #0f172a; color: #f8fafc; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;">
+                    <option value="">Chargement des bassins versants...</option>
+                </select>
+                <div id="bassin-info"></div>
+            </div>
+
+            <div id="orphelins-export-section" style="margin-top: 8px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 6px;">
+                <a href="/api/v1/network/orphelins/geojson" target="_blank" download="elements_orphelins.geojson" style="font-size: 0.72rem; color: #f59e0b; text-decoration: none; display: flex; align-items: center; gap: 5px;">
+                    <i class="fas fa-file-export"></i> Exporter les orphelins isolés (GeoJSON)
+                </a>
+            </div>
+        </div>
+    </div>

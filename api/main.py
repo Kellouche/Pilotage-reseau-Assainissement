@@ -17,6 +17,7 @@ os.environ.setdefault("MKL_NUM_THREADS", "1")
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 
 import asyncio
+import jinja2
 from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -184,10 +185,22 @@ def read_root(request: Request, db=Depends(get_db)):
         with open(landing_path, "r", encoding="utf-8") as f:
             return HTMLResponse(content=f.read())
 
+_jinja_env = jinja2.Environment(
+    loader=jinja2.FileSystemLoader("templates"),
+    autoescape=False
+)
+
+def _render_cockpit_html(template_name: str = "index.html") -> str:
+    template = _jinja_env.get_template(template_name)
+    return template.render()
+
     index_path = Path("templates/index.html")
     if index_path.exists():
-        with open(index_path, "r", encoding="utf-8") as f:
-            return HTMLResponse(content=f.read())
+        try:
+            return HTMLResponse(content=_render_cockpit_html("index.html"))
+        except Exception:
+            with open(index_path, "r", encoding="utf-8") as f:
+                return HTMLResponse(content=f.read())
 
     return HTMLResponse("<h1>SWMM Platform</h1><p>Consultez la <a href='/docs'>Documentation API Swagger</a>.</p>")
 
@@ -256,8 +269,11 @@ def get_cockpit(request: Request, db=Depends(get_db)):
     if not template_path.exists():
         template_path = Path("templates/map.html")
     if template_path.exists():
-        with open(template_path, "r", encoding="utf-8") as f:
-            return HTMLResponse(content=f.read())
+        try:
+            return HTMLResponse(content=_render_cockpit_html(template_path.name))
+        except Exception:
+            with open(template_path, "r", encoding="utf-8") as f:
+                return HTMLResponse(content=f.read())
     return HTMLResponse(content="<h1>Erreur: Template cockpit non trouvé</h1>", status_code=404)
 
 

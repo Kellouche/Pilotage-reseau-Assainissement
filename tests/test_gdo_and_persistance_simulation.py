@@ -11,20 +11,28 @@ Objet : Tests de la terminologie GDO et de la persistance des simulations
 import re
 from pathlib import Path
 
+def _get_full_cockpit_content():
+    base = Path(__file__).resolve().parent.parent
+    content = (base / "templates" / "index.html").read_text(encoding="utf-8")
+    for p in (base / "templates" / "partials").glob("*.html"):
+        content += "\n" + p.read_text(encoding="utf-8")
+    for j in (base / "static" / "js" / "app").glob("*.js"):
+        content += "\n" + j.read_text(encoding="utf-8")
+    for c in (base / "static" / "css").glob("*.css"):
+        content += "\n" + c.read_text(encoding="utf-8")
+    return content
+
 def test_absence_sfn_and_presence_gdo():
     """Vérifie l'éradication du terme SFN au profit de GDO dans le code métier et les templates."""
     base_dir = Path(__file__).resolve().parent.parent
     
-    # Fichiers à inspecter
+    # Fichiers et corpus à inspecter
     files_to_check = [
-        base_dir / "src" / "domain" / "agents_expertise.py",
-        base_dir / "templates" / "index.html"
+        (base_dir / "src" / "domain" / "agents_expertise.py", (base_dir / "src" / "domain" / "agents_expertise.py").read_text(encoding="utf-8")),
+        (base_dir / "templates" / "index.html", _get_full_cockpit_content())
     ]
     
-    for fpath in files_to_check:
-        assert fpath.exists(), f"Fichier introuvable: {fpath}"
-        content = fpath.read_text(encoding="utf-8")
-        
+    for fpath, content in files_to_check:
         # 1. Vérifier l'absence totale de SFN comme acronyme ou mot complet
         sfn_matches = re.findall(r"\bSFN\b", content)
         assert len(sfn_matches) == 0, f"Présence du terme SFN détectée dans {fpath.name}: {len(sfn_matches)} occurrences trouvées"
@@ -37,8 +45,7 @@ def test_absence_sfn_and_presence_gdo():
 
 def test_simulation_persistance_and_french_case():
     """Vérifie la présence du cache multi-clé, la synchronisation du bandeau et la casse française."""
-    base_dir = Path(__file__).resolve().parent.parent
-    index_html = (base_dir / "templates" / "index.html").read_text(encoding="utf-8")
+    index_html = _get_full_cockpit_content()
     
     # 1. Cache de simulation et synchronisation
     assert "_simulationsCache" in index_html, "Cache _simulationsCache manquant dans templates/index.html"

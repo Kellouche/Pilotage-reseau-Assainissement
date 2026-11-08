@@ -100,3 +100,4 @@ def calculer_sensibilite_buffers_impl(
             "sans déborder sur la périphérie agricole."
         )
     }
+

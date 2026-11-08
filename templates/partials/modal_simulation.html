@@ -1,0 +1,438 @@
+<!--
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Modale de paramétrage de pluie, stations ANRH et déclenchement SWMM 5.2
+================================================================================
+-->
+    <!-- Modal de Configuration & Exécution SWMM 5.2 -->
+    <div id="modal-simulation" onclick="if(event.target === this) fermerModalSimulation();" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(6px); z-index: 3000; align-items: center; justify-content: center;">
+        <div style="background: #1e293b; color: #f8fafc; border-radius: 16px; width: 92%; max-width: 680px; max-height: 90vh; display: flex; flex-direction: column; border: 1px solid rgba(255, 255, 255, 0.15); box-shadow: 0 25px 50px rgba(0, 0, 0, 0.6); overflow: hidden;">
+            <!-- Entête -->
+            <div style="background: #0f172a; padding: 18px 24px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="width: 38px; height: 38px; border-radius: 10px; background: linear-gradient(135deg, #0284c7, #0369a1); display: flex; align-items: center; justify-content: center; font-size: 18px; color: white;">
+                        <i class="fas fa-bolt"></i>
+                    </div>
+                    <div>
+                        <h5 style="margin: 0; font-weight: 700; font-size: 1.05rem;">Simulation hydrodynamique EPA SWMM 5.2</h5>
+                        <small style="color: #94a3b8;">Résolution Saint-Venant 1D (DYNWAVE) &amp; hydrologie Horton</small>
+                    </div>
+                </div>
+                <button onclick="fermerModalSimulation()" style="background: transparent; border: none; color: #94a3b8; font-size: 24px; cursor: pointer; line-height: 1;">&times;</button>
+            </div>
+
+            <!-- Corps scrollable -->
+            <div style="padding: 22px 24px; overflow-y: auto; flex: 1;">
+                <!-- Choix du Périmètre / Bassin Urbain -->
+                <div style="margin-bottom: 16px;">
+                    <label style="font-size: 0.82rem; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 6px;">
+                        <i class="fas fa-sitemap me-1" style="color: #38bdf8;"></i> Périmètre de Simulation (Bassin Urbain)
+                    </label>
+                    <select id="sim-select-bassin" style="width: 100%; padding: 10px 12px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #f8fafc; font-size: 0.88rem;">
+                        <option value="" disabled selected>-- Sélectionnez un bassin versant sectorisé --</option>
+                    </select>
+                    <small style="color: #94a3b8; font-size: 0.76rem; display: block; margin-top: 5px;">
+                        <i class="fas fa-shield-alt me-1" style="color: #38bdf8;"></i> Règle d'ingénierie : La simulation s'exécute par bassin versant sectorisé afin de garantir des exutoires hydrauliquement libres et sans reflux artificiels.
+                    </small>
+                </div>
+
+                <!-- Détection et Raccordement Interactif des Ouvrages Spéciaux Proches (< 120 m) -->
+                <div id="sim-ouvrages-orphelins-section" style="display: none; margin-bottom: 16px; background: rgba(15, 23, 42, 0.85); border: 1.5px solid rgba(6, 182, 212, 0.6); border-radius: 10px; padding: 14px; box-shadow: 0 4px 16px rgba(6, 182, 212, 0.18);">
+                    <div style="display: flex; align-items: flex-start; gap: 12px;">
+                        <div style="background: rgba(6, 182, 212, 0.2); border: 1px solid rgba(6, 182, 212, 0.5); width: 34px; height: 34px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px;">
+                            <i class="fas fa-bolt" style="color: #22d3ee; font-size: 1.1rem;"></i>
+                        </div>
+                        <div style="flex: 1;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px;">
+                                <div style="font-weight: 700; color: #38bdf8; font-size: 0.88rem;" id="sim-ouvrages-titre">
+                                    ⚡ Ouvrages Spéciaux Proches Détectés (&lt; 120 m)
+                                </div>
+                                <span class="badge" id="sim-ouvrages-count-badge" style="background: rgba(6, 182, 212, 0.25); color: #38bdf8; border: 1px solid rgba(6, 182, 212, 0.5); font-size: 0.72rem; padding: 3px 8px;">
+                                    0 ouvrage(s)
+                                </span>
+                            </div>
+                            <div style="font-size: 0.76rem; color: #cbd5e1; margin-top: 4px; line-height: 1.45;" id="sim-ouvrages-desc">
+                                Des ouvrages hydrauliques existants sont identifiés à proximité sans raccordement SIG. Cochez les ouvrages à connecter virtuellement (tracé en pointillé cyan sur la carte et décharge SWMM) :
+                            </div>
+
+                            <!-- Liste dynamique des ouvrages avec checkboxes -->
+                            <div id="sim-ouvrages-liste" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;"></div>
+
+                            <div style="margin-top: 9px; padding-top: 7px; border-top: 1px solid rgba(148, 163, 184, 0.2); display: flex; justify-content: space-between; align-items: center; font-size: 0.72rem; color: #94a3b8;">
+                                <span><i class="fas fa-project-diagram text-info me-1"></i> Tracé dynamique en pointillé cyan actif sur la carte</span>
+                                <span style="color: #4ade80; font-weight: 700;" id="sim-ouvrages-gain-label">Variante 0 : Gain économique &gt; 90%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Validation Ingénieur pour Ouvrages Spéciaux Déportés (> 1.0 m) -->
+                <div id="sim-deporte-box" style="display: none; margin-bottom: 16px; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.45); border-radius: 8px; padding: 12px;">
+                    <div style="display: flex; align-items: flex-start; gap: 10px;">
+                        <i class="fas fa-exclamation-triangle" style="color: #f59e0b; font-size: 1.15rem; margin-top: 2px;"></i>
+                        <div style="flex: 1;">
+                            <div style="font-weight: 700; color: #fbbf24; font-size: 0.85rem;" id="sim-deporte-titre">
+                                Ouvrage spécial déporté (> 1.0 m du réseau principal)
+                            </div>
+                            <div style="font-size: 0.78rem; color: #cbd5e1; margin-top: 3px; line-height: 1.45;" id="sim-deporte-desc">
+                                Cet ouvrage est distant du regard collecteur le plus proche.
+                            </div>
+                            <div style="margin-top: 9px; padding-top: 7px; border-top: 1px solid rgba(245, 158, 11, 0.25);">
+                                <label style="font-size: 0.82rem; color: #f8fafc; display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
+                                    <input type="checkbox" id="sim-chk-valider-raccordement" checked style="accent-color: #38bdf8; width: 17px; height: 17px; cursor: pointer;">
+                                    <span id="sim-deporte-label-chk"><b>Valider le raccordement hydraulique au regard amont</b></span>
+                                </label>
+                                <small style="display: block; color: #94a3b8; font-size: 0.72rem; margin-top: 3px; margin-left: 25px;" id="sim-deporte-hint">
+                                    Coché : intègre les conduites amont &bull; Décoché : simulation autonome locale (sans réseau amont).
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Choix Station, Scénario & Intensité Pluviométrique Réglable (Référentiel ANRH / UHBC) -->
+                <div style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <label style="font-size: 0.82rem; font-weight: 700; color: #38bdf8; margin: 0;">
+                            <i class="fas fa-cloud-showers-heavy me-1"></i> Référentiel Pluviométrique &amp; Sollicitation SWMM
+                        </label>
+                        <span id="sim-pluvio-station-badge" style="font-size: 0.72rem; color: #38bdf8; background: rgba(56,189,248,0.12); padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(56,189,248,0.3); font-weight: 600;">Station ANRH Chlef Siège (010501)</span>
+                    </div>
+
+                    <!-- Sélecteur de Station Hydro-Météo ANRH -->
+                    <div style="margin-bottom: 10px;">
+                        <label style="font-size: 0.75rem; color: #cbd5e1; display: block; margin-bottom: 4px;">
+                            <i class="fas fa-map-marker-alt me-1" style="color: #38bdf8;"></i> Station Hydro-Météorologique de Référence :
+                        </label>
+                        <select id="sim-select-station" onchange="onChangementStationPluie(this.value)" style="width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 6px; color: #f8fafc; font-size: 0.82rem; font-weight: 600;">
+                            <optgroup label="📍 Wilaya de Chlef (Bassin Versant 01 - Chélif) [ANRH / UHBC]">
+                                <option value="chlef_anrh_siege" selected>🏢 Station ANRH Chlef Siège (Ech-Cheliff) [Code 010501 - Alt. 154m - UHBC Réf.]</option>
+                                <option value="chlef_ponteba_oum_drou">🌾 Station Pontéba (Oum Drou) [Code 010502 - Alt. 142m]</option>
+                                <option value="chlef_oued_fodda">🌊 Station Oued Fodda (Vallée &amp; Barrage) [Code 010505 - Alt. 180m]</option>
+                                <option value="chlef_benairia_dahra">⛰️ Station Bénaïria (Massif du Dahra) [Code 010508 - Alt. 480m]</option>
+                                <option value="chlef_domaine_si_tayeb">🚜 Station Domaine Si Tayeb [Code 010512 - Alt. 165m]</option>
+                                <option value="chlef_tenes_littoral">⚓ Station Ténès (Côte Méditerranéenne) [Code 010520 - Alt. 15m]</option>
+                                <option value="chlef_boukadir">🏜️ Station Boukadir (Bas Chélif Ouest) [Code 010525 - Alt. 110m]</option>
+                            </optgroup>
+                            <optgroup label="🌍 Autres Bassins Régionaux">
+                                <option value="ain_defla_khemis">Station Khemis Miliana (Haut Chélif - 010403)</option>
+                                <option value="mascara_ghriss">Station ANRH Mascara-Ghriss (Bassin Macta - 040702)</option>
+                                <option value="alger_port">Station Alger Port / Cap Caxine (Côtiers Algérois - 020301)</option>
+                                <option value="oran_senia">Station Oran Es-Sénia (Oranie - 050201)</option>
+                                <option value="constantine_aeroport">Station Constantine Aïn El Bey (Bassin 03 - 030401)</option>
+                            </optgroup>
+                        </select>
+                    </div>
+
+                    <!-- Scénario et Intensité Réglable -->
+                    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 12px; align-items: start;">
+                        <div>
+                            <label style="font-size: 0.75rem; color: #cbd5e1; display: block; margin-bottom: 4px;">Scénario Pluviométrique Validé :</label>
+                            <select id="sim-select-scenario" onchange="onChangementScenarioPluie(this.value)" style="width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #f8fafc; font-size: 0.82rem;">
+                                <option value="pluie_decennale" selected>🌧️ Pluie Décennale (T = 10 ans) [Standard Réglementaire ONA]</option>
+                                <option value="pluie_cinquantennale">⛈️ Pluie Cinquantennale (T = 50 ans) [Crise Majeure / Inondations]</option>
+                                <option value="pluie_centennale">🌊 Pluie Centennale (T = 100 ans) [Crue Historique Exceptionnelle]</option>
+                                <option value="pluie_biennale">🌦️ Pluie Biennale (T = 2 ans) [Pluie Courante / Confort Urbain]</option>
+                                <option value="pluie_orage_2h">⚡ Orage d'Été Brutal Méditerranéen [Averse Convective 2h — 92.5 mm/h]</option>
+                                <option value="temps_sec_pur">☀️ Temps Sec Pur (Étiage / Eaux Usées sans pluie — 0 mm/h)</option>
+                                <option value="personnalise">✏️ Saisie Manuelle Ingénieur (Intensité Personnalisée)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size: 0.75rem; color: #cbd5e1; display: block; margin-bottom: 4px;">Intensité Pointe Imax (mm/h) :</label>
+                            <div style="display: flex; align-items: center; gap: 4px;">
+                                <input type="number" id="sim-input-intensite-max" min="0" max="300" step="0.5" value="74.9" oninput="onChangementIntensitePluie(this.value)" style="width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid rgba(56, 189, 248, 0.5); border-radius: 6px; color: #38bdf8; font-size: 0.88rem; font-weight: 700; text-align: center;">
+                                <span style="font-size: 0.82rem; color: #94a3b8; font-weight: bold;">mm/h</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="sim-pluvio-info-note" style="color: #94a3b8; font-size: 0.72rem; margin-top: 8px; line-height: 1.4; background: rgba(15,23,42,0.5); padding: 6px 10px; border-radius: 6px; border-left: 3px solid #38bdf8;">
+                        <i class="fas fa-info-circle me-1" style="color: #38bdf8;"></i>
+                        <span id="sim-pluvio-note-text">Paramétrage ANRH Chlef Siège (UHBC) : Formule Montana I(t) = 9.334 · t⁻⁰·⁷⁴⁵ &bull; Hyétogramme Chicago centré (tc = 15 min) &bull; P₂₄ = 56.0 mm &bull; Hauteur cumulée P = 42.8 mm [Standard Réglementaire ONA].</span>
+                    </div>
+                </div>
+
+                <!-- Occupation du Sol & Imperméabilisation (Palier 1 - Instantané) -->
+                <div style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <label style="font-size: 0.82rem; font-weight: 700; color: #38bdf8; margin: 0;">
+                            <i class="fas fa-layer-group me-1"></i> Occupation du Sol &amp; Imperméabilisation Urbaine
+                        </label>
+                        <span style="font-size: 0.72rem; color: #38bdf8; background: rgba(56,189,248,0.12); padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(56,189,248,0.3); font-weight: 600;">Palier 1 - Sensibilité Instantanée</span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 12px; align-items: start;">
+                        <div>
+                            <label style="font-size: 0.75rem; color: #cbd5e1; display: block; margin-bottom: 4px;">Typologie Urbaine Dominante :</label>
+                            <select id="sim-select-typologie-sol" style="width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #f8fafc; font-size: 0.82rem;">
+                                <option value="centre_urbain_dense">🏢 Centre urbain dense / Commercial (85%)</option>
+                                <option value="habitat_collectif">🏬 Habitat collectif / Cités denses (75%)</option>
+                                <option value="habitat_mixte" selected>🏘️ Habitat mixte / Tissu intermédiaire (65% - Défaut)</option>
+                                <option value="habitat_individuel">🏡 Habitat individuel / Pavillonnaire (50%)</option>
+                                <option value="zone_activites_indus">🏭 Zone industrielle &amp; Entrepôts (80%)</option>
+                                <option value="periurbain_semi_rural">🌾 Périurbain / Semi-rural lâche (35%)</option>
+                                <option value="espaces_verts_friches">🌳 Parcs / Espaces naturels / Friches (15%)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size: 0.75rem; color: #cbd5e1; display: block; margin-bottom: 4px;">% Imperméabilisation :</label>
+                            <div style="display: flex; align-items: center; gap: 4px;">
+                                <input type="number" id="sim-imperv-pct" min="5" max="100" step="1" value="65" style="width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 6px; color: #38bdf8; font-size: 0.88rem; font-weight: 700; text-align: center;">
+                                <span style="font-size: 0.82rem; color: #94a3b8; font-weight: bold;">%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <small style="color: #94a3b8; font-size: 0.72rem; display: block; margin-top: 6px; line-height: 1.4;">
+                        <i class="fas fa-sliders-h me-1" style="color: #38bdf8;"></i> Ajustez librement le % pour tester la sensibilité au ruissellement (ex: 60% vs 85%). Modifie directement les sous-bassins SWMM et les pertes initiales ($D_{store}$).
+                    </small>
+                </div>
+
+                <!-- Paramètres en grille -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px;">
+                    <div>
+                        <label style="font-size: 0.82rem; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 6px;">
+                            <i class="fas fa-clock me-1" style="color: #38bdf8;"></i> Durée de Calcul
+                        </label>
+                        <select id="sim-select-duree" style="width: 100%; padding: 10px 12px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #f8fafc; font-size: 0.88rem;">
+                            <option value="4.0" selected>4 heures (Événement &amp; Ressuyage)</option>
+                            <option value="2.0">2 heures (Court)</option>
+                            <option value="6.0">6 heures</option>
+                            <option value="12.0">12 heures</option>
+                            <option value="24.0">24 heures (Cycle journalier complet)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size: 0.82rem; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 6px;">
+                            <i class="fas fa-tachometer-alt me-1" style="color: #38bdf8;"></i> Pas de Routage (DYNWAVE)
+                        </label>
+                        <select id="sim-select-step" style="width: 100%; padding: 10px 12px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #f8fafc; font-size: 0.88rem;">
+                            <option value="5" selected>5 secondes (Stabilité optimale Saint-Venant)</option>
+                            <option value="1">1 seconde (Haute précision)</option>
+                            <option value="10">10 secondes (Rapide)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Pente Hydraulique de Substitution (Requis si Z absent) -->
+                <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 12px 14px; margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <label style="font-size: 0.82rem; font-weight: 700; color: #cbd5e1; margin: 0;">
+                            <i class="fas fa-ruler-combined me-1" style="color: #38bdf8;"></i> Pente hydraulique de substitution (%)
+                        </label>
+                        <span style="font-size: 0.72rem; color: #facc15; background: rgba(250, 204, 21, 0.15); padding: 2px 7px; border-radius: 4px; font-weight: 700;">
+                            <i class="fas fa-info-circle me-1"></i> Pente par défaut si Z absent
+                        </span>
+                    </div>
+                    <div style="display: flex; gap: 12px; align-items: center;">
+                        <input type="number" id="sim-pente-moyenne" step="0.1" min="0.1" max="15.0" value="1.0" style="width: 95px; padding: 8px 10px; background: #0f172a; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; color: #f8fafc; font-size: 0.95rem; font-weight: 700; text-align: center;">
+                        <span style="font-size: 0.78rem; color: #94a3b8; line-height: 1.35;">
+                            Pente par défaut pour conduites sans altimétrie (cotes radier absentes dans le SIG). Utilisée pour calculer la capacité gravitaire de Manning (Q<sub>full</sub>) et maintenir l'écoulement 1D sans divergence numérique.
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Résumé du modèle -->
+                <div style="background: rgba(2, 132, 199, 0.08); border: 1px solid rgba(2, 132, 199, 0.25); border-radius: 10px; padding: 12px 16px; margin-bottom: 20px; font-size: 0.82rem; color: #94a3b8; line-height: 1.5;">
+                    <strong style="color: #38bdf8;">Configuration appliquée :</strong> Résolution complète Saint-Venant 1D (Dynamic Wave) &bull; Découpage surfacique en <b>sous-bassins versants Voronoï</b> &bull; Infiltration d'eau selon <b>Horton</b> (f₀ = 75 mm/h, fc = 10 mm/h) &bull; Unités métriques CMS.
+                </div>
+
+                <!-- Bouton d'action -->
+                <button id="btn-run-sim-action" onclick="declencherSimulationSWMM()" style="width: 100%; padding: 12px; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: white; border: none; border-radius: 10px; font-weight: 700; font-size: 0.95rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4);">
+                    <i class="fas fa-play"></i> Lancer la simulation SWMM 5.2
+                </button>
+
+                <!-- Zone d'état / progression -->
+                <div id="sim-status-message" style="display: none; margin-top: 16px; padding: 12px; background: rgba(255,255,255,0.05); border-radius: 8px; text-align: center; font-size: 0.85rem;"></div>
+
+                <!-- Zone de résultats (affichée après calcul) -->
+                <div id="sim-results-card" style="display: none; margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 18px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                        <span style="font-weight: 700; color: #34d399; font-size: 0.95rem;">
+                            <i class="fas fa-check-circle me-1"></i> Synthèse hydrodynamique (solveur EPA)
+                        </span>
+                        <span style="font-size: 0.75rem; background: rgba(52, 211, 153, 0.15); color: #34d399; padding: 2px 8px; border-radius: 4px; font-weight: 600;">
+                            CONFORME
+                        </span>
+                    </div>
+
+                    <!-- En-tête périmètre simulé -->
+                    <div id="sim-results-bassin-title" style="font-size: 0.82rem; color: #38bdf8; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 6px; padding: 6px 10px; margin-bottom: 12px; display: none;"></div>
+
+                    <!-- Cadre Hydro-Météorologique & Sollicitation Pluviométrique de Dimensionnement -->
+                    <div id="sim-pluvio-results-box" style="background: rgba(14, 165, 233, 0.08); border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span style="font-size: 0.82rem; font-weight: 700; color: #38bdf8; display: flex; align-items: center; gap: 7px;">
+                                <i class="fas fa-cloud-showers-heavy"></i> Sollicitation pluviométrique &amp; station de référence
+                            </span>
+                            <span id="kpi-pluvio-station-badge" style="font-size: 0.72rem; background: rgba(56, 189, 248, 0.18); color: #7dd3fc; border: 1px solid rgba(56, 189, 248, 0.35); padding: 2px 8px; border-radius: 4px; font-weight: 700;">Station ANRH Chlef Siège (010501)</span>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; font-size: 0.78rem;">
+                            <div style="background: rgba(15, 23, 42, 0.65); padding: 8px 10px; border-radius: 6px; text-align: center; border: 1px solid rgba(255,255,255,0.05);">
+                                <div style="color: #94a3b8; font-size: 0.7rem; margin-bottom: 2px;">Période de retour</div>
+                                <b id="kpi-pluvio-periode" style="color: #f8fafc; font-size: 0.86rem;">T = 10 ans</b>
+                            </div>
+                            <div style="background: rgba(15, 23, 42, 0.65); padding: 8px 10px; border-radius: 6px; text-align: center; border: 1px solid rgba(56, 189, 248, 0.35);">
+                                <div style="color: #94a3b8; font-size: 0.7rem; margin-bottom: 2px;">Intensité de pointe (Imax)</div>
+                                <b id="kpi-pluvio-imax" style="color: #38bdf8; font-size: 1.05rem; font-weight: 900;">74.9 mm/h</b>
+                            </div>
+                            <div style="background: rgba(15, 23, 42, 0.65); padding: 8px 10px; border-radius: 6px; text-align: center; border: 1px solid rgba(255,255,255,0.05);">
+                                <div style="color: #94a3b8; font-size: 0.7rem; margin-bottom: 2px;">Hauteur cumulée (Ptot)</div>
+                                <b id="kpi-pluvio-ptot" style="color: #34d399; font-size: 0.86rem;">42.8 mm</b>
+                            </div>
+                            <div style="background: rgba(15, 23, 42, 0.65); padding: 8px 10px; border-radius: 6px; text-align: center; border: 1px solid rgba(255,255,255,0.05);">
+                                <div style="color: #94a3b8; font-size: 0.7rem; margin-bottom: 2px;">Formule Montana</div>
+                                <b id="kpi-pluvio-montana" style="color: #fbbf24; font-size: 0.76rem;">I(t) = 9.334·t^(-0.745)</b>
+                            </div>
+                        </div>
+                        <div id="kpi-pluvio-source-note" style="font-size: 0.72rem; color: #94a3b8; margin-top: 8px; line-height: 1.35;">
+                            <i class="fas fa-database me-1" style="color: #38bdf8;"></i> Agence Nationale des Ressources Hydriques (ANRH Chlef Siège Hay Nasr / UHBC Master Assainissement - Séries 1970-2024).
+                        </div>
+                    </div>
+
+                    <!-- Module Bilan Hydraulique & Ouvrages Spéciaux (Option 1 : Lecture Hydraulique) -->
+                    <div id="sim-orphelin-kpi-box" style="display: none; background: rgba(6, 182, 212, 0.12); border: 1px solid rgba(6, 182, 212, 0.4); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <div style="font-size: 0.82rem; font-weight: 800; color: #22d3ee; display: flex; align-items: center; gap: 7px;">
+                                <i class="fas fa-random"></i> Répartition des débits du bassin versant (Option 1)
+                            </div>
+                            <span id="kpi-orphelin-badge" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; font-weight: 800; background: rgba(6, 182, 212, 0.25); color: #22d3ee; border: 1px solid rgba(6, 182, 212, 0.5);">--</span>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; font-size: 0.78rem; background: rgba(0,0,0,0.25); border-radius: 6px; padding: 8px 10px;">
+                            <div><span style="color: #94a3b8; display: block; font-size: 0.7rem;">Débit généré :</span> <b id="kpi-orphelin-qgenere" style="color: #38bdf8; font-size: 0.95rem;">--</b></div>
+                            <div><span style="color: #94a3b8; display: block; font-size: 0.7rem;">Vers exutoire principal :</span> <b id="kpi-orphelin-qexutoire" style="color: #34d399; font-size: 0.95rem;">--</b></div>
+                            <div><span style="color: #94a3b8; display: block; font-size: 0.7rem;">Dérivé par ouv. spéc. :</span> <b id="kpi-orphelin-qdeleste" style="color: #22d3ee; font-size: 0.95rem;">--</b></div>
+                        </div>
+                        <div id="kpi-orphelin-desc" style="color: #cbd5e1; font-size: 0.73rem; margin-top: 6px; border-top: 1px dashed rgba(6,182,212,0.3); padding-top: 4px; line-height: 1.35;">--</div>
+                    </div>
+
+                    <!-- Cartouches KPIs Ligne 1 : Dynamique & Hydraulique -->
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px;">
+                        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; text-align: center;">
+                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">Bilan de continuité</div>
+                            <div id="kpi-continuity" style="font-size: 1.05rem; font-weight: 800; color: #38bdf8;">--</div>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; text-align: center;">
+                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">Pointe à l'exutoire</div>
+                            <div id="kpi-peak-outflow" style="font-size: 1.05rem; font-weight: 800; color: #34d399;">--</div>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; text-align: center;">
+                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">Temps à la pointe (Tp)</div>
+                            <div id="kpi-peak-time" style="font-size: 1.05rem; font-weight: 800; color: #fbbf24;">--</div>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; text-align: center;">
+                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">Vitesse maximale (Vmax)</div>
+                            <div id="kpi-max-velocity" style="font-size: 1.05rem; font-weight: 800; color: #a855f7;">--</div>
+                        </div>
+                    </div>
+
+                    <!-- Cartouches KPIs Ligne 2 : Bilan Massique des Volumes & Surcharge -->
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 12px;">
+                        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; text-align: center;">
+                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">Volume ruisselé</div>
+                            <div id="kpi-vol-runoff" style="font-size: 1.0rem; font-weight: 800; color: #38bdf8;">--</div>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; text-align: center;">
+                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">Volume infiltré</div>
+                            <div id="kpi-vol-infil" style="font-size: 1.0rem; font-weight: 800; color: #10b981;">--</div>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; text-align: center;">
+                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">Coefficient de ruissellement (Ceff)</div>
+                            <div id="kpi-coeff-eff" style="font-size: 1.0rem; font-weight: 800; color: #f59e0b;">--</div>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; text-align: center;">
+                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">Réseau en surcharge</div>
+                            <div id="kpi-surcharge-pct" style="font-size: 1.0rem; font-weight: 800; color: #f87171;">--</div>
+                        </div>
+                    </div>
+
+                    <!-- Module d'Intelligence Métier : Contrôle Automatique Pluie-Débit (Méthode Rationnelle) -->
+                    <div id="sim-coherence-box" style="background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <div style="font-size: 0.82rem; font-weight: 700; color: #f8fafc; display: flex; align-items: center; gap: 7px;">
+                                <i class="fas fa-brain" style="color: #38bdf8;"></i> Contrôle de cohérence pluie-débit (méthode rationnelle)
+                            </div>
+                            <span id="kpi-coherence-badge" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; font-weight: 700;">--</span>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.78rem; background: rgba(255,255,255,0.03); border-radius: 6px; padding: 8px 10px; margin-bottom: 6px;">
+                            <div><span style="color: #94a3b8;">Débit simulé Saint-Venant 1D :</span> <b id="kpi-coh-qsim" style="color: #38bdf8;">--</b></div>
+                            <div><span style="color: #94a3b8;">Débit rationnel attendu (C&bull;I&bull;A/360) :</span> <b id="kpi-coh-qrat" style="color: #cbd5e1;">--</b></div>
+                        </div>
+                        <div id="kpi-coherence-msg" style="font-size: 0.76rem; color: #cbd5e1; line-height: 1.4;">--</div>
+                    </div>
+
+                    <!-- Double Échelle de Surface : Urbaine Drainée vs Impluvium Global Convexe -->
+                    <div style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem;">
+                        <div>
+                            <span style="color: #94a3b8;">Surface Urbaine Drainée (Voronoï sans trous) :</span>
+                            <b id="kpi-surf-urbaine" style="color: #34d399; margin-left: 6px;">-- ha</b>
+                        </div>
+                        <div style="border-left: 1px solid rgba(255,255,255,0.12); padding-left: 14px;">
+                            <span style="color: #94a3b8;">Impluvium Global (Convex Hull) :</span>
+                            <b id="kpi-surf-convexe" style="color: #38bdf8; margin-left: 6px;">5 430 ha</b>
+                            <span id="kpi-ratio-drainage" style="font-size: 0.72rem; color: #facc15; margin-left: 6px; font-weight: 700;">(Ratio: -- %)</span>
+                        </div>
+                    </div>
+
+                    <!-- Analyse de Sensibilité du Buffer Voronoï (Arrière-Plan : 35m, 45m, 60m) -->
+                    <div id="sim-buffer-sensitivity-block" style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 12px; padding: 14px 16px; margin-bottom: 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <div style="font-size: 0.86rem; font-weight: 700; color: #38bdf8; display: flex; align-items: center; gap: 7px;">
+                                <i class="fas fa-chart-line"></i> Analyse de Sensibilité du Buffer Voronoï (Scénarios 35m, 45m, 60m)
+                            </div>
+                            <span id="buffer-badge-recommande" style="font-size: 0.72rem; background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.35); padding: 2px 8px; border-radius: 4px; font-weight: 700;">
+                                ⭐ Inflexion Optimale : 45 m
+                            </span>
+                        </div>
+                        <p style="font-size: 0.78rem; color: #94a3b8; margin: 0 0 12px 0; line-height: 1.4;">
+                            Calcul automatique en arrière-plan comparant l'impact du rayon de découpage sur la surface drainée et le débit de pointe. Cliquez sur un scénario pour valider le choix définitif :
+                        </p>
+                        
+                        <!-- Tuiles comparatives des 3 scénarios -->
+                        <div id="sim-buffer-tiles-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px;">
+                            <!-- Injecté dynamiquement par afficherAnalyseSensibiliteBuffer -->
+                        </div>
+
+                        <!-- Barre de progression relative de la surface -->
+                        <div style="background: rgba(255,255,255,0.06); border-radius: 6px; height: 7px; overflow: hidden; display: flex; margin-bottom: 6px;">
+                            <div id="bar-buffer-35" style="width: 33.3%; background: #0284c7; height: 100%;" title="Buffer 35m"></div>
+                            <div id="bar-buffer-45" style="width: 33.3%; background: #10b981; height: 100%;" title="Buffer 45m (Optimal)"></div>
+                            <div id="bar-buffer-60" style="width: 33.4%; background: #f59e0b; height: 100%;" title="Buffer 60m"></div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-size: 0.7rem; color: #64748b;">
+                            <span>35 m (Voirie stricte)</span>
+                            <span style="color: #34d399; font-weight: 700;">45 m (Cœurs d'îlots comblés)</span>
+                            <span>60 m (Élargi)</span>
+                        </div>
+                    </div>
+
+                    <!-- Bouton d'accès direct à l'interprétation experte des Agents IA -->
+                    <button onclick="fermerModalSimulation(); ouvrirModalInterpretation();" style="width: 100%; margin-bottom: 8px; padding: 12px 18px; background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%); color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 0.92rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 9px; box-shadow: 0 4px 14px rgba(168, 85, 247, 0.4); transition: transform 0.15s;" onmouseover="this.style.transform='scale(1.01)'" onmouseout="this.style.transform='scale(1)'">
+                        <i class="fas fa-brain"></i> Consulter l'Interprétation des Agents IA &amp; Prescriptions Travaux
+                    </button>
+
+                    <!-- Bouton d'impression directe du rapport complet PDF -->
+                    <button onclick="imprimerDiagnosticTechniqueComplet()" style="width: 100%; margin-bottom: 14px; padding: 10px 16px; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.4); color: #d8b4fe; border-radius: 8px; font-weight: 700; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.15s;" onmouseover="this.style.background='rgba(168, 85, 247, 0.25)'" onmouseout="this.style.background='rgba(168, 85, 247, 0.15)'">
+                        <i class="fas fa-file-pdf"></i> Imprimer le Rapport d'Expertise Complet (PDF / Papier)
+                    </button>
+
+                    <!-- Téléchargements d'artefacts certifiés -->
+                    <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                        <a id="btn-download-inp" href="/api/v1/simulations/download/inp" target="_blank" style="padding: 6px 12px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); color: #e2e8f0; border-radius: 6px; font-size: 0.78rem; text-decoration: none; display: flex; align-items: center; gap: 6px;">
+                            <i class="fas fa-file-code"></i> Fichier .INP
+                        </a>
+                        <a id="btn-download-rpt" href="/api/v1/simulations/download/rpt" target="_blank" style="padding: 6px 12px; background: rgba(2, 132, 199, 0.2); border: 1px solid #0284c7; color: #38bdf8; border-radius: 6px; font-size: 0.78rem; text-decoration: none; display: flex; align-items: center; gap: 6px;">
+                            <i class="fas fa-file-alt"></i> Rapport .RPT
+                        </a>
+                    </div>
+
+                    <!-- Bouton pour voir la zone simulée sur la carte -->
+                    <button onclick="fermerModalSimulation()" style="width: 100%; margin-top: 14px; padding: 11px 16px; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4); transition: filter 0.15s;" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter='brightness(1)'">
+                        <i class="fas fa-search-location"></i> Explorer la zone simulée sur la carte &amp; Quitter
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+

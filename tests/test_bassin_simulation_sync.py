@@ -12,13 +12,24 @@ from pathlib import Path
 from api.routes.simulations import get_bassin_simulation
 from api.database import SessionLocal
 
+def _get_full_cockpit_content():
+    base = Path(__file__).resolve().parent.parent
+    content = (base / "templates" / "index.html").read_text(encoding="utf-8")
+    for p in (base / "templates" / "partials").glob("*.html"):
+        content += "\n" + p.read_text(encoding="utf-8")
+    for j in (base / "static" / "js" / "app").glob("*.js"):
+        content += "\n" + j.read_text(encoding="utf-8")
+    for c in (base / "static" / "css").glob("*.css"):
+        content += "\n" + c.read_text(encoding="utf-8")
+    return content
+
 def test_suppression_bandeau_flottant_doublon():
     """Vérifie que l'indicateur flottant en doublon sur la carte a été retiré."""
-    index_html = Path("templates/index.html").read_text(encoding="utf-8")
-    assert 'id="map-bassin-indicator"' not in index_html
-    assert 'id="topbar-bassin-container"' in index_html
-    assert 'id="topbar-bassin-pill"' in index_html
-    assert 'gererAffichageSimulationPourBassin' in index_html
+    cockpit_content = _get_full_cockpit_content()
+    assert 'id="map-bassin-indicator"' not in cockpit_content
+    assert 'id="topbar-bassin-container"' in cockpit_content
+    assert 'id="topbar-bassin-pill"' in cockpit_content
+    assert 'gererAffichageSimulationPourBassin' in cockpit_content
 
 
 def test_endpoint_simulation_par_bassin():

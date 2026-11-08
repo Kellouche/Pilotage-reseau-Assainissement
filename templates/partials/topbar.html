@@ -1,0 +1,151 @@
+<!--
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Barre supérieure de navigation SaaS, sélecteur de projet et indicateur central de bassin
+================================================================================
+-->
+        <!-- Section Gauche : Logo & Sélecteur de Contexte Réseau -->
+        <div style="display: flex; align-items: center; gap: 14px;">
+            <div class="nav-brand-title" style="cursor: default; user-select: none;">
+                <i class="fas fa-water" style="color: #38bdf8;"></i>
+                <span>DrainPilot</span>
+                <span style="font-size: 0.62rem; background: rgba(56, 189, 248, 0.18); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.35); padding: 1px 6px; border-radius: 4px; font-weight: 700;">5.2</span>
+            </div>
+
+            <div style="width: 1px; height: 20px; background: rgba(255, 255, 255, 0.15);"></div>
+
+            <!-- Bouton Sélecteur de Projet / Démo -->
+            <button id="btn-project-state" onclick="montrerModalProjet(true)" title="Changer de réseau ou charger un modèle officiel EPA" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.15); color: #f8fafc; padding: 5px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s;" onmouseover="this.style.background='rgba(56, 189, 248, 0.15)'; this.style.borderColor='#38bdf8';" onmouseout="this.style.background='rgba(255, 255, 255, 0.05)'; this.style.borderColor='rgba(255, 255, 255, 0.15)';">
+                <i class="fas fa-folder-open" style="color: #38bdf8;"></i>
+                <span id="topbar-project-label" style="max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Projet Réseau</span>
+                <i class="fas fa-chevron-down" style="font-size: 9px; color: #94a3b8;"></i>
+            </button>
+        </div>
+
+        <!-- Section Centrale : Indicateur Dynamique Bassin / Bassins en cours -->
+        <div id="topbar-bassin-container" style="display: flex; align-items: center; justify-content: center; flex: 1; max-width: 550px; margin: 0 12px;">
+            <div id="topbar-bassin-pill" style="display: inline-flex; align-items: center; gap: 8px; background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 20px; padding: 4px 14px; font-size: 0.8rem; color: #e2e8f0; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25); transition: all 0.25s ease;">
+                <span id="topbar-bassin-icon"><i class="fas fa-network-wired" style="color: #38bdf8;"></i></span>
+                <span id="topbar-bassin-text" style="font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 380px;">Bassins en cours : <span style="color: #38bdf8; font-weight: 700;">Tous les bassins</span></span>
+                <span id="topbar-bassin-badge" style="font-size: 0.7rem; background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); padding: 1px 7px; border-radius: 9999px; font-weight: 700;">77 BV</span>
+                <button id="topbar-bassin-reset-btn" onclick="reinitialiserSelectionBassin(event)" title="Réinitialiser et afficher tous les bassins" style="display: none; background: transparent; border: none; color: #94a3b8; cursor: pointer; padding: 0 2px; font-size: 11px; margin-left: 2px; line-height: 1;" onmouseover="this.style.color='#f87171'" onmouseout="this.style.color='#94a3b8'">
+                    <i class="fas fa-times-circle"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Section Droite : Simulation, Ressources & Profil Utilisateur -->
+        <div id="nav-user-area" style="display: flex; align-items: center; gap: 10px;">
+            <!-- Menu Déroulant Actions & Analyse Hydraulique -->
+            <div style="position: relative;">
+                <button id="btn-actions-menu" onclick="basculerMenuActions(event)" title="Actions de simulation et d'analyse hydraulique" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); border: none; color: white; padding: 5px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 2px 8px rgba(2, 132, 199, 0.35); transition: all 0.2s;">
+                    <i class="fas fa-bolt" style="font-size: 10px;"></i>
+                    <span>Actions</span>
+                    <i class="fas fa-chevron-down" style="font-size: 9px; opacity: 0.85;"></i>
+                </button>
+                <div id="actions-dropdown" style="display: none; position: absolute; right: 0; top: 100%; margin-top: 6px; width: 235px; background: rgba(15, 23, 42, 0.98); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.18); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); z-index: 2600; overflow: hidden; padding: 6px 0;">
+                    <!-- Action 1 : Simuler (toujours actif) -->
+                    <button onclick="fermerMenuActions(); ouvrirModalSimulation();" style="width: 100%; text-align: left; padding: 8px 14px; font-size: 12px; font-weight: 600; color: #f8fafc; background: transparent; border: none; cursor: pointer; display: flex; align-items: center; gap: 9px; transition: background 0.15s;" onmouseover="this.style.background='rgba(56, 189, 248, 0.15)'" onmouseout="this.style.background='transparent'">
+                        <i class="fas fa-play" style="color: #38bdf8; width: 16px; font-size: 12px;"></i>
+                        <span>Simuler</span>
+                    </button>
+                    <!-- Action : Exporter le modèle complet (.inp) -->
+                    <button onclick="fermerMenuActions(); telechargerModeleInpActif();" style="width: 100%; text-align: left; padding: 8px 14px; font-size: 12px; font-weight: 600; color: #f8fafc; background: transparent; border: none; cursor: pointer; display: flex; align-items: center; gap: 9px; box-sizing: border-box; transition: background 0.15s;" onmouseover="this.style.background='rgba(56, 189, 248, 0.15)'" onmouseout="this.style.background='transparent'">
+                        <i class="fas fa-file-code" style="color: #38bdf8; width: 16px; font-size: 12px;"></i>
+                        <span>Exporter le modèle (.inp)</span>
+                    </button>
+                    <!-- Action : Contrôle Qualité Réseau -->
+                    <button onclick="fermerMenuActions(); basculerVueCockpit('qualite');" style="width: 100%; text-align: left; padding: 8px 14px; font-size: 12px; font-weight: 600; color: #f8fafc; background: transparent; border: none; cursor: pointer; display: flex; align-items: center; gap: 9px; transition: background 0.15s;" onmouseover="this.style.background='rgba(16, 185, 129, 0.15)'" onmouseout="this.style.background='transparent'">
+                        <i class="fas fa-clipboard-check" style="color: #10b981; width: 16px; font-size: 12px;"></i>
+                        <span>Contrôle qualité du réseau</span>
+                    </button>
+                    <!-- Séparateur -->
+                    <div style="height: 1px; background: rgba(255,255,255,0.08); margin: 4px 0;"></div>
+                    <!-- Action 2 : Afficher les résultats (désactivé tant que pas de simulation) -->
+                    <button id="action-item-results" onclick="fermerMenuActions(); afficherDerniersResultats();" class="action-dropdown-item disabled" style="width: 100%; text-align: left; padding: 8px 14px; font-size: 12px; font-weight: 600; color: #cbd5e1; background: transparent; border: none; cursor: not-allowed; display: flex; align-items: center; gap: 9px; opacity: 0.45; pointer-events: none; transition: all 0.2s;" onmouseover="if(!this.classList.contains('disabled')) this.style.background='rgba(16, 185, 129, 0.15)'" onmouseout="this.style.background='transparent'">
+                        <i class="fas fa-chart-line" style="color: #10b981; width: 16px; font-size: 12px;"></i>
+                        <span>Afficher les résultats</span>
+                    </button>
+                    <!-- Action 3 : Interprétation des résultats (désactivé tant que pas de simulation) -->
+                    <button id="action-item-interpretation" onclick="fermerMenuActions(); ouvrirModalInterpretation();" class="action-dropdown-item disabled" style="width: 100%; text-align: left; padding: 8px 14px; font-size: 12px; font-weight: 600; color: #cbd5e1; background: transparent; border: none; cursor: not-allowed; display: flex; align-items: center; gap: 9px; opacity: 0.45; pointer-events: none; transition: all 0.2s;" onmouseover="if(!this.classList.contains('disabled')) this.style.background='rgba(168, 85, 247, 0.15)'" onmouseout="this.style.background='transparent'">
+                        <i class="fas fa-brain" style="color: #a855f7; width: 16px; font-size: 12px;"></i>
+                        <span>Interprétation des résultats</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Menu Déroulant Aide & Ressources -->
+            <div style="position: relative;">
+                <button id="btn-resources-menu" onclick="basculerMenuRessources(event)" style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); color: #cbd5e1; padding: 5px 10px; border-radius: 8px; font-size: 0.8rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                    <i class="fas fa-question-circle" style="color: #94a3b8;"></i>
+                    <span>Aide</span>
+                    <i class="fas fa-chevron-down" style="font-size: 9px; color: #94a3b8;"></i>
+                </button>
+                <div id="resources-dropdown" style="display: none; position: absolute; right: 0; top: 100%; margin-top: 6px; width: 220px; background: rgba(15, 23, 42, 0.98); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.18); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); z-index: 2600; overflow: hidden; padding: 6px 0;">
+                    <a href="/docs" target="_blank" style="padding: 8px 14px; font-size: 12px; color: #e2e8f0; display: flex; align-items: center; gap: 8px; text-decoration: none;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='transparent'">
+                        <i class="fas fa-book" style="color: #38bdf8; width: 16px;"></i> Documentation SWMM
+                    </a>
+                    <a href="/docs" target="_blank" style="padding: 8px 14px; font-size: 12px; color: #e2e8f0; display: flex; align-items: center; gap: 8px; text-decoration: none;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='transparent'">
+                        <i class="fas fa-code" style="color: #10b981; width: 16px;"></i> API REST Swagger
+                    </a>
+                    <a href="/pricing" style="padding: 8px 14px; font-size: 12px; color: #e2e8f0; display: flex; align-items: center; gap: 8px; text-decoration: none;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='transparent'">
+                        <i class="fas fa-tags" style="color: #facc15; width: 16px;"></i> Offres et licences (DZD)
+                    </a>
+                </div>
+            </div>
+
+            <!-- Chargement Auth -->
+            <div id="nav-auth-loading" style="font-size: 0.8rem; color: #94a3b8;">
+                <i class="fas fa-circle-notch fa-spin me-1"></i>
+            </div>
+
+            <!-- Espace Utilisateur Connecté -->
+            <div id="nav-auth-user" style="display: none; align-items: center; gap: 8px; position: relative;">
+                <span id="nav-org-pill" class="nav-plan-badge" style="background: rgba(2, 132, 199, 0.2); color: #38bdf8; border: 1px solid rgba(2, 132, 199, 0.4);">
+                    <i class="fas fa-building me-1"></i> <span id="nav-org-name">Organisation</span>
+                </span>
+                
+                <!-- Menu Profil Utilisateur Dropdown -->
+                <div style="position: relative;">
+                    <button id="btn-user-profile-menu" onclick="basculerMenuProfil(event)" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.18); color: #e2e8f0; padding: 4px 10px; border-radius: 20px; font-size: 0.82rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                        <span id="nav-user-avatar" style="width: 22px; height: 22px; border-radius: 50%; background: #0284c7; color: white; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800;">U</span>
+                        <span id="nav-user-name">Utilisateur</span>
+                        <i class="fas fa-chevron-down" style="font-size: 9px; color: #94a3b8;"></i>
+                    </button>
+                    <!-- Menu Déroulant Profil -->
+                    <div id="user-profile-dropdown" style="display: none; position: absolute; right: 0; top: 100%; margin-top: 6px; width: 250px; background: rgba(15, 23, 42, 0.98); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.18); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); z-index: 2600; overflow: hidden;">
+                        <div style="padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03);">
+                            <div id="dropdown-full-name" style="font-weight: 800; font-size: 13px; color: #f8fafc;">Utilisateur</div>
+                            <div id="dropdown-user-email" style="font-size: 11px; color: #94a3b8; margin-top: 2px;">user@example.com</div>
+                            <div style="margin-top: 6px;">
+                                <span id="dropdown-user-role" style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; background: rgba(56, 189, 248, 0.2); color: #38bdf8; padding: 2px 6px; border-radius: 4px; font-weight: 700;">Ingénieur</span>
+                            </div>
+                        </div>
+                        <div style="padding: 6px 0;">
+                            <button onclick="ouvrirModalProfil('infos')" style="width: 100%; text-align: left; background: transparent; border: none; padding: 8px 14px; font-size: 12px; color: #e2e8f0; cursor: pointer; display: flex; align-items: center; gap: 8px;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='transparent'">
+                                <i class="fas fa-user-edit" style="color: #38bdf8; width: 16px;"></i> Mon Profil &amp; Informations
+                            </button>
+                            <button onclick="ouvrirModalProfil('password')" style="width: 100%; text-align: left; background: transparent; border: none; padding: 8px 14px; font-size: 12px; color: #e2e8f0; cursor: pointer; display: flex; align-items: center; gap: 8px;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='transparent'">
+                                <i class="fas fa-key" style="color: #facc15; width: 16px;"></i> Changer mon mot de passe
+                            </button>
+                        </div>
+                        <div style="border-top: 1px solid rgba(255,255,255,0.1); padding: 6px 0;">
+                            <button onclick="executerDeconnexion()" style="width: 100%; text-align: left; background: transparent; border: none; padding: 8px 14px; font-size: 12px; color: #f87171; cursor: pointer; display: flex; align-items: center; gap: 8px;" onmouseover="this.style.background='rgba(239, 68, 68, 0.1)'" onmouseout="this.style.background='transparent'">
+                                <i class="fas fa-sign-out-alt" style="width: 16px;"></i> Déconnexion
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Espace Invité / Non connecté -->
+            <div id="nav-auth-guest" style="display: none; align-items: center; gap: 8px;">
+                <a href="/login" style="color: #e2e8f0; font-weight: 600; padding: 4px 12px; border-radius: 6px; background: rgba(255,255,255,0.1);">Connexion</a>
+                <a href="/register?plan=demo" style="color: #fff; font-weight: 600; padding: 4px 12px; border-radius: 6px; background: #0284c7;">Essai Démo (14j)</a>
+            </div>
+        </div>
+    </header>
+

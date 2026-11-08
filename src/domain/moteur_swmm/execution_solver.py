@@ -65,3 +65,4 @@ def executer_solver_swmm(inp_content: str) -> Tuple[str, str]:
                     os.unlink(p)
                 except Exception:
                     pass
+

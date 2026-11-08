@@ -355,3 +355,4 @@ def analyser_rapport_swmm_impl(rpt_text: str, meta: Dict[str, Any]) -> Dict[str,
     kpis["bilan_hydraulique_decisionnel"] = texte_decisionnel
     kpis["compliance_continuity"] = abs(kpis["routing_continuity_error_pct"]) <= 5.0
     return kpis
+

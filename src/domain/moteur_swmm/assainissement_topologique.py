@@ -323,3 +323,4 @@ def _assainir_topologie_swmm(inp_text: str) -> str:
             rebuilt.append(sec_name)
         rebuilt.extend(sec_lines)
     return "\n".join(rebuilt)
+

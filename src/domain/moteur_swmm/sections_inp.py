@@ -476,3 +476,4 @@ def generer_lignes_sections_inp(
     }
 
     return lines, meta
+
