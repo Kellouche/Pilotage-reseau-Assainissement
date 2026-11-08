@@ -450,7 +450,7 @@
             </div>
 
             <h3 style="font-size: 1.25rem; font-weight: 800; color: #f8fafc; margin-bottom: 6px; letter-spacing: -0.3px;">
-                Simulation Hydrodynamique SWMM 5.2
+                Simulation hydrodynamique SWMM 5.2
             </h3>
             <p style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 18px; line-height: 1.4;">
                 Résolution des équations 1D de Saint-Venant &amp; hydrologie Horton
@@ -531,7 +531,7 @@
                     <!-- Action : Contrôle Qualité Réseau -->
                     <button onclick="fermerMenuActions(); basculerVueCockpit('qualite');" style="width: 100%; text-align: left; padding: 8px 14px; font-size: 12px; font-weight: 600; color: #f8fafc; background: transparent; border: none; cursor: pointer; display: flex; align-items: center; gap: 9px; transition: background 0.15s;" onmouseover="this.style.background='rgba(16, 185, 129, 0.15)'" onmouseout="this.style.background='transparent'">
                         <i class="fas fa-clipboard-check" style="color: #10b981; width: 16px; font-size: 12px;"></i>
-                        <span>Contrôle Qualité Réseau</span>
+                        <span>Contrôle qualité du réseau</span>
                     </button>
                     <!-- Séparateur -->
                     <div style="height: 1px; background: rgba(255,255,255,0.08); margin: 4px 0;"></div>
@@ -563,7 +563,7 @@
                         <i class="fas fa-code" style="color: #10b981; width: 16px;"></i> API REST Swagger
                     </a>
                     <a href="/pricing" style="padding: 8px 14px; font-size: 12px; color: #e2e8f0; display: flex; align-items: center; gap: 8px; text-decoration: none;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='transparent'">
-                        <i class="fas fa-tags" style="color: #facc15; width: 16px;"></i> Offres &amp; Licences (DZD)
+                        <i class="fas fa-tags" style="color: #facc15; width: 16px;"></i> Offres et licences (DZD)
                     </a>
                 </div>
             </div>
@@ -644,14 +644,14 @@
         <!-- ============================================== -->
         <div class="sidebar-section">
             <div class="section-title">
-                <span><i class="fas fa-network-wired text-sky me-1"></i> 1. Réseau Physique</span>
+                <span><i class="fas fa-network-wired text-sky me-1"></i> 1. Réseau physique</span>
             </div>
             <div class="layer-list">
                 <label class="layer-item"><input type="checkbox" id="f-conduites" checked> <span class="layer-indicator" style="background: #38bdf8;"></span> Conduites</label>
                 <label class="layer-item"><input type="checkbox" id="f-sens-ecoulement" onchange="basculerSensEcoulement(this.checked)"> <span class="layer-indicator" style="background: transparent; color: #38bdf8; font-weight: bold; font-size: 11px; display: inline-flex; align-items: center; justify-content: center;">➤</span> Sens d'écoulement</label>
                 <label class="layer-item"><input type="checkbox" id="f-regards" checked> <span class="layer-indicator" style="background: #e2e8f0; border-radius: 50%;"></span> Regards de visite</label>
-                <label class="layer-item"><input type="checkbox" id="f-rejets" checked> <span class="layer-indicator" style="background: #ef4444; border-radius: 50%;"></span> Rejets vers le milieu naturel (Oueds)</label>
-                <label class="layer-item"><input type="checkbox" id="f-stations" checked> <span class="layer-indicator" style="background: #f97316; border-radius: 50%;"></span> Stations de relevage / pompage</label>
+                <label class="layer-item"><input type="checkbox" id="f-rejets" checked> <span class="layer-indicator" style="background: #ef4444; border-radius: 50%;"></span> Rejets vers le milieu naturel (oueds)</label>
+                <label class="layer-item"><input type="checkbox" id="f-stations" checked> <span class="layer-indicator" style="background: #f97316; border-radius: 50%;"></span> Stations de relevage et pompage</label>
                 <label class="layer-item"><input type="checkbox" id="f-step" checked> <span class="layer-indicator" style="background: #22c55e; border-radius: 50%;"></span> Station d'épuration (STEP)</label>
                 <label class="layer-item"><input type="checkbox" id="f-ouvrages" checked> <span class="layer-indicator" style="background: #06b6d4; border-radius: 50%;"></span> Ouvrages spéciaux</label>
                 <div id="subtypes-ouvrages" style="margin-left: 14px; margin-top: 2px; margin-bottom: 6px; padding-left: 8px; border-left: 2px solid rgba(255,255,255,0.12); display: flex; flex-direction: column; gap: 3px;">
@@ -685,7 +685,7 @@
         <!-- ============================================== -->
         <div class="sidebar-section">
             <div class="section-title">
-                <span><i class="fas fa-draw-polygon text-emerald me-1"></i> 2. Hydrologie &amp; Surfaces</span>
+                <span><i class="fas fa-draw-polygon text-emerald me-1"></i> 2. Hydrologie et surfaces</span>
                 <span id="badge-subcatchments-count" class="badge-pill">-- SB</span>
             </div>
             <!-- Checkbox Couche Bassins Versants (Exutoires) -->
@@ -693,7 +693,7 @@
                 <label class="layer-item" id="label-bassins" style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 6px; padding: 6px 10px;">
                     <input type="checkbox" id="f-bassins" checked onchange="basculerCoucheBassins(this.checked)">
                     <span class="layer-indicator" style="background: #38bdf8;"></span>
-                    <span style="font-weight: 600; color: #38bdf8;">Bassins Versants (Exutoires)</span>
+                    <span style="font-weight: 600; color: #38bdf8;">Bassins versants (exutoires)</span>
                 </label>
             </div>
             <!-- Checkbox Sous-bassins versants Voronoï (Point 1) -->
@@ -701,7 +701,7 @@
                 <label class="layer-item" style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 6px; padding: 6px 10px;">
                     <input type="checkbox" id="f-subcatchments" checked onchange="basculerCoucheSousBassins(this.checked)">
                     <span class="layer-indicator" style="background: #10b981;"></span>
-                    <span style="font-weight: 600; color: #34d399;">Sous-Bassins (Voronoï)</span>
+                    <span style="font-weight: 600; color: #34d399;">Sous-bassins (Voronoï)</span>
                 </label>
                 <div id="subcatchments-legend" style="font-size: 0.72rem; color: #94a3b8; padding-left: 26px; line-height: 1.3;">
                     Surfaces d'apport élémentaires par regard (Horton $f_0=75, f_c=10$).
@@ -721,17 +721,17 @@
 
             <div id="orphelins-export-section" style="margin-top: 8px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 6px;">
                 <a href="/api/v1/network/orphelins/geojson" target="_blank" download="elements_orphelins.geojson" style="font-size: 0.72rem; color: #f59e0b; text-decoration: none; display: flex; align-items: center; gap: 5px;">
-                    <i class="fas fa-file-export"></i> Exporter orphelins isolés (GeoJSON)
+                    <i class="fas fa-file-export"></i> Exporter les orphelins isolés (GeoJSON)
                 </a>
             </div>
         </div>
     </div>
     <!-- Barre d'outils d'édition (déplacée hors de map) -->
     <div class="edit-toolbar" id="main-edit-toolbar">
-        <button class="tool-btn tool-tip" id="btn-create-bassin" data-tip="Nouveau Bassin (Polygone)">
+        <button class="tool-btn tool-tip" id="btn-create-bassin" data-tip="Nouveau bassin (polygone)">
             <i class="fas fa-draw-polygon"></i>
         </button>
-        <button class="tool-btn tool-tip" id="btn-merge-bassin" data-tip="Fusionner Bassins" disabled>
+        <button class="tool-btn tool-tip" id="btn-merge-bassin" data-tip="Fusionner les bassins" disabled>
             <i class="fas fa-link"></i>
         </button>
         <button class="tool-btn tool-tip" id="btn-delete-bassin" data-tip="Supprimer" disabled>
@@ -1926,6 +1926,18 @@
                             },
                             onEachFeature: (feature, layer) => {
                                 if (feature.properties.type === 'bassin_urbain') {
+                                    const cid = String(feature.properties.cluster_id);
+                                    if (!window._bassinProperties) window._bassinProperties = {};
+                                    window._bassinProperties[cid] = feature.properties;
+                                    if (feature.properties.nom) {
+                                        window._bassinProperties[String(feature.properties.nom)] = feature.properties;
+                                    }
+                                    if (!window._bassinNoms) window._bassinNoms = {};
+                                    window._bassinNoms[cid] = feature.properties.nom || ('Bassin ' + cid);
+                                    if (feature.properties.nom) {
+                                        window._bassinNoms[String(feature.properties.nom)] = feature.properties.nom;
+                                    }
+
                                     const tipHtml = window.genererTooltipBassinVersantHtml(feature.properties);
                                     layer.bindTooltip(tipHtml, {
                                         sticky: true,
@@ -2105,6 +2117,7 @@
                         if (badgeOrph) badgeOrph.textContent = `(${nbOrphelins} tr. • ${nbRegOrphelins} reg.)`;
 
                         _activeClusterLayer = clusterLayer;
+                        window._activeClusterLayer = clusterLayer;
                         
                         const nbBassins = clusterData.clusters_crees || clusterData.features.filter(f => f.properties && f.properties.type === 'bassin_urbain').length;
                         const nbTroncons = clusterData.troncons_connectes !== undefined ? clusterData.troncons_connectes : clusterData.features.filter(f => f.geometry && (f.geometry.type === 'LineString' || f.geometry.type === 'MultiLineString')).length;
@@ -2215,15 +2228,39 @@
                 return;
             }
 
-            // État 2 : Simulation terminée avec succès (Option 1 : Lecture Hydraulique)
-            if (state.status === 'simulated') {
-                const nom = (window._bassinNoms && cidStr && window._bassinNoms[cidStr]) ? window._bassinNoms[cidStr] : `Bassin ${cidStr || ''}`;
-                const qExutoire = (state.q_exutoire_m3s !== undefined) ? parseFloat(state.q_exutoire_m3s) : (state.peak_flow ? parseFloat(state.peak_flow) : 0.0);
-                const qDerive = (state.q_derive_m3s !== undefined) ? parseFloat(state.q_derive_m3s) : (state.q_deleste_ls ? (parseFloat(state.q_deleste_ls) / 1000.0) : 0.0);
-                const qGenere = (state.q_genere_m3s !== undefined) ? parseFloat(state.q_genere_m3s) : (qExutoire + qDerive);
-                const nbRacc = parseInt(state.nb_ouvrages_raccordes || 0, 10);
-                const tauxDerive = (state.taux_derive_pct !== undefined) ? parseFloat(state.taux_derive_pct) : (qGenere > 0 ? ((qDerive / qGenere) * 100.0) : 0.0);
-                const tauxExutoire = (state.taux_exutoire_pct !== undefined) ? parseFloat(state.taux_exutoire_pct) : Math.max(0, 100.0 - tauxDerive);
+            // Détection automatique si le bassin possède une simulation active ou mise en cache
+            let simActive = null;
+            if (state.status === 'simulated' && (state.q_genere_m3s !== undefined || state.peak_flow !== undefined || state.q_exutoire_m3s !== undefined)) {
+                simActive = state;
+            } else if (cidStr) {
+                const lastSim = window._dernierResultatSimulation;
+                if (lastSim && lastSim.meta) {
+                    const mId = String(lastSim.meta.cluster_id !== undefined && lastSim.meta.cluster_id !== null ? lastSim.meta.cluster_id : '');
+                    const mNom = String(lastSim.meta.bassin_nom || lastSim.meta.cluster_nom || '');
+                    if (mId === cidStr || mNom === cidStr || (window._bassinNoms && (window._bassinNoms[cidStr] === mNom || window._bassinNoms[cidStr] === mId))) {
+                        simActive = lastSim;
+                    }
+                }
+                if (!simActive && window._simulationsCache) {
+                    simActive = window._simulationsCache[cidStr];
+                    if (!simActive && window._bassinNoms && window._bassinNoms[cidStr]) {
+                        simActive = window._simulationsCache[window._bassinNoms[cidStr]];
+                    }
+                }
+            }
+
+            // État 2 : Simulation terminée avec succès (Affichage des métriques hydrauliques complètes)
+            if (simActive) {
+                const kp = simActive.kpis || simActive;
+                const m = simActive.meta || {};
+                const nom = m.cluster_nom || (window._bassinNoms && cidStr && window._bassinNoms[cidStr]) || `Bassin ${cidStr || ''}`;
+
+                const qExutoire = (kp.q_exutoire_m3s !== undefined) ? parseFloat(kp.q_exutoire_m3s) : (kp.peak_flow ? parseFloat(kp.peak_flow) : (kp.peak_outflow_m3s ? parseFloat(kp.peak_outflow_m3s) : 0.0));
+                const qDerive = (kp.q_derive_m3s !== undefined) ? parseFloat(kp.q_derive_m3s) : (kp.q_deleste_ls ? (parseFloat(kp.q_deleste_ls) / 1000.0) : (kp.q_deleste_m3s ? parseFloat(kp.q_deleste_m3s) : 0.0));
+                const qGenere = (kp.q_genere_m3s !== undefined) ? parseFloat(kp.q_genere_m3s) : (qExutoire + qDerive);
+                const nbRacc = parseInt(kp.nb_ouvrages_raccordes || 0, 10);
+                const tauxDerive = (kp.taux_derive_pct !== undefined) ? parseFloat(kp.taux_derive_pct) : (qGenere > 0 ? ((qDerive / qGenere) * 100.0) : 0.0);
+                const tauxExutoire = (kp.taux_exutoire_pct !== undefined) ? parseFloat(kp.taux_exutoire_pct) : Math.max(0, 100.0 - tauxDerive);
 
                 const qGenereStr = window.formaterNombre(qGenere, 3);
                 const qExutoireStr = window.formaterNombre(qExutoire, 3);
@@ -2269,37 +2306,65 @@
 
                 if (mapIcon) mapIcon.innerHTML = '<i class="fas fa-network-wired" style="color: #38bdf8;"></i>';
                 if (mapTitle) mapTitle.innerHTML = `Bassins en cours : <b style="color: #38bdf8;">Tous les bassins (${totalBassins})</b>`;
-                if (mapMeta) mapMeta.innerHTML = `Mode Réseau Global`;
+                if (mapMeta) mapMeta.innerHTML = `Mode réseau global`;
                 if (mapReset) mapReset.style.display = 'none';
                 return;
             }
 
-            // État 4 : Un bassin individuel est sélectionné
+            // État 4 : Un bassin individuel est sélectionné (Extraction robuste des métadonnées)
             let nom = (window._bassinNoms && window._bassinNoms[cidStr]) ? window._bassinNoms[cidStr] : `Bassin ${cidStr}`;
             let surfHa = '';
             let nbRegards = '';
             let nbConduites = '';
+            let longStr = '';
             let bColor = '#38bdf8';
 
-            if (window._activeClusterLayer) {
-                window._activeClusterLayer.eachLayer(l => {
+            // 1. Recherche prioritaire dans le dictionnaire direct indexé
+            let p = window._bassinProperties ? window._bassinProperties[cidStr] : null;
+            if (!p && window._bassinProperties && window._bassinNoms && window._bassinNoms[cidStr]) {
+                p = window._bassinProperties[window._bassinNoms[cidStr]];
+            }
+
+            // 2. Recherche de secours dans les couches GeoJSON
+            if (!p && couches && couches.bassins) {
+                couches.bassins.eachLayer(l => {
                     const f = l.feature;
-                    if (f && f.properties && f.properties.type === 'bassin_urbain' && String(f.properties.cluster_id) === cidStr) {
-                        const p = f.properties;
-                        if (p.nom) nom = p.nom;
-                        if (p.surface_ha !== undefined && p.surface_ha !== null) surfHa = `${p.surface_ha} ha`;
-                        if (p.nb_regards !== undefined && p.nb_regards !== null) nbRegards = `${p.nb_regards} regards`;
-                        if (p.nb_conduites !== undefined) nbConduites = `${p.nb_conduites} conduites`;
-                        else if (p.nb_troncons !== undefined) nbConduites = `${p.nb_troncons} conduites`;
-                        if (p.couleur) bColor = p.couleur;
+                    if (f && f.properties && f.properties.type === 'bassin_urbain') {
+                        if (String(f.properties.cluster_id) === cidStr || String(f.properties.nom) === cidStr) {
+                            p = f.properties;
+                        }
                     }
                 });
+            }
+            if (!p && window._activeClusterLayer) {
+                window._activeClusterLayer.eachLayer(l => {
+                    const f = l.feature;
+                    if (f && f.properties && f.properties.type === 'bassin_urbain') {
+                        if (String(f.properties.cluster_id) === cidStr || String(f.properties.nom) === cidStr) {
+                            p = f.properties;
+                        }
+                    }
+                });
+            }
+            if (!p && window._clustersData && Array.isArray(window._clustersData.features)) {
+                const match = window._clustersData.features.find(f => f.properties && f.properties.type === 'bassin_urbain' && (String(f.properties.cluster_id) === cidStr || String(f.properties.nom) === cidStr));
+                if (match) p = match.properties;
+            }
+
+            if (p) {
+                if (p.nom) nom = p.nom;
+                if (p.surface_ha !== undefined && p.surface_ha !== null) surfHa = `${Number(p.surface_ha).toFixed(2)} ha`;
+                if (p.nb_regards !== undefined && p.nb_regards !== null) nbRegards = `${p.nb_regards} regards`;
+                if (p.nb_conduites !== undefined) nbConduites = `${p.nb_conduites} conduites`;
+                else if (p.nb_troncons !== undefined) nbConduites = `${p.nb_troncons} conduites`;
+                if (p.longueur_totale_m) longStr = `(${Math.round(p.longueur_totale_m)} m)`;
+                if (p.couleur) bColor = p.couleur;
             }
 
             if (topIcon) topIcon.innerHTML = `<i class="fas fa-draw-polygon" style="color: ${bColor};"></i>`;
             if (topText) topText.innerHTML = `Bassin en cours : <span style="color: #f8fafc; font-weight: 700;">${nom}</span>`;
             if (topBadge) {
-                topBadge.innerText = surfHa || `ID ${cidStr}`;
+                topBadge.innerText = surfHa || (nbRegards ? `${nbRegards} • ${nbConduites}` : nom || `Bassin ${cidStr}`);
                 topBadge.style.background = 'rgba(56, 189, 248, 0.15)';
                 topBadge.style.color = '#38bdf8';
             }
@@ -2307,7 +2372,12 @@
 
             if (mapIcon) mapIcon.innerHTML = `<i class="fas fa-draw-polygon" style="color: ${bColor};"></i>`;
             if (mapTitle) mapTitle.innerHTML = `Bassin en cours : <b style="color: #f8fafc;">${nom}</b>`;
-            if (mapMeta) mapMeta.innerHTML = `<span style="color: #38bdf8; font-weight: 600;">${surfHa}</span> ${nbRegards ? `&bull; 📍 ${nbRegards}` : ''} ${nbConduites ? `&bull; 📏 ${nbConduites}` : ''}`;
+            const metaElements = [];
+            if (surfHa) metaElements.push(`<span style="color: #38bdf8; font-weight: 600;">${surfHa}</span>`);
+            if (nbRegards) metaElements.push(`📍 ${nbRegards}`);
+            if (nbConduites) metaElements.push(`📏 ${nbConduites}${longStr ? ' ' + longStr : ''}`);
+            if (metaElements.length === 0) metaElements.push(`Bassin versant sélectionné`);
+            if (mapMeta) mapMeta.innerHTML = metaElements.join(' &bull; ');
             if (mapReset) mapReset.style.display = 'inline-flex';
         };
 
@@ -2336,6 +2406,25 @@
                 sel.value = _selectedClusterId || '';
             }
             afficherInfoBassin(_selectedClusterId);
+
+            // Synchroniser le titre de la légende flottante
+            const legTitle = document.querySelector('#sim-floating-legend span');
+            if (legTitle) {
+                let cachedSim = null;
+                if (_selectedClusterId && window._simulationsCache) {
+                    cachedSim = window._simulationsCache[_selectedClusterId];
+                    if (!cachedSim && window._bassinNoms && window._bassinNoms[_selectedClusterId]) {
+                        cachedSim = window._simulationsCache[window._bassinNoms[_selectedClusterId]];
+                    }
+                }
+                if (cachedSim && cachedSim.meta) {
+                    legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> SWMM 5.2 — ${cachedSim.meta.cluster_nom || ('Bassin ' + cachedSim.meta.cluster_id)}`;
+                } else if (_selectedClusterId && window._bassinNoms && window._bassinNoms[_selectedClusterId]) {
+                    legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> SWMM 5.2 — ${window._bassinNoms[_selectedClusterId]}`;
+                } else {
+                    legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> Légende SWMM 5.2`;
+                }
+            }
 
             geojsonLayer = geojsonLayer || window._activeClusterLayer || (typeof couches !== 'undefined' ? couches.bassins : null);
             if (!geojsonLayer) return;
@@ -2441,6 +2530,12 @@
                 const cid = f.properties.cluster_id;
                 const nom = f.properties.nom || `Bassin ${cid}`;
                 _bassinNoms[cid] = nom;
+                if (!window._bassinProperties) window._bassinProperties = {};
+                window._bassinProperties[String(cid)] = f.properties;
+                if (nom) {
+                    window._bassinProperties[String(nom)] = f.properties;
+                    _bassinNoms[String(nom)] = nom;
+                }
 
                 const nbReg = parseInt(f.properties.nb_regards || 0);
                 const nbCond = parseInt(f.properties.nb_conduites || 0);
@@ -2467,7 +2562,7 @@
             // Groupe 1 : Bassins versants collecteurs (réseau connecté)
             if (collecteurs.length > 0) {
                 const grpCol = document.createElement('optgroup');
-                grpCol.label = `── BASSINS VERSANTS COLLECTEURS (${collecteurs.length}) ──`;
+                grpCol.label = `── Bassins versants collecteurs (${collecteurs.length}) ──`;
                 collecteurs.forEach(f => {
                     const cid = f.properties.cluster_id;
                     const nom = f.properties.nom || `Bassin ${cid}`;
@@ -2484,7 +2579,7 @@
             // Groupe 2 : Exutoires & Ouvrages ponctuels isolés (sans réseau amont)
             if (isoles.length > 0) {
                 const grpIso = document.createElement('optgroup');
-                grpIso.label = `── EXUTOIRES & OUVRAGES PONCTUELS SANS RÉSEAU (${isoles.length}) ──`;
+                grpIso.label = `── Exutoires et ouvrages ponctuels sans réseau (${isoles.length}) ──`;
                 isoles.forEach(f => {
                     const cid = f.properties.cluster_id;
                     const nom = f.properties.nom || `Bassin ${cid}`;
@@ -3498,7 +3593,7 @@
                 gcRows = '<tr><td colspan="7" style="text-align:center; color:#64748b;">Aucun recalibrage structurel lourd requis. Capacité gravitaire actuelle satisfaisante.</td></tr>';
             }
 
-            // Tableau LID / SFN (Agent 3)
+            // Tableau rétention / GDO (Agent 3)
             let lidRows = '';
             if (lid.solutions && lid.solutions.length > 0) {
                 lid.solutions.forEach(s => {
@@ -3540,17 +3635,17 @@
                     const dispArea = (isAct && meta.total_area_ha) ? meta.total_area_ha : c.surface_ha;
                     bufRows += `
                         <tr style="${isRec ? 'background: #e0f2fe; font-weight: 700;' : ''}">
-                            <td>Buffer <b>${Math.round(c.buffer_m)} m</b> ${isRec ? '⭐ (Optimal)' : ''}</td>
+                            <td>Tampon <b>${Math.round(c.buffer_m)} m</b> ${isRec ? '⭐ (Optimal)' : ''}</td>
                             <td style="text-align: right;">${dispArea} ha</td>
                             <td style="text-align: right;">${c.gain_pct > 0 ? '+' + c.gain_pct + '%' : 'Référence'}</td>
                             <td style="text-align: right;">${c.peak_flow_m3s} m³/s</td>
-                            <td>${c.buffer_m === 35 ? 'Emprise voirie stricte (Scénario de référence simulé)' : (c.buffer_m === 45 ? 'Comblement des îlots bâtis (Recommandé)' : 'Extension zone périurbaine')}</td>
+                            <td>${c.buffer_m === 35 ? 'Emprise voirie stricte (scénario de référence simulé)' : (c.buffer_m === 45 ? 'Comblement des îlots bâtis (recommandé)' : 'Extension zone périurbaine')}</td>
                         </tr>
                     `;
                 });
             }
 
-            // Tableau Comparatif des Variantes (Agent 5 Finance)
+            // Tableau comparatif des variantes (Agent 5 Finance)
             let varRows = '';
             if (variantes.length > 0) {
                 variantes.forEach(v => {
@@ -3581,35 +3676,35 @@
             } else {
                 varRows = `
                     <tr>
-                        <td><b>Variante 1 : Tout-Réseau</b><br><small style="color:#64748b;">Recalibrage intégral 7.6 km sans bassin</small></td>
+                        <td><b>Variante 1 : 100 % tout-réseau</b><br><small style="color:#64748b;">Recalibrage intégral 7.6 km sans bassin</small></td>
                         <td style="text-align: right;">7 591,9 ml</td>
                         <td style="text-align: right;">--</td>
                         <td style="text-align: right; font-weight: 700;">${window.formaterCoutDZD(330964500)}</td>
-                        <td>100% théorique (sans abattement de pointe)</td>
-                        <td>TRÈS ÉLEVÉ (Coupure RN4, paralysie urbaine)</td>
-                        <td>TRÈS ÉLEVÉ (Crue brute à l'exutoire)</td>
+                        <td>100 % théorique (sans abattement de pointe)</td>
+                        <td>TRÈS ÉLEVÉ (coupure RN4, paralysie urbaine)</td>
+                        <td>TRÈS ÉLEVÉ (crue brute à l'exutoire)</td>
                         <td style="text-align: center;">5,5 / 10</td>
                         <td style="text-align: center;"><span class="badge badge-p1">NON RETENU</span></td>
                     </tr>
                     <tr>
-                        <td><b>Variante 2 : SFN Pures</b><br><small style="color:#64748b;">Bassin d'orage 18 500 m³ sans recalibrage réseau</small></td>
+                        <td><b>Variante 2 : 100 % GDO pures</b><br><small style="color:#64748b;">Bassin d'orage 18 500 m³ sans recalibrage réseau</small></td>
                         <td style="text-align: right;">--</td>
                         <td style="text-align: right;">18 500 m³</td>
                         <td style="text-align: right; font-weight: 700;">${window.formaterCoutDZD(112500000)}</td>
-                        <td>Partiel (~62% réduction débordements)</td>
+                        <td>Partiel (~62 % réduction débordements)</td>
                         <td>Faible (hors voies circulées)</td>
                         <td>Faible (bon écrêtement)</td>
                         <td style="text-align: center;">6,0 / 10</td>
                         <td style="text-align: center;"><span class="badge badge-p2">INSUFFISANT</span></td>
                     </tr>
                     <tr style="background: #f0fdf4; font-weight: 600;">
-                        <td><b>Variante 3 : Mixte Optimisée</b><br><small style="color:#64748b;">Recalibrage ciblé 97 goulots + Bassin 6 595 m³</small></td>
+                        <td><b>Variante 3 : Mixte optimisée</b><br><small style="color:#64748b;">Recalibrage ciblé 97 goulots + Bassin 6 595 m³</small></td>
                         <td style="text-align: right;">4 112,8 ml</td>
                         <td style="text-align: right;">6 595 m³</td>
                         <td style="text-align: right; font-weight: 800; color: #16a34a;">${window.formaterCoutDZD(240384400)}</td>
-                        <td>100% résorption intégrale (Saint-Venant vérifié)</td>
+                        <td>100 % résorption intégrale (Saint-Venant vérifié)</td>
                         <td>Modéré et phasable (P1 / P2)</td>
-                        <td>MINIMAL (Pointe écrêtée de 1,73 à 0,65 m³/s)</td>
+                        <td>MINIMAL (pointe écrêtée de 1,73 à 0,65 m³/s)</td>
                         <td style="text-align: center;"><b>9,2 / 10</b></td>
                         <td style="text-align: center;"><span class="badge badge-p3" style="background: #16a34a;">RECOMMANDÉ</span></td>
                     </tr>
@@ -3621,7 +3716,7 @@
 <html lang="fr">
 <head>
     <meta charset="utf-8">
-    <title>Rapport d'Expertise Hydraulique SWMM 5.2 — ${meta.cluster_nom || 'Reseau'}</title>
+    <title>Rapport d'expertise hydraulique SWMM 5.2 — ${meta.cluster_nom || 'Réseau'}</title>
     <style>
         @page { size: A4; margin: 12mm 15mm 15mm 15mm; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #0f172a; background: #ffffff; margin: 0; padding: 0; font-size: 9pt; line-height: 1.35; }
@@ -3665,26 +3760,26 @@
     <div class="header">
         <h3>République Algérienne Démocratique et Populaire</h3>
         <h4>Ministère des Ressources en Eau &bull; Office National de l'Assainissement (ONA)</h4>
-        <h2>Rapport d'Expertise Hydraulique &amp; Prescriptions Travaux</h2>
-        <h4>Simulation Numérique EPA SWMM 5.2.4 &bull; Diagnostic Multi-Agents IA &bull; Génie Civil &bull; Solutions SFN</h4>
+        <h2>Rapport d'expertise hydraulique et prescriptions de travaux</h2>
+        <h4>Simulation numérique EPA SWMM 5.2.4 &bull; Diagnostic multi-agents IA &bull; Génie civil &bull; Gestion durable des ouvrages (GDO)</h4>
     </div>
 
     <div class="cartouche">
-        <div class="cartouche-item"><span>Projet Réseau</span><b>${projectName}</b></div>
-        <div class="cartouche-item"><span>Périmètre Simulé</span><b>${meta.cluster_nom || ('Bassin ' + meta.cluster_id) || 'Réseau Complet'}</b></div>
-        <div class="cartouche-item"><span>Date d'Expertise</span><b>${dateStr}</b></div>
-        <div class="cartouche-item"><span>Scénario Pluvieux</span><b>${meta.scenario || 'Pluie Décennale ANRH Mascara'} (Imax = ${k.pluvio_intensite_max_mmh || meta.pluvio_intensite_max_mmh || 62.0} mm/h)</b></div>
-        <div class="cartouche-item"><span>Surface Drainée</span><b>${meta.total_area_ha || 0} ha (Buffer ${meta.buffer_m || 35} m)</b></div>
-        <div class="cartouche-item"><span>Éléments Modélisés</span><b>${meta.conduits_count || 0} Conduites &bull; ${(meta.junctions_count || 0) + 1} Regards</b></div>
-        <div class="cartouche-item"><span>Débit Pointe Exutoire</span><b style="color: #0284c7;">${k.peak_outflow_m3s || 0} m³/s</b></div>
-        <div class="cartouche-item"><span>Bilan Débordements</span><b style="color: ${k.flooded_nodes_count > 0 ? '#ef4444' : '#10b981'};">${k.flooded_nodes_count || 0} Débordements &bull; ${k.surcharged_nodes_count || 0} en Charge</b></div>
+        <div class="cartouche-item"><span>Projet réseau</span><b>${projectName}</b></div>
+        <div class="cartouche-item"><span>Périmètre simulé</span><b>${meta.cluster_nom || ('Bassin ' + meta.cluster_id) || 'Réseau complet'}</b></div>
+        <div class="cartouche-item"><span>Date d'expertise</span><b>${dateStr}</b></div>
+        <div class="cartouche-item"><span>Scénario pluvieux</span><b>${meta.scenario || 'Pluie décennale ANRH Mascara'} (Imax = ${k.pluvio_intensite_max_mmh || meta.pluvio_intensite_max_mmh || 62.0} mm/h)</b></div>
+        <div class="cartouche-item"><span>Surface drainée</span><b>${meta.total_area_ha || 0} ha (tampon ${meta.buffer_m || 35} m)</b></div>
+        <div class="cartouche-item"><span>Éléments modélisés</span><b>${meta.conduits_count || 0} conduites &bull; ${(meta.junctions_count || 0) + 1} regards</b></div>
+        <div class="cartouche-item"><span>Débit de pointe à l'exutoire</span><b style="color: #0284c7;">${k.peak_outflow_m3s || 0} m³/s</b></div>
+        <div class="cartouche-item"><span>Bilan des débordements</span><b style="color: ${k.flooded_nodes_count > 0 ? '#ef4444' : '#10b981'};">${k.flooded_nodes_count || 0} débordements &bull; ${k.surcharged_nodes_count || 0} en charge</b></div>
     </div>
 
     <!-- Cadre Hydro-Météorologique de Dimensionnement (Référentiel ANRH / ONA) -->
     <div style="background: #f0f9ff; border: 1.5px solid #0284c7; border-left: 6px solid #0284c7; border-radius: 6px; padding: 9px 12px; margin-bottom: 10px; page-break-inside: avoid;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
             <span style="font-weight: 800; font-size: 8.8pt; color: #0369a1; text-transform: uppercase;">
-                🌧️ Cadre Hydro-Météorologique &amp; Sollicitation Pluviométrique Réglementaire (ANRH / ONA)
+                🌧️ Cadre hydro-météorologique et sollicitation pluviométrique réglementaire (ANRH / ONA)
             </span>
             <span style="background: #0284c7; color: white; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 7.5pt;">
                 ${meta.pluvio_station || k.pluvio_station || 'Station ANRH Chlef Siège (Réf. 010501)'}
@@ -3692,17 +3787,17 @@
         </div>
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; background: white; border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px 8px; margin-bottom: 6px;">
             <div>
-                <span style="color: #64748b; font-size: 7pt; text-transform: uppercase; display: block; font-weight: 700;">Période de Retour (T)</span>
-                <b style="color: #0f172a; font-size: 8.5pt;">${meta.pluvio_periode_retour || k.pluvio_periode_retour || 'T = 10 ans (Décennale)'}</b>
-                <small style="color: #64748b; display: block; font-size: 6.8pt;">Conforme Guide ONA Assainissement</small>
+                <span style="color: #64748b; font-size: 7pt; text-transform: uppercase; display: block; font-weight: 700;">Période de retour (T)</span>
+                <b style="color: #0f172a; font-size: 8.5pt;">${meta.pluvio_periode_retour || k.pluvio_periode_retour || 'T = 10 ans (décennale)'}</b>
+                <small style="color: #64748b; display: block; font-size: 6.8pt;">Conforme guide ONA assainissement</small>
             </div>
             <div style="background: #e0f2fe; padding: 3px 6px; border-radius: 4px; border: 1px solid #bae6fd;">
-                <span style="color: #0369a1; font-size: 7pt; text-transform: uppercase; display: block; font-weight: 800;">Intensité Pointe (Imax)</span>
+                <span style="color: #0369a1; font-size: 7pt; text-transform: uppercase; display: block; font-weight: 800;">Intensité de pointe (Imax)</span>
                 <b style="color: #0284c7; font-size: 10.5pt; font-weight: 900;">${k.pluvio_intensite_max_mmh || meta.pluvio_intensite_max_mmh || 74.9} mm/h</b>
                 <small style="color: #0369a1; display: block; font-size: 6.8pt; font-weight: 600;">Durée critique tc ≈ 15 min</small>
             </div>
             <div>
-                <span style="color: #64748b; font-size: 7pt; text-transform: uppercase; display: block; font-weight: 700;">Hauteur Cumulée (Ptot)</span>
+                <span style="color: #64748b; font-size: 7pt; text-transform: uppercase; display: block; font-weight: 700;">Hauteur cumulée (Ptot)</span>
                 <b style="color: #0f172a; font-size: 8.5pt;">${k.pluvio_hauteur_totale_mm || meta.pluvio_hauteur_totale_mm || 42.8} mm</b>
                 <small style="color: #64748b; display: block; font-size: 6.8pt;">Pluie 24h P₂₄ = ${meta.pluvio_p24_mm || 56.0} mm (Gumbel)</small>
             </div>
@@ -3723,7 +3818,7 @@
     <div style="background: #f8fafc; border: 1.5px solid #0284c7; border-left: 6px solid #0284c7; border-radius: 6px; padding: 9px 12px; margin-bottom: 12px; page-break-inside: avoid;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
             <span style="font-weight: 800; font-size: 8.8pt; color: #0369a1; text-transform: uppercase;">
-                💧 Cadre de Validation Hydrologique &amp; Modèle d'Infiltration (SWMM / Horton / Voronoï)
+                💧 Cadre de validation hydrologique et modèle d'infiltration (SWMM / Horton / Voronoï)
             </span>
             <span style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; padding: 2px 7px; border-radius: 4px; font-weight: 700; font-size: 7.2pt;">
                 Norme EPA SWMM 5.2 Hydrology
@@ -3731,22 +3826,22 @@
         </div>
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; background: white; border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px 8px; margin-bottom: 6px;">
             <div>
-                <span style="color: #64748b; font-size: 7pt; text-transform: uppercase; display: block; font-weight: 700;">Discrétisation Spatiale</span>
-                <b style="color: #0f172a; font-size: 8.2pt;">${meta.subcatchments_count || meta.junctions_count || 703} Sous-bassins</b>
+                <span style="color: #64748b; font-size: 7pt; text-transform: uppercase; display: block; font-weight: 700;">Discrétisation spatiale</span>
+                <b style="color: #0f172a; font-size: 8.2pt;">${meta.subcatchments_count || meta.junctions_count || 703} sous-bassins</b>
                 <small style="color: #64748b; display: block; font-size: 6.8pt;">Polygones Voronoï ajustés (${meta.buffer_m || 35} m)</small>
             </div>
             <div>
-                <span style="color: #64748b; font-size: 7pt; text-transform: uppercase; display: block; font-weight: 700;">Imperméabilisation Urbaine</span>
+                <span style="color: #64748b; font-size: 7pt; text-transform: uppercase; display: block; font-weight: 700;">Imperméabilisation urbaine</span>
                 <b style="color: #0284c7; font-size: 9pt; font-weight: 800;">C_imp = ${meta.imperv_pct || 65}%</b>
                 <small style="color: #64748b; display: block; font-size: 6.8pt;">${meta.typologie_nom || "Habitat mixte urbain"}</small>
             </div>
             <div>
-                <span style="color: #64748b; font-size: 7pt; text-transform: uppercase; display: block; font-weight: 700;">Modèle d'Infiltration</span>
-                <b style="color: #0f172a; font-size: 8.2pt;">Horton Exponentiel</b>
+                <span style="color: #64748b; font-size: 7pt; text-transform: uppercase; display: block; font-weight: 700;">Modèle d'infiltration</span>
+                <b style="color: #0f172a; font-size: 8.2pt;">Horton exponentiel</b>
                 <small style="color: #64748b; display: block; font-size: 6.8pt;">f₀=76.2 mm/h &bull; f∞=13.2 mm/h &bull; k=4.14 h⁻¹</small>
             </div>
             <div>
-                <span style="color: #64748b; font-size: 7pt; text-transform: uppercase; display: block; font-weight: 700;">Temps Concentration (tc)</span>
+                <span style="color: #64748b; font-size: 7pt; text-transform: uppercase; display: block; font-weight: 700;">Temps de concentration (tc)</span>
                 <b style="color: #0f172a; font-size: 8.2pt;">tc ≈ 15.0 min</b>
                 <small style="color: #64748b; display: block; font-size: 6.8pt;">Kirpich / Passini (Pente ${meta.pente_moyenne_pct || 1.0}%)</small>
             </div>
@@ -3761,14 +3856,14 @@
     <div style="background: #f8fafc; border: 1.5px solid #0284c7; border-left: 6px solid #0284c7; border-radius: 6px; padding: 9px 12px; margin-bottom: 12px; page-break-inside: avoid;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
             <span style="font-weight: 800; font-size: 8.8pt; color: #0369a1; text-transform: uppercase;">
-                ⚖️ Bilan Hydraulique Décisionnel &amp; Répartition des Flux (Option 3)
+                ⚖️ Bilan hydraulique décisionnel et répartition des flux (Option 3)
             </span>
             <span style="background: #0284c7; color: white; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 7.2pt;">
-                Lecture Décisionnelle
+                Lecture décisionnelle
             </span>
         </div>
         <div style="background: white; border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px 12px; font-size: 8.5pt; color: #1e293b; line-height: 1.6;">
-            <div><b>Bassin versant :</b> <b>${meta.cluster_nom || ('Bassin ' + meta.cluster_id) || 'Réseau Principal'}</b></div>
+            <div><b>Bassin versant :</b> <b>${meta.cluster_nom || ('Bassin ' + meta.cluster_id) || 'Réseau principal'}</b></div>
             <div>&bull; <b>Débit total généré par le bassin :</b> <b style="color: #0369a1;">${window.formaterNombre(k.q_genere_m3s || ((k.peak_outflow_m3s || 0) + (k.q_derive_m3s || k.q_deleste_m3s || 0)), 3)} m³/s</b></div>
             <div style="color: #16a34a; font-weight: 700;">&bull; <b>Soulagement du collecteur principal :</b> ${window.formaterNombre(k.soulagement_reseau_pct !== undefined ? k.soulagement_reseau_pct : (k.taux_derive_pct || 0), 1)} %</div>
             <div>&bull; <b>Débit résiduel vers l'exutoire principal :</b> <b>${window.formaterNombre(k.q_exutoire_m3s || k.peak_outflow_m3s || 0, 3)} m³/s</b> (${window.formaterNombre(k.taux_exutoire_pct !== undefined ? k.taux_exutoire_pct : 100.0, 1)} %)</div>
@@ -3778,8 +3873,8 @@
 
     <!-- 1. Synthèse Exécutive (Agent 5) -->
     <div class="section-title">
-        <span>1. Synthèse Stratégique &amp; Avis Décideurs (Agent 5)</span>
-        <span style="font-size: 8pt; color: #64748b;">Score Résilience : <b>${synth.score_resilience_reseau ? synth.score_resilience_reseau + ' / 100' : 'Évalué'}</b></span>
+        <span>1. Synthèse stratégique et avis des décideurs (Agent 5)</span>
+        <span style="font-size: 8pt; color: #64748b;">Score de résilience : <b>${synth.score_resilience_reseau ? synth.score_resilience_reseau + ' / 100' : 'Évalué'}</b></span>
     </div>
     <div class="verdict-box">
         <div style="font-weight: 800; font-size: 9.5pt; color: ${verdictColor}; margin-bottom: 3px;">
@@ -3799,21 +3894,21 @@
 
     <!-- 2. Matrice des Risques & Plan d'Action (Agent 4) -->
     <div class="section-title">
-        <span>2. Plan d'Action Priorisé &amp; Matrice des Risques (Agent 4)</span>
-        <span style="font-size: 7.5pt; color: #64748b;">Budget Total Estimé : <b>${window.formaterCoutDZD(gc.cout_global_estime_dzd)}</b></span>
+        <span>2. Plan d'action priorisé et matrice des risques (Agent 4)</span>
+        <span style="font-size: 7.5pt; color: #64748b;">Budget total estimé : <b>${window.formaterCoutDZD(gc.cout_global_estime_dzd)}</b></span>
     </div>
     <div class="agent-memo-box">
-        <div class="agent-memo-title">🎯 Note de Hiérarchisation Multi-Critères &bull; Expert Risques &amp; Exploitation (Agent 4)</div>
+        <div class="agent-memo-title">🎯 Note de hiérarchisation multicritère &bull; Expert risques et exploitation (Agent 4)</div>
         ${risk.note_technique || "La hiérarchisation multi-critères classe les interventions en 3 horizons d'urgence (P1 Critique à 3 mois, P2 Majeur sous tension à 12 mois, P3 Maintenance préventive) pour optimiser l'allocation budgétaire de la collectivité."}
     </div>
     <table>
         <thead>
             <tr>
                 <th style="width: 50px; text-align: center;">Priorité</th>
-                <th style="width: 120px;">Ouvrage / Conduite</th>
-                <th style="width: 140px;">Risque Identifié</th>
-                <th>Action Prescrite</th>
-                <th style="width: 95px; text-align: right;">Coût Estimé</th>
+                <th style="width: 120px;">Ouvrage / conduite</th>
+                <th style="width: 140px;">Risque identifié</th>
+                <th>Action prescrite</th>
+                <th style="width: 95px; text-align: right;">Coût estimé</th>
                 <th style="width: 80px; text-align: center;">Délai</th>
             </tr>
         </thead>
@@ -3824,11 +3919,11 @@
 
     <!-- 3. Diagnostic Causal (Agent 1) -->
     <div class="section-title">
-        <span>3. Diagnostic Causal &amp; Dysfonctionnements Hydrauliques (Agent 1)</span>
-        <span style="font-size: 7.5pt; color: #64748b;">${diag.nb_surcharges || 0} Tronçons Surchargés &bull; ${diag.nb_goulots || 0} Goulots Détectés</span>
+        <span>3. Diagnostic causal et dysfonctionnements hydrauliques (Agent 1)</span>
+        <span style="font-size: 7.5pt; color: #64748b;">${diag.nb_surcharges || 0} tronçons surchargés &bull; ${diag.nb_goulots || 0} goulots détectés</span>
     </div>
     <div class="agent-memo-box">
-        <div class="agent-memo-title">🔬 Diagnostic Hydrodynamique &bull; Spécialiste Écoulements Saint-Venant 1D (Agent 1)</div>
+        <div class="agent-memo-title">🔬 Diagnostic hydrodynamique &bull; Spécialiste écoulements Saint-Venant 1D (Agent 1)</div>
         ${diag.note_technique || "L'analyse hydrodynamique 1D Saint-Venant (Dynamic Wave) met en évidence un régime d'écoulement sous forte tension lors du pic pluvial, causé par les remous hydrauliques et les étranglements géométriques amont-aval."}
     </div>
     <table>
@@ -3838,8 +3933,8 @@
                 <th style="width: 80px; text-align: right;">Taux Q/Qmax</th>
                 <th style="width: 80px; text-align: right;">Remplissage H/D</th>
                 <th style="width: 80px; text-align: right;">Vitesse</th>
-                <th style="width: 90px; text-align: right;">Débit Crête</th>
-                <th>Observation / Diagnostic</th>
+                <th style="width: 90px; text-align: right;">Débit de crête</th>
+                <th>Observation / diagnostic</th>
             </tr>
         </thead>
         <tbody>
@@ -3848,15 +3943,15 @@
     </table>
 
     <!-- Goulots d'étranglement -->
-    <div style="font-size: 8.5pt; font-weight: 700; color: #0f172a; margin: 6px 0 3px 0;">Anomalies Géométriques &amp; Goulots d'Étranglement Amont &rarr; Aval :</div>
+    <div style="font-size: 8.5pt; font-weight: 700; color: #0f172a; margin: 6px 0 3px 0;">Anomalies géométriques et goulots d'étranglement amont &rarr; aval :</div>
     <table>
         <thead>
             <tr>
-                <th style="width: 140px;">Tronçon (Amont &rarr; Aval)</th>
-                <th style="width: 100px; text-align: right;">Diamètre Amont</th>
-                <th style="width: 100px; text-align: right;">Diamètre Aval</th>
+                <th style="width: 140px;">Tronçon (amont &rarr; aval)</th>
+                <th style="width: 100px; text-align: right;">Diamètre amont</th>
+                <th style="width: 100px; text-align: right;">Diamètre aval</th>
                 <th style="width: 80px; text-align: right;">Longueur</th>
-                <th>Conséquence Hydraulique</th>
+                <th>Conséquence hydraulique</th>
             </tr>
         </thead>
         <tbody>
@@ -3866,31 +3961,31 @@
 
     <!-- 4. Prescriptions de Génie Civil & Dimensionnement (Agent 2) -->
     <div class="section-title">
-        <span>4. Prescriptions de Génie Civil &amp; Dimensionnement Normalisé (Agent 2)</span>
-        <span style="font-size: 7.5pt; color: #64748b;">Métré Total : <b>${(gc.metres_lineaires_totaux || 0).toFixed(1)} ml</b> &bull; Marge Sécurité Manning : <b>+25%</b></span>
+        <span>4. Prescriptions de génie civil et dimensionnement normalisé (Agent 2)</span>
+        <span style="font-size: 7.5pt; color: #64748b;">Métré total : <b>${(gc.metres_lineaires_totaux || 0).toFixed(1)} ml</b> &bull; Marge de sécurité Manning : <b>+25%</b></span>
     </div>
     <div class="agent-memo-box">
-        <div class="agent-memo-title">📐 Justification de Calcul Gravitaire &amp; Optimisation Économique &bull; Ingénieur Génie Civil &amp; Réseaux (Agent 2)</div>
+        <div class="agent-memo-title">📐 Justification de calcul gravitaire et optimisation économique &bull; Ingénieur génie civil et réseaux (Agent 2)</div>
         ${gc.note_technique || "Conformément aux règles de l'art du dimensionnement gravitaire (formule de Manning-Strickler), les diamètres actuels sont recalibrés avec une marge de sécurité de +25% afin de maintenir un tirant d'eau H/D <= 0.80."}
     </div>
 
     <!-- Prescriptions Structurelles & Règles de Pose Fascicule 70 / ONA -->
     <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-left: 4.5px solid #0284c7; border-radius: 5px; padding: 7px 11px; margin: 6px 0 10px 0; font-size: 8pt; line-height: 1.4; page-break-inside: avoid;">
         <div style="font-weight: 800; color: #0284c7; font-size: 8.2pt; margin-bottom: 4px; display: flex; justify-content: space-between;">
-            <span>🏗️ Prescriptions Structurelles de Pose &amp; Justification Matériaux (Fascicule 70 / ONA)</span>
-            <span style="color: #64748b; font-size: 7.2pt;">Charges Roulantes : Convoi Bc 30t / Essieu 13t</span>
+            <span>🏗️ Prescriptions structurelles de pose et justification des matériaux (Fascicule 70 / ONA)</span>
+            <span style="color: #64748b; font-size: 7.2pt;">Charges roulantes : convoi Bc 30 t / essieu 13 t</span>
         </div>
         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 4px;">
             <div style="background: white; border: 1px solid #e2e8f0; border-radius: 4px; padding: 5px 8px;">
-                <b style="color: #0f172a; display: block; font-size: 7.6pt;">Classes de Rigidité</b>
+                <b style="color: #0f172a; display: block; font-size: 7.6pt;">Classes de rigidité</b>
                 <span style="color: #475569; font-size: 7.2pt;">DN &lt; 800 : PEHD SN8 (≥8 kN/m²)<br>DN ≥ 800 : Béton Armé 135A (NF EN 1916)</span>
             </div>
             <div style="background: white; border: 1px solid #e2e8f0; border-radius: 4px; padding: 5px 8px;">
-                <b style="color: #0f172a; display: block; font-size: 7.6pt;">Couverture &amp; Lit de Pose</b>
+                <b style="color: #0f172a; display: block; font-size: 7.6pt;">Couverture et lit de pose</b>
                 <span style="color: #475569; font-size: 7.2pt;">H_min = 1.00 m sous voirie (0.80 m trottoir)<br>Lit de pose sable 0/10 compacté (10 cm)</span>
             </div>
             <div style="background: white; border: 1px solid #e2e8f0; border-radius: 4px; padding: 5px 8px;">
-                <b style="color: #0f172a; display: block; font-size: 7.6pt;">Blindage &amp; Remblaiement</b>
+                <b style="color: #0f172a; display: block; font-size: 7.6pt;">Blindage et remblaiement</b>
                 <span style="color: #475569; font-size: 7.2pt;">Blindage jointif obligatoire si H &gt; 1.30 m<br>Compactage tranchée à 95% OPM</span>
             </div>
         </div>
@@ -3898,20 +3993,20 @@
 
     <!-- Tableau Synthétique des Métrés par Diamètre & Matériau -->
     <div style="font-size: 8.5pt; font-weight: 700; color: #0f172a; margin: 8px 0 4px 0; display: flex; justify-content: space-between; align-items: center;">
-        <span>Bordereau Récapitulatif des Métrés par Diamètre &amp; Matériau (APS) :</span>
-        <span style="font-size: 7.5pt; color: #64748b;">Total Programme : <b>${gc.nb_troncons_a_recalibrer || 0} conduites</b> (${Number(gc.metres_lineaires_totaux || 0).toFixed(1)} ml)</span>
+        <span>Bordereau récapitulatif des métrés par diamètre et matériau (APS) :</span>
+        <span style="font-size: 7.5pt; color: #64748b;">Total du programme : <b>${gc.nb_troncons_a_recalibrer || 0} conduites</b> (${Number(gc.metres_lineaires_totaux || 0).toFixed(1)} ml)</span>
     </div>
     <table>
         <thead>
             <tr>
-                <th style="width: 70px;">DN Retenu</th>
-                <th style="width: 150px;">Matériau Prescrit</th>
-                <th style="width: 100px; text-align: center;">Classe / Norme</th>
-                <th style="width: 65px; text-align: right;">Nb Tronçons</th>
+                <th style="width: 70px;">DN retenu</th>
+                <th style="width: 150px;">Matériau prescrit</th>
+                <th style="width: 100px; text-align: center;">Classe / norme</th>
+                <th style="width: 65px; text-align: right;">Nb tronçons</th>
                 <th style="width: 80px; text-align: right;">Linéaire (ml)</th>
                 <th style="width: 55px; text-align: right;">Part (ml)</th>
-                <th style="width: 90px; text-align: right;">Prix Unitaire</th>
-                <th style="width: 105px; text-align: right;">Montant Total</th>
+                <th style="width: 90px; text-align: right;">Prix unitaire</th>
+                <th style="width: 105px; text-align: right;">Montant total</th>
                 <th style="width: 55px; text-align: right;">Part (%)</th>
             </tr>
         </thead>
@@ -3920,7 +4015,7 @@
         </tbody>
         <tfoot>
             <tr style="background: #f1f5f9; font-weight: 800;">
-                <td colspan="3"><b>TOTAL DU PROGRAMME DE REHABILITATION</b></td>
+                <td colspan="3"><b>TOTAL DU PROGRAMME DE RÉHABILITATION</b></td>
                 <td style="text-align: right;"><b>${gc.nb_troncons_a_recalibrer || 0}</b></td>
                 <td style="text-align: right;"><b>${Number(gc.metres_lineaires_totaux || 0).toFixed(1)} ml</b></td>
                 <td style="text-align: right;">100%</td>
@@ -3934,41 +4029,41 @@
     <!-- Décomposition Analytique du Coût des Travaux (BPU) -->
     <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 8px;">
         <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; padding: 5px 8px; font-size: 7.5pt;">
-            <span style="color: #64748b; display: block; font-size: 6.8pt; text-transform: uppercase;">1. Terrassement &amp; Blindage (30%)</span>
+            <span style="color: #64748b; display: block; font-size: 6.8pt; text-transform: uppercase;">1. Terrassement et blindage (30 %)</span>
             <b style="color: #0f172a; font-size: 8.2pt;">${window.formaterCoutDZD(bpuTerrassement)}</b>
         </div>
         <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; padding: 5px 8px; font-size: 7.5pt;">
-            <span style="color: #64748b; display: block; font-size: 6.8pt; text-transform: uppercase;">2. Fourniture Tuyaux (35%)</span>
+            <span style="color: #64748b; display: block; font-size: 6.8pt; text-transform: uppercase;">2. Fourniture des tuyaux (35 %)</span>
             <b style="color: #0f172a; font-size: 8.2pt;">${window.formaterCoutDZD(bpuFourniture)}</b>
         </div>
         <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; padding: 5px 8px; font-size: 7.5pt;">
-            <span style="color: #64748b; display: block; font-size: 6.8pt; text-transform: uppercase;">3. Pose &amp; Remblai 95% (20%)</span>
+            <span style="color: #64748b; display: block; font-size: 6.8pt; text-transform: uppercase;">3. Pose et remblai à 95 % OPM (20 %)</span>
             <b style="color: #0f172a; font-size: 8.2pt;">${window.formaterCoutDZD(bpuPose)}</b>
         </div>
         <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; padding: 5px 8px; font-size: 7.5pt;">
-            <span style="color: #64748b; display: block; font-size: 6.8pt; text-transform: uppercase;">4. Réfection Chaussée BB (15%)</span>
+            <span style="color: #64748b; display: block; font-size: 6.8pt; text-transform: uppercase;">4. Réfection de chaussée en béton bitumineux (15 %)</span>
             <b style="color: #0f172a; font-size: 8.2pt;">${window.formaterCoutDZD(bpuChaussee)}</b>
         </div>
     </div>
 
     ${gc.nb_troncons_suffisants_remous > 0 ? `
         <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 4px; padding: 5px 8px; margin-bottom: 8px; font-size: 7.4pt; color: #065f46;">
-            <b>💡 Optimisation Économique &amp; Capacité Résiduelle :</b>
+            <b>💡 Optimisation économique et capacité résiduelle :</b>
             <b>${gc.nb_troncons_suffisants_remous} tronçon(s)</b> surchargé(s) ont été écartés du programme de renouvellement lourd car leur gabarit actuel est hydrauliquement suffisant. Leur mise en charge transitoire résulte d'un refoulement aval qui sera résorbé par le recalibrage des exutoires, économisant d'importants coûts de terrassement.
         </div>
     ` : ''}
 
-    <div style="font-size: 8pt; font-weight: 700; color: #475569; margin: 6px 0 3px 0;">Détail des Tronçons Prioritaires à Recalibrer :</div>
+    <div style="font-size: 8pt; font-weight: 700; color: #475569; margin: 6px 0 3px 0;">Détail des tronçons prioritaires à recalibrer :</div>
     <table>
         <thead>
             <tr>
                 <th style="width: 80px;">Conduite</th>
-                <th style="width: 75px; text-align: right;">Ø Actuel</th>
-                <th style="width: 75px; text-align: right;">Ø Requis</th>
-                <th style="width: 85px; text-align: right;">DN Retenu</th>
-                <th style="width: 130px;">Matériau Prescrit</th>
+                <th style="width: 75px; text-align: right;">Ø actuel</th>
+                <th style="width: 75px; text-align: right;">Ø requis</th>
+                <th style="width: 85px; text-align: right;">DN retenu</th>
+                <th style="width: 130px;">Matériau prescrit</th>
                 <th style="width: 75px; text-align: right;">Longueur</th>
-                <th style="width: 95px; text-align: right;">Coût Estimé</th>
+                <th style="width: 95px; text-align: right;">Coût estimé</th>
             </tr>
         </thead>
         <tbody>
@@ -3978,50 +4073,50 @@
 
     <!-- 5. Analyse Multi-Critères des Variantes d'Aménagement & Décision d'Investissement (Agent 5) -->
     <div class="section-title">
-        <span>5. Analyse Multi-Critères des Variantes d'Aménagement &amp; Décision d'Investissement (Agent 5)</span>
-        <span style="font-size: 7.5pt; color: #16a34a;">Économie Scénario Mixte : <b>${window.formaterCoutDZD(finance.economie_realisee_dzd || 90580100)} (-${finance.economie_pourcentage || 27.4}%)</b></span>
+        <span>5. Analyse multicritère des variantes d'aménagement et décision d'investissement (Agent 5)</span>
+        <span style="font-size: 7.5pt; color: #16a34a;">Économie scénario mixte : <b>${window.formaterCoutDZD(finance.economie_realisee_dzd || 90580100)} (-${finance.economie_pourcentage || 27.4}%)</b></span>
     </div>
     <div class="agent-memo-box">
-        <div class="agent-memo-title">💼 Analyse Technico-Économique &amp; Rentabilité Socio-Économique &bull; Expert Financier &amp; Marchés Publics (Agent 5)</div>
+        <div class="agent-memo-title">💼 Analyse technico-économique et rentabilité socio-économique &bull; Expert financier et marchés publics (Agent 5)</div>
         ${finance.note_technique || "L'analyse comparative des trois grandes variantes d'aménagement démontre la supériorité technico-économique de la Variante 3 (Mixte Optimisée). En couplant le recalibrage ciblé des 97 goulots structurants avec un bassin d'écrêtement amont régulé, ce scénario résorbe l'intégralité des débordements tout en réduisant l'enveloppe budgétaire de 90.6 M DZD par rapport au schéma classique de tout-réseau."}
     </div>
 
     <!-- Ratios Directeurs Décisionnels & Rentabilité -->
     <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 8px;">
         <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; padding: 5px 8px; font-size: 7.5pt;">
-            <span style="color: #64748b; display: block; font-size: 6.8pt; text-transform: uppercase;">Coût au Mètre Linéaire Rénové</span>
+            <span style="color: #64748b; display: block; font-size: 6.8pt; text-transform: uppercase;">Coût au mètre linéaire rénové</span>
             <b style="color: #0284c7; font-size: 8.5pt;">${window.formaterCoutDZD(ratios.cout_par_ml_renove_dzd || 47870)} / ml</b>
             <small style="color: #64748b; display: block; font-size: 6.8pt;">Base 4 112.8 ml ciblés</small>
         </div>
         <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; padding: 5px 8px; font-size: 7.5pt;">
-            <span style="color: #64748b; display: block; font-size: 6.8pt; text-transform: uppercase;">Coût par Habitant Équivalent</span>
+            <span style="color: #64748b; display: block; font-size: 6.8pt; text-transform: uppercase;">Coût par habitant équivalent</span>
             <b style="color: #0284c7; font-size: 8.5pt;">${window.formaterCoutDZD(ratios.cout_par_habitant_protege_dzd || 16025)} / hab</b>
             <small style="color: #64748b; display: block; font-size: 6.8pt;">Bassin ~15 000 hab protégés</small>
         </div>
         <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 4px; padding: 5px 8px; font-size: 7.5pt;">
-            <span style="color: #16a34a; display: block; font-size: 6.8pt; text-transform: uppercase; font-weight: 700;">Dommages Annuels Évités (EAD)</span>
+            <span style="color: #16a34a; display: block; font-size: 6.8pt; text-transform: uppercase; font-weight: 700;">Dommages annuels évités (EAD)</span>
             <b style="color: #15803d; font-size: 8.5pt;">${window.formaterCoutDZD(ratios.dommages_annuels_evites_dzd || 45000000)} / an</b>
             <small style="color: #16a34a; display: block; font-size: 6.8pt;">Voirie, caves, RN4, pompage ONA</small>
         </div>
         <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 4px; padding: 5px 8px; font-size: 7.5pt;">
-            <span style="color: #16a34a; display: block; font-size: 6.8pt; text-transform: uppercase; font-weight: 700;">Rentabilité Socio-Économique</span>
+            <span style="color: #16a34a; display: block; font-size: 6.8pt; text-transform: uppercase; font-weight: 700;">Rentabilité socio-économique</span>
             <b style="color: #15803d; font-size: 8.5pt;">Payback ${ratios.payback_annees || 5.3} ans &bull; TRI ${ratios.tri_pourcentage || 14.8}%</b>
             <small style="color: #16a34a; display: block; font-size: 6.8pt;">VAN 20 ans @ 6% : +${((ratios.van_actualisee_20ans_dzd || 275761100) / 1000000).toFixed(1)} M DZD</small>
         </div>
     </div>
 
     <!-- Tableau Comparatif Multi-Critères des Variantes -->
-    <div style="font-size: 8.5pt; font-weight: 700; color: #0f172a; margin: 6px 0 3px 0;">Matrice Comparative des Variantes d'Aménagement (APS / APD) :</div>
+    <div style="font-size: 8.5pt; font-weight: 700; color: #0f172a; margin: 6px 0 3px 0;">Matrice comparative des variantes d'aménagement (APS / APD) :</div>
     <table>
         <thead>
             <tr>
-                <th style="width: 170px;">Variante Technique</th>
-                <th style="width: 70px; text-align: right;">Réseau ml</th>
-                <th style="width: 65px; text-align: right;">SFN m³</th>
+                <th style="width: 170px;">Variante technique</th>
+                <th style="width: 70px; text-align: right;">Réseau (ml)</th>
+                <th style="width: 65px; text-align: right;">GDO (m³)</th>
                 <th style="width: 100px; text-align: right;">Investissement (CapEx)</th>
-                <th style="width: 110px;">Efficacité Hydraulique</th>
-                <th style="width: 110px;">Impact Voirie &amp; RN4</th>
-                <th style="width: 90px;">Risque Aval Oued</th>
+                <th style="width: 110px;">Efficacité hydraulique</th>
+                <th style="width: 110px;">Impact voirie et RN4</th>
+                <th style="width: 90px;">Risque aval oued</th>
                 <th style="width: 50px; text-align: center;">Score</th>
                 <th style="width: 75px; text-align: center;">Décision</th>
             </tr>
@@ -4031,22 +4126,22 @@
         </tbody>
     </table>
 
-    <!-- 6. Solutions Alternatives LID / SFN & Écrêtement des Pointes (Agent 3) -->
+    <!-- 6. Gestion durable des ouvrages (GDO) & écrêtement des pointes (Agent 3) -->
     <div class="section-title">
-        <span>6. Solutions Alternatives LID / SFN &amp; Écrêtement des Pointes (Agent 3)</span>
-        <span style="font-size: 7.5pt; color: #64748b;">Volume Tampon Total : <b>${(lid.volume_tampon_requis_m3 || 0).toFixed(0)} m³</b></span>
+        <span>6. Gestion durable des ouvrages (GDO) et écrêtement des pointes (Agent 3)</span>
+        <span style="font-size: 7.5pt; color: #64748b;">Volume tampon total : <b>${(lid.volume_tampon_requis_m3 || 0).toFixed(0)} m³</b></span>
     </div>
     <div class="agent-memo-box">
-        <div class="agent-memo-title">🌿 Stratégie d'Écrêtement à la Source &bull; Hydrologue SFN &amp; Ville Durable (Agent 3)</div>
-        ${lid.note_technique || "L'Agent SFN préconise d'intercepter et de temporiser les eaux pluviales à la source par des solutions fondées sur la nature (LID) pour rabattre le pic de débit de 35% à 45% et éviter le surdimensionnement onéreux des réseaux enterrés."}
+        <div class="agent-memo-title">🌿 Stratégie d'écrêtement à la source &bull; Expert en gestion durable des ouvrages (GDO) (Agent 3)</div>
+        ${lid.note_technique || "L'agent GDO préconise d'intercepter et de temporiser les eaux pluviales à la source par des dispositifs de gestion durable des ouvrages (GDO) pour rabattre le pic de débit de 35 % à 45 % et éviter le surdimensionnement onéreux des réseaux enterrés."}
     </div>
     <table>
         <thead>
             <tr>
-                <th style="width: 130px;">Type Solution SFN</th>
-                <th style="width: 180px;">Désignation &amp; Emplacement</th>
-                <th>Dimensionnement Technique</th>
-                <th style="width: 190px;">Impact Hydraulique Attendu</th>
+                <th style="width: 130px;">Type de solution GDO</th>
+                <th style="width: 180px;">Désignation et emplacement</th>
+                <th>Dimensionnement technique</th>
+                <th style="width: 190px;">Impact hydraulique attendu</th>
             </tr>
         </thead>
         <tbody>
@@ -4056,21 +4151,21 @@
 
     <!-- 7. Analyse de Sensibilité du Tampon Voronoï -->
     <div class="section-title">
-        <span>7. Analyse de Sensibilité du Tampon Voronoï (35m, 45m, 60m)</span>
-        <span style="font-size: 7.5pt; color: #64748b;">Validation Technique &bull; Point d'Inflexion Recommandé</span>
+        <span>7. Analyse de sensibilité du tampon Voronoï (35 m, 45 m, 60 m)</span>
+        <span style="font-size: 7.5pt; color: #64748b;">Validation technique &bull; Point d'inflexion recommandé</span>
     </div>
     <div class="agent-memo-box">
-        <div class="agent-memo-title">📈 Analyse Morphologique du Ruissellement &bull; Calage du Tampon Voronoï</div>
-        La simulation automatisée des trois variantes de buffer (35m emprise voirie, 45m comblement d'îlots bâtis, 60m périurbain) identifie un point d'inflexion majeur à <b>45 mètres</b>. Cette configuration capture l'intégralité du bassin versant urbain actif sans déformation artificielle des temps de concentration.
+        <div class="agent-memo-title">📈 Analyse morphologique du ruissellement &bull; Calage du tampon Voronoï</div>
+        La simulation automatisée des trois variantes de buffer (35 m emprise voirie, 45 m comblement d'îlots bâtis, 60 m périurbain) identifie un point d'inflexion majeur à <b>45 mètres</b>. Cette configuration capture l'intégralité du bassin versant urbain actif sans déformation artificielle des temps de concentration.
     </div>
     <table>
         <thead>
             <tr>
-                <th style="width: 140px;">Scénario Buffer</th>
-                <th style="width: 100px; text-align: right;">Surface Drainée</th>
-                <th style="width: 90px; text-align: right;">Écart Relatif</th>
-                <th style="width: 110px; text-align: right;">Débit Pointe</th>
-                <th>Interprétation Morphologique Urbaine</th>
+                <th style="width: 140px;">Scénario de tampon</th>
+                <th style="width: 100px; text-align: right;">Surface drainée</th>
+                <th style="width: 90px; text-align: right;">Écart relatif</th>
+                <th style="width: 110px; text-align: right;">Débit de pointe</th>
+                <th>Interprétation morphologique urbaine</th>
             </tr>
         </thead>
         <tbody>
@@ -4295,7 +4390,7 @@
                 <!-- Cadre de Validation Hydrologique (Horton / Voronoï / SWMM) -->
                 <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 10px 16px; margin-bottom: 16px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; font-size: 0.78rem;">
                     <div>
-                        <span style="color: #94a3b8; display: block; font-size: 0.7rem; text-transform: uppercase;">Discrétisation Spatiale</span>
+                        <span style="color: #94a3b8; display: block; font-size: 0.7rem; text-transform: uppercase;">Discrétisation spatiale</span>
                         <b style="color: #f8fafc;">${meta.subcatchments_count || 703} Sous-bassins</b>
                         <span style="color: #64748b; display: block; font-size: 0.68rem;">Voronoï (${meta.buffer_m || 35}m) &bull; ${meta.total_area_ha || 117.83} ha</span>
                     </div>
@@ -4305,12 +4400,12 @@
                         <span style="color: #64748b; display: block; font-size: 0.68rem;">${meta.typologie_nom || 'Habitat mixte urbain'}</span>
                     </div>
                     <div>
-                        <span style="color: #94a3b8; display: block; font-size: 0.7rem; text-transform: uppercase;">Infiltration des Sols</span>
+                        <span style="color: #94a3b8; display: block; font-size: 0.7rem; text-transform: uppercase;">Infiltration des sols</span>
                         <b style="color: #f8fafc;">Loi d'Horton</b>
                         <span style="color: #64748b; display: block; font-size: 0.68rem;">f₀=76.2 &bull; f∞=13.2 &bull; k=4.14 h⁻¹</span>
                     </div>
                     <div>
-                        <span style="color: #94a3b8; display: block; font-size: 0.7rem; text-transform: uppercase;">Temps de Concentration</span>
+                        <span style="color: #94a3b8; display: block; font-size: 0.7rem; text-transform: uppercase;">Temps de concentration</span>
                         <b style="color: #f8fafc;">tc ≈ 15.0 min</b>
                         <span style="color: #64748b; display: block; font-size: 0.68rem;">Kirpich / Passini (Pente ${meta.pente_moyenne_pct || 1.0}%)</span>
                     </div>
@@ -4319,25 +4414,25 @@
                 <!-- Barre de navigation des 7 onglets Agents IA -->
                 <div style="display: flex; gap: 6px; overflow-x: auto; margin-bottom: 16px; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.08);">
                     <button id="btn-tab-agent-diag" onclick="changerOngletAgent('agent-diag')" class="agent-tab-btn" style="padding: 7px 12px; font-size: 0.78rem; font-weight: 700; border-radius: 8px; cursor: pointer; border: 1px solid #a855f7; background: rgba(168, 85, 247, 0.2); color: #f8fafc; white-space: nowrap; display: flex; align-items: center; gap: 6px;">
-                        <i class="fas fa-search-plus"></i> 1. Diagnostic Causal
+                        <i class="fas fa-search-plus"></i> 1. Diagnostic causal
                     </button>
                     <button id="btn-tab-agent-gc" onclick="changerOngletAgent('agent-gc')" class="agent-tab-btn" style="padding: 7px 12px; font-size: 0.78rem; font-weight: 700; border-radius: 8px; cursor: pointer; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.05); color: #94a3b8; white-space: nowrap; display: flex; align-items: center; gap: 6px;">
-                        <i class="fas fa-drafting-compass"></i> 2. Génie Civil &amp; DN
+                        <i class="fas fa-drafting-compass"></i> 2. Génie civil et dimensionnement
                     </button>
                     <button id="btn-tab-agent-lid" onclick="changerOngletAgent('agent-lid')" class="agent-tab-btn" style="padding: 7px 12px; font-size: 0.78rem; font-weight: 700; border-radius: 8px; cursor: pointer; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.05); color: #94a3b8; white-space: nowrap; display: flex; align-items: center; gap: 6px;">
-                        <i class="fas fa-leaf"></i> 3. Rétention LID / SFN
+                        <i class="fas fa-leaf"></i> 3. Rétention et gestion durable des ouvrages (GDO)
                     </button>
                     <button id="btn-tab-agent-risk" onclick="changerOngletAgent('agent-risk')" class="agent-tab-btn" style="padding: 7px 12px; font-size: 0.78rem; font-weight: 700; border-radius: 8px; cursor: pointer; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.05); color: #94a3b8; white-space: nowrap; display: flex; align-items: center; gap: 6px;">
-                        <i class="fas fa-exclamation-triangle"></i> 4. Priorisation Risques
+                        <i class="fas fa-exclamation-triangle"></i> 4. Priorisation des risques
                     </button>
                     <button id="btn-tab-agent-finance" onclick="changerOngletAgent('agent-finance')" class="agent-tab-btn" style="padding: 7px 12px; font-size: 0.78rem; font-weight: 700; border-radius: 8px; cursor: pointer; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.05); color: #94a3b8; white-space: nowrap; display: flex; align-items: center; gap: 6px;">
-                        <i class="fas fa-coins"></i> 5. Variantes &amp; Finance
+                        <i class="fas fa-coins"></i> 5. Variantes et ingénierie financière
                     </button>
                     <button id="btn-tab-agent-synth" onclick="changerOngletAgent('agent-synth')" class="agent-tab-btn" style="padding: 7px 12px; font-size: 0.78rem; font-weight: 700; border-radius: 8px; cursor: pointer; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.05); color: #94a3b8; white-space: nowrap; display: flex; align-items: center; gap: 6px;">
-                        <i class="fas fa-file-contract"></i> 6. Note Exécutive
+                        <i class="fas fa-file-contract"></i> 6. Note exécutive stratégique
                     </button>
                     <button id="btn-tab-agent-buffer" onclick="changerOngletAgent('agent-buffer')" class="agent-tab-btn" style="padding: 7px 12px; font-size: 0.78rem; font-weight: 700; border-radius: 8px; cursor: pointer; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.05); color: #94a3b8; white-space: nowrap; display: flex; align-items: center; gap: 6px;">
-                        <i class="fas fa-chart-line"></i> 7. Courbe Buffer
+                        <i class="fas fa-chart-line"></i> 7. Courbe buffer
                     </button>
                 </div>
 
@@ -4349,26 +4444,26 @@
                             ${diag.note_technique || "L'analyse hydrodynamique 1D Saint-Venant (Dynamic Wave) met en évidence un régime d'écoulement sous forte tension lors du pic d'intensité pluviométrique."}
                         </div>
                         <div style="font-weight: 700; font-size: 0.88rem; color: #38bdf8; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
-                            <i class="fas fa-microscope"></i> Identification des Causes Racines &amp; Anomalies Hydrauliques
+                            <i class="fas fa-microscope"></i> Identification des causes racines et anomalies hydrauliques
                         </div>
                         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px;">
                             <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 8px; padding: 10px; text-align: center;">
-                                <div style="font-size: 0.72rem; color: #f87171;">Regards Submergés</div>
+                                <div style="font-size: 0.72rem; color: #f87171;">Regards submergés</div>
                                 <div style="font-size: 1.25rem; font-weight: 800; color: #f87171;">${floodedNodes}</div>
                             </div>
                             <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 8px; padding: 10px; text-align: center;">
-                                <div style="font-size: 0.72rem; color: #fbbf24;">Conduites en Charge</div>
+                                <div style="font-size: 0.72rem; color: #fbbf24;">Conduites en charge</div>
                                 <div style="font-size: 1.25rem; font-weight: 800; color: #fbbf24;">${nbSurcharge}</div>
                             </div>
                             <div style="background: rgba(2, 132, 199, 0.1); border: 1px solid rgba(2, 132, 199, 0.25); border-radius: 8px; padding: 10px; text-align: center;">
-                                <div style="font-size: 0.72rem; color: #38bdf8;">Étranglements Détectés</div>
+                                <div style="font-size: 0.72rem; color: #38bdf8;">Étranglements détectés</div>
                                 <div style="font-size: 1.25rem; font-weight: 800; color: #38bdf8;">${diag.nb_goulots || 0}</div>
                             </div>
                         </div>
 
                         ${(diag.bottlenecks && diag.bottlenecks.length > 0) ? `
                             <div style="font-size: 0.8rem; font-weight: 700; color: #facc15; margin-bottom: 6px;">
-                                <i class="fas fa-exclamation-circle me-1"></i> Goulots d'Étranglement Géométriques Détectés :
+                                <i class="fas fa-exclamation-circle me-1"></i> Goulots d'étranglement géométriques détectés :
                             </div>
                             <div style="display: grid; gap: 6px; margin-bottom: 12px;">
                                 ${diag.bottlenecks.map(b => `
@@ -4381,7 +4476,7 @@
 
                         ${(diag.flooded_nodes && diag.flooded_nodes.length > 0) ? `
                             <div style="font-size: 0.8rem; font-weight: 700; color: #f87171; margin-bottom: 6px;">
-                                <i class="fas fa-water me-1"></i> Regards de Visite en Débordement Critique :
+                                <i class="fas fa-water me-1"></i> Regards de visite en débordement critique :
                             </div>
                             <div style="display: grid; gap: 6px;">
                                 ${diag.flooded_nodes.map(fn => `
@@ -4406,12 +4501,12 @@
                 <div id="pane-agent-gc" class="agent-tab-pane" style="display: none;">
                     <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px; margin-bottom: 14px;">
                         <div style="background: rgba(52, 211, 153, 0.08); border-left: 4px solid #34d399; border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.82rem; color: #e2e8f0; line-height: 1.5;">
-                            <strong style="color: #34d399; display: block; margin-bottom: 4px;"><i class="fas fa-ruler-combined me-1"></i> Mémoire Technique de Dimensionnement Manning &amp; Recalibrage (Agent 2) :</strong>
+                            <strong style="color: #34d399; display: block; margin-bottom: 4px;"><i class="fas fa-ruler-combined me-1"></i> Mémoire technique de dimensionnement Manning et recalibrage (Agent 2) :</strong>
                             ${gc.note_technique || "Prescriptions de recalibrage selon la formule de Manning-Strickler avec marge de sécurité de +25% afin de maintenir un tirant d'eau maximal H/D <= 0.80."}
                         </div>
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                             <div style="font-weight: 700; font-size: 0.88rem; color: #34d399; display: flex; align-items: center; gap: 6px;">
-                                <i class="fas fa-ruler-combined"></i> Prescriptions de Recalibrage (Formule de Manning-Strickler)
+                                <i class="fas fa-ruler-combined"></i> Prescriptions de recalibrage (formule de Manning-Strickler)
                             </div>
                             <span style="font-size: 0.74rem; color: #94a3b8;">
                                 Linéaire : <b style="color: #38bdf8;">${(gc.metres_lineaires_totaux || 0).toFixed(1)} ml</b> &bull; Budget : <b style="color: #34d399;">${window.formaterCoutDZD(gc.cout_global_estime_dzd)}</b>
@@ -4421,7 +4516,7 @@
                         ${(gc.recapitulatif_par_dn && gc.recapitulatif_par_dn.length > 0) ? `
                             <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; margin-bottom: 12px;">
                                 <div style="font-size: 0.78rem; font-weight: 700; color: #38bdf8; margin-bottom: 6px;">
-                                    <i class="fas fa-layer-group me-1"></i> Répartition des Métrés par Diamètre &amp; Matériau :
+                                    <i class="fas fa-layer-group me-1"></i> Répartition des métrés par diamètre et matériau :
                                 </div>
                                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 6px;">
                                     ${gc.recapitulatif_par_dn.map(r => `
@@ -4438,7 +4533,7 @@
                         ${gc.nb_troncons_suffisants_remous > 0 ? `
                             <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 6px; padding: 7px 10px; margin-bottom: 12px; font-size: 0.74rem; color: #a7f3d0;">
                                 <i class="fas fa-shield-alt me-1" style="color: #34d399;"></i>
-                                <b>Optimisation Capacité Résiduelle :</b> <b>${gc.nb_troncons_suffisants_remous} tronçon(s)</b> ont été préservés de travaux lourds car leur section actuelle est hydrauliquement suffisante (surcharge due au remous aval résolue par décongestionnement aval).
+                                <b>Optimisation de la capacité résiduelle :</b> <b>${gc.nb_troncons_suffisants_remous} tronçon(s)</b> ont été préservés de travaux lourds car leur section actuelle est hydrauliquement suffisante (surcharge due au remous aval résolue par décongestionnement aval).
                             </div>
                         ` : ''}
                         <p style="font-size: 0.78rem; color: #94a3b8; margin: 0 0 12px 0; line-height: 1.4;">
@@ -4452,9 +4547,9 @@
                                         <th style="padding: 6px 4px;">Tronçon</th>
                                         <th style="padding: 6px 4px;">Actuel</th>
                                         <th style="padding: 6px 4px;">Prescrit</th>
-                                        <th style="padding: 6px 4px;">Gain Capacité</th>
+                                        <th style="padding: 6px 4px;">Gain de capacité</th>
                                         <th style="padding: 6px 4px;">Matériau</th>
-                                        <th style="padding: 6px 4px; text-align: right;">Coût Est.</th>
+                                        <th style="padding: 6px 4px; text-align: right;">Coût estimé</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -4478,15 +4573,15 @@
                 <div id="pane-agent-lid" class="agent-tab-pane" style="display: none;">
                     <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px; margin-bottom: 14px;">
                         <div style="background: rgba(16, 185, 129, 0.08); border-left: 4px solid #10b981; border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.82rem; color: #e2e8f0; line-height: 1.5;">
-                            <strong style="color: #10b981; display: block; margin-bottom: 4px;"><i class="fas fa-leaf me-1"></i> Mémoire Technique de Gestion Pluviale à la Source &bull; Solutions SFN (Agent 3) :</strong>
-                            ${lid.note_technique || "Stratégie d'interception et de temporisation à la source par des solutions fondées sur la nature (LID) pour rabattre la pointe de débit."}
+                            <strong style="color: #10b981; display: block; margin-bottom: 4px;"><i class="fas fa-leaf me-1"></i> Mémoire technique de gestion pluviale à la source &bull; Solutions de gestion durable des ouvrages (GDO) (Agent 3) :</strong>
+                            ${lid.note_technique || "Stratégie d'interception et de temporisation à la source par des solutions de gestion durable des ouvrages (GDO) pour rabattre la pointe de débit."}
                         </div>
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                             <div style="font-weight: 700; font-size: 0.88rem; color: #10b981; display: flex; align-items: center; gap: 6px;">
-                                <i class="fas fa-tint"></i> Solutions Fondées sur la Nature &amp; Écrêtement de Crue
+                                <i class="fas fa-tint"></i> Solutions de gestion durable des ouvrages (GDO) et écrêtement de crue
                             </div>
                             <span style="font-size: 0.74rem; background: rgba(16, 185, 129, 0.15); color: #34d399; padding: 2px 8px; border-radius: 4px; font-weight: 700;">
-                                Tampon Requis : ${lid.volume_tampon_requis_m3 || 500} m³
+                                Tampon requis : ${lid.volume_tampon_requis_m3 || 500} m³
                             </span>
                         </div>
                         <p style="font-size: 0.78rem; color: #94a3b8; margin: 0 0 12px 0; line-height: 1.4;">
@@ -4514,11 +4609,11 @@
                 <div id="pane-agent-risk" class="agent-tab-pane" style="display: none;">
                     <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px; margin-bottom: 14px;">
                         <div style="background: rgba(245, 158, 11, 0.08); border-left: 4px solid #f59e0b; border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.82rem; color: #e2e8f0; line-height: 1.5;">
-                            <strong style="color: #f59e0b; display: block; margin-bottom: 4px;"><i class="fas fa-shield-alt me-1"></i> Mémoire Technique de Priorisation Multi-Critères des Risques (Agent 4) :</strong>
-                            ${risk.note_technique || "Hiérarchisation multi-critères des interventions (P1 Critique sous 3 mois, P2 Majeur sous 12 mois, P3 Maintenance préventive) pour optimiser les investissements."}
+                            <strong style="color: #f59e0b; display: block; margin-bottom: 4px;"><i class="fas fa-shield-alt me-1"></i> Mémoire technique de priorisation multicritère des risques (Agent 4) :</strong>
+                            ${risk.note_technique || "Hiérarchisation multicritère des interventions (P1 Critique sous 3 mois, P2 Majeur sous 12 mois, P3 Maintenance préventive) pour optimiser les investissements."}
                         </div>
                         <div style="font-weight: 700; font-size: 0.88rem; color: #f59e0b; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
-                            <i class="fas fa-layer-group"></i> Matrice de Hiérarchisation des Travaux &amp; Investissements
+                            <i class="fas fa-layer-group"></i> Matrice de hiérarchisation des travaux et investissements
                         </div>
 
                         <!-- Priorité 1 : Critique -->
@@ -4526,7 +4621,7 @@
                             <div style="font-size: 0.78rem; font-weight: 800; color: #ef4444; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
                                 <div style="display: flex; align-items: center; gap: 6px;">
                                     <span style="background: #ef4444; color: white; padding: 1px 6px; border-radius: 4px; font-size: 0.68rem;">P1</span>
-                                    Priorité 1 — Urgence Critique (Submersion Voirie &amp; Habitations)
+                                    Priorité 1 — Urgence critique (submersion de voirie et habitations)
                                 </div>
                                 <span style="font-size: 0.72rem; color: #f87171; font-weight: 700;">${window.formaterCoutDZD((risk.synthese && risk.synthese.cout_p1_dzd) || 0)}</span>
                             </div>
@@ -4550,7 +4645,7 @@
                             <div style="font-size: 0.78rem; font-weight: 800; color: #f59e0b; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
                                 <div style="display: flex; align-items: center; gap: 6px;">
                                     <span style="background: #f59e0b; color: white; padding: 1px 6px; border-radius: 4px; font-size: 0.68rem;">P2</span>
-                                    Priorité 2 — Alerte Majeure (Mise en Charge Continue sans Inondation)
+                                    Priorité 2 — Alerte majeure (mise en charge continue sans inondation)
                                 </div>
                                 <span style="font-size: 0.72rem; color: #fbbf24; font-weight: 700;">${window.formaterCoutDZD((risk.synthese && risk.synthese.cout_p2_dzd) || 0)}</span>
                             </div>
@@ -4574,7 +4669,7 @@
                             <div style="font-size: 0.78rem; font-weight: 800; color: #38bdf8; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
                                 <div style="display: flex; align-items: center; gap: 6px;">
                                     <span style="background: #0284c7; color: white; padding: 1px 6px; border-radius: 4px; font-size: 0.68rem;">P3</span>
-                                    Priorité 3 — Maintenance Préventive (Auto-curage / Pentes)
+                                    Priorité 3 — Maintenance préventive (autocurage et pentes)
                                 </div>
                                 <span style="font-size: 0.72rem; color: #38bdf8; font-weight: 700;">${window.formaterCoutDZD((risk.synthese && risk.synthese.cout_p3_dzd) || 0)}</span>
                             </div>
@@ -4599,14 +4694,14 @@
                 <div id="pane-agent-finance" class="agent-tab-pane" style="display: none;">
                     <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px; margin-bottom: 14px;">
                         <div style="background: rgba(16, 185, 129, 0.08); border-left: 4px solid #10b981; border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.82rem; color: #e2e8f0; line-height: 1.5;">
-                            <strong style="color: #34d399; display: block; margin-bottom: 4px;"><i class="fas fa-coins me-1"></i> Mémoire de l'Expert Financier &amp; Marchés Publics (Agent 5) :</strong>
-                            ${(agents.analyse_variantes_financiere && agents.analyse_variantes_financiere.note_technique) ? agents.analyse_variantes_financiere.note_technique : "L'analyse multi-critères démontre la supériorité de la Variante 3 (Mixte Optimisée). En limitant les travaux lourds aux 97 goulots à déficit avéré (4 112.8 ml) et en créant un bassin d'écrêtement amont (6 595 m³), le coût est de 240.38 M DZD, soit 90.6 M DZD d'économie (-27.4%) par rapport au tout-réseau."}
+                            <strong style="color: #34d399; display: block; margin-bottom: 4px;"><i class="fas fa-coins me-1"></i> Mémoire de l'expert financier et marchés publics (Agent 5) :</strong>
+                            ${(agents.analyse_variantes_financiere && agents.analyse_variantes_financiere.note_technique) ? agents.analyse_variantes_financiere.note_technique : "L'analyse multicritère démontre la supériorité de la Variante 3 (mixte optimisée). En limitant les travaux lourds aux 97 goulots à déficit avéré (4 112.8 ml) et en créant un bassin d'écrêtement amont (6 595 m³), le coût est de 240.38 M DZD, soit 90.6 M DZD d'économie (-27.4%) par rapport au tout-réseau."}
                         </div>
 
                         <div style="font-weight: 700; font-size: 0.92rem; color: #34d399; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
-                            <span><i class="fas fa-balance-scale me-1"></i> Comparatif Multi-Critères des 3 Variantes d'Aménagement</span>
+                            <span><i class="fas fa-balance-scale me-1"></i> Comparatif multicritère des 3 variantes d'aménagement</span>
                             <span style="font-size: 0.76rem; background: rgba(16,185,129,0.18); color: #34d399; border: 1px solid rgba(16,185,129,0.4); padding: 2px 8px; border-radius: 4px; font-weight: 700;">
-                                Gain Net : 90,58 M DZD (-27,4%)
+                                Gain net : 90,58 M DZD (-27,4%)
                             </span>
                         </div>
 
@@ -4615,7 +4710,7 @@
                             <!-- V1 -->
                             <div style="background: rgba(239, 68, 68, 0.06); border: 1.5px solid rgba(239, 68, 68, 0.3); border-radius: 10px; padding: 12px;">
                                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                                    <span style="font-weight: 800; font-size: 0.84rem; color: #f87171;">V1 : 100% Tout-Réseau</span>
+                                    <span style="font-weight: 800; font-size: 0.84rem; color: #f87171;">V1 : 100 % tout-réseau</span>
                                     <span style="font-size: 0.68rem; background: rgba(239,68,68,0.2); color: #fca5a5; padding: 1px 6px; border-radius: 3px; font-weight: 700;">NON RETENU</span>
                                 </div>
                                 <div style="font-size: 1.15rem; font-weight: 900; color: #f8fafc; margin-bottom: 4px;">330 964 500,00 DZD</div>
@@ -4633,7 +4728,7 @@
                             <!-- V2 -->
                             <div style="background: rgba(245, 158, 11, 0.06); border: 1.5px solid rgba(245, 158, 11, 0.3); border-radius: 10px; padding: 12px;">
                                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                                    <span style="font-weight: 800; font-size: 0.84rem; color: #fbbf24;">V2 : 100% SFN Pures</span>
+                                    <span style="font-weight: 800; font-size: 0.84rem; color: #fbbf24;">V2 : 100 % gestion durable des ouvrages (GDO)</span>
                                     <span style="font-size: 0.68rem; background: rgba(245,158,11,0.2); color: #fde68a; padding: 1px 6px; border-radius: 3px; font-weight: 700;">INSUFFISANT</span>
                                 </div>
                                 <div style="font-size: 1.15rem; font-weight: 900; color: #f8fafc; margin-bottom: 4px;">112 500 000,00 DZD</div>
@@ -4651,9 +4746,50 @@
                             <!-- V3 -->
                             <div style="background: rgba(16, 185, 129, 0.1); border: 2px solid #10b981; border-radius: 10px; padding: 12px; box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);">
                                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                                    <span style="font-weight: 800; font-size: 0.84rem; color: #34d399;">V3 : Mixte Optimisée</span>
+                                    <span style="font-weight: 800; font-size: 0.84rem; color: #34d399;">V3 : Mixte optimisée</span>
                                     <span style="font-size: 0.68rem; background: #10b981; color: white; padding: 2px 7px; border-radius: 3px; font-weight: 800;">RECOMMANDÉ</span>
                                 </div>
+                                <div style="font-size: 1.25rem; font-weight: 900; color: #34d399; margin-bottom: 4px;">240 384 400,00 DZD</div>
+                                <div style="font-size: 0.74rem; color: #cbd5e1; line-height: 1.4; margin-bottom: 8px;">
+                                    Recalibrage ciblé 97 goulots (4 112,8 ml) + Bassin amont régulé 6 595 m³ + noues.
+                                </div>
+                                <div style="font-size: 0.72rem; color: #f8fafc; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 6px;">
+                                    <div>✅ <b>Efficacité :</b> 100% résorption hydrodynamique</div>
+                                    <div>📉 <b>Économie :</b> 90 580 100,00 DZD (-27,4%)</div>
+                                    <div>🛡️ <b>Protection aval :</b> Débit pointe écrêté à 0,65 m³/s</div>
+                                    <div>⭐ <b>Résilience :</b> 9,2 / 10</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- KPIs Ratios Directeurs & Rentabilité -->
+                        <div style="font-weight: 700; font-size: 0.88rem; color: #38bdf8; margin-bottom: 8px;">
+                            <i class="fas fa-chart-pie me-1"></i> Ratios directeurs et indicateurs décisionnels (aide à la décision ONA / wilaya)
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; font-size: 0.78rem;">
+                            <div style="background: rgba(255,255,255,0.03); padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08);">
+                                <span style="color: #94a3b8; display: block; font-size: 0.7rem;">Coût par ml rénové</span>
+                                <b style="color: #38bdf8; font-size: 0.95rem;">${window.formaterCoutDZD(agents.analyse_variantes_financiere?.ratios_decisionnels?.cout_par_ml_renove_dzd || 47871)} / ml</b>
+                                <small style="color: #64748b; display: block; font-size: 0.68rem;">Base 4 112.8 ml ciblés</small>
+                            </div>
+                            <div style="background: rgba(255,255,255,0.03); padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08);">
+                                <span style="color: #94a3b8; display: block; font-size: 0.7rem;">Coût par habitant</span>
+                                <b style="color: #38bdf8; font-size: 0.95rem;">${window.formaterCoutDZD(agents.analyse_variantes_financiere?.ratios_decisionnels?.cout_par_habitant_protege_dzd || 16026)} / hab</b>
+                                <small style="color: #64748b; display: block; font-size: 0.68rem;">15 000 hab équivalents</small>
+                            </div>
+                            <div style="background: rgba(16,185,129,0.08); padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(16,185,129,0.25);">
+                                <span style="color: #34d399; display: block; font-size: 0.7rem; font-weight: 700;">Dommages annuels évités</span>
+                                <b style="color: #34d399; font-size: 0.95rem;">45,0 M DZD / an</b>
+                                <small style="color: #6ee7b7; display: block; font-size: 0.68rem;">Voirie, sous-sols, caves, RN4</small>
+                            </div>
+                            <div style="background: rgba(16,185,129,0.08); padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(16,185,129,0.25);">
+                                <span style="color: #34d399; display: block; font-size: 0.7rem; font-weight: 700;">Rentabilité socio-économique</span>
+                                <b style="color: #34d399; font-size: 0.95rem;">Payback 5,3 ans &bull; TRI 14,8%</b>
+                                <small style="color: #6ee7b7; display: block; font-size: 0.68rem;">VAN 20 ans : +275,8 M DZD</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                                 <div style="font-size: 1.25rem; font-weight: 900; color: #34d399; margin-bottom: 4px;">240 384 400,00 DZD</div>
                                 <div style="font-size: 0.74rem; color: #cbd5e1; line-height: 1.4; margin-bottom: 8px;">
                                     Recalibrage ciblé 97 goulots (4 112,8 ml) + Bassin amont régulé 6 595 m³ + noues.
@@ -6305,11 +6441,25 @@
                 .then(data => {
                     if (data && data.status === 'success' && data.conduit_results && Object.keys(data.conduit_results).length > 0) {
                         window._dernierResultatSimulation = data;
+                        if (!window._simulationsCache) window._simulationsCache = {};
+                        if (data.meta && data.meta.cluster_id) {
+                            window._simulationsCache[String(data.meta.cluster_id)] = data;
+                        }
+                        if (data.meta && data.meta.bassin_nom) {
+                            window._simulationsCache[String(data.meta.bassin_nom)] = data;
+                        }
+                        if (data.meta && data.meta.cluster_nom) {
+                            window._simulationsCache[String(data.meta.cluster_nom)] = data;
+                        }
                         if (typeof activerActionsSimulation === 'function') {
                             activerActionsSimulation(true);
                         }
-                        // Note : Ne pas forcer l'affichage de la légende ni écraser le tracé SIG physique à l'ouverture de la page.
-                        // La légende et les calques Q/Qmax s'affichent uniquement lorsque l'utilisateur simule ou clique sur 'Afficher les résultats'.
+                        if (data.meta && data.meta.cluster_id && typeof window.mettreAJourIndicateurBassin === 'function') {
+                            window.mettreAJourIndicateurBassin(data.meta.cluster_id, {
+                                status: 'simulated',
+                                ...(data.kpis || {})
+                            });
+                        }
                     } else {
                         reinitialiserAffichageSimulation();
                     }
@@ -6942,6 +7092,21 @@
                 } else {
                     statusDiv.style.display = 'none';
                 }
+
+                if (!window._simulationsCache) window._simulationsCache = {};
+                if (data && data.meta && data.meta.cluster_id) {
+                    window._simulationsCache[String(data.meta.cluster_id)] = data;
+                }
+                if (data && data.meta && data.meta.bassin_nom) {
+                    window._simulationsCache[String(data.meta.bassin_nom)] = data;
+                }
+                if (data && data.meta && data.meta.cluster_nom) {
+                    window._simulationsCache[String(data.meta.cluster_nom)] = data;
+                }
+                if (clusterId) {
+                    window._simulationsCache[String(clusterId)] = data;
+                }
+                window._dernierResultatSimulation = data;
                 
                 if (typeof window.mettreAJourIndicateurBassin === 'function') {
                     const kp = (data && data.kpis) || {};
@@ -7209,8 +7374,8 @@
                         <i class="fas fa-bolt"></i>
                     </div>
                     <div>
-                        <h5 style="margin: 0; font-weight: 700; font-size: 1.05rem;">Simulation Hydrodynamique EPA SWMM 5.2</h5>
-                        <small style="color: #94a3b8;">Résolution Saint-Venant 1D (DYNWAVE) &amp; Hydrologie Horton</small>
+                        <h5 style="margin: 0; font-weight: 700; font-size: 1.05rem;">Simulation hydrodynamique EPA SWMM 5.2</h5>
+                        <small style="color: #94a3b8;">Résolution Saint-Venant 1D (DYNWAVE) &amp; hydrologie Horton</small>
                     </div>
                 </div>
                 <button onclick="fermerModalSimulation()" style="background: transparent; border: none; color: #94a3b8; font-size: 24px; cursor: pointer; line-height: 1;">&times;</button>
@@ -7432,7 +7597,7 @@
 
                 <!-- Bouton d'action -->
                 <button id="btn-run-sim-action" onclick="declencherSimulationSWMM()" style="width: 100%; padding: 12px; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: white; border: none; border-radius: 10px; font-weight: 700; font-size: 0.95rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4);">
-                    <i class="fas fa-play"></i> Lancer la Simulation SWMM 5.2
+                    <i class="fas fa-play"></i> Lancer la simulation SWMM 5.2
                 </button>
 
                 <!-- Zone d'état / progression -->
@@ -7442,7 +7607,7 @@
                 <div id="sim-results-card" style="display: none; margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 18px;">
                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
                         <span style="font-weight: 700; color: #34d399; font-size: 0.95rem;">
-                            <i class="fas fa-check-circle me-1"></i> Synthèse Hydrodynamique (Solveur EPA)
+                            <i class="fas fa-check-circle me-1"></i> Synthèse hydrodynamique (solveur EPA)
                         </span>
                         <span style="font-size: 0.75rem; background: rgba(52, 211, 153, 0.15); color: #34d399; padding: 2px 8px; border-radius: 4px; font-weight: 600;">
                             CONFORME
@@ -7456,21 +7621,21 @@
                     <div id="sim-pluvio-results-box" style="background: rgba(14, 165, 233, 0.08); border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                             <span style="font-size: 0.82rem; font-weight: 700; color: #38bdf8; display: flex; align-items: center; gap: 7px;">
-                                <i class="fas fa-cloud-showers-heavy"></i> Sollicitation Pluviométrique &amp; Station de Référence
+                                <i class="fas fa-cloud-showers-heavy"></i> Sollicitation pluviométrique &amp; station de référence
                             </span>
                             <span id="kpi-pluvio-station-badge" style="font-size: 0.72rem; background: rgba(56, 189, 248, 0.18); color: #7dd3fc; border: 1px solid rgba(56, 189, 248, 0.35); padding: 2px 8px; border-radius: 4px; font-weight: 700;">Station ANRH Chlef Siège (010501)</span>
                         </div>
                         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; font-size: 0.78rem;">
                             <div style="background: rgba(15, 23, 42, 0.65); padding: 8px 10px; border-radius: 6px; text-align: center; border: 1px solid rgba(255,255,255,0.05);">
-                                <div style="color: #94a3b8; font-size: 0.7rem; margin-bottom: 2px;">Période de Retour</div>
+                                <div style="color: #94a3b8; font-size: 0.7rem; margin-bottom: 2px;">Période de retour</div>
                                 <b id="kpi-pluvio-periode" style="color: #f8fafc; font-size: 0.86rem;">T = 10 ans</b>
                             </div>
                             <div style="background: rgba(15, 23, 42, 0.65); padding: 8px 10px; border-radius: 6px; text-align: center; border: 1px solid rgba(56, 189, 248, 0.35);">
-                                <div style="color: #94a3b8; font-size: 0.7rem; margin-bottom: 2px;">Intensité Pointe (Imax)</div>
+                                <div style="color: #94a3b8; font-size: 0.7rem; margin-bottom: 2px;">Intensité de pointe (Imax)</div>
                                 <b id="kpi-pluvio-imax" style="color: #38bdf8; font-size: 1.05rem; font-weight: 900;">74.9 mm/h</b>
                             </div>
                             <div style="background: rgba(15, 23, 42, 0.65); padding: 8px 10px; border-radius: 6px; text-align: center; border: 1px solid rgba(255,255,255,0.05);">
-                                <div style="color: #94a3b8; font-size: 0.7rem; margin-bottom: 2px;">Hauteur Cumulée (Ptot)</div>
+                                <div style="color: #94a3b8; font-size: 0.7rem; margin-bottom: 2px;">Hauteur cumulée (Ptot)</div>
                                 <b id="kpi-pluvio-ptot" style="color: #34d399; font-size: 0.86rem;">42.8 mm</b>
                             </div>
                             <div style="background: rgba(15, 23, 42, 0.65); padding: 8px 10px; border-radius: 6px; text-align: center; border: 1px solid rgba(255,255,255,0.05);">
@@ -7487,7 +7652,7 @@
                     <div id="sim-orphelin-kpi-box" style="display: none; background: rgba(6, 182, 212, 0.12); border: 1px solid rgba(6, 182, 212, 0.4); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                             <div style="font-size: 0.82rem; font-weight: 800; color: #22d3ee; display: flex; align-items: center; gap: 7px;">
-                                <i class="fas fa-random"></i> Répartition des Débits du Bassin Versant (Option 1)
+                                <i class="fas fa-random"></i> Répartition des débits du bassin versant (Option 1)
                             </div>
                             <span id="kpi-orphelin-badge" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; font-weight: 800; background: rgba(6, 182, 212, 0.25); color: #22d3ee; border: 1px solid rgba(6, 182, 212, 0.5);">--</span>
                         </div>
@@ -7502,19 +7667,19 @@
                     <!-- Cartouches KPIs Ligne 1 : Dynamique & Hydraulique -->
                     <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px;">
                         <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; text-align: center;">
-                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">Bilan Continuité</div>
+                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">Bilan de continuité</div>
                             <div id="kpi-continuity" style="font-size: 1.05rem; font-weight: 800; color: #38bdf8;">--</div>
                         </div>
                         <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; text-align: center;">
-                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">Pointe à l'Exutoire</div>
+                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">Pointe à l'exutoire</div>
                             <div id="kpi-peak-outflow" style="font-size: 1.05rem; font-weight: 800; color: #34d399;">--</div>
                         </div>
                         <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; text-align: center;">
-                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">Temps à la Pointe (Tp)</div>
+                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">Temps à la pointe (Tp)</div>
                             <div id="kpi-peak-time" style="font-size: 1.05rem; font-weight: 800; color: #fbbf24;">--</div>
                         </div>
                         <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; text-align: center;">
-                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">Vitesse Max (Vmax)</div>
+                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">Vitesse maximale (Vmax)</div>
                             <div id="kpi-max-velocity" style="font-size: 1.05rem; font-weight: 800; color: #a855f7;">--</div>
                         </div>
                     </div>
@@ -7522,19 +7687,19 @@
                     <!-- Cartouches KPIs Ligne 2 : Bilan Massique des Volumes & Surcharge -->
                     <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 12px;">
                         <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; text-align: center;">
-                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">Volume Ruisselé</div>
+                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">Volume ruisselé</div>
                             <div id="kpi-vol-runoff" style="font-size: 1.0rem; font-weight: 800; color: #38bdf8;">--</div>
                         </div>
                         <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; text-align: center;">
-                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">Volume Infiltré</div>
+                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">Volume infiltré</div>
                             <div id="kpi-vol-infil" style="font-size: 1.0rem; font-weight: 800; color: #10b981;">--</div>
                         </div>
                         <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; text-align: center;">
-                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">Coeff. Ruissellement (Ceff)</div>
+                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">Coefficient de ruissellement (Ceff)</div>
                             <div id="kpi-coeff-eff" style="font-size: 1.0rem; font-weight: 800; color: #f59e0b;">--</div>
                         </div>
                         <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; text-align: center;">
-                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">Réseau en Surcharge</div>
+                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">Réseau en surcharge</div>
                             <div id="kpi-surcharge-pct" style="font-size: 1.0rem; font-weight: 800; color: #f87171;">--</div>
                         </div>
                     </div>
@@ -7543,7 +7708,7 @@
                     <div id="sim-coherence-box" style="background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                             <div style="font-size: 0.82rem; font-weight: 700; color: #f8fafc; display: flex; align-items: center; gap: 7px;">
-                                <i class="fas fa-brain" style="color: #38bdf8;"></i> Contrôle de Cohérence Pluie-Débit (Méthode Rationnelle)
+                                <i class="fas fa-brain" style="color: #38bdf8;"></i> Contrôle de cohérence pluie-débit (méthode rationnelle)
                             </div>
                             <span id="kpi-coherence-badge" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; font-weight: 700;">--</span>
                         </div>

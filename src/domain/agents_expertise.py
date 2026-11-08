@@ -4,7 +4,7 @@ Fichier : src/domain/agents_expertise.py
 
 Orchestre une équipe d'agents d'IA métier pour transformer les résultats bruts
 de simulation hydraulique (hauteurs, débits, vitesses) en diagnostics causaux,
-prescriptions de travaux de génie civil dimensionnés, solutions durables (LID/SFN),
+prescriptions de travaux de génie civil dimensionnés, solutions durables de gestion durable des ouvrages (GDO),
 et plans d'action priorisés pour les directeurs et ingénieurs d'assainissement.
 """
 
@@ -233,7 +233,7 @@ class AgentDiagnosticCausal:
 
         return {
             "agent": "Agent 1 : Diagnosticien Causal",
-            "statut": "Analyse Complète",
+            "statut": "Analyse complète",
             "note_technique": note_technique,
             "nb_surcharges": len(surcharged_links),
             "surcharged_links": surcharged_links,
@@ -466,7 +466,7 @@ class AgentGenieCivil:
 
         return {
             "agent": "Agent 2 : Génie Civil & Dimensionnement",
-            "statut": "Prescriptions Établies",
+            "statut": "Prescriptions établies",
             "note_technique": note_technique,
             "nb_troncons_a_recalibrer": len(prescriptions),
             "nb_troncons_suffisants_remous": nb_remous,
@@ -482,7 +482,7 @@ class AgentGenieCivil:
 
 
 # ==============================================================================
-# AGENT 3 : HYDROLOGIE DURABLE & SOLUTIONS FONDÉES SUR LA NATURE (LID/SFN)
+# AGENT 3 : HYDROLOGIE DURABLE & GESTION DURABLE DES OUVRAGES (GDO)
 # ==============================================================================
 
 class AgentHydrologieDurable:
@@ -514,8 +514,8 @@ class AgentHydrologieDurable:
 
         solutions = [
             {
-                "solution": "Bassin d'Écrêtement & Rétention Paysager",
-                "designation": "Bassin d'Écrêtement & Rétention Paysager",
+                "solution": "Bassin d'écrêtement et rétention paysager",
+                "designation": "Bassin d'écrêtement et rétention paysager",
                 "type": "Ouvrage de stockage centralisé en amont",
                 "volume_utile_m3": vol_retention_cible_m3,
                 "emprise_au_sol_m2": emprise_sol_bassin_m2,
@@ -525,8 +525,8 @@ class AgentHydrologieDurable:
                 "avantage": "Évite le recalibrage lourd des collecteurs aval en milieu urbain dense"
             },
             {
-                "solution": "Noues Végétalisées & Tranchées d'Infiltration",
-                "designation": "Noues Végétalisées & Tranchées d'Infiltration",
+                "solution": "Noues végétalisées et tranchées d'infiltration",
+                "designation": "Noues végétalisées et tranchées d'infiltration",
                 "type": "Gestion linéaire le long des délaissés de voirie",
                 "lineaire_recommande_m": lineaire_noues_m,
                 "dimensionnement": f"Linéaire : {lineaire_noues_m} ml (Largeur 2.0 m)",
@@ -535,8 +535,8 @@ class AgentHydrologieDurable:
                 "avantage": "Recharge de la nappe phréatique et îlots de fraîcheur urbains"
             },
             {
-                "solution": "Chaussées Réservoirs & Pavés Drainants",
-                "designation": "Chaussées Réservoirs & Pavés Drainants",
+                "solution": "Chaussées réservoirs et pavés drainants",
+                "designation": "Chaussées réservoirs et pavés drainants",
                 "type": "Infiltration directe dans les parkings et voies secondaires",
                 "surface_recommandee_m2": round(emprise_sol_bassin_m2 * 2.5, 1),
                 "dimensionnement": f"Surface perméable : {round(emprise_sol_bassin_m2 * 2.5, 1)} m²",
@@ -548,15 +548,15 @@ class AgentHydrologieDurable:
 
         note_technique = (
             f"La minéralisation et l'imperméabilisation des sols génèrent un volume de ruissellement direct qui sature rapidement les canalisations aval. "
-            f"L'Agent SFN préconise d'intercepter et de temporiser les eaux pluviales à la source par des solutions fondées sur la nature (LID). "
+            f"L'Agent GDO préconise d'intercepter et de temporiser les eaux pluviales à la source par une gestion durable des ouvrages (GDO). "
             f"Un volume tampon de {vol_retention_cible_m3} m³ doit être mobilisé, combinant un bassin d'écrêtement paysager ({emprise_sol_bassin_m2} m² d'emprise) "
             f"et {lineaire_noues_m} ml de noues végétalisées en délaissés de voirie. Cette approche permet de rabattre le pic de débit de 35% à 45% "
             f"et d'éviter le surdimensionnement onéreux des réseaux enterrés en zone urbaine dense."
         )
 
         return {
-            "agent": "Agent 3 : Hydrologie Durable (LID / SFN)",
-            "statut": "Solutions Établies",
+            "agent": "Agent 3 : Hydrologie durable & gestion durable des ouvrages (GDO)",
+            "statut": "Solutions établies",
             "note_technique": note_technique,
             "volume_tampon_requis_m3": vol_retention_cible_m3,
             "surface_bassin_m2": emprise_sol_bassin_m2,
@@ -715,7 +715,7 @@ class AgentGestionRisques:
 
         return {
             "agent": "Agent 4 : Priorisation des Risques",
-            "statut": "Priorisation Établie",
+            "statut": "Priorisation établie",
             "note_technique": note_technique,
             "synthese": {
                 "nb_p1_critique": len(actions_p1),
@@ -742,8 +742,8 @@ class AgentGestionRisques:
 class AgentFinancierEtVariantes:
     """
     Expert en Ingénierie Financière & Économie de Projets d'Assainissement (ONA / BTPH).
-    Modélise l'analyse multi-critères des 3 grandes familles d'aménagement (100% Tout-Réseau,
-    100% SFN / Rétention Pure, et Mixte Optimisée) et calcule les indicateurs directeurs
+    Modélise l'analyse multicritère des 3 grandes familles d'aménagement (100 % tout-réseau,
+    100 % gestion durable des ouvrages / rétention, et mixte optimisée) et calcule les indicateurs directeurs
     de rentabilité socio-économique (VAN, TRI, Payback, Dommages annuels évités EAD,
     coût par mètre linéaire et coût par habitant équivalent protégé).
     """
@@ -759,23 +759,23 @@ class AgentFinancierEtVariantes:
         ml_recalibre = float(gc.get("metres_lineaires_totaux") or 4112.8)
         nb_troncons_gc = int(gc.get("nb_troncons_a_recalibrer") or 97)
 
-        # Données de dimensionnement SFN
+        # Données de dimensionnement de gestion durable des ouvrages (GDO)
         vol_lid = float(lid.get("volume_tampon_requis_m3") or 6595.0)
         cout_bassin_dzd = 35000000.0  # Bassin d'écrêtement amont 6595 m³ (terrassement + régulation de fuite)
         cout_noues_dzd = 8500000.0    # Noues d'infiltration et dépavements d'appoint
-        cout_sfn_mixte = cout_bassin_dzd + cout_noues_dzd  # 43 500 000 DZD
+        cout_gdo_mixte = cout_bassin_dzd + cout_noues_dzd  # 43 500 000 DZD
 
         # Variante 1 : 100% Tout-Réseau (Recalibrage Systématique de tous les tronçons surchargés sans rétention)
         ml_v1 = 7591.9
         nb_troncons_v1 = 347
         cout_v1 = 330964500.0
 
-        # Variante 2 : 100% SFN & Rétention Pure (Sans renforcement du réseau souterrain)
+        # Variante 2 : 100% GDO & rétention pure (sans renforcement du réseau souterrain)
         vol_v2 = 18500.0
         cout_v2 = 112500000.0
 
         # Variante 3 : Mixte Optimisée (Scénario Recommandé DrainPilot)
-        cout_v3 = round(cout_gc + cout_sfn_mixte, 2)  # 240 384 400 DZD
+        cout_v3 = round(cout_gc + cout_gdo_mixte, 2)  # 240 384 400 DZD
         economie_vs_v1 = round(cout_v1 - cout_v3, 2)  # 90 580 100 DZD (économie de ~27.4%)
         economie_pct = round((economie_vs_v1 / cout_v1) * 100.0, 1)
 
@@ -809,7 +809,7 @@ class AgentFinancierEtVariantes:
         variantes = [
             {
                 "id": "V1",
-                "nom": "Variante 1 : 100% Tout-Réseau (Recalibrage Collecteurs Seul)",
+                "nom": "Variante 1 : 100 % tout-réseau (recalibrage des collecteurs seul)",
                 "description": "Recalibrage étendu de l'ensemble des collecteurs surchargés sans ouvrage de rétention amont.",
                 "recalibrage_ml": ml_v1,
                 "nb_troncons": nb_troncons_v1,
@@ -817,7 +817,7 @@ class AgentFinancierEtVariantes:
                 "cout_reseau_dzd": cout_v1,
                 "cout_retention_dzd": 0,
                 "cout_total_dzd": cout_v1,
-                "gain_hydraulique": "100% théorique (sans écrêtement de pointe)",
+                "gain_hydraulique": "100 % théorique (sans écrêtement de pointe)",
                 "emprise_fonciere": "Nulle (travaux intégralement sous voirie)",
                 "impact_voirie": "TRÈS ÉLEVÉ (7.6 km de tranchées en zone dense, paralysie circulation RN4)",
                 "risque_aval": "TRÈS ÉLEVÉ (report direct de la pointe de crue sans régulation vers l'oued)",
@@ -828,7 +828,7 @@ class AgentFinancierEtVariantes:
             },
             {
                 "id": "V2",
-                "nom": "Variante 2 : 100% Solutions Fondées sur la Nature (SFN / Rétention Pure)",
+                "nom": "Variante 2 : 100 % gestion durable des ouvrages (GDO / rétention)",
                 "description": "Aménagement exclusif de bassins d'orage à ciel ouvert, noues et chaussées drainantes sans recalibrage de collecteurs.",
                 "recalibrage_ml": 0,
                 "nb_troncons": 0,
@@ -836,7 +836,7 @@ class AgentFinancierEtVariantes:
                 "cout_reseau_dzd": 0,
                 "cout_retention_dzd": cout_v2,
                 "cout_total_dzd": cout_v2,
-                "gain_hydraulique": "Partiel (~62% de réduction des débordements)",
+                "gain_hydraulique": "Partiel (~62 % de réduction des débordements)",
                 "emprise_fonciere": "TRÈS ÉLEVÉE (~2.5 à 3.0 hectares requis dans un tissu urbain dense)",
                 "impact_voirie": "Faible (travaux en dehors des voies circulées)",
                 "risque_aval": "Faible (bon abattement des débits de pointe)",
@@ -847,13 +847,13 @@ class AgentFinancierEtVariantes:
             },
             {
                 "id": "V3",
-                "nom": "Variante 3 : Mixte Optimisée — Recalibrage Ciblé + Rétention Amont (Scénario Recommandé)",
+                "nom": "Variante 3 : Mixte optimisée — recalibrage ciblé et rétention amont (scénario recommandé)",
                 "description": "Recalibrage chirurgical des seuls 97 tronçons déficitaires intrinsèques couplé au bassin d'écrêtement amont (6 595 m³) et noues paysagères.",
                 "recalibrage_ml": ml_recalibre,
                 "nb_troncons": nb_troncons_gc,
                 "volume_retention_m3": vol_lid,
                 "cout_reseau_dzd": cout_gc,
-                "cout_retention_dzd": cout_sfn_mixte,
+                "cout_retention_dzd": cout_gdo_mixte,
                 "cout_total_dzd": cout_v3,
                 "gain_hydraulique": "100% de résorption théorique des débordements (modélisation Saint-Venant vérifiée)",
                 "emprise_fonciere": "Modérée (~0.8 ha en tête de bassin sur domaine communal)",
@@ -1016,7 +1016,7 @@ class AgentSyntheseExecutive:
         note_technique = (
             f"Synthèse stratégique d'aide à la décision destinée à la Direction Générale (ONA, DRE, Wilaya). "
             f"Le verdict hydraulique conclut à : {verdict}. {recommandation_cle} "
-            f"Le couplage du recalibrage des points critiques P1 avec les aménagements d'écrêtement SFN constitue "
+            f"Le couplage du recalibrage des points critiques P1 avec les aménagements d'écrêtement et de gestion durable des ouvrages (GDO) constitue "
             f"la stratégie optimale recommandée pour restaurer la capacité d'évacuation gravitaire et réduire significativement "
             f"les risques de submersion urbaine pour cet événement pluvial."
         )
@@ -1053,7 +1053,7 @@ class AgentSyntheseExecutive:
 
         return {
             "agent": "Agent 6 : Synthèse Exécutive",
-            "titre": "Note d'Aide à la Décision en Assainissement Urbain",
+            "titre": "Note d'aide à la décision en assainissement urbain",
             "perimetre": meta.get("cluster_nom") or "Réseau Urbain Complet",
             "scenario": meta.get("scenario") or "Pluie Décennale",
             "verdict": verdict,
