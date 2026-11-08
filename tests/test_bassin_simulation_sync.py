@@ -82,3 +82,10 @@ def test_anti_cache_et_cache_busting():
     assert "anti_cache_static_middleware" in main_py
     assert "no-store, must-revalidate" in main_py
     assert "?v=5.2.2" in index_html
+
+
+def test_bassin_non_simule_mention_et_masquage_legende():
+    """Vérifie que pour un bassin non simulé, l'indicateur affiche '(non simulé)' et la légende est masquée."""
+    bassins_js = Path("static/js/app/bassins_selection.js").read_text(encoding="utf-8")
+    assert "(non simulé)" in bassins_js
+    assert "legNonSim.style.display = 'none'" in bassins_js

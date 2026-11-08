@@ -150,13 +150,20 @@
             }
 
             if (topIcon) topIcon.innerHTML = `<i class="fas fa-draw-polygon" style="color: ${bColor};"></i>`;
-            if (topText) topText.innerHTML = `Bassin en cours : <span style="color: #f8fafc; font-weight: 700;">${nom}</span>`;
+            if (topText) topText.innerHTML = `Bassin en cours : <span style="color: #cbd5e1; font-size: 0.74rem; background: rgba(148, 163, 184, 0.18); border: 1px solid rgba(148, 163, 184, 0.35); padding: 1px 6px; border-radius: 4px; margin-right: 6px; font-weight: 700; letter-spacing: 0.2px;">(non simulé)</span><span style="color: #f8fafc; font-weight: 700;">${nom}</span>`;
             if (topBadge) {
                 topBadge.innerText = surfHa || (nbRegards ? `${nbRegards} • ${nbConduites}` : `ID ${cidStr}`);
                 topBadge.style.background = 'rgba(56, 189, 248, 0.15)';
                 topBadge.style.color = '#38bdf8';
             }
             if (topReset) topReset.style.display = 'inline-block';
+
+            // Masquer immédiatement la légende car sans objet pour un bassin non simulé
+            const legNonSim = document.getElementById('sim-floating-legend');
+            if (legNonSim) {
+                legNonSim.classList.remove('active-legend');
+                legNonSim.style.display = 'none';
+            }
         };
 
         // GESTION AUTOMATIQUE DE L'AFFICHAGE DE SIMULATION PAR BASSIN
@@ -224,6 +231,9 @@
                     const dispNom = (cached.meta && (cached.meta.cluster_nom || cached.meta.bassin_nom)) || nomBassin;
                     legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> SWMM 5.2 — ${dispNom}`;
                 }
+                if (typeof window.mettreAJourIndicateurBassin === 'function') {
+                    window.mettreAJourIndicateurBassin(cidStr, cached);
+                }
                 return;
             }
 
@@ -250,6 +260,9 @@
                             const dispNom = (d.meta && (d.meta.cluster_nom || d.meta.bassin_nom)) || nomBassin;
                             legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> SWMM 5.2 — ${dispNom}`;
                         }
+                        if (typeof window.mettreAJourIndicateurBassin === 'function') {
+                            window.mettreAJourIndicateurBassin(cidStr, d);
+                        }
                     } else {
                         // Aucun calcul sauvegardé pour ce bassin : nettoyer les résultats précédents
                         if (typeof reinitialiserAffichageSimulation === 'function') {
@@ -259,7 +272,9 @@
                             leg.classList.remove('active-legend');
                             leg.style.display = 'none';
                         }
-                        if (legTitle) legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> Légende SWMM 5.2`;
+                        if (typeof window.mettreAJourIndicateurBassin === 'function') {
+                            window.mettreAJourIndicateurBassin(cidStr, { status: 'unsimulated' });
+                        }
                     }
                 })
                 .catch(err => {
@@ -271,6 +286,9 @@
                         if (leg) {
                             leg.classList.remove('active-legend');
                             leg.style.display = 'none';
+                        }
+                        if (typeof window.mettreAJourIndicateurBassin === 'function') {
+                            window.mettreAJourIndicateurBassin(cidStr, { status: 'unsimulated' });
                         }
                     }
                 });
