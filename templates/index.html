@@ -1736,7 +1736,6 @@
                 return window.lancerPartitionnementBassins(null, null, false, false);
             }
         };
-        };
 
         // Gestion et fonction globale de sectorisation / détection des clusters
         window._isPartitioningInProgress = false;
@@ -5933,8 +5932,6 @@
                         }
                         if (qEl) qEl.innerText = `0,000 m³/s (0,0%)`;
                         if (dEl) dEl.innerHTML = `<i class="fas fa-info-circle text-sky-400 me-1"></i> <b>Scénario sans ouvrage spécial raccordé</b> : 100,0% du débit produit (${qGenereStr} m³/s) transite vers le collecteur et l'exutoire principal.`;
-                    }
-                        if (dEl) dEl.innerHTML = `<i class="fas fa-info-circle text-sky-400 me-1"></i> <b>Scénario sans ouvrage spécial raccordé</b> : 100% du débit produit (${qGenere.toFixed(3)} m³/s) transite vers le collecteur et l'exutoire principal.`;
                     }
                 }
 
