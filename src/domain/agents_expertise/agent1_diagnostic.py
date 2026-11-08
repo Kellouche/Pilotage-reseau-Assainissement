@@ -1,10 +1,10 @@
 """
 ================================================================================
 Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
-Auteur : Hakim / Équipe DrainPilot
+Auteur : Dr Abdelhakim KELLOUCHE
 Date de création : 2026-04-20
 Date de modification : 2026-11-08
-Objet : Agent 1 - Diagnosticien hydraulique causal et détection des anomalies 1D
+Objet : Agent Expert 1 : Diagnostic causal hydraulique et goulots d'étranglement
 ================================================================================
 """
 
@@ -212,3 +212,4 @@ class AgentDiagnosticCausal:
             "nb_erosion": len(high_velocity_links),
             "high_velocity_links": high_velocity_links[:6]
         }
+

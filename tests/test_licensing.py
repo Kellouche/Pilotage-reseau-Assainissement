@@ -1,8 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Tests unitaires de la Phase 3 : Commercial Engine, Licences B2B/B2G, Proforma PDF et Quotas.
-Vérifie la génération PDF, le cycle des bons de commande, les règles de stealth 404
-et les plafonds de collaborateurs d'organisation.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Tests unitaires du système de licences logicielles et quotas
+================================================================================
 """
 
 from datetime import datetime, timezone, timedelta

@@ -1,6 +1,11 @@
 """
-Suite de tests pour la Phase 2 : Tâches Asynchrones Celery/Redis, Stockage S3/Local et API Jobs.
-Conforme ADR-0003, ADR-0004 et règle de furtivité multi-tenant ADR-0001 (Stealth 404).
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Tests unitaires du système de gestion des jobs asynchrones
+================================================================================
 """
 
 import json

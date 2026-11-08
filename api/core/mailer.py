@@ -1,13 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Nom Auteur : Dr Abdelhakim Kellouche
-Nom de l'application : SWMM Platform SaaS
-Numéro version : 2.1.0
-Date de création : 29-10-2026
-Date de modification : 30-10-2026
-
-Module api.core.mailer : Service d'expédition des e-mails transactionnels et codes d'activation.
-Prend en charge la configuration SMTP standard ou le mode simulation en développement local.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Service d'envoi de courriels transactionnels et notifications d'alertes
+================================================================================
 """
 
 import os

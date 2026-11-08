@@ -1,6 +1,11 @@
 """
-Validateurs hydrauliques du réseau d'assainissement.
-Validation de la topologie, géométrie et hydraulique.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Package des validateurs de cohérence du réseau
+================================================================================
 """
 
 from src.validateurs.topologie import ValidateurTopologie

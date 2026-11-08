@@ -1,7 +1,13 @@
 """
-Tests unitaires pour le bilan hydraulique Option 1 (Affichage écran) et Option 3 (Rapport décisionnel).
-Vérifie la cohérence du bilan de flux Q_généré = Q_exutoire + Q_dérivé et la suppression de l'ambiguïté 'Délesté'.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Tests des options du bilan hydraulique et formatage monétaire DZD
+================================================================================
 """
+
 import pytest
 from src.domain.moteur_swmm import MoteurSWMM
 from src.domain.agents_expertise import AgentSyntheseExecutive

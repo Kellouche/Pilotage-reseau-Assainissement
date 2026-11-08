@@ -1,3 +1,13 @@
+/**
+ * ================================================================================
+ * Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+ * Auteur : Dr Abdelhakim KELLOUCHE
+ * Date de création : 2026-04-20
+ * Date de modification : 2026-11-08
+ * Objet : Couche de base et configuration du canevas cartographique
+ * ================================================================================
+ */
+
 (() => {
     const state = window.mapState;
     state.carte = L.map('map').setView([36.15, 1.33], 13);

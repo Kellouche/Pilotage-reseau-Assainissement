@@ -1,3 +1,13 @@
+"""
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Tests de chargement et d'intégrité du réseau de démonstration
+================================================================================
+"""
+
 import pytest
 from fastapi.testclient import TestClient
 from pathlib import Path

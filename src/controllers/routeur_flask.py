@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Nom Auteur : Dr Abdelhakim Kellouche
-Nom de l'application : Pilotage Réseau d'Assainissement
-Numéro version : 1.0.0
-Date de création : 02-04-2026
-Date de modification : 02-04-2026
-Objectif : Définition des routes Flask pour l'API de visualisation
-et le service de l'interface web. Point d'entrée HTTP
-pour la carte interactive et les données GeoJSON.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Routeur de secours pour les vues legacy Flask
+================================================================================
 """
 
 import logging

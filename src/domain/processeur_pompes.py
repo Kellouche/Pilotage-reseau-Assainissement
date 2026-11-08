@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Nom Auteur : Dr Abdelhakim Kellouche
-Nom de l'application : Pilotage Réseau d'Assainissement
-Numéro version : 1.0.0
-Date de création : 02-04-2026
-Date de modification : 02-04-2026
-Objectif : Traitement des pompes de relevage du réseau.
-Gère l'appariement des stations de relevage aux nœuds
-et la création des objets pompe pour SWMM.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Modélisation hydraulique des postes de relevage et stations de pompage
+================================================================================
 """
 
 import logging

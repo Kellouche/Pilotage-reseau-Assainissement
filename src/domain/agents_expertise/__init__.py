@@ -1,8 +1,11 @@
 """
-Auteur : Hakim / Équipe DrainPilot
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
 Date de création : 2026-04-20
 Date de modification : 2026-11-08
-Objet : Package d'expertise multi-agents autonome pour le diagnostic causal et les prescriptions décisionnelles.
+Objet : Package des agents experts d'analyse post-simulation
+================================================================================
 """
 
 from .common import formater_cout_dzd, formater_montant_dzd, formater_nombre_fr

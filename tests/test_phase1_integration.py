@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 """
-Test d'intégration Phase 1 - Fondations topologiques
-Lance les 3 validations et affiche les résultats
-
-Usage:
-    python tests/test_phase1_integration.py
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Tests d'intégration globale du livrable Phase 1
+================================================================================
 """
 
 import sys

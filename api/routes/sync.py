@@ -1,6 +1,11 @@
 """
-Routes de synchronisation bidirectionnelle.
-Delta sync, poussée de modifications, versioning.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Endpoints de synchronisation bidirectionnelle mobile/terrain et bureau
+================================================================================
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks

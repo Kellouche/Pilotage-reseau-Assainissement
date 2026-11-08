@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Module api.core.proforma : Génération des factures proforma et bons de commande officiels en PDF.
-Conforme aux règles de facturation B2B / B2G en Algérie (Dinars Algériens - DZD) pour les directions
-de l'hydraulique, collectivités et bureaux d'études VRD.
-Conforme à ADR 0006 et Roadmap SaaS Phase 3.2.
-
-Auteur : Dr Abdelhakim Kellouche / Antigravity
-Date : Octobre 2026
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Génération de devis proforma et facturation automatisée
+================================================================================
 """
 
 import io

@@ -1,14 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Nom Auteur : Dr Abdelhakim Kellouche
-Nom de l'application : Plateforme de Pilotage du Réseau d'Assainissement
-Numéro version : 1.0.0
-Date de création : 30-05-2026
-Date de modification : 30-05-2026
-
-Objectif du module :
-Routeur FastAPI exposant les points d'accès (endpoints) pour la gestion 
-des fiches d'inspections terrain et des incidents géolocalisés.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Endpoints mobiles pour la saisie terrain d'anomalies et photos d'ouvrages
+================================================================================
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query

@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Nom Auteur : Dr Abdelhakim Kellouche
-Nom de l'application : Pilotage Réseau d'Assainissement
-Numéro version : 1.0.0
-Date de création : 02-04-2026
-Date de modification : 02-04-2026
-Objectif : Génération des sections de nœuds d'un fichier SWMM.
-Gère les sections TITLE, OPTIONS, JUNCTIONS, OUTFALLS,
-STORAGE, COORDINATES et MAP.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Contrôleur de génération des nœuds et attributs de regards
+================================================================================
 """
 
 import geopandas as gpd

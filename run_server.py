@@ -1,10 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Lancement du serveur FastAPI en production (avec support mode silencieux).
-Usage:
-  python run_server.py            # Mode standard (logs d'accès complets)
-  python run_server.py --silent   # Mode silencieux (sans flood console, sans access logs)
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Script principal de démarrage du serveur Uvicorn DrainPilot 5.2
+================================================================================
 """
 
 import os

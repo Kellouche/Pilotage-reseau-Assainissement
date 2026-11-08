@@ -1,8 +1,11 @@
 """
-Configuration de l'application Celery pour SWMM Platform SaaS — Phase 2.3 (ADR-0003).
-
-Gère la file de messages asynchrones (Redis / Celery) pour les simulations SWMM 5.2,
-l'analyse topographique MNT, le calcul des clusters et l'ingestion de jeux de données SIG.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Instance et configuration de l'application Celery
+================================================================================
 """
 
 import os

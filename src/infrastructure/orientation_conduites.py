@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Nom Auteur : Dr Abdelhakim Kellouche
-Nom de l'application : Pilotage Réseau d'Assainissement
-Numéro version : 1.0.0
-Date de création : 02-04-2026
-Date de modification : 02-04-2026
-Objectif : Orientation hydraulique des canalisations.
-Calcule les cotes de radier à partir des regards et inverse
-les coordonnées des canalisations dans le sens amont → aval.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Algorithme d'orientation automatique du sens d'écoulement
+================================================================================
 """
 
 import numpy as np

@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Nom Auteur : Dr Abdelhakim Kellouche
-Nom de l'application : Pilotage Réseau d'Assainissement
-Numéro version : 1.0.0
-Date de création : 02-04-2026
-Date de modification : 02-04-2026
-Objectif : Orchestration de la génération complète d'un fichier
-SWMM .inp. Coordonne les sections (nœuds, liens, données)
-et écrit le fichier de sortie.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Contrôleur de compilation des fichiers d'entrée SWMM
+================================================================================
 """
 
 import logging

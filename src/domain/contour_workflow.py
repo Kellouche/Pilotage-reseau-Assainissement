@@ -1,6 +1,11 @@
 """
-src/domain/contour_workflow.py
-Remplacement du workflow complet de génération des bassins.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Workflow automatisé d'extraction et de lissage des contours de bassins
+================================================================================
 """
 
 from typing import Dict, Any, Optional

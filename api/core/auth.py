@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Module api.core.auth : Authentification, hachage Argon2id, clés API et JWT pour SWMM Platform SaaS.
-Inspiré et calqué sur l'architecture de sécurité de Pilotage-Réseau-AEP (core.auth).
-Conforme à ADR 0001 (Authentification FastAPI, Argon2id et Double Session JWT/Cookie).
-
-Auteur : Dr Abdelhakim Kellouche / Antigravity
-Date : Octobre 2026
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Logique d'authentification, hachage de mots de passe et gestion des tokens
+================================================================================
 """
 
 import os

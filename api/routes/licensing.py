@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Module api.routes.licensing : Endpoints de gestion des licences, bons de commande et factures proforma (DZD).
-Conforme à ADR 0006 et Roadmap SaaS Phase 3.
-Isolation stricte par org_id et validation RBAC.
-
-Auteur : Dr Abdelhakim Kellouche / Antigravity
-Date : Octobre 2026
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Gestion des licences d'exploitation, quotas et clés d'activation
+================================================================================
 """
 
 from datetime import datetime

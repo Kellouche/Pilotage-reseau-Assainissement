@@ -1,17 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Module api.core.quotas : Gestion et contrôle des quotas et des fonctionnalités par profil métier pour SWMM Platform SaaS.
-Inspiré et calqué sur l'architecture de Pilotage-Réseau-AEP (core.quotas).
-Conforme à docs/14_FICHE_PRODUIT_CADRAGE.md et docs/15_PLANS_TARIFAIRES.md.
-
-Profils métier Assainissement :
-1. Version Démo (demo / trial / essai) : Évaluation 14 jours, 2 000 regards, calculs SWMM d'initiation.
-2. Académique & Recherche (education / academique / recherche) : Gratuit, lois de Manning-Strickler & Saint-Venant, 500 regards, filigrane pédagogique.
-3. Bureau d'Études (bet / pro / ingenierie) : 45 000 DZD/mois, schémas directeurs, croisement MNT, 15 000 regards, rapports certifiés sans filigrane.
-4. Régies & Exploitants (exploitation / regie / entreprise) : Sur devis/marché public, réseaux illimités, flotte mobile terrain ITV, réconciliation offline.
-
-Auteur : Dr Abdelhakim Kellouche / Antigravity
-Date : Octobre 2026
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Vérification et respect des quotas de calculs et stockage multi-tenant
+================================================================================
 """
 
 from datetime import datetime, timezone

@@ -1,7 +1,13 @@
 """
-Tests unitaires pour la détection et le raccordement opportuniste
-des ouvrages spéciaux orphelins (Variante 0).
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Tests de détection et filtrage des tronçons déconnectés
+================================================================================
 """
+
 import pytest
 from pathlib import Path
 from src.domain.ouvrages_orphelins import detecter_ouvrages_orphelins_proches

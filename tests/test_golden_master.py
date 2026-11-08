@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Tests de non-régression hydraulique et topologique — GOLDEN MASTER (Tâche 0.6).
-Garantit l'invariance stricte des calculs physiques, topologiques et algorithmiques
-lors de la transformation SaaS du projet SWMM Platform.
-
-Auteur : Dr Abdelhakim Kellouche / Antigravity
-Date : Octobre 2026
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Tests de non-régression par rapport au Golden Master de référence
+================================================================================
 """
 
 import os

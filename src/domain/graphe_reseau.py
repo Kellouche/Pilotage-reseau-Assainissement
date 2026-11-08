@@ -1,6 +1,11 @@
 """
-Module de construction et de fiabilisation topologique du graphe orienté.
-Fichier : src/domain/graphe_reseau.py
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Modélisation du réseau d'assainissement sous forme de graphe orienté (NetworkX)
+================================================================================
 """
 
 from typing import Dict, Any, List

@@ -1,6 +1,11 @@
 """
-Tests de validation hydraulique et géométrique des bassins versants.
-Fichier : tests/test_bassins_hydraulique.py
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Tests de cohérence hydraulique et débits de pointe par bassin versant
+================================================================================
 """
 
 import pytest

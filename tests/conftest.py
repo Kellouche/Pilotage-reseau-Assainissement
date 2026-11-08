@@ -1,9 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-Configuration globale de la suite de tests pytest pour SWMM Platform SaaS.
-Isole strictement la base de données de test pour ne JAMAIS impacter
-la base opérationnelle locale de développement (swmm_platform.db).
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Fixtures Pytest globales, base de données de test et client HTTP
+================================================================================
 """
+
 import os
 import sys
 

@@ -1,6 +1,11 @@
 """
-Point d'entrée principal de l'API FastAPI.
-Configure l'application, les routes, le middleware CORS, etc.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Application FastAPI principale, middlewares, CORS et montage des routeurs
+================================================================================
 """
 
 import os

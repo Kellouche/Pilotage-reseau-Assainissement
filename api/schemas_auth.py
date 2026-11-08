@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Module api.schemas_auth : Contrats de données Pydantic pour l'authentification et les organisations SaaS.
-Conforme à ADR 0001 (Authentification & Isolation Multi-Tenant).
-
-Auteur : Dr Abdelhakim Kellouche / Antigravity
-Date : Octobre 2026
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Schémas Pydantic d'authentification, utilisateurs et organisations
+================================================================================
 """
 
 from pydantic import BaseModel, Field, field_validator

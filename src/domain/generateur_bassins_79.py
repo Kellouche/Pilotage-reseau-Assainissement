@@ -1,7 +1,11 @@
 """
-Module de sectorisation et génération des 79 bassins versants urbains
-et intégration hiérarchique des sous-bassins Voronoï pour SWMM 5.2.
-Fichier : src/domain/generateur_bassins_79.py
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Génération et calibration des bassins versants pour le scénario 79
+================================================================================
 """
 
 import os

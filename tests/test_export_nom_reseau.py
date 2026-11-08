@@ -1,3 +1,13 @@
+"""
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Tests d'exportation des données réseau et conventions de nommage
+================================================================================
+"""
+
 import pytest
 from api.routes.simulations import _formater_nom_fichier_export, download_latest_inp, download_latest_rpt
 import api.routes.simulations as sim_module

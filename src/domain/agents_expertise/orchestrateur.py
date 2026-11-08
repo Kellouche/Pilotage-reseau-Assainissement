@@ -1,8 +1,11 @@
 """
-Auteur : Hakim / Équipe DrainPilot
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
 Date de création : 2026-04-20
 Date de modification : 2026-11-08
-Objet : Orchestrateur central de l'équipe multi-agents d'expertise hydraulique et d'aide à la décision.
+Objet : Orchestrateur multi-agents d'expertise post-simulation SWMM
+================================================================================
 """
 
 from typing import Dict, Any, Optional
@@ -62,3 +65,4 @@ def orchestrer_equipe_agents(
         "analyse_variantes_financiere": finance,
         "synthese_executive": synthese
     }
+

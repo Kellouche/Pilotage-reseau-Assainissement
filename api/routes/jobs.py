@@ -1,6 +1,11 @@
 """
-Routes API et WebSocket pour le suivi des tâches d'arrière-plan Celery.
-Phase 2.6 — Conforme ADR-0003 et isolation multi-tenant ADR-0001.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Endpoints de suivi des jobs asynchrones Celery et calculs de fond
+================================================================================
 """
 
 import asyncio

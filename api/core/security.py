@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Module api.core.security : Dépendances de sécurité FastAPI, authentification et contrôle d'accès RBAC multi-tenant.
-Inspiré et calqué sur l'architecture de Pilotage-Réseau-AEP (core.auth_decorators).
-Conforme à ADR 0001 (Authentification & Isolation Multi-Tenant) et Section 3 (Règle d'or de cloisonnement).
-
-Auteur : Dr Abdelhakim Kellouche / Antigravity
-Date : Octobre 2026
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Utilitaires de chiffrement, tokens sécurisés et protection CSRF/XSS
+================================================================================
 """
 
 import logging

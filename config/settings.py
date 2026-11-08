@@ -1,6 +1,11 @@
 """
-Configuration centralisée de la plateforme SWMM.
-Paramètres d'environnement, chemins, connexions DB.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Paramètres d'environnement, configuration base de données et flags applicatifs
+================================================================================
 """
 
 import os

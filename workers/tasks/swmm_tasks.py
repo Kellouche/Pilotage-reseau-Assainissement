@@ -1,8 +1,11 @@
 """
-Tâche Celery pour l'exécution asynchrone des simulations EPA SWMM 5.2 — Phase 2.4 (ADR-0003).
-
-Gère la génération du fichier .inp, l'exécution hydraulique, le calcul des KPIs (débordements,
-continuité, débits de pointe), le stockage des artefacts dans ArtifactStore et la mise à jour du Job.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Tâches asynchrones de simulation hydraulique SWMM
+================================================================================
 """
 
 import json

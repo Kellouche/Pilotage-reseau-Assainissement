@@ -1,6 +1,11 @@
 """
-Module api.core.jobs : Gestionnaire unifié du cycle de vie des Jobs asynchrones.
-Conforme à la Roadmap SaaS Phase 2.3 & 2.6 (ADR-0003 : File de Jobs & Suivi).
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Gestionnaire et suivi de la file de tâches asynchrones
+================================================================================
 """
 
 from datetime import datetime, timezone

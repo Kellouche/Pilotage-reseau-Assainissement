@@ -1,7 +1,11 @@
 """
-Routes pour l'intégration MNT/DEM et analyse de bassins versants.
-Expose les fonctionnalités d'extraction de courbes de niveau et
-de comparaison avec les bassins topologiques.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Endpoints d'analyse altimétrique et découpage topographique MNT
+================================================================================
 """
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks

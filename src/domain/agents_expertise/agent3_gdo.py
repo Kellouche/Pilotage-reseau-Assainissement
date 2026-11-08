@@ -1,10 +1,10 @@
 """
 ================================================================================
 Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
-Auteur : Hakim / Équipe DrainPilot
+Auteur : Dr Abdelhakim KELLOUCHE
 Date de création : 2026-04-20
 Date de modification : 2026-11-08
-Objet : Agent 3 - Hydrologie durable & gestion durable des ouvrages (GDO)
+Objet : Agent Expert 3 : Gestion durable des ouvrages (GDO) et rétention
 ================================================================================
 """
 
@@ -88,3 +88,4 @@ class AgentHydrologieDurable:
             "surface_bassin_m2": emprise_sol_bassin_m2,
             "solutions": solutions
         }
+

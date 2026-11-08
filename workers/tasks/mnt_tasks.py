@@ -1,8 +1,11 @@
 """
-Tâche Celery pour l'analyse altimétrique MNT et l'extraction de contours — Phase 2.5 (ADR-0003).
-
-Effectue le traitement lourd de rasters DEM (.tif), l'interpolation des cotes de radier
-et la délimitation topologique des bassins versants sans bloquer le serveur FastAPI.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Tâches asynchrones de traitement et découpage altimétrique MNT
+================================================================================
 """
 
 import json

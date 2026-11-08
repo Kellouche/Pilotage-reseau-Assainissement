@@ -1,10 +1,10 @@
 """
 ================================================================================
 Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
-Auteur : Hakim / Équipe DrainPilot
+Auteur : Dr Abdelhakim KELLOUCHE
 Date de création : 2026-04-20
 Date de modification : 2026-11-08
-Objet : Agent 4 - Hiérarchisation multicritère des risques hydrauliques (P1/P2/P3)
+Objet : Agent Expert 4 : Cartographie et évaluation multidimensionnelle des risques
 ================================================================================
 """
 
@@ -177,3 +177,4 @@ class AgentGestionRisques:
             },
             "actions_liste": actions_liste
         }
+

@@ -1,11 +1,11 @@
 """
-Service de détection et d'intégration des ouvrages spéciaux orphelins (Variante 0).
-Fichier : src/domain/ouvrages_orphelins.py
-
-Détecte automatiquement les ouvrages spéciaux (déversoirs d'orage, trop-pleins,
-stations de relevage) situés à proximité géographique immédiate (< 120 m)
-des regards réels d'un cluster ou bassin versant, et prépare leur raccordement
-opportuniste pour soulager le réseau avant/pendant la simulation SWMM 5.2.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Détection, isolement et traitement des tronçons et ouvrages orphelins
+================================================================================
 """
 
 import json

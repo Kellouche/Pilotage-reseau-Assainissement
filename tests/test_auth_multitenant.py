@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Tests unitaires et d'intégration pour l'authentification et l'isolation multi-tenant SaaS.
-Conforme à ADR 0001 (Authentification FastAPI, Argon2id et Double Session JWT/Cookie)
-et ADR 0002 (Isolation Multi-Tenant par Base Partagée avec org_id et Règle d'or de cloisonnement).
-
-Auteur : Dr Abdelhakim Kellouche / Antigravity
-Date : Octobre 2026
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Tests d'authentification, isolation multi-tenant et gestion des droits
+================================================================================
 """
 
 import pytest

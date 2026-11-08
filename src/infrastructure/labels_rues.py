@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Nom Auteur : Dr Abdelhakim Kellouche
-Nom de l'application : Pilotage Réseau d'Assainissement
-Numéro version : 1.0.0
-Date de création : 02-04-2026
-Date de modification : 02-04-2026
-Objectif : Génération des labels de rues pour la carte.
-Crée un GeoJSON de points avec les noms de rues,
-un par rue, positionnés au centroïde de ses regards.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Gestionnaire d'étiquettes et toponymie des voies urbaines
+================================================================================
 """
-
 
 def construire_labels_rues(regards_gdf):
     """Crée un GeoJSON de labels de rues."""

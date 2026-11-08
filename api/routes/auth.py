@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Module api.routes.auth : Routes d'authentification, de gestion de session et de clés d'API.
-Inspiré et calqué sur l'architecture de Pilotage-Réseau-AEP.
-Conforme à ADR 0001 (Authentification FastAPI, Argon2id et Double Session JWT/Cookie).
-
-Auteur : Dr Abdelhakim Kellouche / Antigravity
-Date : Octobre 2026
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Endpoints d'authentification JWT, inscription, connexion et sessions
+================================================================================
 """
 
 from datetime import datetime, timezone, timedelta

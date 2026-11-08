@@ -1,13 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Nom Auteur : Dr Abdelhakim Kellouche
-Nom de l'application : Plateforme de Pilotage du Réseau d'Assainissement
-Numéro version : 1.0.0
-Date de création : 30-05-2026
-Date de modification : 30-05-2026
-
-Objectif du module :
-Schémas de validation Pydantic pour les inspections terrain et les incidents géolocalisés.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Schémas Pydantic pour la collecte terrain et signalements d'anomalies
+================================================================================
 """
 
 from pydantic import BaseModel, Field, ConfigDict

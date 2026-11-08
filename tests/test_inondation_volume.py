@@ -1,3 +1,13 @@
+"""
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Tests d'évaluation des volumes de débordement et inondations urbaines
+================================================================================
+"""
+
 import pytest
 from src.domain.moteur_swmm import MoteurSWMM
 from src.domain.agents_expertise import AgentDiagnosticCausal

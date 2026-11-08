@@ -1,6 +1,11 @@
 """
-Configuration des validations topologiques - Phase 1
-Seuils hydrauliques et paramètres de tolérance
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Règles et critères de validation pour les livrables de Phase 1
+================================================================================
 """
 
 # Paramètres hydrauliques critiques

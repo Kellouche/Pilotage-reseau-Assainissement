@@ -1,8 +1,11 @@
 """
-Module d'import et de conversion de fichiers EPA SWMM (.inp) en GeoPackage (.gpkg).
-Permet à DrainPilot d'ingérer n'importe quel fichier de modélisation SWMM standard,
-d'en extraire les géométries (regards, canalisations, exutoires, sous-bassins)
-et de le rendre immédiatement simulable et visualisable dans le cockpit cartographique.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Parseur et lecteur de fichiers de modélisation SWMM au format .INP
+================================================================================
 """
 
 import os

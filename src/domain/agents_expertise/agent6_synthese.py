@@ -1,8 +1,11 @@
 """
-Auteur : Hakim / Équipe DrainPilot
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
 Date de création : 2026-04-20
 Date de modification : 2026-11-08
-Objet : Agent 6 d'expertise multi-agents - Synthèse exécutive, décisionnelle et institutionnelle (ONA, DRE).
+Objet : Agent Expert 6 : Synthèse décisionnelle et génération de rapport d'expertise
+================================================================================
 """
 
 from typing import Dict, Any, Optional
@@ -138,3 +141,4 @@ class AgentSyntheseExecutive:
             },
             "bilan_hydraulique_decisionnel": texte_decisionnel
         }
+

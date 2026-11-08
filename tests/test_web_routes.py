@@ -1,8 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Tests unitaires des routes web de l'application SaaS (ADR 0001, ADR 0008).
-Vérifie la vitrine SaaS (/), les pages d'authentification (/login, /register, /logout)
-et l'accès au cockpit hydraulique (/cockpit).
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Tests de bout en bout des routes Web et rendu HTML
+================================================================================
 """
 
 from unittest.mock import MagicMock

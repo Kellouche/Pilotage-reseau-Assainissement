@@ -1,8 +1,11 @@
 """
-Auteur : Hakim / Équipe DrainPilot
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
 Date de création : 2026-04-20
 Date de modification : 2026-11-08
-Objet : Routes API FastAPI pour les simulations SWMM 5.2, la persistance par bassin versant et l'interprétation multi-agents.
+Objet : Endpoints de lancement de simulation SWMM 5.2 et restitution des résultats
+================================================================================
 """
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status

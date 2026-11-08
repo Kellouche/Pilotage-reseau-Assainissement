@@ -1,8 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Module d'analyse et de contrôle qualité SIG du réseau d'assainissement sur GeoPackage.
-Remplace l'ancien audit statique par un diagnostic dynamique adapté à chaque projet actif.
-Auteur : Dr Abdelhakim Kellouche
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Outil d'analyse qualité et de validation des couches GeoPackage
+================================================================================
 """
 
 import os

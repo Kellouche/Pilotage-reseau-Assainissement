@@ -1,6 +1,11 @@
 """
-Routes pour l'analyse de qualité du réseau d'assainissement.
-Exposition des anomalies et scores de qualité via API REST.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Endpoints de contrôle qualité topologique et audit de connectivité
+================================================================================
 """
 
 import asyncio

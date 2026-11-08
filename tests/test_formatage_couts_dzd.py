@@ -1,3 +1,13 @@
+"""
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Tests unitaires de formatage monétaire comptable DZD avec séparateur décimal
+================================================================================
+"""
+
 import pytest
 from src.domain.agents_expertise import formater_cout_dzd, formater_nombre_fr
 

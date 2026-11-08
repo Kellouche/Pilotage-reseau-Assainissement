@@ -1,6 +1,11 @@
 """
-Routes pour le téléchargement sécurisé des artefacts (GeoPackage, MNT raster, rapports, modèles SWMM).
-Phase 2.1 & 2.2 — Conforme ADR-0004 et règle de furtivité ADR-0001 (Stealth 404).
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Endpoints de gestion et téléchargement des artefacts de simulation
+================================================================================
 """
 
 import mimetypes

@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Script d'extraction et de génération du Golden Dataset de référence (Tâche 0.5).
-Extrait un sous-réseau représentatif d'assainissement et son MNT associé
-pour servir de jeu de données certifié et pérenne pour les tests de non-régression.
-
-Auteur : Antigravity / Hakim
-Date : Octobre 2026
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Construction du jeu de données de référence (Golden Master)
+================================================================================
 """
 
 import os

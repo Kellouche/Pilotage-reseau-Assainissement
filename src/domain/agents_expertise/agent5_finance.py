@@ -1,10 +1,10 @@
 """
 ================================================================================
 Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
-Auteur : Hakim / Équipe DrainPilot
+Auteur : Dr Abdelhakim KELLOUCHE
 Date de création : 2026-04-20
 Date de modification : 2026-11-08
-Objet : Agent 5 - Ingénierie financière, analyse des variantes (V0, V1, V2, V3) et rentabilité
+Objet : Agent Expert 5 : Chiffrage budgétaire DZD et priorisation financière
 ================================================================================
 """
 
@@ -213,3 +213,4 @@ class AgentFinancierEtVariantes:
             },
             "note_technique": note_financiere
         }
+

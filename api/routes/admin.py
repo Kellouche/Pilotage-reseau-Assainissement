@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Module api.routes.admin : Console Opérateur SuperAdmin pour la supervision des abonnés et validation des licences.
-Réservé aux super-administrateurs de la plateforme (règle furtive 404 pour les utilisateurs non autorisés).
-Conforme à ADR 0006 et Roadmap SaaS Phase 3.5.
-
-Auteur : Dr Abdelhakim Kellouche / Antigravity
-Date : Octobre 2026
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Endpoints d'administration système, maintenance et métriques globales
+================================================================================
 """
 
 from datetime import datetime, timezone, timedelta

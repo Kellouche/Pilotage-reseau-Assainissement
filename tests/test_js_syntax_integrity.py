@@ -1,3 +1,13 @@
+"""
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Validation automatisée de l'intégrité syntaxique du code JavaScript frontend
+================================================================================
+"""
+
 import re
 import subprocess
 import tempfile

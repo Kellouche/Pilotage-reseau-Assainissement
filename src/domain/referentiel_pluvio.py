@@ -1,8 +1,11 @@
 """
-Module de gestion du Référentiel National des Données Pluviométriques (Algérie).
-Sources : ANRH, ONA, Université Hassiba Ben Bouali de Chlef (UHBC), ONM.
-Permet d'exploiter les stations pluviographiques certifiées, les formules Montana
-et les hyétogrammes de projet Chicago pour la simulation hydrodynamique EPA SWMM 5.2.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Référentiel pluviométrique (Montana, courbes IDF et pluies de projet)
+================================================================================
 """
 
 import json

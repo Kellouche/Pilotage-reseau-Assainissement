@@ -1,7 +1,11 @@
 """
-Module de détection, partitionnement et délimitation géométrique
-des sous-bassins versants collectés pour les réseaux d'assainissement.
-Fichier : src/domain/detecteur_clusters.py
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Algorithmes de détection de clusters topologiques et bassins versants
+================================================================================
 """
 
 from typing import Dict, List, Set, Tuple, Any, Optional

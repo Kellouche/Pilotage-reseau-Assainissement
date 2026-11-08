@@ -1,10 +1,11 @@
 """
-Module de modélisation hydrologique pour SWMM 5.2.
-Fichier : src/domain/hydrologie.py
-
-Génère les sous-bassins versants élémentaires (Subcatchments) par décomposition
-spatiale (Voronoï / Thiessen), calcule les paramètres physiques (surface, imperméabilisation,
-largeur hydraulique, pente, infiltration selon Horton) et formate les sections SWMM .inp.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Modélisation hydrologique (Horton, ruissellement et surfaces imperméables)
+================================================================================
 """
 
 import os

@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Modèles de données SQLAlchemy 2.0 pour SWMM Platform SaaS.
-Architecture multi-tenant avec isolation stricte par org_id et modèles du réseau d'assainissement.
-Inspiré de l'architecture HydroPilot AEP (Phase 1 — Tenancy & Persistance).
-
-Auteur : Dr Abdelhakim Kellouche / Antigravity
-Date : Octobre 2026
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Modèles SQLAlchemy ORM pour le réseau, les bassins et les simulations
+================================================================================
 """
 
 from datetime import datetime, timezone

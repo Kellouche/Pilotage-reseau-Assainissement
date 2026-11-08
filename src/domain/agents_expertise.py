@@ -1,8 +1,11 @@
 """
-Auteur : Hakim / Équipe DrainPilot
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
 Date de création : 2026-04-20
 Date de modification : 2026-11-08
-Objet : Module de compatibilité ascendante pour l'équipe multi-agents d'expertise et gestion durable des ouvrages (GDO) (re-exporte le package modulaire src.domain.agents_expertise).
+Objet : Wrapper de compatibilité pour le module d'agents d'expertise IA et gestion durable des ouvrages (GDO)
+================================================================================
 """
 
 from src.domain.agents_expertise import (

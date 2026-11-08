@@ -1,15 +1,11 @@
 """
-Couche d'abstraction du stockage des artefacts (ArtifactStore) — SaaS Phase 2.1 (ADR-0004).
-
-Permet de stocker les artefacts volumineux (GeoPackage, rasters MNT .tif, modèles SWMM .inp,
-résultats .out/.rpt, photographies d'inspection) indépendamment du système de fichiers local du serveur.
-
-Backends supportés :
-- LocalStore : pour le développement local et la suite de tests (stockage sous dossier racine)
-- S3Store : pour le staging et la production (compatible AWS S3, MinIO, Scaleway, Cloudflare R2)
-
-Partitionnement multi-tenant garanti :
-Toute clé d'artefact est strictement préfixée par : {org_id}/{project_id}/{relative_path}
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Gestionnaire de stockage des fichiers, rapports et rasters MNT
+================================================================================
 """
 
 import abc

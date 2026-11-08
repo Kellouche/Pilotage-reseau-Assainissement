@@ -1,7 +1,13 @@
 """
-Tests unitaires de non-régression pour la conformité topologique EPA SWMM 5.2 Dynamic Wave (DYNWAVE).
-Garantit qu'aucun exutoire [OUTFALLS] ne possède plus d'1 tronçon amont ou un quelconque tronçon aval (Erreur 141).
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Tests de prévention et résolution de l'erreur SWMM 141 (Outfall invalide)
+================================================================================
 """
+
 import pytest
 from pathlib import Path
 from src.domain.moteur_swmm import MoteurSWMM, _assainir_topologie_swmm

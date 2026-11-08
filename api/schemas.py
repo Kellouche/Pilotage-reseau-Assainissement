@@ -1,6 +1,11 @@
 """
-Schémas Pydantic pour validation des requêtes et réponses API.
-Définit les contrats de données pour tous les endpoints.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Schémas Pydantic de validation des requêtes et réponses SWMM
+================================================================================
 """
 
 from pydantic import BaseModel, Field, ConfigDict, field_validator

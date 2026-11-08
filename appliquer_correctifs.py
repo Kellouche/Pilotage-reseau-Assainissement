@@ -1,6 +1,11 @@
 """
-Script de mise à jour du module detecteur_clusters.py
-Compatibilité universelle NetworkX DiGraph et MultiDiGraph.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Script d'application batch des correctifs topologiques du réseau
+================================================================================
 """
 
 import os

@@ -1,10 +1,10 @@
 """
 ================================================================================
 Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
-Auteur : Hakim / Équipe DrainPilot
+Auteur : Dr Abdelhakim KELLOUCHE
 Date de création : 2026-04-20
 Date de modification : 2026-11-08
-Objet : Agent 2 - Génie civil, dimensionnement Manning-Strickler et BPU Algérie
+Objet : Agent Expert 2 : Dimensionnement génie civil et métré des conduites
 ================================================================================
 """
 
@@ -240,3 +240,4 @@ class AgentGenieCivil:
             "conduites_suffisantes_remous": conduites_suffisantes_remous[:30],
             "prescriptions": prescriptions[:60]
         }
+

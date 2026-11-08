@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Module api.crud : Opérations CRUD (Create, Read, Update, Delete) multi-tenant pour SWMM Platform SaaS.
-Garantit l'isolation stricte par org_id (Section 3 & ADR 0002) tout en conservant la compatibilité
-avec les appels historiques sans org_id.
-
-Auteur : Dr Abdelhakim Kellouche / Antigravity
-Date : Octobre 2026
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Opérations CRUD base de données pour nœuds, conduites et simulations
+================================================================================
 """
 
 from typing import List, Optional, Dict, Any

@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Migration des données GeoPackage vers PostgreSQL + PostGIS.
-Lit le GeoPackage original et insère dans les tables de la plateforme.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Script de migration des données GeoPackage vers PostgreSQL/PostGIS
+================================================================================
 """
 
 import sys

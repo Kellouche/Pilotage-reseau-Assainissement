@@ -1,6 +1,11 @@
 """
-Worker Celery pour exécuter les simulations SWMM en arrière-plan.
-Pour POC : peut aussi fonctionner en threading simple si Celery non dispo.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Worker d'exécution des calculs lourds SWMM en arrière-plan
+================================================================================
 """
 
 import os

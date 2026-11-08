@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Nom Auteur : Dr Abdelhakim Kellouche
-Nom de l'application : SWMM Platform SaaS
-Numéro version : 2.2.0
-Date de création : 01-11-2026
-
-Module domain.moteur_swmm : Assemblage du modèle SWMM 5.2 natif, exécution hydrodynamique
-via pyswmm (Dynamic Wave DYNWAVE), et analyse certifiée des résultats hydrauliques.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Moteur d'orchestration et d'exécution des simulations hydrauliques SWMM 5.2
+================================================================================
 """
 
 import os

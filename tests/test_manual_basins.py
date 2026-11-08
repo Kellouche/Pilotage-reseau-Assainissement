@@ -1,6 +1,11 @@
 """
-Tests de persistance et d'intégration des bassins manuels tracés par l'ingénieur.
-Fichier : tests/test_manual_basins.py
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Tests de création et d'édition manuelle de bassins versants
+================================================================================
 """
 
 import json

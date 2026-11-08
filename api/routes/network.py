@@ -1,6 +1,11 @@
 """
-Routes pour la gestion du réseau (regards, canalisations, rejets).
-Endpoints CRUD complets avec validation Pydantic.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Endpoints de gestion du réseau physique (nœuds, conduites, regards, exutoires)
+================================================================================
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Response

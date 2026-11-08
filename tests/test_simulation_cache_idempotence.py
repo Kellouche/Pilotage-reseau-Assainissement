@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Tests unitaires & d'intégration : Persistance et Cache Intelligent des simulations SWMM 5.2.
-Vérifie :
-1. Déterminisme du hash SHA-256 des paramètres de simulation.
-2. Persistance complète sur disque (.simulation_cache) et SQLite (table simulations).
-3. Idempotence : si les paramètres sont identiques, les résultats sont restaurés instantanément depuis le cache (cached=True).
-4. Invalidation & recalcul si un paramètre change ou recalcul forcé (cached=False).
-5. Restauration transparente via GET /latest depuis le disque/base après purge mémoire.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Tests d'idempotence et mise en cache des résultats de simulation SWMM
+================================================================================
 """
 
 import pytest

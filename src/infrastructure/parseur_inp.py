@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Parseur de fichier .inp SWMM.
-Extrait les comptes : tronçons (conduites), regards (junctions),
-stations de relevage (pumping stations), STEP (WWTP), ouvrages (outfalls/structures).
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Parseur bas-niveau pour les fichiers d'entrée SWMM
+================================================================================
 """
 
 import re

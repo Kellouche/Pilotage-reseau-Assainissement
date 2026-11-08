@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Module api.routes.organization : Gestion des membres, collaborateurs et invitations au sein du locataire.
-Conforme à ADR 0001, ADR 0002 et Roadmap SaaS Phase 3.6.
-Contrôle strict des quotas de collaborateurs autorisés selon le plan d'activité.
-
-Auteur : Dr Abdelhakim Kellouche / Antigravity
-Date : Octobre 2026
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Gestion multi-tenant des organisations et espaces de travail
+================================================================================
 """
 
 from datetime import datetime

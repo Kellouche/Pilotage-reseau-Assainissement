@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Nom Auteur : Dr Abdelhakim Kellouche
-Nom de l'application : Pilotage Réseau d'Assainissement
-Numéro version : 1.0.0
-Date de création : 02-04-2026
-Date de modification : 02-04-2026
-Objectif : Fonctions utilitaires pour le traitement des données
-géospatiales. Contient le mappage des types de nœuds,
-la recherche du nœud le plus proche et les conversions
-de coordonnées.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Fiches d'aide interactive, documentation méthodologique et guides d'ingénierie
+================================================================================
 """
 
 from typing import Optional

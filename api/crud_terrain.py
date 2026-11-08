@@ -1,14 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Nom Auteur : Dr Abdelhakim Kellouche
-Nom de l'application : Plateforme de Pilotage du Réseau d'Assainissement
-Numéro version : 1.0.0
-Date de création : 30-05-2026
-Date de modification : 30-05-2026
-
-Objectif du module :
-Fonctions CRUD pour la gestion en base de données des inspections terrain et des 
-incidents géolocalisés, avec enregistrement systématique dans le journal d'audit.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Opérations CRUD pour les relevés terrain et photos géolocalisées
+================================================================================
 """
 
 from typing import List, Optional, Dict, Any

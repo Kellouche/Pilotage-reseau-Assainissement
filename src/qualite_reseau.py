@@ -1,3 +1,13 @@
+"""
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Audit de qualité topologique, détection d'inversions de pente et anomalies
+================================================================================
+"""
+
 import os
 import math
 from sqlalchemy import create_engine, text

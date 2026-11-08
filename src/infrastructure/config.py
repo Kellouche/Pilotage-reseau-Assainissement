@@ -1,17 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Nom Auteur : Dr Abdelhakim Kellouche
-Nom de l'application : Pilotage Réseau d'Assainissement
-Numéro version : 1.0.0
-Date de création : 02-04-2026
-Date de modification : 02-04-2026
-Objectif : Configuration centralisée du projet.
-Contient les constantes, paramètres SWMM et mappages
-nécessaires au traitement des données géospatiales
-et à la génération des fichiers SWMM.
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Configuration technique spécifique à l'infrastructure SIG
+================================================================================
 """
-
 
 # Système de coordonnées
 TARGET_CRS = 'EPSG:32631'  # UTM Zone 31N - Algérie

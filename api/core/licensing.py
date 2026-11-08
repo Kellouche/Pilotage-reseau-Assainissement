@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Module api.core.licensing : Gestion du cycle de vie des licences B2B / B2G et validation des bons de commande.
-Conforme à la Roadmap SaaS Phase 3.3 et ADR 0006 (Facturation B2B/B2G Dinars Algériens).
-Adapté aux services techniques d'assainissement et bureaux d'études (BET).
-
-Auteur : Dr Abdelhakim Kellouche / Antigravity
-Date : Octobre 2026
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Contrôle de validité des licences et vérification des droits d'accès
+================================================================================
 """
 
 from datetime import datetime, timezone, timedelta

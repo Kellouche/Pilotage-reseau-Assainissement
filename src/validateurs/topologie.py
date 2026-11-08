@@ -1,11 +1,11 @@
 """
-Validateurs topologiques - Phase 1
-Fondations topologiques : validations hydrauliquement essentielles
-
-Détections :
-1. Connexions amont-aval cohérentes (tolérance 50cm)
-2. Chevauchements géométriques (conduites se croisant sans nœud)
-3. Doublons regards à < 2m
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Validateur de cohérence topologique et connectivité hydraulique
+================================================================================
 """
 
 from typing import Dict, List, Any, Tuple
