@@ -2090,16 +2090,17 @@
 
                 let infoMeta = `Débit généré : <b style="color: #38bdf8;">${qGenere.toFixed(3)} m³/s</b>`;
                 if (qDerive > 0) {
-                    infoMeta += ` &bull; <span style="color: #cbd5e1;">Exutoire principal :</span> <b>${qExutoire.toFixed(3)} m³/s</b> (${tauxExutoire.toFixed(1)}%)`;
+                    infoMeta += ` &bull; <span style="color: #cbd5e1;">Vers exutoire principal :</span> <b>${qExutoire.toFixed(3)} m³/s</b> (${tauxExutoire.toFixed(1)}%)`;
                     infoMeta += ` &bull; <span style="color:#06b6d4; font-weight:700;"><i class="fas fa-random"></i> Dérivé par ${nbRacc} ouv. spéc. : <b>${qDerive.toFixed(3)} m³/s</b> (${tauxDerive.toFixed(1)}%)</span>`;
                 } else {
-                    infoMeta += ` &bull; <span style="color: #cbd5e1;">Exutoire principal :</span> <b>${qExutoire.toFixed(3)} m³/s</b> (100%)`;
+                    infoMeta += ` &bull; <span style="color: #cbd5e1;">Vers exutoire principal :</span> <b>${qExutoire.toFixed(3)} m³/s</b> (100.0%)`;
+                    infoMeta += ` &bull; <span style="color: #94a3b8;">Dérivé : <b>0.000 m³/s</b> (0.0%)</span>`;
                 }
 
                 if (topIcon) topIcon.innerHTML = '<i class="fas fa-check-circle" style="color: #34d399;"></i>';
                 if (topText) topText.innerHTML = `Bassin simulé : <span style="color: #34d399; font-weight: 700;">${nom}</span>`;
                 if (topBadge) {
-                    topBadge.innerText = qDerive > 0 ? `Soulagement réseau : ${tauxDerive.toFixed(1)}% (${qDerive.toFixed(3)} m³/s)` : `${qGenere.toFixed(3)} m³/s`;
+                    topBadge.innerText = qDerive > 0 ? `Soulagement réseau : ${tauxDerive.toFixed(1)}% (${qDerive.toFixed(3)} m³/s)` : `Soulagement réseau : 0.0% (${qGenere.toFixed(3)} m³/s)`;
                     topBadge.style.background = qDerive > 0 ? 'rgba(6, 182, 212, 0.2)' : 'rgba(16, 185, 129, 0.2)';
                     topBadge.style.color = qDerive > 0 ? '#06b6d4' : '#34d399';
                 }
@@ -5848,20 +5849,34 @@
                     const tauxDerive = (data.kpis && typeof data.kpis.taux_derive_pct === 'number') ? data.kpis.taux_derive_pct : (qGenere > 0 ? ((qDerive / qGenere) * 100.0) : 0.0);
                     const tauxExutoire = (data.kpis && typeof data.kpis.taux_exutoire_pct === 'number') ? data.kpis.taux_exutoire_pct : Math.max(0, 100.0 - tauxDerive);
 
+                    orphBox.style.display = 'block';
+                    const bEl = document.getElementById('kpi-orphelin-badge');
+                    const gEl = document.getElementById('kpi-orphelin-qgenere');
+                    const eEl = document.getElementById('kpi-orphelin-qexutoire');
+                    const qEl = document.getElementById('kpi-orphelin-qdeleste');
+                    const dEl = document.getElementById('kpi-orphelin-desc');
+
+                    if (gEl) gEl.innerText = `${qGenere.toFixed(3)} m³/s`;
+                    if (eEl) eEl.innerText = `${qExutoire.toFixed(3)} m³/s (${tauxExutoire.toFixed(1)}%)`;
+
                     if (qDerive > 0) {
-                        orphBox.style.display = 'block';
-                        const bEl = document.getElementById('kpi-orphelin-badge');
-                        if (bEl) bEl.innerText = `Soulagement réseau : ${tauxDerive.toFixed(1)}%`;
-                        const gEl = document.getElementById('kpi-orphelin-qgenere');
-                        if (gEl) gEl.innerText = `${qGenere.toFixed(3)} m³/s`;
-                        const eEl = document.getElementById('kpi-orphelin-qexutoire');
-                        if (eEl) eEl.innerText = `${qExutoire.toFixed(3)} m³/s (${tauxExutoire.toFixed(1)}%)`;
-                        const qEl = document.getElementById('kpi-orphelin-qdeleste');
+                        if (bEl) {
+                            bEl.innerText = `Soulagement réseau : ${tauxDerive.toFixed(1)}%`;
+                            bEl.style.background = 'rgba(6, 182, 212, 0.25)';
+                            bEl.style.color = '#22d3ee';
+                            bEl.style.borderColor = 'rgba(6, 182, 212, 0.5)';
+                        }
                         if (qEl) qEl.innerText = `${qDerive.toFixed(3)} m³/s (${tauxDerive.toFixed(1)}%)`;
-                        const dEl = document.getElementById('kpi-orphelin-desc');
                         if (dEl) dEl.innerHTML = `<i class="fas fa-check-circle text-emerald-400 me-1"></i> <b>${nbOrph} ouvrage(s) spécial(aux) actif(s)</b> : ${qDerive.toFixed(3)} m³/s captés (${tauxDerive.toFixed(1)}% du débit produit), soulageant d'autant le collecteur principal.`;
                     } else {
-                        orphBox.style.display = 'none';
+                        if (bEl) {
+                            bEl.innerText = `Soulagement réseau : 0.0%`;
+                            bEl.style.background = 'rgba(16, 185, 129, 0.2)';
+                            bEl.style.color = '#34d399';
+                            bEl.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+                        }
+                        if (qEl) qEl.innerText = `0.000 m³/s (0.0%)`;
+                        if (dEl) dEl.innerHTML = `<i class="fas fa-info-circle text-sky-400 me-1"></i> <b>Scénario sans ouvrage spécial raccordé</b> : 100% du débit produit (${qGenere.toFixed(3)} m³/s) transite vers le collecteur et l'exutoire principal.`;
                     }
                 }
 
@@ -6597,7 +6612,7 @@
             }
             if (isNaN(penteVal) || penteVal === null) penteVal = 1.0;
             const simBassinVal = document.getElementById('sim-select-bassin') ? document.getElementById('sim-select-bassin').value : '';
-            const clusterId = simBassinVal ? parseInt(simBassinVal) : null;
+            const clusterId = (simBassinVal && !isNaN(Number(simBassinVal))) ? parseInt(simBassinVal, 10) : (simBassinVal || null);
 
             if (!clusterId) {
                 const statusDiv = document.getElementById('sim-status-message');
@@ -7307,7 +7322,7 @@
                             <div id="kpi-continuity" style="font-size: 1.05rem; font-weight: 800; color: #38bdf8;">--</div>
                         </div>
                         <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; text-align: center;">
-                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">Débit de Pointe</div>
+                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px;">Pointe à l'Exutoire</div>
                             <div id="kpi-peak-outflow" style="font-size: 1.05rem; font-weight: 800; color: #34d399;">--</div>
                         </div>
                         <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; text-align: center;">

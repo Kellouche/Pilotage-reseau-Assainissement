@@ -17,6 +17,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
 import re
+import json
 import math
 import tempfile
 import logging
@@ -751,6 +752,42 @@ class MoteurSWMM:
             except ValueError:
                 cid_int = None
 
+            # Résolution prioritaire via le cache topologique des bassins sectorisés (.clusters_cache.json)
+            cache_file = Path(gpkg_path).with_suffix(".clusters_cache.json")
+            if not target_ex_id and cache_file.exists():
+                try:
+                    with open(cache_file, "r", encoding="utf-8") as fc:
+                        cdata = json.load(fc)
+                    feats = cdata.get("bassins_geojson", {}).get("features", [])
+                    # Passe 1 : correspondance exacte sur le nom de l'exutoire/bassin
+                    for f in feats:
+                        fp = f.get("properties", {})
+                        fnom = str(fp.get("nom", "")).strip()
+                        if fnom.lower() == cid_str.lower():
+                            target_ex_id = fnom
+                            bassin_nom = fnom
+                            break
+                    # Passe 2 : correspondance par préfixe sur le nom (ex: cid_str='25' pour '25_ouvrages_speciaux_348883')
+                    if not target_ex_id:
+                        for f in feats:
+                            fp = f.get("properties", {})
+                            fnom = str(fp.get("nom", "")).strip()
+                            if fnom.lower().startswith(f"{cid_str.lower()}_"):
+                                target_ex_id = fnom
+                                bassin_nom = fnom
+                                break
+                    # Passe 3 : correspondance par cluster_id numérique exact (ex: cluster_id=92)
+                    if not target_ex_id and cid_int is not None:
+                        for f in feats:
+                            fp = f.get("properties", {})
+                            if fp.get("cluster_id") == cid_int:
+                                fnom = str(fp.get("nom", "")).strip()
+                                target_ex_id = fnom
+                                bassin_nom = fnom
+                                break
+                except Exception as e_cjson:
+                    logger.warning(f"Lecture clusters_cache: {e_cjson}")
+
             # Tenter de lire directement depuis la couche bassins_versants_79 si présente
             try:
                 import sqlite3
@@ -993,7 +1030,6 @@ class MoteurSWMM:
         cache_sub_path = Path(str(gpkg_path)).with_suffix(".subcatchments_cache.json")
         if cluster_id is None and cache_sub_path.exists():
             try:
-                import json
                 with open(cache_sub_path, "r", encoding="utf-8") as f_sub:
                     cached_sub = json.load(f_sub)
                 features_sub = cached_sub.get("features", [])
@@ -1987,7 +2023,7 @@ class MoteurSWMM:
         if q_genere_m3s > 0:
             q_derive_m3s = min(q_derive_m3s, q_genere_m3s)
             taux_derive_pct = round(min(100.0, (q_derive_m3s / q_genere_m3s) * 100.0), 1)
-            taux_exutoire_pct = round(min(100.0, (q_exutoire_m3s / q_genere_m3s) * 100.0), 1)
+            taux_exutoire_pct = round(max(0.0, 100.0 - taux_derive_pct), 1)
         else:
             taux_derive_pct = 0.0
             taux_exutoire_pct = 100.0

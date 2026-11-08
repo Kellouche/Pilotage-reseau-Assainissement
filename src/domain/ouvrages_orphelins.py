@@ -77,6 +77,9 @@ def detecter_ouvrages_orphelins_proches(
         if cid == target_str or cnom == target_str or exnom == target_str:
             target_c = c
             break
+        if cnom.startswith(f"{target_str}_") or exnom.startswith(f"{target_str}_"):
+            target_c = c
+            break
         if len(target_str) >= 5 and (target_str in cnom or target_str in exnom or cnom in target_str):
             target_c = c
             break
