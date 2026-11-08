@@ -1,6 +1,8 @@
 """
-Routes pour les simulations SWMM.
-Lancement asynchrone via Celery, suivi de jobs et récupération des résultats.
+Auteur : Hakim / Équipe DrainPilot
+Date de création : 2026-04-20
+Date de modification : 2026-11-08
+Objet : Routes API FastAPI pour les simulations SWMM 5.2, la persistance par bassin versant et l'interprétation multi-agents.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
@@ -643,16 +645,22 @@ def get_latest_simulation(
     active_gpkg = None
     project_name = None
     proj = None
-    if tenant and tenant.org_id:
-        proj = db.query(Project).filter(
-            Project.org_id == tenant.org_id,
-            Project.is_archived.is_(False)
-        ).first()
+    if tenant and hasattr(tenant, "org_id") and tenant.org_id:
+        try:
+            proj = db.query(Project).filter(
+                Project.org_id == tenant.org_id,
+                Project.is_archived.is_(False)
+            ).first()
+        except Exception:
+            proj = None
         if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
             active_gpkg = str(Path(proj.source_gpkg_key).resolve())
             project_name = proj.name
     if not active_gpkg:
-        proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
+        try:
+            proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
+        except Exception:
+            proj = None
         if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
             active_gpkg = str(Path(proj.source_gpkg_key).resolve())
             project_name = proj.name
@@ -681,6 +689,85 @@ def get_latest_simulation(
             return {"status": "none", "message": "Aucune simulation enregistrée pour ce réseau."}
 
     return _construire_reponse_simulation(_DERNIERE_SIMULATION, cached=True)
+
+
+@router.get("/bassin/{cluster_id}")
+def get_bassin_simulation(
+    cluster_id: str,
+    db: Session = Depends(get_db),
+    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional)
+):
+    """
+    Retourne la simulation la plus récente enregistrée pour un bassin versant spécifique.
+    Supporte la recherche par cluster_id numérique (ex: 92) ou nom (ex: 25_ouvrages_speciaux_348883).
+    """
+    global _DERNIERE_SIMULATION
+    from api.models import Project
+
+    active_gpkg = None
+    project_name = None
+    proj = None
+    if tenant and hasattr(tenant, "org_id") and tenant.org_id:
+        try:
+            proj = db.query(Project).filter(
+                Project.org_id == tenant.org_id,
+                Project.is_archived.is_(False)
+            ).first()
+        except Exception:
+            proj = None
+        if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
+            active_gpkg = str(Path(proj.source_gpkg_key).resolve())
+            project_name = proj.name
+    if not active_gpkg:
+        try:
+            proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
+        except Exception:
+            proj = None
+        if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
+            active_gpkg = str(Path(proj.source_gpkg_key).resolve())
+            project_name = proj.name
+        elif Path("data/demo_reseau.gpkg").exists():
+            active_gpkg = str(Path("data/demo_reseau.gpkg").resolve())
+            project_name = "demo_reseau"
+
+    if not active_gpkg or not Path(active_gpkg).exists():
+        return {"status": "none", "message": "Aucun réseau actif."}
+
+    gpkg_path = Path(active_gpkg)
+    cache_dir = gpkg_path.parent / ".simulation_cache"
+    clean_stem = re.sub(r'[^\w\-]+', '_', gpkg_path.stem)
+
+    if cache_dir.exists():
+        clean_cid = str(cluster_id).strip().lower()
+        all_files = list(cache_dir.glob(f"sim_{clean_stem}_cluster_*.json"))
+        
+        # Filtrage ultra-rapide par nom de fichier (évite la lecture inutile de gros fichiers JSON sur disque)
+        matching_files = [
+            f for f in all_files
+            if f"_cluster_{clean_cid}_" in f.name.lower() or f"_{clean_cid}_" in f.name.lower()
+        ]
+
+        # Si aucune correspondance directe sur le nom de fichier, tenter une correspondance par préfixe
+        if not matching_files and clean_cid.isdigit():
+            matching_files = [
+                f for f in all_files
+                if f"_cluster_{clean_cid}_" in f.name.lower() or f"_{clean_cid}_ouvrages_" in f.name.lower() or f"_{clean_cid}_rejets_" in f.name.lower()
+            ]
+
+        matching_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+        for fpath in matching_files:
+            try:
+                with open(fpath, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if data and "node_results" in data:
+                    data["source_gpkg"] = str(gpkg_path.resolve())
+                    data["project_name"] = project_name or gpkg_path.stem
+                    _DERNIERE_SIMULATION = data
+                    return _construire_reponse_simulation(data, cached=True)
+            except Exception:
+                continue
+
+    return {"status": "none", "message": f"Aucune simulation enregistrée pour le bassin {cluster_id}."}
 
 
 @router.post("/validate-buffer")

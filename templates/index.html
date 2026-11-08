@@ -743,16 +743,6 @@
         </button>
     </div>
 
-    <!-- Indicateur Flottant sur Carte : Bassin en cours -->
-    <div id="map-bassin-indicator" style="position: absolute; top: 16px; left: calc(320px + (100% - 320px) / 2); transform: translateX(-50%); z-index: 1000; background: rgba(15, 23, 42, 0.88); backdrop-filter: blur(8px); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 30px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45); padding: 6px 16px; font-size: 0.82rem; color: #e2e8f0; display: flex; align-items: center; gap: 9px; pointer-events: auto; transition: all 0.3s ease; user-select: none;">
-        <span id="map-bassin-icon"><i class="fas fa-network-wired" style="color: #38bdf8;"></i></span>
-        <span id="map-bassin-title" style="font-weight: 600;">Bassins en cours : <b style="color: #38bdf8;">Tous les bassins (77)</b></span>
-        <span id="map-bassin-meta" style="font-size: 0.74rem; color: #94a3b8; border-left: 1px solid rgba(255,255,255,0.15); padding-left: 8px;">Réseau global</span>
-        <button id="map-bassin-reset-btn" onclick="reinitialiserSelectionBassin(event)" title="Réinitialiser : Revenir à tous les bassins" style="display: none; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 12px; padding: 2px 8px; font-size: 0.72rem; color: #e2e8f0; cursor: pointer; align-items: center; gap: 4px; transition: all 0.2s;" onmouseover="this.style.background='rgba(239, 68, 68, 0.25)'; this.style.borderColor='#f87171'; this.style.color='#fca5a5';" onmouseout="this.style.background='rgba(255, 255, 255, 0.1)'; this.style.borderColor='rgba(255, 255, 255, 0.2)'; this.style.color='#e2e8f0';">
-            <i class="fas fa-times"></i> Tout afficher
-        </button>
-    </div>
-
     <div id="map"></div>
     </div> <!-- fin app-workspace -->
 
@@ -1049,6 +1039,9 @@
             } else {
                 if (window._loadingSafetyTimer) clearTimeout(window._loadingSafetyTimer);
                 overlay.style.display = 'none';
+                if (window.carte) {
+                    setTimeout(() => { try { window.carte.invalidateSize(); } catch(e) {} }, 50);
+                }
             }
         }
 
@@ -2201,11 +2194,6 @@
             const topBadge = document.getElementById('topbar-bassin-badge');
             const topReset = document.getElementById('topbar-bassin-reset-btn');
 
-            const mapIcon = document.getElementById('map-bassin-icon');
-            const mapTitle = document.getElementById('map-bassin-title');
-            const mapMeta = document.getElementById('map-bassin-meta');
-            const mapReset = document.getElementById('map-bassin-reset-btn');
-
             const cidStr = (clusterId !== null && clusterId !== undefined && clusterId !== '') ? String(clusterId) : null;
             const totalBassins = (window._clustersData && window._clustersData.clusters_crees) || (window._bassinNoms ? Object.keys(window._bassinNoms).length : 77) || 77;
 
@@ -2220,11 +2208,6 @@
                     topBadge.style.color = '#f59e0b';
                 }
                 if (topReset) topReset.style.display = 'none';
-
-                if (mapIcon) mapIcon.innerHTML = '<i class="fas fa-circle-notch fa-spin" style="color: #fbbf24;"></i>';
-                if (mapTitle) mapTitle.innerHTML = `Simulation en cours : <b style="color: #fbbf24;">${nom}</b>`;
-                if (mapMeta) mapMeta.innerHTML = `<span style="color: #facc15;">Résolution Saint-Venant 1D (DYNWAVE)...</span>`;
-                if (mapReset) mapReset.style.display = 'none';
                 return;
             }
 
@@ -2268,28 +2251,14 @@
                 const tauxDeriveStr = window.formaterNombre(tauxDerive, 1);
                 const tauxExutoireStr = window.formaterNombre(tauxExutoire, 1);
 
-                let infoMeta = `Débit généré : <b style="color: #38bdf8;">${qGenereStr} m³/s</b>`;
-                if (qDerive > 0) {
-                    infoMeta += ` &bull; <span style="color: #cbd5e1;">Vers exutoire principal :</span> <b>${qExutoireStr} m³/s</b> (${tauxExutoireStr}%)`;
-                    infoMeta += ` &bull; <span style="color:#06b6d4; font-weight:700;"><i class="fas fa-random"></i> Dérivé par ${nbRacc} ouv. spéc. : <b>${qDeriveStr} m³/s</b> (${tauxDeriveStr}%)</span>`;
-                } else {
-                    infoMeta += ` &bull; <span style="color: #cbd5e1;">Vers exutoire principal :</span> <b>${qExutoireStr} m³/s</b> (100,0%)`;
-                    infoMeta += ` &bull; <span style="color: #94a3b8;">Dérivé : <b>0,000 m³/s</b> (0,0%)</span>`;
-                }
-
                 if (topIcon) topIcon.innerHTML = '<i class="fas fa-check-circle" style="color: #34d399;"></i>';
                 if (topText) topText.innerHTML = `Bassin simulé : <span style="color: #34d399; font-weight: 700;">${nom}</span>`;
                 if (topBadge) {
-                    topBadge.innerText = qDerive > 0 ? `Soulagement réseau : ${tauxDeriveStr}% (${qDeriveStr} m³/s)` : `Soulagement réseau : 0,0% (${qGenereStr} m³/s)`;
+                    topBadge.innerText = qDerive > 0 ? `Soulagement : ${tauxDeriveStr}% (${qDeriveStr} m³/s)` : `Soulagement : 0,0% (${qGenereStr} m³/s)`;
                     topBadge.style.background = qDerive > 0 ? 'rgba(6, 182, 212, 0.2)' : 'rgba(16, 185, 129, 0.2)';
                     topBadge.style.color = qDerive > 0 ? '#06b6d4' : '#34d399';
                 }
                 if (topReset) topReset.style.display = 'inline-block';
-
-                if (mapIcon) mapIcon.innerHTML = '<i class="fas fa-check-circle" style="color: #34d399;"></i>';
-                if (mapTitle) mapTitle.innerHTML = `Bassin simulé : <b style="color: #34d399;">${nom}</b>`;
-                if (mapMeta) mapMeta.innerHTML = `<span style="color: #34d399;">${infoMeta}</span>`;
-                if (mapReset) mapReset.style.display = 'inline-flex';
                 return;
             }
 
@@ -2303,11 +2272,6 @@
                     topBadge.style.color = '#38bdf8';
                 }
                 if (topReset) topReset.style.display = 'none';
-
-                if (mapIcon) mapIcon.innerHTML = '<i class="fas fa-network-wired" style="color: #38bdf8;"></i>';
-                if (mapTitle) mapTitle.innerHTML = `Bassins en cours : <b style="color: #38bdf8;">Tous les bassins (${totalBassins})</b>`;
-                if (mapMeta) mapMeta.innerHTML = `Mode réseau global`;
-                if (mapReset) mapReset.style.display = 'none';
                 return;
             }
 
@@ -2354,9 +2318,9 @@
             if (p) {
                 if (p.nom) nom = p.nom;
                 if (p.surface_ha !== undefined && p.surface_ha !== null) surfHa = `${Number(p.surface_ha).toFixed(2)} ha`;
-                if (p.nb_regards !== undefined && p.nb_regards !== null) nbRegards = `${p.nb_regards} regards`;
-                if (p.nb_conduites !== undefined) nbConduites = `${p.nb_conduites} conduites`;
-                else if (p.nb_troncons !== undefined) nbConduites = `${p.nb_troncons} conduites`;
+                if (p.nb_regards !== undefined && p.nb_regards !== null) nbRegards = `${p.nb_regards} reg.`;
+                if (p.nb_conduites !== undefined) nbConduites = `${p.nb_conduites} cond.`;
+                else if (p.nb_troncons !== undefined) nbConduites = `${p.nb_troncons} cond.`;
                 if (p.longueur_totale_m) longStr = `(${Math.round(p.longueur_totale_m)} m)`;
                 if (p.couleur) bColor = p.couleur;
             }
@@ -2364,21 +2328,119 @@
             if (topIcon) topIcon.innerHTML = `<i class="fas fa-draw-polygon" style="color: ${bColor};"></i>`;
             if (topText) topText.innerHTML = `Bassin en cours : <span style="color: #f8fafc; font-weight: 700;">${nom}</span>`;
             if (topBadge) {
-                topBadge.innerText = surfHa || (nbRegards ? `${nbRegards} • ${nbConduites}` : nom || `Bassin ${cidStr}`);
+                topBadge.innerText = surfHa || (nbRegards ? `${nbRegards} • ${nbConduites}` : `ID ${cidStr}`);
                 topBadge.style.background = 'rgba(56, 189, 248, 0.15)';
                 topBadge.style.color = '#38bdf8';
             }
             if (topReset) topReset.style.display = 'inline-block';
+        };
 
-            if (mapIcon) mapIcon.innerHTML = `<i class="fas fa-draw-polygon" style="color: ${bColor};"></i>`;
-            if (mapTitle) mapTitle.innerHTML = `Bassin en cours : <b style="color: #f8fafc;">${nom}</b>`;
-            const metaElements = [];
-            if (surfHa) metaElements.push(`<span style="color: #38bdf8; font-weight: 600;">${surfHa}</span>`);
-            if (nbRegards) metaElements.push(`📍 ${nbRegards}`);
-            if (nbConduites) metaElements.push(`📏 ${nbConduites}${longStr ? ' ' + longStr : ''}`);
-            if (metaElements.length === 0) metaElements.push(`Bassin versant sélectionné`);
-            if (mapMeta) mapMeta.innerHTML = metaElements.join(' &bull; ');
-            if (mapReset) mapReset.style.display = 'inline-flex';
+        // GESTION AUTOMATIQUE DE L'AFFICHAGE DE SIMULATION PAR BASSIN
+        // Garantit la cohérence stricte : n'affiche jamais la simulation d'un autre bassin
+        window.gererAffichageSimulationPourBassin = function(clusterId) {
+            const leg = document.getElementById('sim-floating-legend');
+            const legTitle = document.querySelector('#sim-floating-legend span');
+
+            if (!clusterId) {
+                // Mode Réseau Global : nettoyer l'affichage des résultats SWMM
+                if (typeof reinitialiserAffichageSimulation === 'function') {
+                    reinitialiserAffichageSimulation();
+                }
+                if (leg) {
+                    leg.classList.remove('active-legend');
+                    leg.style.display = 'none';
+                }
+                if (legTitle) legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> Légende SWMM 5.2`;
+                return;
+            }
+
+            const cidStr = String(clusterId);
+            const nomBassin = (window._bassinNoms && window._bassinNoms[cidStr]) || cidStr;
+
+            // 1. Vérifier si la simulation actuellement affichée correspond déjà à ce bassin
+            if (window._dernierResultatSimulation && window._dernierResultatSimulation.meta) {
+                const m = window._dernierResultatSimulation.meta;
+                const mCid = String(m.cluster_id !== undefined && m.cluster_id !== null ? m.cluster_id : '');
+                const mNom = String(m.bassin_nom || m.cluster_nom || '');
+                if (mCid === cidStr || mNom === cidStr || mNom === nomBassin || (nomBassin && mNom.toLowerCase() === nomBassin.toLowerCase())) {
+                    if (leg) {
+                        leg.classList.add('active-legend');
+                        leg.style.display = 'block';
+                    }
+                    if (legTitle) {
+                        legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> SWMM 5.2 — ${mNom || nomBassin}`;
+                    }
+                    return;
+                }
+            }
+
+            // 2. Vérifier si ce bassin a une simulation dans le cache client
+            let cached = null;
+            if (window._simulationsCache) {
+                cached = window._simulationsCache[cidStr] || (nomBassin && window._simulationsCache[nomBassin]);
+            }
+
+            if (cached && cached.status === 'success' && cached.conduit_results && Object.keys(cached.conduit_results).length > 0) {
+                window._dernierResultatSimulation = cached;
+                afficherResultatsSimulation(cached);
+                if (leg) {
+                    leg.classList.add('active-legend');
+                    leg.style.display = 'block';
+                }
+                if (legTitle) {
+                    const dispNom = (cached.meta && (cached.meta.cluster_nom || cached.meta.bassin_nom)) || nomBassin;
+                    legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> SWMM 5.2 — ${dispNom}`;
+                }
+                return;
+            }
+
+            // 3. Interroger le serveur pour charger la simulation enregistrée de ce bassin
+            const token = localStorage.getItem('swmm_access_token');
+            const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+            fetch('/api/v1/simulations/bassin/' + encodeURIComponent(cidStr), { headers, credentials: 'include' })
+                .then(r => r.json())
+                .then(d => {
+                    // Vérifier que l'utilisateur est toujours sur ce bassin
+                    if (_selectedClusterId !== cidStr) return;
+
+                    if (d && d.status === 'success' && d.conduit_results && Object.keys(d.conduit_results).length > 0) {
+                        if (!window._simulationsCache) window._simulationsCache = {};
+                        window._simulationsCache[cidStr] = d;
+                        if (nomBassin) window._simulationsCache[nomBassin] = d;
+                        window._dernierResultatSimulation = d;
+                        afficherResultatsSimulation(d);
+                        if (leg) {
+                            leg.classList.add('active-legend');
+                            leg.style.display = 'block';
+                        }
+                        if (legTitle) {
+                            const dispNom = (d.meta && (d.meta.cluster_nom || d.meta.bassin_nom)) || nomBassin;
+                            legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> SWMM 5.2 — ${dispNom}`;
+                        }
+                    } else {
+                        // Aucun calcul sauvegardé pour ce bassin : nettoyer les résultats précédents
+                        if (typeof reinitialiserAffichageSimulation === 'function') {
+                            reinitialiserAffichageSimulation();
+                        }
+                        if (leg) {
+                            leg.classList.remove('active-legend');
+                            leg.style.display = 'none';
+                        }
+                        if (legTitle) legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> Légende SWMM 5.2`;
+                    }
+                })
+                .catch(err => {
+                    console.warn("Vérification simulation bassin:", err);
+                    if (_selectedClusterId === cidStr) {
+                        if (typeof reinitialiserAffichageSimulation === 'function') {
+                            reinitialiserAffichageSimulation();
+                        }
+                        if (leg) {
+                            leg.classList.remove('active-legend');
+                            leg.style.display = 'none';
+                        }
+                    }
+                });
         };
 
         window.reinitialiserSelectionBassin = function(e) {
@@ -2407,23 +2469,9 @@
             }
             afficherInfoBassin(_selectedClusterId);
 
-            // Synchroniser le titre de la légende flottante
-            const legTitle = document.querySelector('#sim-floating-legend span');
-            if (legTitle) {
-                let cachedSim = null;
-                if (_selectedClusterId && window._simulationsCache) {
-                    cachedSim = window._simulationsCache[_selectedClusterId];
-                    if (!cachedSim && window._bassinNoms && window._bassinNoms[_selectedClusterId]) {
-                        cachedSim = window._simulationsCache[window._bassinNoms[_selectedClusterId]];
-                    }
-                }
-                if (cachedSim && cachedSim.meta) {
-                    legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> SWMM 5.2 — ${cachedSim.meta.cluster_nom || ('Bassin ' + cachedSim.meta.cluster_id)}`;
-                } else if (_selectedClusterId && window._bassinNoms && window._bassinNoms[_selectedClusterId]) {
-                    legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> SWMM 5.2 — ${window._bassinNoms[_selectedClusterId]}`;
-                } else {
-                    legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> Légende SWMM 5.2`;
-                }
+            // Synchronisation intelligente et sécurisée de l'affichage de simulation
+            if (typeof window.gererAffichageSimulationPourBassin === 'function') {
+                window.gererAffichageSimulationPourBassin(_selectedClusterId);
             }
 
             geojsonLayer = geojsonLayer || window._activeClusterLayer || (typeof couches !== 'undefined' ? couches.bassins : null);

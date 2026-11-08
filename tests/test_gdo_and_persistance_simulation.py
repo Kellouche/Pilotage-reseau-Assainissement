@@ -47,3 +47,4 @@ def test_simulation_persistance_and_french_case():
     assert "Plan d'action priorisé" in index_html
     assert "Bilan Débordements" not in index_html
     assert "Bilan des débordements" in index_html
+
