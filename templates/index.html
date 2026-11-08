@@ -690,15 +690,14 @@
                 </div>
             </div>
 
-            <!-- Détection et sélection des bassins urbains -->
-            <button class="cluster-button-outline" id="detect-cluster-btn" style="width: 100%; margin-top: 4px; padding: 7px; font-size: 0.8rem;">
-                <i class="fas fa-sitemap me-1"></i> Partitionner bassins versants (Exutoires)
-            </button>
+            <!-- Sélection des bassins versants sectorisés automatiquement -->
             <div id="cluster-status" style="display: none;"></div>
 
-            <div id="bassin-section" style="display: none; margin-top: 8px;">
+            <div id="bassin-section" style="display: block; margin-top: 6px;">
                 <label for="bassin-select" style="font-size: 0.75rem; color: #cbd5e1; margin-bottom: 4px; display: block;">🗺 Bassin versant sélectionné :</label>
-                <select id="bassin-select" style="width: 100%; font-size: 0.82rem; padding: 6px; background: #0f172a; color: #f8fafc; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;"></select>
+                <select id="bassin-select" style="width: 100%; font-size: 0.82rem; padding: 6px; background: #0f172a; color: #f8fafc; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;">
+                    <option value="">Chargement des bassins versants...</option>
+                </select>
                 <div id="bassin-info"></div>
             </div>
 
@@ -1412,7 +1411,9 @@
                 alert("Bassin manuel enregistré avec succès !");
                 desactiverModeEdition();
                 // Recharger les données pour voir le nouveau bassin
-                document.getElementById('detect-cluster-btn').click();
+                if (typeof window.lancerPartitionnementBassins === 'function') {
+                    window.lancerPartitionnementBassins(null, null, true, true);
+                }
             })
             .catch(err => {
                 console.error(err);
@@ -1436,7 +1437,9 @@
                 .then(res => {
                     alert("Bassin supprimé.");
                     // Recharger les clusters
-                    document.getElementById('detect-cluster-btn').click();
+                    if (typeof window.lancerPartitionnementBassins === 'function') {
+                        window.lancerPartitionnementBassins(null, null, true, true);
+                    }
                 });
         };
 
@@ -1699,23 +1702,26 @@
                         carte.fitBounds(bounds, { padding: [40, 40], maxZoom: 17 });
                     }
                     
-                    // 1. Charger immédiatement la sectorisation Voronoï (Point 1)
+                    // 1. Charger immédiatement la sectorisation Voronoï
                     if (typeof chargerEtAfficherSousBassins === 'function') {
                         chargerEtAfficherSousBassins();
                     }
 
-                    // 2. Pré-charger silencieusement les bassins versants sectorisés
-                    if (typeof prechargerBassinsVersantsSilencieux === 'function') {
-                        prechargerBassinsVersantsSilencieux();
+                    // 2. Partitionnement et tracé automatique immédiat des bassins versants (Exutoires)
+                    if (typeof window.lancerPartitionnementBassins === 'function') {
+                        window.lancerPartitionnementBassins(function(clusterData) {
+                            // 3. Charger et restituer la dernière simulation une fois les bassins tracés
+                            if (typeof chargerDerniereSimulation === 'function') {
+                                chargerDerniereSimulation();
+                            }
+                            montrerChargement(false);
+                        }, null, false, false);
+                    } else {
+                        if (typeof chargerDerniereSimulation === 'function') {
+                            chargerDerniereSimulation();
+                        }
+                        montrerChargement(false);
                     }
-
-                    // 3. Charger et afficher la dernière simulation persistée (Point 3)
-                    if (typeof chargerDerniereSimulation === 'function') {
-                        chargerDerniereSimulation();
-                    }
-
-                    // Masquer l'overlay de chargement une fois les données chargées
-                    montrerChargement(false);
                 })
                 .catch(e => {
                     console.error('Erreur:', e);
@@ -1724,49 +1730,43 @@
                 });
         }
 
-        // Préchargement silencieux des bassins versants sectorisés (disque instantané)
+        // Préchargement automatique des bassins versants sectorisés
         window.prechargerBassinsVersantsSilencieux = function() {
-            if (window._clustersData && (
-                (window._clustersData.clusters_crees && window._clustersData.clusters_crees > 0) ||
-                (window._clustersData.resultats && window._clustersData.resultats.length > 0)
-            )) return;
-            fetch('/api/v1/clusters/recalculate-all?persist=false', { method: 'POST' })
-                .then(r => r.ok ? r.json() : null)
-                .then(clusterData => {
-                    if (!clusterData) return;
-                    window._clustersData = clusterData;
-                    clusterData.features = (clusterData.resultats || []).flatMap(result =>
-                        result.geojson && Array.isArray(result.geojson.features)
-                            ? result.geojson.features
-                            : []
-                    );
-                    if (clusterData.features && clusterData.features.length > 0) {
-                        peuplerDropdownBassins(clusterData, null);
-                    }
-                })
-                .catch(e => console.log('[clusters] Préchargement silencieux:', e));
+            if (typeof window.lancerPartitionnementBassins === 'function') {
+                return window.lancerPartitionnementBassins(null, null, false, false);
+            }
+        };
         };
 
         // Gestion et fonction globale de sectorisation / détection des clusters
         window._isPartitioningInProgress = false;
-        window.lancerPartitionnementBassins = function(onSuccessCallback, messageOverlay) {
+        window._partitioningCallbacks = [];
+        window.lancerPartitionnementBassins = function(onSuccessCallback, messageOverlay, afficherOverlay = false, rezoomer = false) {
             if (window._isPartitioningInProgress) {
-                console.warn('[clusters] Partitionnement déjà en cours, ignorer appel concurrent.');
+                console.warn('[clusters] Partitionnement déjà en cours, enregistrement du rappel.');
+                if (typeof onSuccessCallback === 'function') {
+                    window._partitioningCallbacks.push(onSuccessCallback);
+                }
                 return;
             }
             window._isPartitioningInProgress = true;
+            if (typeof onSuccessCallback === 'function') {
+                window._partitioningCallbacks.push(onSuccessCallback);
+            }
             const btn = document.getElementById('detect-cluster-btn');
             const statusDiv = document.getElementById('cluster-status');
             
-            // Geler l'interface et verrouiller toute interaction ou navigation utilisateur
-            montrerChargement(true, messageOverlay || 'Analyse topologique et partitionnement des bassins versants...');
+            // Afficher l'overlay uniquement si demandé explicitement
+            if (afficherOverlay) {
+                montrerChargement(true, messageOverlay || 'Analyse topologique et partitionnement des bassins versants...');
+            }
             if (btn) {
                 btn.disabled = true;
                 btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Partitionnement...';
             }
             if (statusDiv) {
                 statusDiv.style.display = 'block';
-                statusDiv.innerHTML = '<span style="color:#38bdf8;"><i class="fas fa-spinner fa-spin me-1"></i> Analyse topologique et détection des bassins versants...</span>';
+                statusDiv.innerHTML = '<span style="color:#38bdf8;"><i class="fas fa-spinner fa-spin me-1"></i> Détection et tracé automatique des bassins versants...</span>';
             }
             
             // Effacer les anciens clusters
@@ -1949,6 +1949,10 @@
                             }
                         });
 
+                        // S'assurer que les couches sont effectivement attachées et visibles sur la carte
+                        if (!carte.hasLayer(couches.bassins)) couches.bassins.addTo(carte);
+                        if (!carte.hasLayer(clusterCouche)) clusterCouche.addTo(carte);
+
                         // Alimenter la couche dédiée des tronçons et regards orphelins (déconnectés)
                         const orphelinsGeo = clusterData.orphelins_conduites;
                         const orphelinsRegGeo = clusterData.orphelins_regards;
@@ -2037,24 +2041,31 @@
                             lblBassins.style.fontWeight = 'bold';
                         }
 
-                        if (clusterLayer.getBounds().isValid()) {
+                        if (rezoomer && clusterLayer.getBounds && clusterLayer.getBounds().isValid()) {
                             carte.fitBounds(clusterLayer.getBounds(), { padding: [50, 50] });
                         }
 
-                        if (typeof onSuccessCallback === 'function') {
-                            onSuccessCallback(clusterData);
-                        }
+                        // Exécuter tous les callbacks en attente
+                        const callbacks = (window._partitioningCallbacks || []).slice();
+                        window._partitioningCallbacks = [];
+                        callbacks.forEach(cb => {
+                            try { cb(clusterData); } catch(errCb) { console.error('[clusters] Erreur callback:', errCb); }
+                        });
                     } else {
-                        if (statusDiv) statusDiv.textContent = 'Aucun cluster détecté';
+                        if (statusDiv) statusDiv.textContent = 'Aucun bassin détecté';
+                        window._partitioningCallbacks = [];
                     }
                 })
                 .catch(error => {
-                    console.error('Erreur:', error);
-                    if (statusDiv) statusDiv.textContent = 'Erreur lors de la détection';
+                    console.error('Erreur partitionnement bassins:', error);
+                    if (statusDiv) statusDiv.textContent = 'Erreur lors de la détection des bassins';
+                    window._partitioningCallbacks = [];
                 })
                 .finally(() => {
                     window._isPartitioningInProgress = false;
-                    montrerChargement(false);
+                    if (afficherOverlay) {
+                        montrerChargement(false);
+                    }
                     if (btn) {
                         btn.disabled = false;
                         btn.innerHTML = '<i class="fas fa-sitemap me-1"></i> Partitionner bassins versants (Exutoires)';
@@ -2062,10 +2073,13 @@
                 });
         };
 
-        // Écouteur sur le bouton de détection des clusters
-        document.getElementById('detect-cluster-btn').addEventListener('click', function() {
-            window.lancerPartitionnementBassins();
-        });
+        // Écouteur rétrocompatible sur le bouton de détection des clusters s'il est présent
+        const detectBtnEl = document.getElementById('detect-cluster-btn');
+        if (detectBtnEl) {
+            detectBtnEl.addEventListener('click', function() {
+                window.lancerPartitionnementBassins(null, null, true, true);
+            });
+        }
 
         // ==========================================
         // SYNCHRONISATION INDICATEUR BASSIN / BASSINS EN COURS
@@ -2226,6 +2240,7 @@
             }
             afficherInfoBassin(_selectedClusterId);
 
+            geojsonLayer = geojsonLayer || window._activeClusterLayer || (typeof couches !== 'undefined' ? couches.bassins : null);
             if (!geojsonLayer) return;
 
             geojsonLayer.eachLayer(layer => {
@@ -5269,6 +5284,9 @@
             // Conserver une barre latérale sobre : afficher la fiche standard du bassin sans le cartouche lourd de simulation
             if (isTargeted) {
                 afficherInfoBassin(meta.cluster_id);
+                if (typeof highlightCluster === 'function') {
+                    highlightCluster(meta.cluster_id, window._activeClusterLayer || (typeof couches !== 'undefined' ? couches.bassins : null));
+                }
             }
 
             // 4. Mettre en valeur les sous-bassins Voronoï du périmètre simulé
@@ -5377,11 +5395,11 @@
                     layer.bindPopup(simCardHtml);
                     layer.options.pane = 'bassinsPane';
                     layer.setStyle({
-                        color: '#38bdf8',
-                        weight: 2.5,
+                        color: '#0284c7',
+                        weight: 3.5,
                         fillColor: '#38bdf8',
-                        fillOpacity: 0.05,
-                        dashArray: '6, 4'
+                        fillOpacity: 0.20,
+                        dashArray: '7, 4'
                     });
                     try { layer.bringToFront(); } catch(e) {}
                 }
@@ -6183,27 +6201,30 @@
         // MODALE DE SIMULATION & DÉCLENCHEMENT SWMM
         // ==========================================
         window.ouvrirModalSimulation = function(forceOpen = false) {
-            // Vérifier si des bassins ou clusters sont déjà disponibles
+            // Vérifier si des bassins sont disponibles ET effectivement dessinés sur la carte
             const mainBassinSel = document.getElementById('bassin-select');
             const simBassinSel = document.getElementById('sim-select-bassin');
             const hasOptions = (mainBassinSel && mainBassinSel.options.length > 1) || 
                                (simBassinSel && simBassinSel.options.length > 1);
-            const hasClusters = (window._clustersData && (
-                (window._clustersData.clusters_crees && window._clustersData.clusters_crees > 0) ||
-                (window._clustersData.resultats && window._clustersData.resultats.length > 0)
-            ));
-            const hasBassinNoms = (window._bassinNoms && Object.keys(window._bassinNoms).length > 0);
+            const hasLayersDrawn = (typeof couches !== 'undefined' && couches.bassins && couches.bassins.getLayers().length > 0) ||
+                                  (window._activeClusterLayer && window._activeClusterLayer.getLayers && window._activeClusterLayer.getLayers().length > 0);
 
-            const isSectorise = (forceOpen === true) || hasOptions || hasClusters || hasBassinNoms;
+            const isSectorise = (forceOpen === true) || (hasOptions && hasLayersDrawn);
 
             if (!isSectorise) {
                 if (window._isPartitioningInProgress) {
-                    console.log("[Simulation] Partitionnement des bassins déjà en cours, attente...");
+                    console.log("[Simulation] Partitionnement des bassins déjà en cours, attente du tracé...");
+                    montrerChargement(true, 'Règle hydraulique : Partitionnement et tracé des bassins en cours...');
+                    if (!window._partitioningCallbacks) window._partitioningCallbacks = [];
+                    window._partitioningCallbacks.push(function() {
+                        montrerChargement(false);
+                        window.ouvrirModalSimulation(true);
+                    });
                     return;
                 }
                 window.lancerPartitionnementBassins(function() {
                     window.ouvrirModalSimulation(true);
-                }, 'Règle hydraulique : Sectorisation préalable obligatoire avant simulation...');
+                }, 'Règle hydraulique : Partitionnement automatique des bassins versants...', true, false);
                 return;
             }
 

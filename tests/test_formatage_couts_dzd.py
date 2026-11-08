@@ -21,3 +21,4 @@ def test_formater_nombre_fr():
     assert formater_nombre_fr(0.019, 3) == "0,019"
     assert formater_nombre_fr(100.0, 1) == "100,0"
     assert formater_nombre_fr(0.0, 3) == "0,000"
+
