@@ -325,6 +325,15 @@
                 window.gererAffichageSimulationPourBassin(_selectedClusterId);
             }
 
+            // Maintenir systématiquement cochés et affichés les rejets et la STEP lors du changement de réseau
+            if (couches && couches.rejets && !carte.hasLayer(couches.rejets)) couches.rejets.addTo(carte);
+            const elRejSync = document.getElementById('f-rejets');
+            if (elRejSync) elRejSync.checked = true;
+
+            if (couches && couches.step && !carte.hasLayer(couches.step)) couches.step.addTo(carte);
+            const elStepSync = document.getElementById('f-step');
+            if (elStepSync) elStepSync.checked = true;
+
             geojsonLayer = geojsonLayer || window._activeClusterLayer || (typeof couches !== 'undefined' ? couches.bassins : null);
             if (!geojsonLayer) return;
 

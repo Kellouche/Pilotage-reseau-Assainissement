@@ -33,6 +33,19 @@ window.reinitialiserAffichageSimulation = function() {
             const elReg = document.getElementById('f-regards');
             if (elReg) elReg.checked = true;
 
+            // Rétablir et maintenir toujours cochés les rejets et la STEP
+            if (couches.rejets && !carte.hasLayer(couches.rejets)) {
+                couches.rejets.addTo(carte);
+            }
+            const elRej = document.getElementById('f-rejets');
+            if (elRej) elRej.checked = true;
+
+            if (couches.step && !carte.hasLayer(couches.step)) {
+                couches.step.addTo(carte);
+            }
+            const elStep = document.getElementById('f-step');
+            if (elStep) elStep.checked = true;
+
             // Rétablir la couche de clusters sectorisés
             if (typeof clusterCouche !== 'undefined' && clusterCouche && !carte.hasLayer(clusterCouche)) {
                 clusterCouche.addTo(carte);

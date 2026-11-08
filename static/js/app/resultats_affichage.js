@@ -56,22 +56,18 @@
                 const el = document.getElementById('f-regards');
                 if (el) el.checked = false;
             }
-            // Masquer les exutoires, ouvrages spéciaux et STEP globaux à l'échelle de la ville pour ne pas encombrer la vue du cluster
-            if (couches.rejets && carte.hasLayer(couches.rejets)) {
-                carte.removeLayer(couches.rejets);
-                const el = document.getElementById('f-rejets');
-                if (el) el.checked = false;
+            // Maintenir impérativement cochés et visibles les exutoires (rejets) et la station d'épuration (STEP)
+            if (couches.rejets && !carte.hasLayer(couches.rejets)) {
+                couches.rejets.addTo(carte);
             }
-            if (couches.ouvrages_speciaux && carte.hasLayer(couches.ouvrages_speciaux)) {
-                carte.removeLayer(couches.ouvrages_speciaux);
-                const el = document.getElementById('f-ouvrages');
-                if (el) el.checked = false;
+            const elRejets = document.getElementById('f-rejets');
+            if (elRejets) elRejets.checked = true;
+
+            if (couches.step && !carte.hasLayer(couches.step)) {
+                couches.step.addTo(carte);
             }
-            if (couches.step && carte.hasLayer(couches.step)) {
-                carte.removeLayer(couches.step);
-                const el = document.getElementById('f-step');
-                if (el) el.checked = false;
-            }
+            const elStep = document.getElementById('f-step');
+            if (elStep) elStep.checked = true;
 
             // Retirer la couche de prévisualisation en pointillés (remplacée par les résultats de simulation)
             if (window._coucheRaccordementsOrphelins && window.carte) {

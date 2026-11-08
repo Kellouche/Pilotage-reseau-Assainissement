@@ -81,7 +81,7 @@ def test_anti_cache_et_cache_busting():
 
     assert "anti_cache_static_middleware" in main_py
     assert "no-store, must-revalidate" in main_py
-    assert "?v=5.2.2" in index_html
+    assert "?v=5.2.3" in index_html
 
 
 def test_bassin_non_simule_mention_et_masquage_legende():
@@ -89,3 +89,17 @@ def test_bassin_non_simule_mention_et_masquage_legende():
     bassins_js = Path("static/js/app/bassins_selection.js").read_text(encoding="utf-8")
     assert "(non simulé)" in bassins_js
     assert "legNonSim.style.display = 'none'" in bassins_js
+
+
+def test_persistance_cochage_rejets_et_step():
+    """Vérifie que les couches rejets et step restent cochées et affichées lors des transitions."""
+    res_aff = Path("static/js/app/resultats_affichage.js").read_text(encoding="utf-8")
+    res_act = Path("static/js/app/resultats_actions.js").read_text(encoding="utf-8")
+    bassin_sel = Path("static/js/app/bassins_selection.js").read_text(encoding="utf-8")
+
+    assert "elRejets.checked = true" in res_aff
+    assert "elStep.checked = true" in res_aff
+    assert "elRej.checked = true" in res_act
+    assert "elStep.checked = true" in res_act
+    assert "elRejSync.checked = true" in bassin_sel
+    assert "elStepSync.checked = true" in bassin_sel
