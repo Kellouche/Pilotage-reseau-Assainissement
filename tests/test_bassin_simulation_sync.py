@@ -81,7 +81,7 @@ def test_anti_cache_et_cache_busting():
 
     assert "anti_cache_static_middleware" in main_py
     assert "no-store, must-revalidate" in main_py
-    assert "?v=5.2.3" in index_html
+    assert "?v=5.2.4" in index_html
 
 
 def test_bassin_non_simule_mention_et_masquage_legende():
@@ -103,3 +103,12 @@ def test_persistance_cochage_rejets_et_step():
     assert "elStep.checked = true" in res_act
     assert "elRejSync.checked = true" in bassin_sel
     assert "elStepSync.checked = true" in bassin_sel
+
+
+def test_allegement_panneau_lateral_sans_pave_bassin_info():
+    """Vérifie que le panneau latéral est allégé et ne contient plus le pavé descriptif redondant."""
+    edit_js = Path("static/js/app/edition_attributs.js").read_text(encoding="utf-8")
+    sidebar_html = Path("templates/partials/sidebar_engineering.html").read_text(encoding="utf-8")
+
+    assert "infoDiv.innerHTML = ''" in edit_js
+    assert 'display: none;' in sidebar_html

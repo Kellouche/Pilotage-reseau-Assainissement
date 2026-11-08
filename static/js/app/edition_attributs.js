@@ -191,18 +191,8 @@
                 miniStatsEl.style.color = '#f8fafc';
             }
 
-            const isIsole = (nb === 0 && (nbReg === 0 || nbReg === '0'));
-
-            infoDiv.innerHTML = `
-                <div style="margin-top: 6px; padding: 6px 8px; background: rgba(30,41,59,0.85); border-radius: 6px; font-size: 0.74rem; border-left: 3px solid ${bColor};">
-                    <div style="font-weight: 700; color: #f8fafc;">${nom}</div>
-                    <div style="color: #94a3b8; font-size: 0.7rem;">🏷️ Type : <b>${typEx}</b></div>
-                    <div style="color: #cbd5e1; margin-top: 2px;">📐 Surface : <b>${surfHa}</b></div>
-                    <div style="color: #cbd5e1;">📍 Regards : <b>${nbReg}</b> ${nbOrph > 0 ? `<span style="color: #f59e0b; font-size: 0.68rem;">(${nbOrph} orphelins rattachés)</span>` : ''}</div>
-                    <div style="color: #cbd5e1;">📏 Conduites : <b>${nb}</b> (${longueur.toFixed(0)} m)</div>
-                    ${isIsole ? `<div style="margin-top: 4px; padding: 3px 6px; background: rgba(245, 158, 11, 0.15); border-radius: 4px; color: #fbbf24; font-size: 0.68rem;"><i class="fas fa-info-circle me-1"></i> Ouvrage ponctuel isolé sans réseau amont numérisé</div>` : ''}
-                </div>
-            `;
+            // Le détail exhaustif est déjà présenté interactivement dans l'infobulle cartographique au survol
+            if (infoDiv) infoDiv.innerHTML = '';
 
             // Détection spatiale et affichage cartographique automatique des ouvrages spéciaux proches
             if (typeof window.actualiserAlerteOuvrageDeporte === 'function' && clusterId) {
