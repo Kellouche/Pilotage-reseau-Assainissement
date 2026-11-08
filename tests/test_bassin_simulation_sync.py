@@ -162,3 +162,60 @@ def test_resolution_et_contour_cluster_9_ouvrages_speciaux_345101():
     code_fb = Path("src/domain/moteur_swmm/filtrage_bassin.py").read_text(encoding="utf-8")
     assert "matched_fp.get(\"exutoire_id\")" in code_fb
     assert "matched_fp.get(\"regard_proche_id\")" in code_fb
+
+
+def test_export_modele_inp_nom_bassin_et_contenu():
+    """Vérifie que l'export INP cible le nom du bassin versant sans déborder sur la totalité du réseau."""
+    from api.routes.simulations import _formater_nom_fichier_export, download_latest_inp
+    from api.database import SessionLocal
+    from api.models import Project
+    import uuid
+
+    # 1. Nom de fichier ciblé
+    fn = _formater_nom_fichier_export("network_Assainissement_Ville", nom_bassin="9_ouvrages_speciaux_345101", ext="inp")
+    assert fn == "9_ouvrages_speciaux_345101.inp", f"Attendu 9_ouvrages_speciaux_345101.inp, obtenu {fn}"
+
+    # 2. Appel de download_latest_inp avec cluster_id
+    db = SessionLocal()
+    try:
+        gpkg_cand = Path("uploads/a66e32ad-f32b-4529-acc3-7a6026eb5a8a/network_Assainissement_Ville.gpkg")
+        if gpkg_cand.exists():
+            proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
+            if not proj:
+                proj = Project(
+                    id=str(uuid.uuid4()),
+                    name="Assainissement_Ville",
+                    org_id="org_test",
+                    source_gpkg_key=str(gpkg_cand),
+                    is_archived=False
+                )
+                db.add(proj)
+                db.commit()
+            elif not proj.source_gpkg_key or not Path(proj.source_gpkg_key).exists():
+                proj.source_gpkg_key = str(gpkg_cand)
+                db.commit()
+
+        resp = download_latest_inp(cluster_id="98", db=db, tenant=None)
+        assert resp.status_code == 200
+        disp = resp.headers.get("content-disposition", "")
+        assert 'filename="9_ouvrages_speciaux_345101.inp"' in disp
+        body = resp.body.decode("utf-8")
+        assert "[JUNCTIONS]" in body
+        assert "[CONDUITS]" in body
+        assert len(body.splitlines()) > 500
+    finally:
+        db.close()
+
+
+def test_suppression_popups_blanches_indesirables():
+    """Vérifie que les popups blanches sur les polygones de bassins ont été supprimées au profit du tooltip noir."""
+    det_js = Path("static/js/app/bassins_detection.js").read_text(encoding="utf-8")
+    couches_js = Path("static/js/app/resultats_couches.js").read_text(encoding="utf-8")
+    act_js = Path("static/js/app/resultats_actions.js").read_text(encoding="utf-8")
+
+    # Vérifier qu'aucune popup n'est bindée aux couches de bassins
+    assert "layer.bindPopup(tipHtml)" not in det_js
+    assert "layer.bindPopup(fullSimTooltip)" not in couches_js
+    assert "layer.bindPopup(baseTip)" not in act_js
+    assert "className: 'sim-bassin-tooltip'" in det_js
+

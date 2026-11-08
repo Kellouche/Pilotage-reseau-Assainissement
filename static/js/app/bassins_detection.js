@@ -206,10 +206,13 @@
                                         opacity: 0.98,
                                         className: 'sim-bassin-tooltip'
                                     });
-                                    layer.bindPopup(tipHtml);
+                                    try { layer.unbindPopup(); } catch(_) {}
 
                                     layer.on('click', function(e) {
                                         L.DomEvent.stopPropagation(e);
+                                        if (window.map && typeof window.map.closePopup === 'function') {
+                                            try { window.map.closePopup(); } catch(_) {}
+                                        }
                                         const cid = feature.properties.cluster_id;
                                         highlightCluster(cid, clusterLayer);
                                         // Sync dropdown
@@ -278,11 +281,15 @@
                                         sticky: true,
                                         direction: 'left',
                                         offset: [-15, 0],
-                                        opacity: 0.98
+                                        opacity: 0.98,
+                                        className: 'sim-bassin-tooltip'
                                     });
-                                    layer.bindPopup(tipHtml);
+                                    try { layer.unbindPopup(); } catch(_) {}
                                     layer.on('click', function(e) {
                                         L.DomEvent.stopPropagation(e);
+                                        if (window.map && typeof window.map.closePopup === 'function') {
+                                            try { window.map.closePopup(); } catch(_) {}
+                                        }
                                         const cid = p.cluster_id;
                                         if (cid !== null && cid !== undefined) {
                                             highlightCluster(cid, clusterLayer);

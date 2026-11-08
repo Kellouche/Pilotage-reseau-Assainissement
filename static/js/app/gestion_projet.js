@@ -295,9 +295,30 @@
                 notif = afficherNotification("Préparation et export du modèle SWMM (.inp)...", "info", 5000);
             }
             try {
-                let response = await fetch('/api/v1/network/export/inp');
-                if (!response.ok && response.status === 404) {
-                    const fallbackResp = await fetch('/api/v1/simulations/download/inp');
+                // Détecter le bassin versant actif ou sélectionné
+                let targetCluster = null;
+                if (typeof _selectedClusterId !== 'undefined' && _selectedClusterId !== null && _selectedClusterId !== '') {
+                    targetCluster = _selectedClusterId;
+                } else if (window._dernierResultatSimulation && window._dernierResultatSimulation.meta) {
+                    targetCluster = window._dernierResultatSimulation.meta.cluster_id || window._dernierResultatSimulation.meta.cluster_nom;
+                } else {
+                    const sel = document.getElementById('bassin-select');
+                    if (sel && sel.value) targetCluster = sel.value;
+                }
+
+                const token = localStorage.getItem('swmm_access_token');
+                const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+                // Priorité : Télécharger le modèle INP du bassin sélectionné ou simulé
+                let url = '/api/v1/simulations/download/inp';
+                if (targetCluster) {
+                    url += '?cluster_id=' + encodeURIComponent(targetCluster);
+                }
+
+                let response = await fetch(url, { headers, credentials: 'include' });
+                // Fallback vers l'intégralité du réseau uniquement si aucun bassin n'est sélectionné et pas de simulation
+                if (!response.ok && !targetCluster) {
+                    const fallbackResp = await fetch('/api/v1/network/export/inp', { headers, credentials: 'include' });
                     if (fallbackResp.ok) {
                         response = fallbackResp;
                     }
@@ -314,6 +335,9 @@
                 if (disposition && disposition.includes('filename=')) {
                     const match = disposition.match(/filename="?([^";]+)"?/);
                     if (match && match[1]) filename = match[1];
+                } else if (targetCluster) {
+                    const nomBassin = (window._bassinNoms && window._bassinNoms[targetCluster]) || targetCluster;
+                    filename = `${nomBassin}.inp`;
                 } else if (window._rawNetworkData && window._rawNetworkData.project_name) {
                     filename = `${window._rawNetworkData.project_name.replace(/[^\w\-_.]+/g, '_')}.inp`;
                 }

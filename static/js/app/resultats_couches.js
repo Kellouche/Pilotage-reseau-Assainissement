@@ -468,7 +468,7 @@ window.addEventListener('DOMContentLoaded', initSaaSNavbar);
                             dashArray: '7, 4'
                         });
                     });
-                    layer.bindPopup(fullSimTooltip);
+                    try { layer.unbindPopup(); } catch(_) {}
                     layer.options.pane = 'bassinsPane';
                     layer.setStyle({
                         color: '#0284c7',

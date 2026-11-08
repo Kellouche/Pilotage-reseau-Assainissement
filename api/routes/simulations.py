@@ -860,17 +860,13 @@ def get_agents_interpretation():
 
 def _formater_nom_fichier_export(nom_reseau: Optional[str], nom_bassin: Optional[str] = None, ext: str = "inp") -> str:
     """Génère un nom de fichier normalisé et compatible pour EPA SWMM 5.2."""
-    parties = []
-    if nom_reseau:
-        r = re.sub(r'\.(gpkg|inp)$', '', str(nom_reseau).strip(), flags=re.I)
-        if r:
-            parties.append(r)
     if nom_bassin:
-        b = str(nom_bassin).strip()
-        if b:
-            parties.append(b)
+        base = str(nom_bassin).strip()
+    elif nom_reseau:
+        base = re.sub(r'\.(gpkg|inp)$', '', str(nom_reseau).strip(), flags=re.I)
+    else:
+        base = "modele_swmm"
 
-    base = "_".join(parties) if parties else "modele_swmm"
     sans_accent = unicodedata.normalize('NFKD', base).encode('ASCII', 'ignore').decode('utf-8')
     clean = re.sub(r'[^\w\-_.]+', '_', sans_accent)
     clean = re.sub(r'_+', '_', clean).strip('_')
@@ -880,24 +876,84 @@ def _formater_nom_fichier_export(nom_reseau: Optional[str], nom_bassin: Optional
 
 
 @router.get("/download/inp")
-def download_latest_inp(db: Session = Depends(get_db)):
-    """Télécharge le fichier d'entrée (.inp) généré pour la dernière simulation portant le nom du réseau."""
-    content = _DERNIERE_SIMULATION.get("inp_content")
-    if not content:
-        raise HTTPException(status_code=404, detail="Aucun fichier de modèle disponible. Veuillez d'abord exécuter une simulation.")
+def download_latest_inp(
+    cluster_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional)
+):
+    """Télécharge le fichier d'entrée (.inp) généré pour le bassin ou la dernière simulation."""
+    from api.models import Project
 
-    nom_reseau = _DERNIERE_SIMULATION.get("project_name")
-    if not nom_reseau:
-        from api.models import Project
-        proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
-        if proj and proj.name:
+    content = None
+    bassin_nom = None
+    nom_reseau = None
+
+    active_gpkg = None
+    if tenant and hasattr(tenant, "org_id") and tenant.org_id:
+        proj = db.query(Project).filter(Project.org_id == tenant.org_id, Project.is_archived.is_(False)).first()
+        if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
+            active_gpkg = Path(proj.source_gpkg_key)
             nom_reseau = proj.name
-        elif _DERNIERE_SIMULATION.get("source_gpkg"):
-            nom_reseau = Path(_DERNIERE_SIMULATION["source_gpkg"]).stem
-        else:
-            nom_reseau = "modele_swmm"
+    if not active_gpkg:
+        proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
+        if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
+            active_gpkg = Path(proj.source_gpkg_key)
+            nom_reseau = proj.name
+        elif Path("data/demo_reseau.gpkg").exists():
+            active_gpkg = Path("data/demo_reseau.gpkg")
+            nom_reseau = "demo_reseau"
 
-    bassin_nom = _DERNIERE_SIMULATION.get("meta", {}).get("bassin_nom") or _DERNIERE_SIMULATION.get("meta", {}).get("cluster_nom")
+    # 1. Vérifier si _DERNIERE_SIMULATION correspond
+    if _DERNIERE_SIMULATION and _est_simulation_valide(_DERNIERE_SIMULATION):
+        cur_cid = str(_DERNIERE_SIMULATION.get("meta", {}).get("cluster_id") or "").lower()
+        cur_cnom = str(_DERNIERE_SIMULATION.get("meta", {}).get("cluster_nom") or "").lower()
+        cur_bnom = str(_DERNIERE_SIMULATION.get("meta", {}).get("bassin_nom") or "").lower()
+        target = str(cluster_id).strip().lower() if cluster_id else None
+
+        if not target or target in (cur_cid, cur_cnom, cur_bnom):
+            content = _DERNIERE_SIMULATION.get("inp_content")
+            bassin_nom = _DERNIERE_SIMULATION.get("meta", {}).get("bassin_nom") or _DERNIERE_SIMULATION.get("meta", {}).get("cluster_nom")
+            if not nom_reseau:
+                nom_reseau = _DERNIERE_SIMULATION.get("project_name")
+
+    # 2. Si cluster_id demandé mais non dans _DERNIERE_SIMULATION, chercher dans le cache
+    if not content and cluster_id and active_gpkg:
+        c_dir = active_gpkg.parent / ".simulation_cache"
+        clean_stem = re.sub(r'[^\w\-]+', '_', active_gpkg.stem)
+        clean_cid = str(cluster_id).strip().lower()
+        if c_dir.exists():
+            for cand in sorted(c_dir.glob(f"sim_{clean_stem}_cluster_*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
+                if f"_{clean_cid}_" in cand.name.lower() or f"_cluster_{clean_cid}_" in cand.name.lower():
+                    try:
+                        with open(cand, "r", encoding="utf-8") as cf:
+                            cd = json.load(cf)
+                        if _est_simulation_valide(cd) and cd.get("inp_content"):
+                            content = cd["inp_content"]
+                            bassin_nom = cd.get("meta", {}).get("bassin_nom") or cd.get("meta", {}).get("cluster_nom") or cluster_id
+                            break
+                    except Exception:
+                        continue
+
+    # 3. Si toujours pas de contenu et cluster_id demandé : assembler le modèle INP à la volée !
+    if not content and cluster_id and active_gpkg and active_gpkg.exists():
+        try:
+            from src.domain.moteur_swmm import MoteurSWMM
+            moteur = MoteurSWMM()
+            content, meta = moteur.assembler_modele_inp(
+                gpkg_path=active_gpkg,
+                cluster_id=cluster_id,
+                pente_moyenne_pct=1.0
+            )
+            bassin_nom = meta.get("bassin_nom") or meta.get("cluster_nom") or cluster_id
+        except Exception as e:
+            logger.warning("Échec assemblage INP à la volée pour cluster %s: %s", cluster_id, e)
+
+    if not content:
+        raise HTTPException(
+            status_code=404,
+            detail="Aucun fichier de modèle disponible. Veuillez d'abord exécuter une simulation ou sélectionner un bassin versant."
+        )
+
     filename = _formater_nom_fichier_export(nom_reseau, nom_bassin=bassin_nom, ext="inp")
 
     return PlainTextResponse(
@@ -908,24 +964,70 @@ def download_latest_inp(db: Session = Depends(get_db)):
 
 
 @router.get("/download/rpt")
-def download_latest_rpt(db: Session = Depends(get_db)):
-    """Télécharge le rapport officiel (.rpt) généré par la dernière simulation portant le nom du réseau."""
-    content = _DERNIERE_SIMULATION.get("rpt_content")
-    if not content:
-        raise HTTPException(status_code=404, detail="Aucun rapport de simulation disponible. Veuillez d'abord exécuter une simulation.")
+def download_latest_rpt(
+    cluster_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional)
+):
+    """Télécharge le rapport officiel (.rpt) généré par la simulation."""
+    from api.models import Project
 
-    nom_reseau = _DERNIERE_SIMULATION.get("project_name")
-    if not nom_reseau:
-        from api.models import Project
-        proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
-        if proj and proj.name:
+    content = None
+    bassin_nom = None
+    nom_reseau = None
+
+    active_gpkg = None
+    if tenant and hasattr(tenant, "org_id") and tenant.org_id:
+        proj = db.query(Project).filter(Project.org_id == tenant.org_id, Project.is_archived.is_(False)).first()
+        if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
+            active_gpkg = Path(proj.source_gpkg_key)
             nom_reseau = proj.name
-        elif _DERNIERE_SIMULATION.get("source_gpkg"):
-            nom_reseau = Path(_DERNIERE_SIMULATION["source_gpkg"]).stem
-        else:
-            nom_reseau = "rapport_swmm"
+    if not active_gpkg:
+        proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
+        if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
+            active_gpkg = Path(proj.source_gpkg_key)
+            nom_reseau = proj.name
+        elif Path("data/demo_reseau.gpkg").exists():
+            active_gpkg = Path("data/demo_reseau.gpkg")
+            nom_reseau = "demo_reseau"
 
-    bassin_nom = _DERNIERE_SIMULATION.get("meta", {}).get("bassin_nom") or _DERNIERE_SIMULATION.get("meta", {}).get("cluster_nom")
+    # 1. Vérifier si _DERNIERE_SIMULATION correspond
+    if _DERNIERE_SIMULATION and _est_simulation_valide(_DERNIERE_SIMULATION):
+        cur_cid = str(_DERNIERE_SIMULATION.get("meta", {}).get("cluster_id") or "").lower()
+        cur_cnom = str(_DERNIERE_SIMULATION.get("meta", {}).get("cluster_nom") or "").lower()
+        cur_bnom = str(_DERNIERE_SIMULATION.get("meta", {}).get("bassin_nom") or "").lower()
+        target = str(cluster_id).strip().lower() if cluster_id else None
+
+        if not target or target in (cur_cid, cur_cnom, cur_bnom):
+            content = _DERNIERE_SIMULATION.get("rpt_content")
+            bassin_nom = _DERNIERE_SIMULATION.get("meta", {}).get("bassin_nom") or _DERNIERE_SIMULATION.get("meta", {}).get("cluster_nom")
+            if not nom_reseau:
+                nom_reseau = _DERNIERE_SIMULATION.get("project_name")
+
+    # 2. Si cluster_id demandé mais non dans _DERNIERE_SIMULATION, chercher dans le cache
+    if not content and cluster_id and active_gpkg:
+        c_dir = active_gpkg.parent / ".simulation_cache"
+        clean_stem = re.sub(r'[^\w\-]+', '_', active_gpkg.stem)
+        clean_cid = str(cluster_id).strip().lower()
+        if c_dir.exists():
+            for cand in sorted(c_dir.glob(f"sim_{clean_stem}_cluster_*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
+                if f"_{clean_cid}_" in cand.name.lower() or f"_cluster_{clean_cid}_" in cand.name.lower():
+                    try:
+                        with open(cand, "r", encoding="utf-8") as cf:
+                            cd = json.load(cf)
+                        if _est_simulation_valide(cd) and cd.get("rpt_content"):
+                            content = cd["rpt_content"]
+                            bassin_nom = cd.get("meta", {}).get("bassin_nom") or cd.get("meta", {}).get("cluster_nom") or cluster_id
+                            break
+                    except Exception:
+                        continue
+
+    if not content:
+        raise HTTPException(
+            status_code=404,
+            detail="Aucun rapport de simulation disponible. Veuillez d'abord exécuter une simulation pour ce bassin."
+        )
+
     filename = _formater_nom_fichier_export(nom_reseau, nom_bassin=bassin_nom, ext="rpt")
 
     return PlainTextResponse(

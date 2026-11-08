@@ -143,7 +143,7 @@ window.reinitialiserAffichageSimulation = function() {
                             opacity: 0.98,
                             className: 'sim-bassin-tooltip'
                         });
-                        layer.bindPopup(baseTip);
+                        try { layer.unbindPopup(); } catch(_) {}
                     }
                     layer._originalTooltip = null;
                 } else if (layer._originalTooltip) {
