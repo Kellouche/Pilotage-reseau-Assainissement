@@ -9,9 +9,38 @@ et plans d'action priorisés pour les directeurs et ingénieurs d'assainissement
 """
 
 import math
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 import pandas as pd
 import geopandas as gpd
+
+
+def formater_cout_dzd(montant: Any, avec_decimales: bool = True, inclure_unite: bool = True) -> str:
+    """Formate un montant en DZD selon les normes comptables francophones (Algérie / ONA) :
+    espace comme séparateur de milliers, virgule comme séparateur décimal.
+    Exemple : 1446816 -> '1 446 816,00 DZD'
+    """
+    try:
+        val = float(montant or 0.0)
+    except (ValueError, TypeError):
+        val = 0.0
+    if avec_decimales:
+        s = f"{val:,.2f}".replace(",", " ").replace(".", ",")
+    else:
+        s = f"{val:,.0f}".replace(",", " ")
+    return f"{s} DZD" if inclure_unite else s
+
+
+def formater_nombre_fr(val: Any, decimales: int = 3) -> str:
+    """Formate un nombre décimal avec la virgule française.
+    Exemple : 1.716 -> '1,716'
+    """
+    try:
+        fval = float(val or 0.0)
+    except (ValueError, TypeError):
+        fval = 0.0
+    fmt = f"{{:,.{decimales}f}}"
+    return fmt.format(fval).replace(",", " ").replace(".", ",")
+
 
 
 # ==============================================================================
@@ -427,7 +456,7 @@ class AgentGenieCivil:
                 f"tronçon(s) dont la section actuelle est suffisante et dont la mise en charge transitoire résulte exclusivement de remous "
                 f"aval (résolus sans ouverture de tranchée par le recalibrage des collecteurs récepteurs). "
                 f"L'ensemble du programme totalise {round(total_metres_a_remplacer, 1)} mètres linéaires pour un montant estimatif global de "
-                f"{int(cout_total_estime_dzd):,} DZD (décomposé en terrassement/blindage 30%, fourniture 35%, pose/remblai 20%, et réfection chaussée 15%)."
+                f"{formater_cout_dzd(cout_total_estime_dzd)} (décomposé en terrassement/blindage 30%, fourniture 35%, pose/remblai 20%, et réfection chaussée 15%)."
             )
         else:
             note_technique = (
@@ -668,15 +697,15 @@ class AgentGestionRisques:
         cout_p2 = sum(a["estimation_cout_dzd"] for a in actions_p2)
         cout_p3 = sum(a["estimation_cout_dzd"] for a in actions_p3)
 
-        fmt_p1 = f"{cout_p1:,.0f}".replace(",", " ")
-        fmt_p2 = f"{cout_p2:,.0f}".replace(",", " ")
-        fmt_p3 = f"{cout_p3:,.0f}".replace(",", " ")
+        fmt_p1 = formater_cout_dzd(cout_p1)
+        fmt_p2 = formater_cout_dzd(cout_p2)
+        fmt_p3 = formater_cout_dzd(cout_p3)
 
         note_technique = (
             f"La hiérarchisation multi-critères classe les interventions en 3 horizons d'urgence : "
-            f"{len(actions_p1)} action(s) P1 - Critique ({fmt_p1} DZD sous 3 mois pour résorption des débordements et points noirs), "
-            f"{len(actions_p2)} action(s) P2 - Majeur ({fmt_p2} DZD sous 12 mois pour suppression des mises en charge continues), et "
-            f"{len(actions_p3)} action(s) P3 - Maintenance ({fmt_p3} DZD pour curage préventif des zones de sédimentation V < 0.60 m/s). "
+            f"{len(actions_p1)} action(s) P1 - Critique ({fmt_p1} sous 3 mois pour résorption des débordements et points noirs), "
+            f"{len(actions_p2)} action(s) P2 - Majeur ({fmt_p2} sous 12 mois pour suppression des mises en charge continues), et "
+            f"{len(actions_p3)} action(s) P3 - Maintenance ({fmt_p3} pour curage préventif des zones de sédimentation V < 0.60 m/s). "
             f"Cette priorisation optimise l'allocation budgétaire et assure la cohérence avec le programme de travaux de génie civil."
         )
 
@@ -865,8 +894,8 @@ class AgentFinancierEtVariantes:
                 "score_resilience": 9.6,
                 "statut": "ACTION PRIORITAIRE IMMÉDIATE (PHASE 0)",
                 "avis_expert": (
-                    f"Solution d'urgence hautement rentable : pour seulement {cout_v0:,.0f} DZD "
-                    f"({gain_v0_pct}% d'économie par rapport au recalibrage lourd de {cout_gc:,.0f} DZD), "
+                    f"Solution d'urgence hautement rentable : pour seulement {formater_cout_dzd(cout_v0)} "
+                    f"({gain_v0_pct}% d'économie par rapport au recalibrage lourd de {formater_cout_dzd(cout_gc)}), "
                     f"ce raccordement opportuniste valorise le patrimoine existant et soulage le bassin en moins d'un mois."
                 )
             }
@@ -874,8 +903,8 @@ class AgentFinancierEtVariantes:
             note_v0_prefix = (
                 f"⚡ OPPORTUNITÉ VALORISÉE (Variante 0) : Le raccordement opportuniste de {nb_v0} ouvrage(s) spécial(aux) "
                 f"situé(s) à moins de {max(float(ro.get('distance_m', 0)) for ro in racc_orph):.1f} m du réseau a été validé. "
-                f"Ce raccordement court ({ml_v0} ml pour {cout_v0:,.0f} DZD) dégage une économie de {gain_v0_pct}% "
-                f"par rapport aux travaux lourds de renouvellement de voirie ({cout_gc:,.0f} DZD). "
+                f"Ce raccordement court ({ml_v0} ml pour {formater_cout_dzd(cout_v0)}) dégage une économie de {gain_v0_pct}% "
+                f"par rapport aux travaux lourds de renouvellement de voirie ({formater_cout_dzd(cout_gc)}). "
             )
 
         note_financiere = (
@@ -883,11 +912,11 @@ class AgentFinancierEtVariantes:
             f"L'analyse multi-critères démontre la supériorité technico-économique de la Variante 3 (Mixte Optimisée). "
             f"En limitant le renouvellement de conduites aux 97 tronçons à déficit capacitaire avéré ({ml_recalibre:.1f} ml) "
             f"et en intégrant un bassin d'écrêtement amont de {vol_lid:.0f} m³, le coût global du projet est ramené à "
-            f"{cout_v3:,.0f} DZD, dégageant une économie immédiate de {economie_vs_v1:,.0f} DZD ({economie_pct}%) par rapport au schéma classique "
-            f"de recalibrage systématique ({cout_v1:,.0f} DZD). "
-            f"Sur le plan socio-économique, avec des dommages annuels moyens évités estimés à {dommages_annuels_evites_dzd:,.0f} DZD/an, "
+            f"{formater_cout_dzd(cout_v3)}, dégageant une économie immédiate de {formater_cout_dzd(economie_vs_v1)} ({economie_pct}%) par rapport au schéma classique "
+            f"de recalibrage systématique ({formater_cout_dzd(cout_v1)}). "
+            f"Sur le plan socio-économique, avec des dommages annuels moyens évités estimés à {formater_cout_dzd(dommages_annuels_evites_dzd)}/an, "
             f"l'investissement présente un temps de retour (Payback) de {payback_annees} ans, un Taux de Rentabilité Interne (TRI) de {tri_pct}%, "
-            f"et une Valeur Actuelle Nette (VAN sur 20 ans @ 6%) de +{van_dzd:,.0f} DZD. Ce scénario constitue la référence opposable "
+            f"et une Valeur Actuelle Nette (VAN sur 20 ans @ 6%) de +{formater_cout_dzd(van_dzd)}. Ce scénario constitue la référence opposable "
             f"recommandée pour la validation en Commission des Marchés Publics et l'arbitrage budgétaire DRE/ONA."
         )
 

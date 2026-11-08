@@ -763,6 +763,32 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
+        // ==============================================================================
+        // FONCTIONS UTILITAIRES DE FORMATAGE HYDRAULIQUE & COMPTABLE (NORMES ONA / DRE)
+        // ==============================================================================
+        window.formaterNombre = function(val, decimales = 3) {
+            if (val === null || val === undefined || isNaN(Number(val))) {
+                return (0).toFixed(decimales).replace('.', ',');
+            }
+            const num = Number(val);
+            return num.toLocaleString('fr-FR', {
+                minimumFractionDigits: decimales,
+                maximumFractionDigits: decimales
+            });
+        };
+
+        window.formaterCoutDZD = function(val, avecDecimales = true) {
+            if (val === null || val === undefined || isNaN(Number(val))) {
+                return avecDecimales ? '0,00 DZD' : '0 DZD';
+            }
+            const num = Number(val);
+            const s = num.toLocaleString('fr-FR', {
+                minimumFractionDigits: avecDecimales ? 2 : 0,
+                maximumFractionDigits: avecDecimales ? 2 : 0
+            });
+            return `${s} DZD`;
+        };
+
         let carte = L.map('map').setView([36.15, 1.33], 13);
         window.carte = carte;
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -2088,19 +2114,25 @@
                 const tauxDerive = (state.taux_derive_pct !== undefined) ? parseFloat(state.taux_derive_pct) : (qGenere > 0 ? ((qDerive / qGenere) * 100.0) : 0.0);
                 const tauxExutoire = (state.taux_exutoire_pct !== undefined) ? parseFloat(state.taux_exutoire_pct) : Math.max(0, 100.0 - tauxDerive);
 
-                let infoMeta = `Débit généré : <b style="color: #38bdf8;">${qGenere.toFixed(3)} m³/s</b>`;
+                const qGenereStr = window.formaterNombre(qGenere, 3);
+                const qExutoireStr = window.formaterNombre(qExutoire, 3);
+                const qDeriveStr = window.formaterNombre(qDerive, 3);
+                const tauxDeriveStr = window.formaterNombre(tauxDerive, 1);
+                const tauxExutoireStr = window.formaterNombre(tauxExutoire, 1);
+
+                let infoMeta = `Débit généré : <b style="color: #38bdf8;">${qGenereStr} m³/s</b>`;
                 if (qDerive > 0) {
-                    infoMeta += ` &bull; <span style="color: #cbd5e1;">Vers exutoire principal :</span> <b>${qExutoire.toFixed(3)} m³/s</b> (${tauxExutoire.toFixed(1)}%)`;
-                    infoMeta += ` &bull; <span style="color:#06b6d4; font-weight:700;"><i class="fas fa-random"></i> Dérivé par ${nbRacc} ouv. spéc. : <b>${qDerive.toFixed(3)} m³/s</b> (${tauxDerive.toFixed(1)}%)</span>`;
+                    infoMeta += ` &bull; <span style="color: #cbd5e1;">Vers exutoire principal :</span> <b>${qExutoireStr} m³/s</b> (${tauxExutoireStr}%)`;
+                    infoMeta += ` &bull; <span style="color:#06b6d4; font-weight:700;"><i class="fas fa-random"></i> Dérivé par ${nbRacc} ouv. spéc. : <b>${qDeriveStr} m³/s</b> (${tauxDeriveStr}%)</span>`;
                 } else {
-                    infoMeta += ` &bull; <span style="color: #cbd5e1;">Vers exutoire principal :</span> <b>${qExutoire.toFixed(3)} m³/s</b> (100.0%)`;
-                    infoMeta += ` &bull; <span style="color: #94a3b8;">Dérivé : <b>0.000 m³/s</b> (0.0%)</span>`;
+                    infoMeta += ` &bull; <span style="color: #cbd5e1;">Vers exutoire principal :</span> <b>${qExutoireStr} m³/s</b> (100,0%)`;
+                    infoMeta += ` &bull; <span style="color: #94a3b8;">Dérivé : <b>0,000 m³/s</b> (0,0%)</span>`;
                 }
 
                 if (topIcon) topIcon.innerHTML = '<i class="fas fa-check-circle" style="color: #34d399;"></i>';
                 if (topText) topText.innerHTML = `Bassin simulé : <span style="color: #34d399; font-weight: 700;">${nom}</span>`;
                 if (topBadge) {
-                    topBadge.innerText = qDerive > 0 ? `Soulagement réseau : ${tauxDerive.toFixed(1)}% (${qDerive.toFixed(3)} m³/s)` : `Soulagement réseau : 0.0% (${qGenere.toFixed(3)} m³/s)`;
+                    topBadge.innerText = qDerive > 0 ? `Soulagement réseau : ${tauxDeriveStr}% (${qDeriveStr} m³/s)` : `Soulagement réseau : 0,0% (${qGenereStr} m³/s)`;
                     topBadge.style.background = qDerive > 0 ? 'rgba(6, 182, 212, 0.2)' : 'rgba(16, 185, 129, 0.2)';
                     topBadge.style.color = qDerive > 0 ? '#06b6d4' : '#34d399';
                 }
@@ -3245,7 +3277,7 @@
                             <td><b>${a.conduite || a.cible || '--'}</b></td>
                             <td>${a.type_risque || a.probleme || '--'}</td>
                             <td>${a.action_requise || a.action || '--'}</td>
-                            <td style="text-align: right; font-weight: 700;">${(a.estimation_cout_dzd || 0).toLocaleString('fr-FR')} DZD</td>
+                            <td style="text-align: right; font-weight: 700;">${window.formaterCoutDZD(a.estimation_cout_dzd)}</td>
                             <td style="text-align: center;">${a.delai_recommande || '--'}</td>
                         </tr>
                     `;
@@ -3310,8 +3342,8 @@
                             <td style="text-align: right; font-weight: 700;">${r.nb_troncons}</td>
                             <td style="text-align: right; font-weight: 700;">${Number(r.lineaire_ml).toFixed(1)} ml</td>
                             <td style="text-align: right;">${r.pct_lineaire}%</td>
-                            <td style="text-align: right;">${Number(r.cout_unitaire_ml_dzd).toLocaleString('fr-FR')} DZD</td>
-                            <td style="text-align: right; font-weight: 700; color: #0284c7;">${Number(r.cout_total_dzd).toLocaleString('fr-FR')} DZD</td>
+                            <td style="text-align: right;">${window.formaterCoutDZD(r.cout_unitaire_ml_dzd)} / ml</td>
+                            <td style="text-align: right; font-weight: 700; color: #0284c7;">${window.formaterCoutDZD(r.cout_total_dzd)}</td>
                             <td style="text-align: right;">${r.pct_budget}%</td>
                         </tr>
                     `;
@@ -3346,7 +3378,7 @@
                             <td style="text-align: right; font-weight: 700; color: #0284c7;">DN ${dn}</td>
                             <td>${mat}</td>
                             <td style="text-align: right;">${Number(long).toFixed(1)} m</td>
-                            <td style="text-align: right; font-weight: 700;">${Number(cout).toLocaleString('fr-FR')} DZD</td>
+                            <td style="text-align: right; font-weight: 700;">${window.formaterCoutDZD(cout)}</td>
                         </tr>
                     `;
                 });
@@ -3420,7 +3452,7 @@
                             <td style="text-align: right;">${v.recalibrage_ml > 0 ? Number(v.recalibrage_ml).toFixed(1) + ' ml' : '--'}</td>
                             <td style="text-align: right;">${v.volume_retention_m3 > 0 ? Number(v.volume_retention_m3).toFixed(0) + ' m³' : '--'}</td>
                             <td style="text-align: right; font-weight: 800; color: ${isRec ? '#16a34a' : '#0f172a'};">
-                                ${(v.cout_total_dzd || 0).toLocaleString('fr-FR')} DZD
+                                ${window.formaterCoutDZD(v.cout_total_dzd)}
                             </td>
                             <td>${v.gain_hydraulique}</td>
                             <td>${v.impact_voirie}</td>
@@ -3428,7 +3460,7 @@
                             <td style="text-align: center;"><b>${v.score_resilience} / 10</b></td>
                             <td style="text-align: center;">
                                 <span class="badge ${isRec ? 'badge-p3' : (v.statut === 'INSUFFISANT' ? 'badge-p2' : 'badge-p1')}" style="${isRec ? 'background: #16a34a;' : ''}">
-                                    ${v.statut}
+                                     ${v.statut}
                                 </span>
                             </td>
                         </tr>
@@ -3438,35 +3470,35 @@
                 varRows = `
                     <tr>
                         <td><b>Variante 1 : Tout-Réseau</b><br><small style="color:#64748b;">Recalibrage intégral 7.6 km sans bassin</small></td>
-                        <td style="text-align: right;">7 591.9 ml</td>
+                        <td style="text-align: right;">7 591,9 ml</td>
                         <td style="text-align: right;">--</td>
-                        <td style="text-align: right; font-weight: 700;">330 964 500 DZD</td>
+                        <td style="text-align: right; font-weight: 700;">${window.formaterCoutDZD(330964500)}</td>
                         <td>100% théorique (sans abattement de pointe)</td>
                         <td>TRÈS ÉLEVÉ (Coupure RN4, paralysie urbaine)</td>
                         <td>TRÈS ÉLEVÉ (Crue brute à l'exutoire)</td>
-                        <td style="text-align: center;">5.5 / 10</td>
+                        <td style="text-align: center;">5,5 / 10</td>
                         <td style="text-align: center;"><span class="badge badge-p1">NON RETENU</span></td>
                     </tr>
                     <tr>
                         <td><b>Variante 2 : SFN Pures</b><br><small style="color:#64748b;">Bassin d'orage 18 500 m³ sans recalibrage réseau</small></td>
                         <td style="text-align: right;">--</td>
                         <td style="text-align: right;">18 500 m³</td>
-                        <td style="text-align: right; font-weight: 700;">112 500 000 DZD</td>
+                        <td style="text-align: right; font-weight: 700;">${window.formaterCoutDZD(112500000)}</td>
                         <td>Partiel (~62% réduction débordements)</td>
                         <td>Faible (hors voies circulées)</td>
                         <td>Faible (bon écrêtement)</td>
-                        <td style="text-align: center;">6.0 / 10</td>
+                        <td style="text-align: center;">6,0 / 10</td>
                         <td style="text-align: center;"><span class="badge badge-p2">INSUFFISANT</span></td>
                     </tr>
                     <tr style="background: #f0fdf4; font-weight: 600;">
                         <td><b>Variante 3 : Mixte Optimisée</b><br><small style="color:#64748b;">Recalibrage ciblé 97 goulots + Bassin 6 595 m³</small></td>
-                        <td style="text-align: right;">4 112.8 ml</td>
+                        <td style="text-align: right;">4 112,8 ml</td>
                         <td style="text-align: right;">6 595 m³</td>
-                        <td style="text-align: right; font-weight: 800; color: #16a34a;">240 384 400 DZD</td>
+                        <td style="text-align: right; font-weight: 800; color: #16a34a;">${window.formaterCoutDZD(240384400)}</td>
                         <td>100% résorption intégrale (Saint-Venant vérifié)</td>
                         <td>Modéré et phasable (P1 / P2)</td>
-                        <td>MINIMAL (Pointe écrêtée de 1.73 à 0.65 m³/s)</td>
-                        <td style="text-align: center;"><b>9.2 / 10</b></td>
+                        <td>MINIMAL (Pointe écrêtée de 1,73 à 0,65 m³/s)</td>
+                        <td style="text-align: center;"><b>9,2 / 10</b></td>
                         <td style="text-align: center;"><span class="badge badge-p3" style="background: #16a34a;">RECOMMANDÉ</span></td>
                     </tr>
                 `;
@@ -3625,10 +3657,10 @@
         </div>
         <div style="background: white; border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px 12px; font-size: 8.5pt; color: #1e293b; line-height: 1.6;">
             <div><b>Bassin versant :</b> <b>${meta.cluster_nom || ('Bassin ' + meta.cluster_id) || 'Réseau Principal'}</b></div>
-            <div>&bull; <b>Débit total généré par le bassin :</b> <b style="color: #0369a1;">${(k.q_genere_m3s || ((k.peak_outflow_m3s || 0) + (k.q_derive_m3s || k.q_deleste_m3s || 0))).toFixed(3)} m³/s</b></div>
-            <div style="color: #16a34a; font-weight: 700;">&bull; <b>Soulagement du collecteur principal :</b> ${(k.soulagement_reseau_pct !== undefined ? k.soulagement_reseau_pct : (k.taux_derive_pct || 0)).toFixed(1)}%</div>
-            <div>&bull; <b>Débit résiduel vers l'exutoire principal :</b> <b>${(k.q_exutoire_m3s || k.peak_outflow_m3s || 0).toFixed(3)} m³/s</b> (${(k.taux_exutoire_pct !== undefined ? k.taux_exutoire_pct : 100.0).toFixed(1)}%)</div>
-            <div>&bull; <b>Débit capté par ${(k.nb_ouvrages_raccordes || 0)} ouvrages spéciaux mobilisés :</b> <b style="color: #0284c7;">${(k.q_derive_m3s || k.q_deleste_m3s || 0).toFixed(3)} m³/s</b> (${(k.taux_derive_pct || 0).toFixed(1)}%)</div>
+            <div>&bull; <b>Débit total généré par le bassin :</b> <b style="color: #0369a1;">${window.formaterNombre(k.q_genere_m3s || ((k.peak_outflow_m3s || 0) + (k.q_derive_m3s || k.q_deleste_m3s || 0)), 3)} m³/s</b></div>
+            <div style="color: #16a34a; font-weight: 700;">&bull; <b>Soulagement du collecteur principal :</b> ${window.formaterNombre(k.soulagement_reseau_pct !== undefined ? k.soulagement_reseau_pct : (k.taux_derive_pct || 0), 1)} %</div>
+            <div>&bull; <b>Débit résiduel vers l'exutoire principal :</b> <b>${window.formaterNombre(k.q_exutoire_m3s || k.peak_outflow_m3s || 0, 3)} m³/s</b> (${window.formaterNombre(k.taux_exutoire_pct !== undefined ? k.taux_exutoire_pct : 100.0, 1)} %)</div>
+            <div>&bull; <b>Débit capté par ${(k.nb_ouvrages_raccordes || 0)} ouvrages spéciaux mobilisés :</b> <b style="color: #0284c7;">${window.formaterNombre(k.q_derive_m3s || k.q_deleste_m3s || 0, 3)} m³/s</b> (${window.formaterNombre(k.taux_derive_pct || 0, 1)} %)</div>
         </div>
     </div>
 
@@ -3656,7 +3688,7 @@
     <!-- 2. Matrice des Risques & Plan d'Action (Agent 4) -->
     <div class="section-title">
         <span>2. Plan d'Action Priorisé &amp; Matrice des Risques (Agent 4)</span>
-        <span style="font-size: 7.5pt; color: #64748b;">Budget Total Estimé : <b>${(gc.cout_global_estime_dzd || 0).toLocaleString('fr-FR')} DZD</b></span>
+        <span style="font-size: 7.5pt; color: #64748b;">Budget Total Estimé : <b>${window.formaterCoutDZD(gc.cout_global_estime_dzd)}</b></span>
     </div>
     <div class="agent-memo-box">
         <div class="agent-memo-title">🎯 Note de Hiérarchisation Multi-Critères &bull; Expert Risques &amp; Exploitation (Agent 4)</div>
@@ -3781,7 +3813,7 @@
                 <td style="text-align: right;"><b>${Number(gc.metres_lineaires_totaux || 0).toFixed(1)} ml</b></td>
                 <td style="text-align: right;">100%</td>
                 <td style="text-align: right;">--</td>
-                <td style="text-align: right; color: #0284c7;"><b>${Number(gc.cout_global_estime_dzd || 0).toLocaleString('fr-FR')} DZD</b></td>
+                <td style="text-align: right; color: #0284c7;"><b>${window.formaterCoutDZD(gc.cout_global_estime_dzd)}</b></td>
                 <td style="text-align: right;">100%</td>
             </tr>
         </tfoot>
@@ -3791,19 +3823,19 @@
     <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 8px;">
         <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; padding: 5px 8px; font-size: 7.5pt;">
             <span style="color: #64748b; display: block; font-size: 6.8pt; text-transform: uppercase;">1. Terrassement &amp; Blindage (30%)</span>
-            <b style="color: #0f172a; font-size: 8.2pt;">${Number(bpuTerrassement).toLocaleString('fr-FR')} DZD</b>
+            <b style="color: #0f172a; font-size: 8.2pt;">${window.formaterCoutDZD(bpuTerrassement)}</b>
         </div>
         <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; padding: 5px 8px; font-size: 7.5pt;">
             <span style="color: #64748b; display: block; font-size: 6.8pt; text-transform: uppercase;">2. Fourniture Tuyaux (35%)</span>
-            <b style="color: #0f172a; font-size: 8.2pt;">${Number(bpuFourniture).toLocaleString('fr-FR')} DZD</b>
+            <b style="color: #0f172a; font-size: 8.2pt;">${window.formaterCoutDZD(bpuFourniture)}</b>
         </div>
         <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; padding: 5px 8px; font-size: 7.5pt;">
             <span style="color: #64748b; display: block; font-size: 6.8pt; text-transform: uppercase;">3. Pose &amp; Remblai 95% (20%)</span>
-            <b style="color: #0f172a; font-size: 8.2pt;">${Number(bpuPose).toLocaleString('fr-FR')} DZD</b>
+            <b style="color: #0f172a; font-size: 8.2pt;">${window.formaterCoutDZD(bpuPose)}</b>
         </div>
         <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; padding: 5px 8px; font-size: 7.5pt;">
             <span style="color: #64748b; display: block; font-size: 6.8pt; text-transform: uppercase;">4. Réfection Chaussée BB (15%)</span>
-            <b style="color: #0f172a; font-size: 8.2pt;">${Number(bpuChaussee).toLocaleString('fr-FR')} DZD</b>
+            <b style="color: #0f172a; font-size: 8.2pt;">${window.formaterCoutDZD(bpuChaussee)}</b>
         </div>
     </div>
 
@@ -3835,7 +3867,7 @@
     <!-- 5. Analyse Multi-Critères des Variantes d'Aménagement & Décision d'Investissement (Agent 5) -->
     <div class="section-title">
         <span>5. Analyse Multi-Critères des Variantes d'Aménagement &amp; Décision d'Investissement (Agent 5)</span>
-        <span style="font-size: 7.5pt; color: #16a34a;">Économie Scénario Mixte : <b>${(finance.economie_realisee_dzd || 90580100).toLocaleString('fr-FR')} DZD (-${finance.economie_pourcentage || 27.4}%)</b></span>
+        <span style="font-size: 7.5pt; color: #16a34a;">Économie Scénario Mixte : <b>${window.formaterCoutDZD(finance.economie_realisee_dzd || 90580100)} (-${finance.economie_pourcentage || 27.4}%)</b></span>
     </div>
     <div class="agent-memo-box">
         <div class="agent-memo-title">💼 Analyse Technico-Économique &amp; Rentabilité Socio-Économique &bull; Expert Financier &amp; Marchés Publics (Agent 5)</div>
@@ -3846,17 +3878,17 @@
     <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 8px;">
         <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; padding: 5px 8px; font-size: 7.5pt;">
             <span style="color: #64748b; display: block; font-size: 6.8pt; text-transform: uppercase;">Coût au Mètre Linéaire Rénové</span>
-            <b style="color: #0284c7; font-size: 8.5pt;">${(ratios.cout_par_ml_renove_dzd || 47870).toLocaleString('fr-FR')} DZD / ml</b>
+            <b style="color: #0284c7; font-size: 8.5pt;">${window.formaterCoutDZD(ratios.cout_par_ml_renove_dzd || 47870)} / ml</b>
             <small style="color: #64748b; display: block; font-size: 6.8pt;">Base 4 112.8 ml ciblés</small>
         </div>
         <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; padding: 5px 8px; font-size: 7.5pt;">
             <span style="color: #64748b; display: block; font-size: 6.8pt; text-transform: uppercase;">Coût par Habitant Équivalent</span>
-            <b style="color: #0284c7; font-size: 8.5pt;">${(ratios.cout_par_habitant_protege_dzd || 16025).toLocaleString('fr-FR')} DZD / hab</b>
+            <b style="color: #0284c7; font-size: 8.5pt;">${window.formaterCoutDZD(ratios.cout_par_habitant_protege_dzd || 16025)} / hab</b>
             <small style="color: #64748b; display: block; font-size: 6.8pt;">Bassin ~15 000 hab protégés</small>
         </div>
         <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 4px; padding: 5px 8px; font-size: 7.5pt;">
             <span style="color: #16a34a; display: block; font-size: 6.8pt; text-transform: uppercase; font-weight: 700;">Dommages Annuels Évités (EAD)</span>
-            <b style="color: #15803d; font-size: 8.5pt;">${(ratios.dommages_annuels_evites_dzd || 45000000).toLocaleString('fr-FR')} DZD / an</b>
+            <b style="color: #15803d; font-size: 8.5pt;">${window.formaterCoutDZD(ratios.dommages_annuels_evites_dzd || 45000000)} / an</b>
             <small style="color: #16a34a; display: block; font-size: 6.8pt;">Voirie, caves, RN4, pompage ONA</small>
         </div>
         <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 4px; padding: 5px 8px; font-size: 7.5pt;">
@@ -4270,7 +4302,7 @@
                                 <i class="fas fa-ruler-combined"></i> Prescriptions de Recalibrage (Formule de Manning-Strickler)
                             </div>
                             <span style="font-size: 0.74rem; color: #94a3b8;">
-                                Linéaire : <b style="color: #38bdf8;">${(gc.metres_lineaires_totaux || 0).toFixed(1)} ml</b> &bull; Budget : <b style="color: #34d399;">${(gc.cout_global_estime_dzd || 0).toLocaleString()} DZD</b>
+                                Linéaire : <b style="color: #38bdf8;">${(gc.metres_lineaires_totaux || 0).toFixed(1)} ml</b> &bull; Budget : <b style="color: #34d399;">${window.formaterCoutDZD(gc.cout_global_estime_dzd)}</b>
                             </span>
                         </div>
 
@@ -4284,7 +4316,7 @@
                                         <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; padding: 6px 8px; font-size: 0.72rem;">
                                             <div style="font-weight: 800; color: #34d399;">${r.label} <span style="font-weight: 400; color: #94a3b8; font-size: 0.68rem;">(${r.materiau.includes('PEHD') ? 'PEHD' : 'Béton'})</span></div>
                                             <div style="color: #f8fafc; font-weight: 700; margin: 2px 0;">${r.lineaire_ml} ml <span style="color:#64748b; font-weight: 400;">(${r.pct_lineaire}%)</span></div>
-                                            <div style="color: #38bdf8; font-weight: 600;">${r.cout_total_dzd.toLocaleString()} DZD</div>
+                                            <div style="color: #38bdf8; font-weight: 600;">${window.formaterCoutDZD(r.cout_total_dzd)}</div>
                                         </div>
                                     `).join('')}
                                 </div>
@@ -4321,7 +4353,7 @@
                                             <td style="padding: 6px 4px; font-weight: 800; color: #34d399;">Ø${p.diam_prescrit_mm} mm</td>
                                             <td style="padding: 6px 4px; color: #34d399;">+${p.gain_capacite_pct}%</td>
                                             <td style="padding: 6px 4px; color: #cbd5e1;">${p.materiau}</td>
-                                            <td style="padding: 6px 4px; text-align: right; font-weight: 700;">${p.cout_estime_dzd.toLocaleString()} DZD</td>
+                                            <td style="padding: 6px 4px; text-align: right; font-weight: 700;">${window.formaterCoutDZD(p.cout_estime_dzd)}</td>
                                         </tr>
                                     `).join('')}
                                 </tbody>
@@ -4384,7 +4416,7 @@
                                     <span style="background: #ef4444; color: white; padding: 1px 6px; border-radius: 4px; font-size: 0.68rem;">P1</span>
                                     Priorité 1 — Urgence Critique (Submersion Voirie &amp; Habitations)
                                 </div>
-                                <span style="font-size: 0.72rem; color: #f87171; font-weight: 700;">${((risk.synthese && risk.synthese.cout_p1_dzd) || 0).toLocaleString('fr-FR')} DZD</span>
+                                <span style="font-size: 0.72rem; color: #f87171; font-weight: 700;">${window.formaterCoutDZD((risk.synthese && risk.synthese.cout_p1_dzd) || 0)}</span>
                             </div>
                             ${(risk.actions_priorisees && risk.actions_priorisees.P1 && risk.actions_priorisees.P1.length > 0) ? `
                                 <div style="display: grid; gap: 6px;">
@@ -4392,7 +4424,7 @@
                                         <div style="background: rgba(239, 68, 68, 0.08); border-left: 3px solid #ef4444; padding: 8px 12px; font-size: 0.78rem; color: #cbd5e1; border-radius: 4px;">
                                             <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px;">
                                                 <strong style="color: #f87171;">${a.conduite || a.cible}</strong>
-                                                <span style="font-weight: 800; color: #38bdf8; font-size: 0.78rem;">${(a.estimation_cout_dzd || 0).toLocaleString('fr-FR')} DZD</span>
+                                                <span style="font-weight: 800; color: #38bdf8; font-size: 0.78rem;">${window.formaterCoutDZD(a.estimation_cout_dzd)}</span>
                                             </div>
                                             <div style="font-size: 0.75rem; color: #94a3b8;">${a.type_risque || a.probleme} ➔ <i style="color: #f8fafc;">${a.action_requise || a.action}</i></div>
                                         </div>
@@ -4408,7 +4440,7 @@
                                     <span style="background: #f59e0b; color: white; padding: 1px 6px; border-radius: 4px; font-size: 0.68rem;">P2</span>
                                     Priorité 2 — Alerte Majeure (Mise en Charge Continue sans Inondation)
                                 </div>
-                                <span style="font-size: 0.72rem; color: #fbbf24; font-weight: 700;">${((risk.synthese && risk.synthese.cout_p2_dzd) || 0).toLocaleString('fr-FR')} DZD</span>
+                                <span style="font-size: 0.72rem; color: #fbbf24; font-weight: 700;">${window.formaterCoutDZD((risk.synthese && risk.synthese.cout_p2_dzd) || 0)}</span>
                             </div>
                             ${(risk.actions_priorisees && risk.actions_priorisees.P2 && risk.actions_priorisees.P2.length > 0) ? `
                                 <div style="display: grid; gap: 6px;">
@@ -4416,7 +4448,7 @@
                                         <div style="background: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; padding: 8px 12px; font-size: 0.78rem; color: #cbd5e1; border-radius: 4px;">
                                             <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px;">
                                                 <strong style="color: #fbbf24;">${a.conduite || a.cible}</strong>
-                                                <span style="font-weight: 800; color: #38bdf8; font-size: 0.78rem;">${(a.estimation_cout_dzd || 0).toLocaleString('fr-FR')} DZD</span>
+                                                <span style="font-weight: 800; color: #38bdf8; font-size: 0.78rem;">${window.formaterCoutDZD(a.estimation_cout_dzd)}</span>
                                             </div>
                                             <div style="font-size: 0.75rem; color: #94a3b8;">${a.type_risque || a.probleme} ➔ <i style="color: #f8fafc;">${a.action_requise || a.action}</i></div>
                                         </div>
@@ -4432,7 +4464,7 @@
                                     <span style="background: #0284c7; color: white; padding: 1px 6px; border-radius: 4px; font-size: 0.68rem;">P3</span>
                                     Priorité 3 — Maintenance Préventive (Auto-curage / Pentes)
                                 </div>
-                                <span style="font-size: 0.72rem; color: #38bdf8; font-weight: 700;">${((risk.synthese && risk.synthese.cout_p3_dzd) || 0).toLocaleString('fr-FR')} DZD</span>
+                                <span style="font-size: 0.72rem; color: #38bdf8; font-weight: 700;">${window.formaterCoutDZD((risk.synthese && risk.synthese.cout_p3_dzd) || 0)}</span>
                             </div>
                             ${(risk.actions_priorisees && risk.actions_priorisees.P3 && risk.actions_priorisees.P3.length > 0) ? `
                                 <div style="display: grid; gap: 6px;">
@@ -4440,7 +4472,7 @@
                                         <div style="background: rgba(2, 132, 199, 0.08); border-left: 3px solid #0284c7; padding: 8px 12px; font-size: 0.78rem; color: #cbd5e1; border-radius: 4px;">
                                             <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px;">
                                                 <strong style="color: #38bdf8;">${a.conduite || a.cible}</strong>
-                                                <span style="font-weight: 800; color: #38bdf8; font-size: 0.78rem;">${(a.estimation_cout_dzd || 0).toLocaleString('fr-FR')} DZD</span>
+                                                <span style="font-weight: 800; color: #38bdf8; font-size: 0.78rem;">${window.formaterCoutDZD(a.estimation_cout_dzd)}</span>
                                             </div>
                                             <div style="font-size: 0.75rem; color: #94a3b8;">${a.type_risque || a.probleme} ➔ <i style="color: #f8fafc;">${a.action_requise || a.action}</i></div>
                                         </div>
@@ -4462,7 +4494,7 @@
                         <div style="font-weight: 700; font-size: 0.92rem; color: #34d399; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
                             <span><i class="fas fa-balance-scale me-1"></i> Comparatif Multi-Critères des 3 Variantes d'Aménagement</span>
                             <span style="font-size: 0.76rem; background: rgba(16,185,129,0.18); color: #34d399; border: 1px solid rgba(16,185,129,0.4); padding: 2px 8px; border-radius: 4px; font-weight: 700;">
-                                Gain Net : 90.58 M DZD (-27.4%)
+                                Gain Net : 90,58 M DZD (-27,4%)
                             </span>
                         </div>
 
@@ -4474,15 +4506,15 @@
                                     <span style="font-weight: 800; font-size: 0.84rem; color: #f87171;">V1 : 100% Tout-Réseau</span>
                                     <span style="font-size: 0.68rem; background: rgba(239,68,68,0.2); color: #fca5a5; padding: 1px 6px; border-radius: 3px; font-weight: 700;">NON RETENU</span>
                                 </div>
-                                <div style="font-size: 1.15rem; font-weight: 900; color: #f8fafc; margin-bottom: 4px;">330 964 500 DZD</div>
+                                <div style="font-size: 1.15rem; font-weight: 900; color: #f8fafc; margin-bottom: 4px;">330 964 500,00 DZD</div>
                                 <div style="font-size: 0.74rem; color: #94a3b8; line-height: 1.4; margin-bottom: 8px;">
-                                    Recalibrage intégral de 7 591.9 ml de conduites sans bassin d'écrêtement amont.
+                                    Recalibrage intégral de 7 591,9 ml de conduites sans bassin d'écrêtement amont.
                                 </div>
                                 <div style="font-size: 0.72rem; color: #cbd5e1; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 6px;">
                                     <div>🚨 <b>Impact voirie :</b> Très Élevé (7.6 km coupés)</div>
                                     <div>🌊 <b>Risque aval :</b> Crue brute à l'exutoire</div>
                                     <div>⏱️ <b>Délai :</b> 18 à 24 mois</div>
-                                    <div>⭐ <b>Résilience :</b> 5.5 / 10</div>
+                                    <div>⭐ <b>Résilience :</b> 5,5 / 10</div>
                                 </div>
                             </div>
 
@@ -4492,7 +4524,7 @@
                                     <span style="font-weight: 800; font-size: 0.84rem; color: #fbbf24;">V2 : 100% SFN Pures</span>
                                     <span style="font-size: 0.68rem; background: rgba(245,158,11,0.2); color: #fde68a; padding: 1px 6px; border-radius: 3px; font-weight: 700;">INSUFFISANT</span>
                                 </div>
-                                <div style="font-size: 1.15rem; font-weight: 900; color: #f8fafc; margin-bottom: 4px;">112 500 000 DZD</div>
+                                <div style="font-size: 1.15rem; font-weight: 900; color: #f8fafc; margin-bottom: 4px;">112 500 000,00 DZD</div>
                                 <div style="font-size: 0.74rem; color: #94a3b8; line-height: 1.4; margin-bottom: 8px;">
                                     Bassin géant (18 500 m³) + noues sans recalibrage de collecteurs sous voirie.
                                 </div>
@@ -4500,7 +4532,7 @@
                                     <div>⚠️ <b>Efficacité :</b> ~62% (débordements résiduels)</div>
                                     <div>🏞️ <b>Emprise :</b> Très Élevée (~2.5 ha foncier)</div>
                                     <div>⏱️ <b>Délai :</b> 12 à 15 mois</div>
-                                    <div>⭐ <b>Résilience :</b> 6.0 / 10</div>
+                                    <div>⭐ <b>Résilience :</b> 6,0 / 10</div>
                                 </div>
                             </div>
 
@@ -4510,15 +4542,15 @@
                                     <span style="font-weight: 800; font-size: 0.84rem; color: #34d399;">V3 : Mixte Optimisée</span>
                                     <span style="font-size: 0.68rem; background: #10b981; color: white; padding: 2px 7px; border-radius: 3px; font-weight: 800;">RECOMMANDÉ</span>
                                 </div>
-                                <div style="font-size: 1.25rem; font-weight: 900; color: #34d399; margin-bottom: 4px;">240 384 400 DZD</div>
+                                <div style="font-size: 1.25rem; font-weight: 900; color: #34d399; margin-bottom: 4px;">240 384 400,00 DZD</div>
                                 <div style="font-size: 0.74rem; color: #cbd5e1; line-height: 1.4; margin-bottom: 8px;">
-                                    Recalibrage ciblé 97 goulots (4 112.8 ml) + Bassin amont régulé 6 595 m³ + noues.
+                                    Recalibrage ciblé 97 goulots (4 112,8 ml) + Bassin amont régulé 6 595 m³ + noues.
                                 </div>
                                 <div style="font-size: 0.72rem; color: #f8fafc; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 6px;">
                                     <div>✅ <b>Efficacité :</b> 100% résorption hydrodynamique</div>
-                                    <div>📉 <b>Économie :</b> 90 580 100 DZD (-27.4%)</div>
-                                    <div>🛡️ <b>Protection aval :</b> Débit pointe écrêté à 0.65 m³/s</div>
-                                    <div>⭐ <b>Résilience :</b> 9.2 / 10</div>
+                                    <div>📉 <b>Économie :</b> 90 580 100,00 DZD (-27,4%)</div>
+                                    <div>🛡️ <b>Protection aval :</b> Débit pointe écrêté à 0,65 m³/s</div>
+                                    <div>⭐ <b>Résilience :</b> 9,2 / 10</div>
                                 </div>
                             </div>
                         </div>
@@ -4530,23 +4562,23 @@
                         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; font-size: 0.78rem;">
                             <div style="background: rgba(255,255,255,0.03); padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08);">
                                 <span style="color: #94a3b8; display: block; font-size: 0.7rem;">Coût par ml Rénové</span>
-                                <b style="color: #38bdf8; font-size: 0.95rem;">${(agents.analyse_variantes_financiere?.ratios_decisionnels?.cout_par_ml_renove_dzd || 47871).toLocaleString('fr-FR')} DZD / ml</b>
+                                <b style="color: #38bdf8; font-size: 0.95rem;">${window.formaterCoutDZD(agents.analyse_variantes_financiere?.ratios_decisionnels?.cout_par_ml_renove_dzd || 47871)} / ml</b>
                                 <small style="color: #64748b; display: block; font-size: 0.68rem;">Base 4 112.8 ml ciblés</small>
                             </div>
                             <div style="background: rgba(255,255,255,0.03); padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08);">
                                 <span style="color: #94a3b8; display: block; font-size: 0.7rem;">Coût par Habitant</span>
-                                <b style="color: #38bdf8; font-size: 0.95rem;">${(agents.analyse_variantes_financiere?.ratios_decisionnels?.cout_par_habitant_protege_dzd || 16026).toLocaleString('fr-FR')} DZD / hab</b>
+                                <b style="color: #38bdf8; font-size: 0.95rem;">${window.formaterCoutDZD(agents.analyse_variantes_financiere?.ratios_decisionnels?.cout_par_habitant_protege_dzd || 16026)} / hab</b>
                                 <small style="color: #64748b; display: block; font-size: 0.68rem;">15 000 hab équivalents</small>
                             </div>
                             <div style="background: rgba(16,185,129,0.08); padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(16,185,129,0.25);">
                                 <span style="color: #34d399; display: block; font-size: 0.7rem; font-weight: 700;">Dommages Annuels Évités</span>
-                                <b style="color: #34d399; font-size: 0.95rem;">45.0 M DZD / an</b>
+                                <b style="color: #34d399; font-size: 0.95rem;">45,0 M DZD / an</b>
                                 <small style="color: #6ee7b7; display: block; font-size: 0.68rem;">Voirie, sous-sols, caves, RN4</small>
                             </div>
                             <div style="background: rgba(16,185,129,0.08); padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(16,185,129,0.25);">
                                 <span style="color: #34d399; display: block; font-size: 0.7rem; font-weight: 700;">Rentabilité Socio-Éco</span>
-                                <b style="color: #34d399; font-size: 0.95rem;">Payback 5.3 ans &bull; TRI 14.8%</b>
-                                <small style="color: #6ee7b7; display: block; font-size: 0.68rem;">VAN 20 ans : +275.8 M DZD</small>
+                                <b style="color: #34d399; font-size: 0.95rem;">Payback 5,3 ans &bull; TRI 14,8%</b>
+                                <small style="color: #6ee7b7; display: block; font-size: 0.68rem;">VAN 20 ans : +275,8 M DZD</small>
                             </div>
                         </div>
                     </div>
@@ -4600,7 +4632,7 @@
                             </div>
                             <div style="background: rgba(255,255,255,0.02); padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.06);">
                                 <span style="color: #94a3b8;">Enveloppe Travaux GC :</span>
-                                <b style="color: #34d399; float: right;">${(gc.cout_global_estime_dzd || 0).toLocaleString()} DZD</b>
+                                <b style="color: #34d399; float: right;">${window.formaterCoutDZD(gc.cout_global_estime_dzd)}</b>
                             </div>
                             <div style="background: rgba(255,255,255,0.02); padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.06);">
                                 <span style="color: #94a3b8;">Rétention Alternative Cible :</span>
@@ -5698,7 +5730,7 @@
                     if (ro.regard_coord_wgs84 && ro.ouvrage_coord_wgs84) {
                         const rPt = ro.regard_coord_wgs84;
                         const oPt = ro.ouvrage_coord_wgs84;
-                        const coutFmt = Number(ro.cout_estime_dzd || 0).toLocaleString('fr-FR');
+                        const coutFmt = window.formaterCoutDZD(ro.cout_estime_dzd);
                         
                         // Collecteur de secours (tracé cyan néon épais et net avec opacité 100%)
                         const polyRacc = L.polyline([rPt, oPt], {
@@ -5723,7 +5755,7 @@
                                     <tr><td style="color:#64748b; padding:2px 0;">Regard amont :</td><td style="font-weight:700; text-align:right;">Regard ${ro.regard_proche_id}</td></tr>
                                     <tr><td style="color:#64748b; padding:2px 0;">Longueur :</td><td style="font-weight:700; text-align:right;">${ro.distance_m} m</td></tr>
                                     <tr><td style="color:#64748b; padding:2px 0;">Diamètre :</td><td style="font-weight:700; text-align:right;">DN 600 mm</td></tr>
-                                    <tr><td style="color:#64748b; padding:2px 0;">Coût estimé :</td><td style="font-weight:700; text-align:right; color:#f59e0b;">${coutFmt} DZD</td></tr>
+                                    <tr><td style="color:#64748b; padding:2px 0;">Coût estimé :</td><td style="font-weight:700; text-align:right; color:#f59e0b;">${coutFmt}</td></tr>
                                     <tr><td style="color:#64748b; padding:2px 0;">Gain économique :</td><td style="font-weight:700; text-align:right; color:#10b981;">&gt; 90% d'économie</td></tr>
                                 </table>
                             </div>
@@ -5789,9 +5821,9 @@
                 const k = data.kpis;
                 const errVal = k.routing_continuity_error_pct || 0;
                 const contEl = document.getElementById('kpi-continuity');
-                if (contEl) contEl.innerText = (errVal > 0 ? '+' : '') + errVal.toFixed(2) + ' %';
+                if (contEl) contEl.innerText = (errVal > 0 ? '+' : '') + window.formaterNombre(errVal, 2) + ' %';
                 const peakEl = document.getElementById('kpi-peak-outflow');
-                if (peakEl) peakEl.innerText = (k.peak_outflow_m3s || 0).toFixed(3) + ' m³/s';
+                if (peakEl) peakEl.innerText = window.formaterNombre(k.peak_outflow_m3s || 0, 3) + ' m³/s';
                 
                 const peakTimeEl = document.getElementById('kpi-peak-time');
                 if (peakTimeEl) peakTimeEl.innerText = k.peak_time_str || '--';
@@ -5799,7 +5831,7 @@
                 const maxVelEl = document.getElementById('kpi-max-velocity');
                 if (maxVelEl) {
                     const vVal = k.max_velocity_ms || 0;
-                    maxVelEl.innerHTML = `${vVal.toFixed(2)} m/s <small style="font-size:0.65rem; display:block; color:${k.autocurage_color || '#34d399'}; font-weight:600;">${k.autocurage_statut || 'Autocurage'}</small>`;
+                    maxVelEl.innerHTML = `${window.formaterNombre(vVal, 2)} m/s <small style="font-size:0.65rem; display:block; color:${k.autocurage_color || '#34d399'}; font-weight:600;">${k.autocurage_statut || 'Autocurage'}</small>`;
                 }
 
                 // Ligne 2 : Volumes et Surcharges
@@ -5816,10 +5848,10 @@
                 }
 
                 const cEffEl = document.getElementById('kpi-coeff-eff');
-                if (cEffEl) cEffEl.innerText = (k.effective_runoff_coeff !== undefined ? k.effective_runoff_coeff.toFixed(2) : '0.70');
+                if (cEffEl) cEffEl.innerText = window.formaterNombre(k.effective_runoff_coeff !== undefined ? k.effective_runoff_coeff : 0.70, 2);
 
                 const surchPctEl = document.getElementById('kpi-surcharge-pct');
-                if (surchPctEl) surchPctEl.innerText = `${k.surcharged_length_pct || 0} % (${k.surcharged_length_m || 0} m)`;
+                if (surchPctEl) surchPctEl.innerText = `${window.formaterNombre(k.surcharged_length_pct || 0, 1)} % (${window.formaterNombre(k.surcharged_length_m || 0, 1)} m)`;
 
                 // Contrôle de cohérence Pluie-Débit (Méthode Rationnelle)
                 const coh = k.coherence_pluie_debit;
@@ -5832,9 +5864,9 @@
                         badgeEl.style.border = `1px solid ${coh.color || '#10b981'}55`;
                     }
                     const qSimEl = document.getElementById('kpi-coh-qsim');
-                    if (qSimEl) qSimEl.innerText = `${coh.q_simule_m3s} m³/s`;
+                    if (qSimEl) qSimEl.innerText = `${window.formaterNombre(coh.q_simule_m3s, 3)} m³/s`;
                     const qRatEl = document.getElementById('kpi-coh-qrat');
-                    if (qRatEl) qRatEl.innerText = `${coh.q_rationnel_m3s} m³/s (Ratio: ${coh.ratio})`;
+                    if (qRatEl) qRatEl.innerText = `${window.formaterNombre(coh.q_rationnel_m3s, 3)} m³/s (Ratio: ${coh.ratio})`;
                     const msgEl = document.getElementById('kpi-coherence-msg');
                     if (msgEl) msgEl.innerText = coh.message;
                 }
@@ -5849,6 +5881,12 @@
                     const tauxDerive = (data.kpis && typeof data.kpis.taux_derive_pct === 'number') ? data.kpis.taux_derive_pct : (qGenere > 0 ? ((qDerive / qGenere) * 100.0) : 0.0);
                     const tauxExutoire = (data.kpis && typeof data.kpis.taux_exutoire_pct === 'number') ? data.kpis.taux_exutoire_pct : Math.max(0, 100.0 - tauxDerive);
 
+                    const qGenereStr = window.formaterNombre(qGenere, 3);
+                    const qExutoireStr = window.formaterNombre(qExutoire, 3);
+                    const qDeriveStr = window.formaterNombre(qDerive, 3);
+                    const tauxDeriveStr = window.formaterNombre(tauxDerive, 1);
+                    const tauxExutoireStr = window.formaterNombre(tauxExutoire, 1);
+
                     orphBox.style.display = 'block';
                     const bEl = document.getElementById('kpi-orphelin-badge');
                     const gEl = document.getElementById('kpi-orphelin-qgenere');
@@ -5856,26 +5894,28 @@
                     const qEl = document.getElementById('kpi-orphelin-qdeleste');
                     const dEl = document.getElementById('kpi-orphelin-desc');
 
-                    if (gEl) gEl.innerText = `${qGenere.toFixed(3)} m³/s`;
-                    if (eEl) eEl.innerText = `${qExutoire.toFixed(3)} m³/s (${tauxExutoire.toFixed(1)}%)`;
+                    if (gEl) gEl.innerText = `${qGenereStr} m³/s`;
+                    if (eEl) eEl.innerText = `${qExutoireStr} m³/s (${tauxExutoireStr}%)`;
 
                     if (qDerive > 0) {
                         if (bEl) {
-                            bEl.innerText = `Soulagement réseau : ${tauxDerive.toFixed(1)}%`;
+                            bEl.innerText = `Soulagement réseau : ${tauxDeriveStr}%`;
                             bEl.style.background = 'rgba(6, 182, 212, 0.25)';
                             bEl.style.color = '#22d3ee';
                             bEl.style.borderColor = 'rgba(6, 182, 212, 0.5)';
                         }
-                        if (qEl) qEl.innerText = `${qDerive.toFixed(3)} m³/s (${tauxDerive.toFixed(1)}%)`;
-                        if (dEl) dEl.innerHTML = `<i class="fas fa-check-circle text-emerald-400 me-1"></i> <b>${nbOrph} ouvrage(s) spécial(aux) actif(s)</b> : ${qDerive.toFixed(3)} m³/s captés (${tauxDerive.toFixed(1)}% du débit produit), soulageant d'autant le collecteur principal.`;
+                        if (qEl) qEl.innerText = `${qDeriveStr} m³/s (${tauxDeriveStr}%)`;
+                        if (dEl) dEl.innerHTML = `<i class="fas fa-check-circle text-emerald-400 me-1"></i> <b>${nbOrph} ouvrage(s) spécial(aux) actif(s)</b> : ${qDeriveStr} m³/s captés (${tauxDeriveStr}% du débit produit), soulageant d'autant le collecteur principal.`;
                     } else {
                         if (bEl) {
-                            bEl.innerText = `Soulagement réseau : 0.0%`;
+                            bEl.innerText = `Soulagement réseau : 0,0%`;
                             bEl.style.background = 'rgba(16, 185, 129, 0.2)';
                             bEl.style.color = '#34d399';
                             bEl.style.borderColor = 'rgba(16, 185, 129, 0.4)';
                         }
-                        if (qEl) qEl.innerText = `0.000 m³/s (0.0%)`;
+                        if (qEl) qEl.innerText = `0,000 m³/s (0,0%)`;
+                        if (dEl) dEl.innerHTML = `<i class="fas fa-info-circle text-sky-400 me-1"></i> <b>Scénario sans ouvrage spécial raccordé</b> : 100,0% du débit produit (${qGenereStr} m³/s) transite vers le collecteur et l'exutoire principal.`;
+                    }
                         if (dEl) dEl.innerHTML = `<i class="fas fa-info-circle text-sky-400 me-1"></i> <b>Scénario sans ouvrage spécial raccordé</b> : 100% du débit produit (${qGenere.toFixed(3)} m³/s) transite vers le collecteur et l'exutoire principal.`;
                     }
                 }
@@ -6294,12 +6334,12 @@
                             opacity: 1.0,
                             pane: window.carte.getPane('swmmNodesPane') ? 'swmmNodesPane' : 'overlayPane'
                         });
-                        const coutFmt = Number(o.cout_estime_dzd || 0).toLocaleString('fr-FR');
+                        const coutFmt = window.formaterCoutDZD(o.cout_estime_dzd);
                         poly.bindTooltip(
                             `⚡ <b>Variante 0 : Raccordement Opportuniste Immédiat</b><br>` +
                             `<b>${o.nom}</b><br>` +
                             `Distance : ${o.distance_m} m du Regard ${o.regard_proche_id}<br>` +
-                            `DN 600 mm &bull; Coût estimé : ${coutFmt} DZD<br>` +
+                            `DN 600 mm &bull; Coût estimé : ${coutFmt}<br>` +
                             `<span style="color:#4ade80; font-weight:700;">Gain économique : &gt; 90%</span>`,
                             { sticky: true }
                         );
@@ -6376,7 +6416,7 @@
 
                 let html = '';
                 ouvrages.forEach((o, i) => {
-                    const coutFmt = Number(o.cout_estime_dzd || 0).toLocaleString('fr-FR');
+                    const coutFmt = window.formaterCoutDZD(o.cout_estime_dzd);
                     html += `
                     <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(148, 163, 184, 0.25); border-radius: 8px; padding: 9px 12px; transition: all 0.2s;">
                         <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer; margin-bottom: 0;">
@@ -6389,7 +6429,7 @@
                                 </div>
                                 <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 3px; display: flex; gap: 12px; flex-wrap: wrap;">
                                     <span><i class="fas fa-arrows-alt-h me-1 text-info"></i> DN 600 mm recommandé</span>
-                                    <span><i class="fas fa-coins me-1 text-warning"></i> Coût estimé : <b style="color: #fbbf24;">${coutFmt} DZD</b></span>
+                                    <span><i class="fas fa-coins me-1 text-warning"></i> Coût estimé : <b style="color: #fbbf24;">${coutFmt}</b></span>
                                     <span style="color: #4ade80; font-weight: 600;"><i class="fas fa-shield-alt me-1"></i> Soulagement immédiat</span>
                                 </div>
                             </div>
