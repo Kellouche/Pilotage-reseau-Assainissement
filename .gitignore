@@ -61,6 +61,10 @@ swmm_mobile_flutter/build/
 output/
 exports/
 uploads/
+.simulation_cache/
+*.clusters_cache.json
+*.subcatchments_cache.json
+elements_orphelins.geojson
 .playwright-mcp/
 
 # Windows system files

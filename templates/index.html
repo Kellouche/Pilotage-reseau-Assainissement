@@ -347,8 +347,11 @@
         .sim-bassin-tooltip::before {
             border-top-color: rgba(15, 23, 42, 0.96) !important;
         }
-        .leaflet-tooltip {
+        .leaflet-tooltip, .sim-bassin-tooltip, .leaflet-tooltip * {
             pointer-events: none !important;
+            user-select: none !important;
+        }
+        .leaflet-tooltip {
             z-index: 1000 !important;
         }
         .leaflet-tooltip-pane {
@@ -842,13 +845,58 @@
             });
         });
 
-        // Fermer automatiquement et instantanément toutes les infobulles lors des déplacements cartographiques
-        carte.on('zoomstart movestart click', function() {
+        // ============================================================
+        // GESTIONNAIRE STRICT D'INFOBULLE UNIQUE (ANTI-CHEVAUCHEMENT LEAFLET)
+        // ============================================================
+        let _activeGlobalTooltip = null;
+
+        carte.on('tooltipopen', function(e) {
+            // S'il y a déjà une infobulle ouverte différente, on la ferme immédiatement
+            if (_activeGlobalTooltip && _activeGlobalTooltip !== e.tooltip) {
+                try {
+                    if (_activeGlobalTooltip._source && typeof _activeGlobalTooltip._source.closeTooltip === 'function') {
+                        _activeGlobalTooltip._source.closeTooltip();
+                    } else if (typeof _activeGlobalTooltip.close === 'function') {
+                        _activeGlobalTooltip.close();
+                    }
+                } catch(_) {}
+            }
+            _activeGlobalTooltip = e.tooltip;
+
+            // Purge DOM de sécurité : toute autre infobulle visible dans le conteneur Leaflet est masquée
+            try {
+                const pane = carte.getPane('tooltipPane');
+                if (pane) {
+                    const allTips = pane.querySelectorAll('.leaflet-tooltip');
+                    allTips.forEach(tipEl => {
+                        if (e.tooltip && e.tooltip._container && tipEl !== e.tooltip._container) {
+                            tipEl.style.display = 'none';
+                        }
+                    });
+                }
+            } catch(_) {}
+        });
+
+        carte.on('tooltipclose', function(e) {
+            if (_activeGlobalTooltip === e.tooltip) {
+                _activeGlobalTooltip = null;
+            }
+        });
+
+        // Fermer automatiquement et instantanément toutes les infobulles lors des déplacements cartographiques ou clics
+        carte.on('zoomstart movestart dragstart click', function() {
+            _activeGlobalTooltip = null;
             carte.eachLayer(function(l) {
                 if (typeof l.closeTooltip === 'function') {
                     try { l.closeTooltip(); } catch(e) {}
                 }
             });
+            try {
+                const pane = carte.getPane('tooltipPane');
+                if (pane) {
+                    pane.querySelectorAll('.leaflet-tooltip').forEach(el => el.remove());
+                }
+            } catch(_) {}
         });
 
         function basculerCoucheBassins(checked) {
@@ -4996,10 +5044,23 @@
                             `;
                             layer.bindTooltip(tooltipHtml, { sticky: true, opacity: 0.95 });
                             
-                            layer.on('mouseover', function() {
+                            layer.on('mouseover', function(e) {
+                                if (_activeGlobalTooltip && _activeGlobalTooltip !== layer.getTooltip()) {
+                                    try {
+                                        if (_activeGlobalTooltip._source && typeof _activeGlobalTooltip._source.closeTooltip === 'function') {
+                                            _activeGlobalTooltip._source.closeTooltip();
+                                        }
+                                    } catch(_) {}
+                                }
                                 layer.setStyle({ fillOpacity: 0.38, weight: 2.5, color: '#10b981' });
                             });
                             layer.on('mouseout', function() {
+                                if (typeof this.closeTooltip === 'function') {
+                                    try { this.closeTooltip(); } catch(_) {}
+                                }
+                                if (_activeGlobalTooltip === this.getTooltip()) {
+                                    _activeGlobalTooltip = null;
+                                }
                                 layer.setStyle({ fillOpacity: 0.18, weight: 1.5, color: '#059669' });
                             });
                         }
@@ -5221,6 +5282,12 @@
                     }
                     layer.unbindTooltip();
                     layer.bindTooltip(simCardHtml, { sticky: true, opacity: 0.98, className: 'sim-bassin-tooltip' });
+                    layer.off('mouseout.bassinFix');
+                    layer.on('mouseout.bassinFix', function() {
+                        if (typeof this.closeTooltip === 'function') {
+                            try { this.closeTooltip(); } catch(_) {}
+                        }
+                    });
                     layer.bindPopup(simCardHtml);
                     layer.options.pane = 'bassinsPane';
                     layer.setStyle({
@@ -5273,6 +5340,12 @@
                         `;
                         sbLayer.unbindTooltip();
                         sbLayer.bindTooltip(sbTooltipHtml, { sticky: true, opacity: 0.98, className: 'sim-bassin-tooltip' });
+                        sbLayer.off('mouseout.sbFix');
+                        sbLayer.on('mouseout.sbFix', function() {
+                            if (typeof this.closeTooltip === 'function') {
+                                try { this.closeTooltip(); } catch(_) {}
+                            }
+                        });
                     }
                 });
             }
@@ -6571,7 +6644,13 @@
                 arreterOverlaySimulation();
                 btn.disabled = false;
                 btn.innerHTML = '<i class="fas fa-redo me-2"></i> Relancer la simulation';
-                statusDiv.style.display = 'none';
+                if (data && data.cached) {
+                    statusDiv.style.display = 'block';
+                    statusDiv.innerHTML = '<span style="color: #10b981; font-weight: 600;"><i class="fas fa-bolt me-1"></i> Résultats restaurés depuis la sauvegarde (paramètres inchangés)</span>';
+                    setTimeout(() => { if (statusDiv && statusDiv.innerHTML && statusDiv.innerHTML.includes('restaurés')) statusDiv.style.display = 'none'; }, 4500);
+                } else {
+                    statusDiv.style.display = 'none';
+                }
                 
                 if (typeof window.mettreAJourIndicateurBassin === 'function') {
                     const qMax = (data && data.kpis && typeof data.kpis.peak_outflow_m3s === 'number') ? data.kpis.peak_outflow_m3s : 0.0;

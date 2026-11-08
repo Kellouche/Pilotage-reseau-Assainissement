@@ -5,7 +5,7 @@ Lancement asynchrone via Celery, suivi de jobs et récupération des résultats.
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
 from sqlalchemy.orm import Session
-from typing import List, Optional, Any, Dict, Union
+from typing import List, Optional, Any, Dict, Union, Tuple
 from pathlib import Path
 import logging
 import re
@@ -123,6 +123,10 @@ def launch_simulation(
 # ============================================================
 
 from pathlib import Path
+import hashlib
+import json
+import uuid
+from datetime import datetime, timezone
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from src.domain.moteur_swmm import MoteurSWMM, SCENARIOS_PLUIE
@@ -134,6 +138,7 @@ def reinitialiser_derniere_simulation():
     """Efface la dernière simulation en cache pour éviter les fuites entre réseaux."""
     global _DERNIERE_SIMULATION
     _DERNIERE_SIMULATION = {}
+
 
 class SimulationRunRequest(BaseModel):
     scenario_key: str = "pluie_decennale"
@@ -148,8 +153,235 @@ class SimulationRunRequest(BaseModel):
     intensite_max_mmh: Optional[float] = None
     station_id: Optional[str] = "chlef_anrh_siege"
     raccordements_orphelins: Optional[List[Dict[str, Any]]] = None
+    force_recalculate: Optional[bool] = False
 
 SimulationRunRequest.model_rebuild()
+
+
+def _generer_cle_cache_simulation(gpkg_path: Path, payload: SimulationRunRequest) -> Tuple[str, Dict[str, Any]]:
+    """
+    Génère un dictionnaire canonique normalisé et une empreinte SHA-256
+    garantissant l'idempotence exacte de la simulation hydrodynamique.
+    Prend en compte l'état physique du GPKG (mtime) et l'intégralité des paramètres d'ingénierie.
+    """
+    gpkg_stat = gpkg_path.stat() if gpkg_path.exists() else None
+    gpkg_mtime = int(gpkg_stat.st_mtime) if gpkg_stat else 0
+    gpkg_size = int(gpkg_stat.st_size) if gpkg_stat else 0
+
+    orph_ids = []
+    if payload.raccordements_orphelins:
+        for item in payload.raccordements_orphelins:
+            if isinstance(item, dict):
+                orph_ids.append(str(item.get("id", item.get("nom", ""))))
+            else:
+                orph_ids.append(str(item))
+    orph_ids.sort()
+
+    params_dict = {
+        "gpkg_name": gpkg_path.name,
+        "gpkg_mtime": gpkg_mtime,
+        "gpkg_size": gpkg_size,
+        "cluster_id": str(payload.cluster_id),
+        "scenario_key": str(payload.scenario_key),
+        "duree_heures": float(payload.duree_heures) if payload.duree_heures is not None else None,
+        "pas_routage_sec": int(payload.pas_routage_sec or 5),
+        "pente_moyenne_pct": float(payload.pente_moyenne_pct or 1.0),
+        "buffer_m": float(payload.buffer_m or 35.0),
+        "valider_raccordement": bool(payload.valider_raccordement if payload.valider_raccordement is not None else True),
+        "typologie_sol": str(payload.typologie_sol or "habitat_mixte"),
+        "imperv_pct": float(payload.imperv_pct) if payload.imperv_pct is not None else None,
+        "intensite_max_mmh": float(payload.intensite_max_mmh) if payload.intensite_max_mmh is not None else None,
+        "station_id": str(payload.station_id or "chlef_anrh_siege"),
+        "raccordements_orphelins": orph_ids,
+    }
+
+    serialized = json.dumps(params_dict, sort_keys=True, ensure_ascii=False)
+    param_hash = hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
+    return param_hash, params_dict
+
+
+def _get_cache_simulation_file(gpkg_path: Path, cluster_id: Any, param_hash: str) -> Path:
+    """Retourne le chemin vers le fichier de persistance de simulation."""
+    cache_dir = gpkg_path.parent / ".simulation_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    clean_stem = re.sub(r'[^\w\-]+', '_', gpkg_path.stem)
+    return cache_dir / f"sim_{clean_stem}_cluster_{cluster_id}_{param_hash}.json"
+
+
+def _charger_cache_simulation(gpkg_path: Path, cluster_id: Any, param_hash: str) -> Optional[Dict[str, Any]]:
+    """Charge les résultats de la simulation si le fichier de cache existe."""
+    cache_file = _get_cache_simulation_file(gpkg_path, cluster_id, param_hash)
+    if cache_file.exists():
+        try:
+            with open(cache_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if data and "node_results" in data and "conduit_results" in data:
+                return data
+        except Exception as e:
+            logger.warning("Échec de lecture du cache simulation %s: %s", cache_file, e)
+    return None
+
+
+def _sauvegarder_simulation(
+    db: Session,
+    gpkg_path: Path,
+    cluster_id: Any,
+    param_hash: str,
+    params_dict: Dict[str, Any],
+    resultat: Dict[str, Any],
+    proj: Any = None,
+    tenant: Any = None,
+) -> Path:
+    """Sauvegarde les résultats complets sur disque et référence la simulation dans la base SQLite."""
+    from api.models import Simulation
+
+    cache_file = _get_cache_simulation_file(gpkg_path, cluster_id, param_hash)
+
+    # 1. Sauvegarde du JSON complet sur disque
+    try:
+        with open(cache_file, "w", encoding="utf-8") as f:
+            json.dump(resultat, f, ensure_ascii=False)
+    except Exception as e:
+        logger.error("Erreur lors de l'écriture du cache simulation sur disque: %s", e)
+
+    # 2. Enregistrement en base de données SQLAlchemy
+    try:
+        org_id = tenant.org_id if (tenant and hasattr(tenant, "org_id")) else None
+        project_id = proj.id if proj else None
+        project_name = proj.name if proj else gpkg_path.stem
+
+        kpis_summary = {
+            "param_hash": param_hash,
+            "cluster_id": cluster_id,
+            "scenario_key": params_dict.get("scenario_key"),
+            "parameters": params_dict,
+            "peak_outflow_m3s": resultat.get("peak_outflow_m3s"),
+            "routing_continuity_error_pct": resultat.get("routing_continuity_error_pct"),
+            "flooded_nodes_count": resultat.get("flooded_nodes_count", 0),
+            "cached_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+        sim_record = Simulation(
+            id=str(uuid.uuid4()),
+            org_id=org_id,
+            project_id=project_id,
+            name=f"SWMM_{project_name}_{cluster_id}_{params_dict.get('scenario_key', 'pluie')}",
+            status="completed",
+            scenario_pluie=str(params_dict.get("scenario_key", "pluie_decennale")),
+            duree_heures=float(params_dict.get("duree_heures") or 4.0),
+            results_s3_key=str(cache_file.resolve()),
+            summary_kpis=kpis_summary,
+            execution_time_seconds=float(resultat.get("meta", {}).get("execution_duration_sec", 0.0)),
+        )
+        db.add(sim_record)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.warning("Avertissement: enregistrement de la simulation en DB impossible: %s", e)
+
+    return cache_file
+
+
+def _charger_derniere_simulation_disque_ou_db(gpkg_path: Path, db: Session, proj: Any = None) -> Optional[Dict[str, Any]]:
+    """
+    Recherche la simulation la plus récente enregistrée pour ce GeoPackage
+    en vérifiant d'abord la table `simulations` en DB, puis le dossier `.simulation_cache/`.
+    """
+    from api.models import Simulation
+    # 1. Vérifier la table Simulation
+    try:
+        query = db.query(Simulation).filter(Simulation.status == "completed")
+        if proj:
+            query = query.filter(Simulation.project_id == proj.id)
+        last_sim = query.order_by(Simulation.created_at.desc()).first()
+        if last_sim and last_sim.results_s3_key:
+            p = Path(last_sim.results_s3_key)
+            if p.exists():
+                with open(p, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if data and "node_results" in data:
+                    return data
+    except Exception as e:
+        logger.warning("Erreur interrogation table simulations: %s", e)
+
+    # 2. Fallback dossier .simulation_cache/
+    cache_dir = gpkg_path.parent / ".simulation_cache"
+    clean_stem = re.sub(r'[^\w\-]+', '_', gpkg_path.stem)
+    if cache_dir.exists():
+        files = list(cache_dir.glob(f"sim_{clean_stem}_cluster_*.json"))
+        if files:
+            files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+            for fpath in files:
+                try:
+                    with open(fpath, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    if data and "node_results" in data:
+                        return data
+                except Exception:
+                    continue
+    return None
+
+
+def _construire_reponse_simulation(resultat: Dict[str, Any], cached: bool = False) -> Dict[str, Any]:
+    """Structure la réponse standardisée renvoyée au frontend."""
+    message = (
+        "Résultats restaurés instantanément depuis la sauvegarde (paramètres de simulation inchangés)."
+        if cached
+        else "Simulation hydrodynamique SWMM 5.2 exécutée avec succès."
+    )
+    return {
+        "status": "success",
+        "cached": cached,
+        "message": message,
+        "meta": resultat.get("meta", {}),
+        "kpis": {
+            "routing_continuity_error_pct": resultat.get("routing_continuity_error_pct"),
+            "runoff_continuity_error_pct": resultat.get("runoff_continuity_error_pct"),
+            "total_precipitation_mm": resultat.get("total_precipitation_mm"),
+            "total_precipitation_volume_m3": resultat.get("total_precipitation_volume_m3"),
+            "total_runoff_volume_m3": resultat.get("total_runoff_volume_m3"),
+            "total_infiltration_volume_m3": resultat.get("total_infiltration_volume_m3"),
+            "total_outflow_m3": resultat.get("total_outflow_m3"),
+            "peak_outflow_m3s": resultat.get("peak_outflow_m3s"),
+            "effective_runoff_coeff": resultat.get("effective_runoff_coeff"),
+            "peak_time_str": resultat.get("peak_time_str"),
+            "max_velocity_ms": resultat.get("max_velocity_ms"),
+            "autocurage_statut": resultat.get("autocurage_statut"),
+            "autocurage_color": resultat.get("autocurage_color"),
+            "autocurage_note": resultat.get("autocurage_note"),
+            "total_network_length_m": resultat.get("total_network_length_m"),
+            "surcharged_length_m": resultat.get("surcharged_length_m"),
+            "surcharged_length_pct": resultat.get("surcharged_length_pct"),
+            "coherence_pluie_debit": resultat.get("coherence_pluie_debit"),
+            "typologie_sol": resultat.get("meta", {}).get("typologie_sol"),
+            "typologie_nom": resultat.get("meta", {}).get("typologie_nom"),
+            "imperv_pct": resultat.get("meta", {}).get("imperv_pct"),
+            "pluvio_station": resultat.get("meta", {}).get("pluvio_station"),
+            "pluvio_station_id": resultat.get("meta", {}).get("pluvio_station_id"),
+            "pluvio_code_anrh": resultat.get("meta", {}).get("pluvio_code_anrh"),
+            "pluvio_wilaya": resultat.get("meta", {}).get("pluvio_wilaya"),
+            "pluvio_scenario_nom": resultat.get("meta", {}).get("pluvio_scenario_nom"),
+            "pluvio_periode_retour": resultat.get("meta", {}).get("pluvio_periode_retour"),
+            "pluvio_intensite_max_mmh": resultat.get("meta", {}).get("pluvio_intensite_max_mmh"),
+            "pluvio_montana": resultat.get("meta", {}).get("pluvio_montana"),
+            "pluvio_hauteur_totale_mm": resultat.get("meta", {}).get("pluvio_hauteur_totale_mm"),
+            "pluvio_p24_mm": resultat.get("meta", {}).get("pluvio_p24_mm"),
+            "pluvio_source": resultat.get("meta", {}).get("pluvio_source"),
+            "flooded_nodes_count": resultat.get("flooded_nodes_count"),
+            "surcharged_nodes_count": resultat.get("surcharged_nodes_count", 0),
+            "flooded_nodes": resultat.get("flooded_nodes", [])[:15],
+            "q_deleste_m3s": resultat.get("q_deleste_m3s", 0.0),
+            "q_deleste_ls": resultat.get("q_deleste_ls", 0.0),
+            "nb_ouvrages_raccordes": resultat.get("nb_ouvrages_raccordes", 0),
+            "compliance_continuity": resultat.get("compliance_continuity", True),
+        },
+        "buffer_sensitivity": resultat.get("buffer_sensitivity", {}),
+        "agents_expertise": resultat.get("agents_expertise", {}),
+        "node_results": resultat.get("node_results", {}),
+        "conduit_results": resultat.get("conduit_results", {}),
+        "download_inp_url": "/api/v1/simulations/download/inp",
+        "download_rpt_url": "/api/v1/simulations/download/rpt",
+    }
 
 
 class ValidateBufferRequest(BaseModel):
@@ -285,7 +517,9 @@ def run_native_swmm_simulation(
 ):
     """
     Exécute la simulation hydrodynamique EPA SWMM 5.2 native pour le réseau actif.
-    Calcule le ruissellement Voronoï, l'infiltration Horton et les équations de Saint-Venant 1D.
+    Sauvegarde systématiquement les résultats sur disque et en base de données.
+    Implémente un cache intelligent : si aucun paramètre de simulation n'a changé
+    et que le recalcul n'est pas forcé, restaure instantanément la simulation sauvegardée.
     """
     global _DERNIERE_SIMULATION
     from api.models import Project
@@ -293,6 +527,7 @@ def run_native_swmm_simulation(
     # 1. Identifier le fichier réseau GeoPackage du projet actif
     gpkg_path = None
     project_name = None
+    proj = None
     if tenant and hasattr(tenant, "org_id") and tenant.org_id:
         proj = db.query(Project).filter(
             Project.org_id == tenant.org_id,
@@ -326,6 +561,20 @@ def run_native_swmm_simulation(
             detail="Règle hydraulique d'ingénierie : La sectorisation préalable en bassins versants d'exutoires est obligatoire avant la simulation SWMM. Veuillez sélectionner un bassin versant à simuler."
         )
 
+    # 2. Empreinte canonique (hash) des paramètres de simulation
+    param_hash, params_dict = _generer_cle_cache_simulation(gpkg_path, payload)
+
+    # 3. Vérification du cache intelligent (Idempotence & Restauration)
+    if not payload.force_recalculate:
+        cached_resultat = _charger_cache_simulation(gpkg_path, payload.cluster_id, param_hash)
+        if cached_resultat:
+            cached_resultat["source_gpkg"] = str(gpkg_path.resolve())
+            cached_resultat["project_name"] = project_name or gpkg_path.stem
+            _DERNIERE_SIMULATION = cached_resultat
+            logger.info("Simulation SWMM restaurée depuis la sauvegarde (cluster %s, hash %s)", payload.cluster_id, param_hash)
+            return _construire_reponse_simulation(cached_resultat, cached=True)
+
+    # 4. Exécution de la simulation SWMM 5.2 complète si paramètres modifiés ou non en cache
     moteur = MoteurSWMM()
     try:
         resultat = moteur.executer_simulation(
@@ -345,60 +594,22 @@ def run_native_swmm_simulation(
         )
         resultat["source_gpkg"] = str(gpkg_path.resolve())
         resultat["project_name"] = project_name or gpkg_path.stem
+        resultat["param_hash"] = param_hash
         _DERNIERE_SIMULATION = resultat
 
-        return {
-            "status": "success",
-            "message": "Simulation hydrodynamique SWMM 5.2 exécutée avec succès.",
-            "meta": resultat.get("meta", {}),
-            "kpis": {
-                "routing_continuity_error_pct": resultat.get("routing_continuity_error_pct"),
-                "runoff_continuity_error_pct": resultat.get("runoff_continuity_error_pct"),
-                "total_precipitation_mm": resultat.get("total_precipitation_mm"),
-                "total_precipitation_volume_m3": resultat.get("total_precipitation_volume_m3"),
-                "total_runoff_volume_m3": resultat.get("total_runoff_volume_m3"),
-                "total_infiltration_volume_m3": resultat.get("total_infiltration_volume_m3"),
-                "total_outflow_m3": resultat.get("total_outflow_m3"),
-                "peak_outflow_m3s": resultat.get("peak_outflow_m3s"),
-                "effective_runoff_coeff": resultat.get("effective_runoff_coeff"),
-                "peak_time_str": resultat.get("peak_time_str"),
-                "max_velocity_ms": resultat.get("max_velocity_ms"),
-                "autocurage_statut": resultat.get("autocurage_statut"),
-                "autocurage_color": resultat.get("autocurage_color"),
-                "autocurage_note": resultat.get("autocurage_note"),
-                "total_network_length_m": resultat.get("total_network_length_m"),
-                "surcharged_length_m": resultat.get("surcharged_length_m"),
-                "surcharged_length_pct": resultat.get("surcharged_length_pct"),
-                "coherence_pluie_debit": resultat.get("coherence_pluie_debit"),
-                "typologie_sol": resultat.get("meta", {}).get("typologie_sol"),
-                "typologie_nom": resultat.get("meta", {}).get("typologie_nom"),
-                "imperv_pct": resultat.get("meta", {}).get("imperv_pct"),
-                "pluvio_station": resultat.get("meta", {}).get("pluvio_station"),
-                "pluvio_station_id": resultat.get("meta", {}).get("pluvio_station_id"),
-                "pluvio_code_anrh": resultat.get("meta", {}).get("pluvio_code_anrh"),
-                "pluvio_wilaya": resultat.get("meta", {}).get("pluvio_wilaya"),
-                "pluvio_scenario_nom": resultat.get("meta", {}).get("pluvio_scenario_nom"),
-                "pluvio_periode_retour": resultat.get("meta", {}).get("pluvio_periode_retour"),
-                "pluvio_intensite_max_mmh": resultat.get("meta", {}).get("pluvio_intensite_max_mmh"),
-                "pluvio_montana": resultat.get("meta", {}).get("pluvio_montana"),
-                "pluvio_hauteur_totale_mm": resultat.get("meta", {}).get("pluvio_hauteur_totale_mm"),
-                "pluvio_p24_mm": resultat.get("meta", {}).get("pluvio_p24_mm"),
-                "pluvio_source": resultat.get("meta", {}).get("pluvio_source"),
-                "flooded_nodes_count": resultat.get("flooded_nodes_count"),
-                "surcharged_nodes_count": resultat.get("surcharged_nodes_count", 0),
-                "flooded_nodes": resultat.get("flooded_nodes", [])[:15],
-                "q_deleste_m3s": resultat.get("q_deleste_m3s", 0.0),
-                "q_deleste_ls": resultat.get("q_deleste_ls", 0.0),
-                "nb_ouvrages_raccordes": resultat.get("nb_ouvrages_raccordes", 0),
-                "compliance_continuity": resultat.get("compliance_continuity", True),
-            },
-            "buffer_sensitivity": resultat.get("buffer_sensitivity", {}),
-            "agents_expertise": resultat.get("agents_expertise", {}),
-            "node_results": resultat.get("node_results", {}),
-            "conduit_results": resultat.get("conduit_results", {}),
-            "download_inp_url": "/api/v1/simulations/download/inp",
-            "download_rpt_url": "/api/v1/simulations/download/rpt",
-        }
+        # 5. Persistance sur disque et en base de données SQLite
+        _sauvegarder_simulation(
+            db=db,
+            gpkg_path=gpkg_path,
+            cluster_id=payload.cluster_id,
+            param_hash=param_hash,
+            params_dict=params_dict,
+            resultat=resultat,
+            proj=proj,
+            tenant=tenant
+        )
+
+        return _construire_reponse_simulation(resultat, cached=False)
     except ValueError as ve:
         logger.warning("Arrêt de la simulation SWMM (altimétrie requise) : %s", ve)
         raise HTTPException(status_code=400, detail=str(ve))
@@ -414,14 +625,15 @@ def get_latest_simulation(
 ):
     """
     Retourne les résultats et cartographies thématiques de la dernière simulation exécutée
-    uniquement si elle correspond au réseau actuellement actif.
+    pour le réseau actif. Si la mémoire est vide (ex: redémarrage serveur), charge automatiquement
+    la dernière simulation sauvegardée sur disque ou en base de données.
     """
     global _DERNIERE_SIMULATION
-    if not _DERNIERE_SIMULATION or "node_results" not in _DERNIERE_SIMULATION:
-        return {"status": "none", "message": "Aucune simulation enregistrée pour ce réseau."}
-
     from api.models import Project
+
     active_gpkg = None
+    project_name = None
+    proj = None
     if tenant and tenant.org_id:
         proj = db.query(Project).filter(
             Project.org_id == tenant.org_id,
@@ -429,55 +641,37 @@ def get_latest_simulation(
         ).first()
         if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
             active_gpkg = str(Path(proj.source_gpkg_key).resolve())
+            project_name = proj.name
     if not active_gpkg:
         proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
         if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
             active_gpkg = str(Path(proj.source_gpkg_key).resolve())
+            project_name = proj.name
         elif Path("data/demo_reseau.gpkg").exists():
             active_gpkg = str(Path("data/demo_reseau.gpkg").resolve())
+            project_name = "demo_reseau"
 
-    sim_gpkg = _DERNIERE_SIMULATION.get("source_gpkg")
+    # Vérification de la cohérence de _DERNIERE_SIMULATION
+    sim_gpkg = _DERNIERE_SIMULATION.get("source_gpkg") if _DERNIERE_SIMULATION else None
     norm_active = str(Path(active_gpkg).resolve()).lower() if active_gpkg else ""
     norm_sim = str(Path(sim_gpkg).resolve()).lower() if sim_gpkg else ""
 
-    if not norm_active or not norm_sim or norm_active != norm_sim:
-        # La simulation en mémoire appartenait à un autre modèle/démo ou le fichier a changé
-        _DERNIERE_SIMULATION = {}
-        return {"status": "none", "message": "Aucune simulation enregistrée pour le réseau actif."}
+    if not _DERNIERE_SIMULATION or "node_results" not in _DERNIERE_SIMULATION or norm_active != norm_sim:
+        # Tenter la restauration depuis la base ou le cache disque
+        if active_gpkg and Path(active_gpkg).exists():
+            restored = _charger_derniere_simulation_disque_ou_db(Path(active_gpkg), db, proj)
+            if restored and "node_results" in restored:
+                restored["source_gpkg"] = str(Path(active_gpkg).resolve())
+                restored["project_name"] = project_name or Path(active_gpkg).stem
+                _DERNIERE_SIMULATION = restored
+            else:
+                _DERNIERE_SIMULATION = {}
+                return {"status": "none", "message": "Aucune simulation enregistrée pour ce réseau."}
+        else:
+            _DERNIERE_SIMULATION = {}
+            return {"status": "none", "message": "Aucune simulation enregistrée pour ce réseau."}
 
-    resultat = _DERNIERE_SIMULATION
-    return {
-        "status": "success",
-        "meta": resultat.get("meta", {}),
-        "kpis": {
-            "routing_continuity_error_pct": resultat.get("routing_continuity_error_pct"),
-            "runoff_continuity_error_pct": resultat.get("runoff_continuity_error_pct"),
-            "total_precipitation_mm": resultat.get("total_precipitation_mm"),
-            "total_outflow_m3": resultat.get("total_outflow_m3"),
-            "peak_outflow_m3s": resultat.get("peak_outflow_m3s"),
-            "q_deleste_m3s": resultat.get("q_deleste_m3s", 0.0),
-            "q_deleste_ls": resultat.get("q_deleste_ls", 0.0),
-            "nb_ouvrages_raccordes": resultat.get("nb_ouvrages_raccordes", 0),
-            "flooded_nodes_count": resultat.get("flooded_nodes_count", 0),
-            "surcharged_nodes_count": resultat.get("surcharged_nodes_count", 0),
-            "flooded_nodes": resultat.get("flooded_nodes", [])[:15],
-            "pluvio_station": resultat.get("meta", {}).get("pluvio_station"),
-            "pluvio_scenario_nom": resultat.get("meta", {}).get("pluvio_scenario_nom"),
-            "pluvio_periode_retour": resultat.get("meta", {}).get("pluvio_periode_retour"),
-            "pluvio_intensite_max_mmh": resultat.get("meta", {}).get("pluvio_intensite_max_mmh"),
-            "pluvio_montana": resultat.get("meta", {}).get("pluvio_montana"),
-            "pluvio_hauteur_totale_mm": resultat.get("meta", {}).get("pluvio_hauteur_totale_mm"),
-            "pluvio_p24_mm": resultat.get("meta", {}).get("pluvio_p24_mm"),
-            "pluvio_source": resultat.get("meta", {}).get("pluvio_source"),
-            "compliance_continuity": resultat.get("compliance_continuity", True),
-        },
-        "buffer_sensitivity": resultat.get("buffer_sensitivity", {}),
-        "agents_expertise": resultat.get("agents_expertise", {}),
-        "node_results": resultat.get("node_results", {}),
-        "conduit_results": resultat.get("conduit_results", {}),
-        "download_inp_url": "/api/v1/simulations/download/inp",
-        "download_rpt_url": "/api/v1/simulations/download/rpt",
-    }
+    return _construire_reponse_simulation(_DERNIERE_SIMULATION, cached=True)
 
 
 @router.post("/validate-buffer")

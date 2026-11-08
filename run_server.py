@@ -1,11 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Lancement du serveur FastAPI en production (sans auto-reload).
+Lancement du serveur FastAPI en production (avec support mode silencieux).
+Usage:
+  python run_server.py            # Mode standard (logs d'accès complets)
+  python run_server.py --silent   # Mode silencieux (sans flood console, sans access logs)
 """
 
 import os
 import sys
+import argparse
+import logging
 
 # Prévention des allocations concurrentes OpenBLAS sous Windows
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
@@ -17,7 +22,7 @@ import time
 import uvicorn
 from config.settings import API_HOST, API_PORT
 
-def kill_process_on_port(port):
+def kill_process_on_port(port, silent=False):
     """Cherche et tue le processus écoutant sur le port donné (Windows)."""
     try:
         output = subprocess.check_output(['netstat', '-ano']).decode('utf-8', errors='ignore')
@@ -27,24 +32,43 @@ def kill_process_on_port(port):
                 parts = line.split()
                 pid = parts[-1]
                 if pid != "0" and pid not in killed_pids:
-                    print(f"Port {port} deja utilise par le PID {pid}. Fermeture forcée de l'arbre de processus...")
-                    subprocess.call(['taskkill', '/F', '/T', '/PID', pid])
+                    if not silent:
+                        print(f"Port {port} déjà utilisé par le PID {pid}. Fermeture forcée de l'arbre de processus...")
+                    subprocess.call(['taskkill', '/F', '/T', '/PID', pid], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                     killed_pids.add(pid)
         
         if killed_pids:
-            time.sleep(2) # Laisser le temps à l'OS de libérer le port
+            time.sleep(2)  # Laisser le temps à l'OS de libérer le port
     except Exception as e:
-        print(f"Impossible de vérifier/tuer le port {port} : {e}")
+        if not silent:
+            print(f"Impossible de vérifier/tuer le port {port} : {e}")
 
 if __name__ == "__main__":
-    kill_process_on_port(API_PORT)
+    parser = argparse.ArgumentParser(description="Serveur API DrainPilot SWMM Platform")
+    parser.add_argument("--silent", "-s", "--quiet", "-q", action="store_true",
+                        help="Démarrer en mode silencieux (désactive les access logs et le flood console)")
+    args, unknown = parser.parse_known_args()
 
-    print("=" * 60)
-    print("Démarrage DrainPilot - API Server (Mode Résilient)")
-    print(f"  URL: http://{API_HOST}:{API_PORT}")
-    print(f"  Docs: http://{API_HOST}:{API_PORT}/docs")
-    print("  Appuyez sur Ctrl+C pour arrêter")
-    print("=" * 60)
+    # Détection mode silencieux via flag ou variable d'environnement
+    is_silent = args.silent or (os.getenv("DRAINPILOT_SILENT", "").lower() in ("1", "true", "yes"))
+    if is_silent:
+        os.environ["DRAINPILOT_SILENT"] = "1"
+        # Ajuster les loggers Python
+        logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+        logging.getLogger("uvicorn.error").setLevel(logging.WARNING)
+
+    kill_process_on_port(API_PORT, silent=is_silent)
+
+    if is_silent:
+        print(f"[DrainPilot] 🚀 Serveur démarré en mode SILENCIEUX sur http://{API_HOST}:{API_PORT} (Ctrl+C pour arrêter)")
+    else:
+        print("=" * 60)
+        print("Démarrage DrainPilot - API Server (Mode Résilient)")
+        print(f"  URL: http://{API_HOST}:{API_PORT}")
+        print(f"  Docs: http://{API_HOST}:{API_PORT}/docs")
+        print("  Mode verbeux actif (utiliser --silent pour le mode silencieux)")
+        print("  Appuyez sur Ctrl+C pour arrêter")
+        print("=" * 60)
 
     import contextlib
     @contextlib.contextmanager
@@ -54,13 +78,16 @@ if __name__ == "__main__":
     while True:
         try:
             reload_mode = os.getenv("API_RELOAD", "true").lower() in ("true", "1", "yes")
+            log_level = "warning" if is_silent else "info"
+            access_log = not is_silent
+
             config = uvicorn.Config(
                 "api.main:app",
                 host=API_HOST,
                 port=API_PORT,
                 reload=reload_mode,
-                log_level="info",
-                access_log=True
+                log_level=log_level,
+                access_log=access_log
             )
             server = uvicorn.Server(config)
             server.capture_signals = no_capture
@@ -70,6 +97,7 @@ if __name__ == "__main__":
             print("\n[INFO] Serveur arrêté proprement par l'utilisateur.")
             break
         except Exception as e:
-            print(f"\n[WARN] Relance du serveur suite à incident: {e}")
-            kill_process_on_port(API_PORT)
+            if not is_silent:
+                print(f"\n[WARN] Relance du serveur suite à incident: {e}")
+            kill_process_on_port(API_PORT, silent=is_silent)
             time.sleep(1)

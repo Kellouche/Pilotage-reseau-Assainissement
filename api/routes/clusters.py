@@ -23,6 +23,13 @@ _GRAPH_CACHES: Dict[str, nx.DiGraph] = {}
 _GRAPH_STATUS = "pending"  # pending | building | ready | error
 
 
+def _log_cluster(*args, **kwargs):
+    """Affiche les logs d'analyse des clusters sauf si le mode silencieux est actif."""
+    import os
+    if os.getenv("DRAINPILOT_SILENT", "").lower() not in ("1", "true", "yes"):
+        print(*args, **kwargs)
+
+
 def _get_current_user_from_request(request: Request, db: Session):
     """Extrait l'utilisateur authentifié depuis le cookie ou l'en-tête Bearer."""
     if not request:
@@ -66,14 +73,14 @@ def _get_graph(chemin_gpkg: Optional[str] = None):
         _GRAPH_STATUS = "building"
         try:
             from src.domain.graphe_reseau import construire_graphe
-            print(f"[clusters] Building graph for {cache_key}...", flush=True)
+            _log_cluster(f"[clusters] Building graph for {cache_key}...", flush=True)
             G = construire_graphe(chemin_gpkg)
             _GRAPH_CACHES[cache_key] = G
             _GRAPH_STATUS = "ready"
-            print(f"[clusters] Graph built and cached for {cache_key}.", flush=True)
+            _log_cluster(f"[clusters] Graph built and cached for {cache_key}.", flush=True)
         except Exception as e:
             _GRAPH_STATUS = "error"
-            print(f"[clusters] ERROR building graph: {e}", flush=True)
+            _log_cluster(f"[clusters] ERROR building graph: {e}", flush=True)
             raise
     return _GRAPH_CACHES[cache_key]
 
@@ -203,14 +210,14 @@ def _warm_graph_cache(chemin_gpkg: Optional[str] = None):
     try:
         from src.domain.graphe_reseau import construire_graphe
         cache_key = str(chemin_gpkg) if chemin_gpkg else "default"
-        print(f"[clusters] Warming graph cache for {cache_key}...", flush=True)
+        _log_cluster(f"[clusters] Warming graph cache for {cache_key}...", flush=True)
         G = construire_graphe(chemin_gpkg)
         _GRAPH_CACHES[cache_key] = G
         _GRAPH_STATUS = "ready"
-        print(f"[clusters] Graph cache warmed for {cache_key}.", flush=True)
+        _log_cluster(f"[clusters] Graph cache warmed for {cache_key}.", flush=True)
     except Exception as e:
         _GRAPH_STATUS = "error"
-        print(f"[clusters] ERROR warming graph cache: {e}", flush=True)
+        _log_cluster(f"[clusters] ERROR warming graph cache: {e}", flush=True)
 
 
 def _calculate_clusters_background():
@@ -220,11 +227,11 @@ def _calculate_clusters_background():
         proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
         chemin_gpkg = proj.source_gpkg_key if (proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists()) else None
         result = _calculate_clusters(db, persist=True, chemin_gpkg=chemin_gpkg)
-        print("[cluster][background] Recalculation completed", flush=True)
+        _log_cluster("[cluster][background] Recalculation completed", flush=True)
         # Optionally log result summary
-        print(f"[cluster][background] {result.get('clusters_crees', 0)} clusters créés", flush=True)
+        _log_cluster(f"[cluster][background] {result.get('clusters_crees', 0)} clusters créés", flush=True)
     except Exception as e:
-        print(f"[cluster][background] Erreur: {e}", flush=True)
+        _log_cluster(f"[cluster][background] Erreur: {e}", flush=True)
     finally:
         db.close()
 
@@ -252,16 +259,16 @@ def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional
 
     if not persist:
         if cache_key in _CLUSTERS_CACHE:
-            print(f"[clusters] Cache mémoire hit pour {cache_key}", flush=True)
+            _log_cluster(f"[clusters] Cache mémoire hit pour {cache_key}", flush=True)
             return _CLUSTERS_CACHE[cache_key]
         if norm_key in _CLUSTERS_CACHE:
-            print(f"[clusters] Cache mémoire hit pour {norm_key}", flush=True)
+            _log_cluster(f"[clusters] Cache mémoire hit pour {norm_key}", flush=True)
             return _CLUSTERS_CACHE[norm_key]
 
         disk_path = _get_clusters_disk_cache_path(chemin_gpkg)
         if disk_path and disk_path.exists():
             try:
-                print(f"[clusters] Cache disque hit pour {cache_key}", flush=True)
+                _log_cluster(f"[clusters] Cache disque hit pour {cache_key}", flush=True)
                 with open(disk_path, "r", encoding="utf-8") as f:
                     cached_res = json.load(f)
                 if cached_res.get("clusters_crees") and cached_res.get("resultats"):
@@ -269,7 +276,7 @@ def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional
                     _CLUSTERS_CACHE[norm_key] = cached_res
                     return cached_res
             except Exception as e:
-                print(f"[clusters] Erreur lecture cache disque: {e}", flush=True)
+                _log_cluster(f"[clusters] Erreur lecture cache disque: {e}", flush=True)
 
         # Protection concurrence : un seul thread exécute le partitionnement à la fois
         with _CLUSTERS_LOCK:
@@ -287,7 +294,7 @@ def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional
                         _CLUSTERS_CACHE[norm_key] = cached_res
                         return cached_res
                 except Exception as e:
-                    print(f"[clusters] Erreur lecture cache disque sous verrou: {e}", flush=True)
+                    _log_cluster(f"[clusters] Erreur lecture cache disque sous verrou: {e}", flush=True)
 
             # Si le cache n'a pas les bassins, lancer le partitionnement topologique
             if chemin_gpkg and Path(chemin_gpkg).exists():
@@ -301,7 +308,7 @@ def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional
                         _CLUSTERS_CACHE[norm_key] = cached_res
                         return cached_res
                 except Exception as e:
-                    print(f"[clusters] Erreur partitionnement: {e}", flush=True)
+                    _log_cluster(f"[clusters] Erreur partitionnement: {e}", flush=True)
 
     # Récupérer le graphe (depuis le cache ou construit pour ce gpkg)
     G = _get_graph(chemin_gpkg)
@@ -337,7 +344,7 @@ def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional
             G.remove_edge(u, v)
         cycles_casses.append((str(u), str(v)))
     if cycles_casses:
-        print(f"[cluster] {len(cycles_casses)} cycle(s) neutralise(s) avant tracage", flush=True)
+        _log_cluster(f"[cluster] {len(cycles_casses)} cycle(s) neutralise(s) avant tracage", flush=True)
 
     if persist:
         # Nettoyer les anciens clusters pour éviter l'affichage de "bassins fantômes" des précédents calculs
@@ -347,13 +354,13 @@ def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional
             db.query(crud.Rejet).update({crud.Rejet.cluster_id: None})
             db.query(crud.Cluster).delete()
             db.commit()
-            print("[cluster] Anciens clusters purgés de la base de données.", flush=True)
+            _log_cluster("[cluster] Anciens clusters purgés de la base de données.", flush=True)
         except Exception as e:
             db.rollback()
-            print(f"[cluster] Erreur lors de la purge des anciens clusters: {e}", flush=True)
+            _log_cluster(f"[cluster] Erreur lors de la purge des anciens clusters: {e}", flush=True)
 
     # 1. Exutoires physiques
-    print("[cluster] Identification des exutoires physiques…", flush=True)
+    _log_cluster("[cluster] Identification des exutoires physiques…", flush=True)
     exutoires_physiques = trouver_exutoires_physiques(G)
     if not exutoires_physiques:
         exutoires_physiques = trouver_exutoires_physiques(G, inclure_exutoires_implicites=True)
@@ -369,11 +376,11 @@ def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional
         }
 
     # 2. Composantes orphelines (pour information)
-    print("[cluster] Détection des tronçons orphelins…", flush=True)
+    _log_cluster("[cluster] Détection des tronçons orphelins…", flush=True)
     composantes_orphelines = detecter_composantes_orphelines(G)
 
-    print(f"[cluster] {len(exutoires_physiques)} exutoires, {len(composantes_orphelines)} composantes", flush=True)
-    print(
+    _log_cluster(f"[cluster] {len(exutoires_physiques)} exutoires, {len(composantes_orphelines)} composantes", flush=True)
+    _log_cluster(
         f"[cluster] Objectif: {len(exutoires_physiques)} bassins hydrauliques urbains, "
         "un par exutoire physique.",
         flush=True,
@@ -645,9 +652,9 @@ def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional
             try:
                 with open(disk_path, "w", encoding="utf-8") as f:
                     json.dump(final_res, f, ensure_ascii=False)
-                print(f"[clusters] Cache disque sauvegardé: {disk_path}", flush=True)
+                _log_cluster(f"[clusters] Cache disque sauvegardé: {disk_path}", flush=True)
             except Exception as e:
-                print(f"[clusters] Erreur écriture cache disque: {e}", flush=True)
+                _log_cluster(f"[clusters] Erreur écriture cache disque: {e}", flush=True)
 
     return final_res
 
