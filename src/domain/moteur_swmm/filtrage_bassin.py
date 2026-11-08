@@ -76,29 +76,45 @@ def extraire_sous_reseau_bassin(
             with open(cache_file, "r", encoding="utf-8") as fc:
                 cdata = json.load(fc)
             feats = cdata.get("bassins_geojson", {}).get("features", [])
+            matched_fp = None
             for f in feats:
                 fp = f.get("properties", {})
                 fnom = str(fp.get("nom", "")).strip()
-                if fnom.lower() == cid_str.lower():
-                    target_ex_id = fnom
-                    bassin_nom = fnom
+                fcid = fp.get("cluster_id")
+                if fnom.lower() == cid_str.lower() or (cid_int is not None and fcid == cid_int):
+                    matched_fp = fp
                     break
-            if not target_ex_id:
-                for f in feats:
-                    fp = f.get("properties", {})
-                    fnom = str(fp.get("nom", "")).strip()
-                    if fnom.lower().startswith(f"{cid_str.lower()}_"):
-                        target_ex_id = fnom
-                        bassin_nom = fnom
+                if fnom.lower().startswith(f"{cid_str.lower()}_"):
+                    matched_fp = fp
+                    break
+
+            if matched_fp:
+                bassin_nom = matched_fp.get("nom")
+                cand_ids = [
+                    matched_fp.get("exutoire_id"),
+                    matched_fp.get("regard_proche_id"),
+                    matched_fp.get("nom_exutoire"),
+                    matched_fp.get("nom")
+                ]
+                for cand in cand_ids:
+                    if not cand:
+                        continue
+                    cand_str = str(cand).strip()
+                    if cand_str in exutoires_map or (G_topo and G_topo.has_node(cand_str)):
+                        target_ex_id = cand_str
                         break
-            if not target_ex_id and cid_int is not None:
-                for f in feats:
-                    fp = f.get("properties", {})
-                    if fp.get("cluster_id") == cid_int:
-                        fnom = str(fp.get("nom", "")).strip()
-                        target_ex_id = fnom
-                        bassin_nom = fnom
+                    if cand_str.endswith(".0") and G_topo and G_topo.has_node(cand_str[:-2]):
+                        target_ex_id = cand_str[:-2]
                         break
+                    if G_topo and G_topo.has_node(f"{cand_str}.0"):
+                        target_ex_id = f"{cand_str}.0"
+                        break
+
+                if not target_ex_id and bassin_nom:
+                    for ex_k, ex_v in exutoires_map.items():
+                        if str(ex_v.get("nom", "")).strip().lower() == bassin_nom.lower():
+                            target_ex_id = str(ex_k)
+                            break
         except Exception as e_cjson:
             logger.warning(f"Lecture clusters_cache: {e_cjson}")
 
@@ -162,7 +178,7 @@ def extraire_sous_reseau_bassin(
         queue = [target_ex_id]
         ex_set = set(exutoires_map.keys())
 
-        if est_deporte and valider_raccordement_deporte and regard_proche and G_topo.has_node(regard_proche):
+        if regard_proche and G_topo.has_node(regard_proche) and (est_deporte or G_topo.in_degree(target_ex_id) == 0):
             target_nodes.add(regard_proche)
             queue.append(regard_proche)
 
@@ -233,9 +249,14 @@ def extraire_sous_reseau_bassin(
             from shapely.geometry import Point, LineString
             ex_pt = ex_info.get("geometry")
             if ex_pt is None or (hasattr(ex_pt, 'is_empty') and ex_pt.is_empty):
-                x = float(ex_info.get("x", 100.0))
-                y = float(ex_info.get("y", 100.0))
-                ex_pt = Point(x, y)
+                if G_topo and G_topo.has_node(target_ex_id) and G_topo.nodes[target_ex_id].get("geometry"):
+                    ex_pt = G_topo.nodes[target_ex_id].get("geometry")
+                elif not regards.empty and hasattr(regards.iloc[0], "geometry"):
+                    ex_pt = regards.iloc[0].geometry
+                else:
+                    x = float(ex_info.get("x") or 345000.0)
+                    y = float(ex_info.get("y") or 4000000.0)
+                    ex_pt = Point(x, y)
 
             reg_code = _clean_node_id(target_ex_id, fallback=f"REG_{cid_int}")
             if len(regards) == 0:

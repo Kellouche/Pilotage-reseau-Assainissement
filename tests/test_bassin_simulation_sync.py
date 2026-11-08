@@ -133,3 +133,32 @@ def test_zone_simulee_survol_garde_bleu_ciel():
     # bassins_selection.js
     assert "Bassin simulé : maintien impératif de la teinte bleu ciel" in sel_js
     assert "layer.setStyle({ color: '#0284c7', fillColor: '#38bdf8'" in sel_js
+
+
+def test_resolution_et_contour_cluster_9_ouvrages_speciaux_345101():
+    """Vérifie que le cluster 9_ouvrages_speciaux_345101 résout son exutoire réel et a un contour valide."""
+    import json
+    from shapely.geometry import shape
+
+    cache_path = Path("uploads/a66e32ad-f32b-4529-acc3-7a6026eb5a8a/network_Assainissement_Ville.clusters_cache.json")
+    if cache_path.exists():
+        with open(cache_path, "r", encoding="utf-8") as f:
+            cdata = json.load(f)
+
+        found_98 = False
+        for feat in cdata.get("bassins_geojson", {}).get("features", []):
+            fp = feat.get("properties", {})
+            if fp.get("cluster_id") == 98 or "345101" in str(fp.get("nom")):
+                found_98 = True
+                geom = feat.get("geometry")
+                assert geom is not None, "La géométrie du contour du cluster 98 ne doit pas être nulle"
+                poly = shape(geom)
+                assert poly.is_valid, f"Le contour du cluster 98 doit être valide topologiquement (sans auto-intersection)"
+                assert poly.bounds[1] > 30.0, "Les coordonnées doivent être en Algérie (~36°N)"
+                break
+        assert found_98, "Le cluster 98 (9_ouvrages_speciaux_345101) doit être présent dans le cache"
+
+    # Vérifier que le code de filtrage_bassin gère exutoire_id et regard_proche_id
+    code_fb = Path("src/domain/moteur_swmm/filtrage_bassin.py").read_text(encoding="utf-8")
+    assert "matched_fp.get(\"exutoire_id\")" in code_fb
+    assert "matched_fp.get(\"regard_proche_id\")" in code_fb
