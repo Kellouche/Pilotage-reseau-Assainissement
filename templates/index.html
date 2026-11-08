@@ -269,16 +269,34 @@
         .tool-tip:hover::after {
             content: attr(data-tip);
             position: absolute;
-            left: 50px;
+            right: calc(100% + 12px);
+            left: auto;
             top: 50%;
             transform: translateY(-50%);
-            background: #1a1a2e;
-            padding: 5px 10px;
-            border-radius: 4px;
+            background: rgba(15, 23, 42, 0.96);
+            color: #f8fafc;
+            padding: 6px 12px;
+            border-radius: 6px;
             font-size: 12px;
+            font-weight: 600;
             white-space: nowrap;
-            z-index: 1001;
-            border: 1px solid #e94560;
+            z-index: 3000;
+            border: 1px solid rgba(56, 189, 248, 0.5);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            pointer-events: none;
+        }
+
+        .tool-tip:hover::before {
+            content: '';
+            position: absolute;
+            right: calc(100% + 4px);
+            top: 50%;
+            transform: translateY(-50%);
+            border-width: 5px 0 5px 6px;
+            border-style: solid;
+            border-color: transparent transparent transparent rgba(56, 189, 248, 0.5);
+            z-index: 3001;
+            pointer-events: none;
         }
 #bassin-section {
             display: none;
@@ -788,10 +806,16 @@
             return `${s} DZD`;
         };
 
-        let carte = L.map('map').setView([36.15, 1.33], 13);
+        let carte = L.map('map', {
+            maxZoom: 22,
+            zoomSnap: 0.5,
+            zoomDelta: 0.5
+        }).setView([36.15, 1.33], 13);
         window.carte = carte;
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap'
+            attribution: '© OpenStreetMap',
+            maxZoom: 22,
+            maxNativeZoom: 19
         }).addTo(carte);
 
         // Hiérarchie cartographique des Panes Leaflet (z-index)
@@ -855,7 +879,8 @@
             if (zoom <= 13) return 4.5;
             if (zoom <= 15) return 6.0;
             if (zoom <= 17) return 8.0;
-            return 10.0;
+            if (zoom <= 19) return 10.0;
+            return 12.0;
         }
         window.calculerRayonOuvrageSpecial = calculerRayonOuvrageSpecial;
 
@@ -871,12 +896,12 @@
         });
 
         // ============================================================
-        // GESTIONNAIRE STRICT D'INFOBULLE UNIQUE (ANTI-CHEVAUCHEMENT LEAFLET)
+        // GESTIONNAIRE STRICT D'INFOBULLE UNIQUE (ANTI-CHEVAUCHEMENT LEAFLET SANS CASSE DU DOM)
         // ============================================================
         let _activeGlobalTooltip = null;
 
         carte.on('tooltipopen', function(e) {
-            // S'il y a déjà une infobulle ouverte différente, on la ferme immédiatement
+            // S'il y a déjà une infobulle ouverte différente, on la ferme proprement via l'API Leaflet
             if (_activeGlobalTooltip && _activeGlobalTooltip !== e.tooltip) {
                 try {
                     if (_activeGlobalTooltip._source && typeof _activeGlobalTooltip._source.closeTooltip === 'function') {
@@ -888,18 +913,10 @@
             }
             _activeGlobalTooltip = e.tooltip;
 
-            // Purge DOM de sécurité : toute autre infobulle visible dans le conteneur Leaflet est masquée
-            try {
-                const pane = carte.getPane('tooltipPane');
-                if (pane) {
-                    const allTips = pane.querySelectorAll('.leaflet-tooltip');
-                    allTips.forEach(tipEl => {
-                        if (e.tooltip && e.tooltip._container && tipEl !== e.tooltip._container) {
-                            tipEl.style.display = 'none';
-                        }
-                    });
-                }
-            } catch(_) {}
+            // Garantir que le tooltip actif est bien visible sans style display parasite
+            if (e.tooltip && e.tooltip._container) {
+                e.tooltip._container.style.display = '';
+            }
         });
 
         carte.on('tooltipclose', function(e) {
@@ -908,7 +925,7 @@
             }
         });
 
-        // Fermer automatiquement et instantanément toutes les infobulles lors des déplacements cartographiques ou clics
+        // Fermer proprement toutes les infobulles lors des déplacements cartographiques ou clics via l'API Leaflet
         carte.on('zoomstart movestart dragstart click', function() {
             _activeGlobalTooltip = null;
             carte.eachLayer(function(l) {
@@ -916,12 +933,6 @@
                     try { l.closeTooltip(); } catch(e) {}
                 }
             });
-            try {
-                const pane = carte.getPane('tooltipPane');
-                if (pane) {
-                    pane.querySelectorAll('.leaflet-tooltip').forEach(el => el.remove());
-                }
-            } catch(_) {}
         });
 
         function basculerCoucheBassins(checked) {
@@ -1918,6 +1929,8 @@
                                     const tipHtml = window.genererTooltipBassinVersantHtml(feature.properties);
                                     layer.bindTooltip(tipHtml, {
                                         sticky: true,
+                                        direction: 'left',
+                                        offset: [-15, 0],
                                         opacity: 0.98,
                                         className: 'sim-bassin-tooltip'
                                     });
@@ -1974,7 +1987,12 @@
                                             ${p.milieu_rec ? `<div><b>Milieu récepteur :</b> ${p.milieu_rec}</div>` : ''}
                                         </div>
                                     `;
-                                    layer.bindTooltip(tipHtml, { sticky: true, opacity: 0.98 });
+                                    layer.bindTooltip(tipHtml, {
+                                        sticky: true,
+                                        direction: 'left',
+                                        offset: [-15, 0],
+                                        opacity: 0.98
+                                    });
                                     layer.bindPopup(tipHtml);
                                     layer.on('click', function(e) {
                                         L.DomEvent.stopPropagation(e);
@@ -5465,7 +5483,13 @@
                     }
                     const fullSimTooltip = window.genererTooltipBassinVersantHtml ? window.genererTooltipBassinVersantHtml(f.properties, data) : simCardHtml;
                     layer.unbindTooltip();
-                    layer.bindTooltip(fullSimTooltip, { sticky: true, opacity: 0.98, className: 'sim-bassin-tooltip' });
+                    layer.bindTooltip(fullSimTooltip, {
+                        sticky: true,
+                        direction: 'left',
+                        offset: [-15, 0],
+                        opacity: 0.98,
+                        className: 'sim-bassin-tooltip'
+                    });
                     layer.off('mouseout.bassinFix');
                     layer.on('mouseout.bassinFix', function() {
                         if (typeof this.closeTooltip === 'function') {
@@ -5525,7 +5549,13 @@
                             </div>
                         `;
                         sbLayer.unbindTooltip();
-                        sbLayer.bindTooltip(sbTooltipHtml, { sticky: true, opacity: 0.98, className: 'sim-bassin-tooltip' });
+                        sbLayer.bindTooltip(sbTooltipHtml, {
+                            sticky: true,
+                            direction: 'left',
+                            offset: [-15, 0],
+                            opacity: 0.98,
+                            className: 'sim-bassin-tooltip'
+                        });
                         sbLayer.off('mouseout.sbFix');
                         sbLayer.on('mouseout.sbFix', function() {
                             if (typeof this.closeTooltip === 'function') {
@@ -6233,7 +6263,13 @@
                     const baseTip = window.genererTooltipBassinVersantHtml ? window.genererTooltipBassinVersantHtml(f.properties, null) : layer._originalTooltip;
                     if (baseTip) {
                         layer.unbindTooltip();
-                        layer.bindTooltip(baseTip, { sticky: true, opacity: 0.98, className: 'sim-bassin-tooltip' });
+                        layer.bindTooltip(baseTip, {
+                            sticky: true,
+                            direction: 'left',
+                            offset: [-15, 0],
+                            opacity: 0.98,
+                            className: 'sim-bassin-tooltip'
+                        });
                         layer.bindPopup(baseTip);
                     }
                     layer._originalTooltip = null;
