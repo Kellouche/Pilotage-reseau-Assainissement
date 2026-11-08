@@ -72,3 +72,13 @@ def test_fermeture_automatique_modale_et_zoom_grande_echelle():
     assert "maxZoom: 19" in resultats_affichage_js
     assert "padding: [35, 35]" in resultats_couches_js
     assert "padding: [35, 35]" in resultats_affichage_js
+
+
+def test_anti_cache_et_cache_busting():
+    """Vérifie la présence du middleware anti-cache HTTP et des tags de cache-busting dans les templates."""
+    main_py = Path("api/main.py").read_text(encoding="utf-8")
+    index_html = Path("templates/index.html").read_text(encoding="utf-8")
+
+    assert "anti_cache_static_middleware" in main_py
+    assert "no-store, must-revalidate" in main_py
+    assert "?v=5.2.2" in index_html

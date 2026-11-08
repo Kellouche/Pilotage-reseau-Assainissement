@@ -121,6 +121,21 @@ async def catch_cancelled_error_middleware(request: Request, call_next):
         return Response(status_code=503)
 
 
+@app.middleware("http")
+async def anti_cache_static_middleware(request: Request, call_next):
+    """
+    Désactive strictement la mise en cache navigateur sur les assets statiques (/static/),
+    les pages HTML et les endpoints de données pour garantir une fraîcheur temps réel immédiate.
+    """
+    response = await call_next(request)
+    path = request.url.path
+    if path.startswith("/static/") or path == "/" or path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
+
 # ============================================================
 # ROOT & HEALTH
 # ============================================================
