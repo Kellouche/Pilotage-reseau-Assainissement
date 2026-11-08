@@ -1737,6 +1737,85 @@
             }
         };
 
+        // ==========================================
+        // INFOBULLE NOIRE ENRICHIE DES BASSINS VERSANTS
+        // ==========================================
+        window.genererTooltipBassinVersantHtml = function(p, simData = null) {
+            if (!p) return '';
+            const cid = p.cluster_id !== undefined ? p.cluster_id : (p.id_bassin || '');
+            const nom = p.nom || p.nom_exutoire || `Bassin ${cid}`;
+            
+            let typEx = 'EXUTOIRE';
+            if (p.exutoire_type) typEx = String(p.exutoire_type).toUpperCase();
+            else if (p.libelle_type) typEx = String(p.libelle_type).toUpperCase();
+            else if (p.type_ouvrage) typEx = String(p.type_ouvrage).toUpperCase();
+
+            if (typEx.includes('DEVERSOIR') || typEx.includes('DVO')) typEx = 'DEVERSOIR_ORAGE';
+            else if (typEx.includes('STEP')) typEx = 'STATION_EPURATION_STEP';
+            else if (typEx.includes('POMPAGE') || typEx.includes('RELEVAGE')) typEx = 'STATION_POMPAGE';
+            else if (typEx.includes('REJET') || typEx.includes('OUED')) typEx = 'REJET_NATUREL';
+
+            let surfHa = 'N/A';
+            if (p.surface_ha !== undefined && p.surface_ha !== null) {
+                surfHa = `${Number(p.surface_ha).toFixed(2)} ha`;
+            }
+
+            const nbReg = (p.nb_regards !== undefined && p.nb_regards !== null) ? p.nb_regards : 'N/A';
+            const nbOrph = parseInt(p.nb_regards_orphelins || 0, 10);
+
+            const nbCond = (p.nb_conduites !== undefined && p.nb_conduites !== null) ? p.nb_conduites : (p.nb_troncons !== undefined ? p.nb_troncons : 'N/A');
+            const longM = (p.longueur_totale_m !== undefined && p.longueur_totale_m !== null) ? Math.round(Number(p.longueur_totale_m)) : null;
+            const longStr = longM !== null ? ` (${longM} m)` : '';
+
+            // Vérifier si ce bassin est actuellement simulé (dans simData ou window._dernierResultatSimulation)
+            const activeSim = simData || (window._dernierResultatSimulation && window._dernierResultatSimulation.meta && String(window._dernierResultatSimulation.meta.cluster_id) === String(cid) ? window._dernierResultatSimulation : null);
+            const isSimulated = !!(activeSim && activeSim.meta && String(activeSim.meta.cluster_id) === String(cid));
+
+            let html = `
+                <div style="font-family: inherit; font-size: 12px; min-width: 220px; color: #f8fafc; padding: 2px; line-height: 1.45;">
+                    <div style="font-weight: 800; color: #38bdf8; font-size: 13px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.15); padding-bottom: 4px; margin-bottom: 6px;">
+                        <span>${nom}</span>
+                        ${isSimulated ? '<span style="font-size: 10px; background: rgba(56,189,248,0.25); color: #38bdf8; padding: 1px 6px; border-radius: 4px; font-weight: 800;">SIMULÉ</span>' : ''}
+                    </div>
+                    <div style="color: #94a3b8; font-size: 11px; margin-bottom: 3px;">🏷️ Type : <b style="color: #f1f5f9;">${typEx}</b></div>
+                    <div style="color: #cbd5e1; margin-bottom: 2px;">📐 Surface : <b style="color: #38bdf8;">${surfHa}</b></div>
+                    <div style="color: #cbd5e1; margin-bottom: 2px;">📍 Regards : <b>${nbReg}</b> ${nbOrph > 0 ? `<span style="color:#f59e0b; font-size: 10px;">(${nbOrph} orphelins rattachés)</span>` : ''}</div>
+                    <div style="color: #cbd5e1; margin-bottom: 2px;">📏 Conduites : <b>${nbCond}</b>${longStr}</div>
+                    ${p.zone_collecte ? `<div style="color: #94a3b8; font-size: 10.5px; margin-top: 2px;">🏘️ Zone : <b>${p.zone_collecte}</b></div>` : ''}
+            `;
+
+            // Si le bassin a été simulé, ajouter le volet hydraulique complet
+            if (isSimulated && activeSim.kpis) {
+                const k = activeSim.kpis;
+                const m = activeSim.meta || {};
+                const qExutoire = parseFloat(k.q_exutoire_m3s !== undefined ? k.q_exutoire_m3s : (k.peak_outflow_m3s || 0));
+                const qDerive = parseFloat(k.q_derive_m3s !== undefined ? k.q_derive_m3s : (k.q_deleste_m3s || 0));
+                const qGenere = parseFloat(k.q_genere_m3s !== undefined ? k.q_genere_m3s : (qExutoire + qDerive));
+                const nbOuv = parseInt(k.nb_ouvrages_raccordes || 0, 10);
+                const tauxDerive = k.taux_derive_pct !== undefined ? parseFloat(k.taux_derive_pct) : (qGenere > 0 ? ((qDerive / qGenere) * 100.0) : 0.0);
+                const tauxExutoire = k.taux_exutoire_pct !== undefined ? parseFloat(k.taux_exutoire_pct) : Math.max(0, 100.0 - tauxDerive);
+
+                const qGenereStr = window.formaterNombre ? window.formaterNombre(qGenere, 3) : qGenere.toFixed(3);
+                const qExutoireStr = window.formaterNombre ? window.formaterNombre(qExutoire, 3) : qExutoire.toFixed(3);
+                const qDeriveStr = window.formaterNombre ? window.formaterNombre(qDerive, 3) : qDerive.toFixed(3);
+                const tauxDeriveStr = window.formaterNombre ? window.formaterNombre(tauxDerive, 1) : tauxDerive.toFixed(1);
+                const tauxExutoireStr = window.formaterNombre ? window.formaterNombre(tauxExutoire, 1) : tauxExutoire.toFixed(1);
+
+                html += `
+                    <div style="border-top: 1px solid rgba(255,255,255,0.15); padding-top: 5px; margin-top: 5px;">
+                        <div style="color: #38bdf8; font-size: 11px; margin-bottom: 2px;">🌧️ Sollicitation : <b>${(Number(k.pluvio_intensite_max_mmh || m.pluvio_intensite_max_mmh || 62.0)).toFixed(1)} mm/h</b> <small style="color:#94a3b8;">(${m.pluvio_periode_retour || k.pluvio_periode_retour || 'T=10 ans'})</small></div>
+                        <div style="color: #38bdf8; font-weight: 700;">🌊 Débit généré : <b>${qGenereStr} m³/s</b></div>
+                        <div style="color: #34d399; font-size: 11px; margin-left: 6px;">► Vers exutoire principal : <b>${qExutoireStr} m³/s</b> (${tauxExutoireStr}%)</div>
+                        ${qDerive > 0 ? `<div style="color: #22d3ee; font-size: 11px; margin-left: 6px;"><i class="fas fa-random"></i> Dérivé (${nbOuv} ouv. spéc.) : <b>${qDeriveStr} m³/s</b> (${tauxDeriveStr}%)</div>` : ''}
+                        <div style="color: #38bdf8; font-weight: 700; margin-top: 3px;">💧 Erreur continuité : <b>${(k.routing_continuity_error_pct || 0).toFixed(2)} %</b></div>
+                    </div>
+                `;
+            }
+
+            html += `</div>`;
+            return html;
+        };
+
         // Gestion et fonction globale de sectorisation / détection des clusters
         window._isPartitioningInProgress = false;
         window._partitioningCallbacks = [];
@@ -1836,12 +1915,13 @@
                             },
                             onEachFeature: (feature, layer) => {
                                 if (feature.properties.type === 'bassin_urbain') {
-                                    const typLabels = { step: '🔴 STEP', station: '🔵 Station', ouvrage: '🟣 Ouvrage', rejet: '🟠 Rejet' };
-                                    const typLabel = typLabels[feature.properties.exutoire_type] || '⚪ Exutoire';
-                                    layer.bindTooltip(
-                                        `<b>${feature.properties.nom || 'Bassin Urbain'}</b><br>${typLabel}`,
-                                        { sticky: true }
-                                    );
+                                    const tipHtml = window.genererTooltipBassinVersantHtml(feature.properties);
+                                    layer.bindTooltip(tipHtml, {
+                                        sticky: true,
+                                        opacity: 0.98,
+                                        className: 'sim-bassin-tooltip'
+                                    });
+                                    layer.bindPopup(tipHtml);
 
                                     layer.on('click', function(e) {
                                         L.DomEvent.stopPropagation(e);
@@ -5383,15 +5463,16 @@
                         const curTip = layer.getTooltip();
                         layer._originalTooltip = curTip ? curTip.getContent() : null;
                     }
+                    const fullSimTooltip = window.genererTooltipBassinVersantHtml ? window.genererTooltipBassinVersantHtml(f.properties, data) : simCardHtml;
                     layer.unbindTooltip();
-                    layer.bindTooltip(simCardHtml, { sticky: true, opacity: 0.98, className: 'sim-bassin-tooltip' });
+                    layer.bindTooltip(fullSimTooltip, { sticky: true, opacity: 0.98, className: 'sim-bassin-tooltip' });
                     layer.off('mouseout.bassinFix');
                     layer.on('mouseout.bassinFix', function() {
                         if (typeof this.closeTooltip === 'function') {
                             try { this.closeTooltip(); } catch(_) {}
                         }
                     });
-                    layer.bindPopup(simCardHtml);
+                    layer.bindPopup(fullSimTooltip);
                     layer.options.pane = 'bassinsPane';
                     layer.setStyle({
                         color: '#0284c7',
@@ -6147,7 +6228,16 @@
 
             // Rétablir les infobulles initiales des bassins
             const restoreBassinTooltip = (layer) => {
-                if (layer._originalTooltip) {
+                const f = layer.feature;
+                if (f && f.properties && f.properties.type === 'bassin_urbain') {
+                    const baseTip = window.genererTooltipBassinVersantHtml ? window.genererTooltipBassinVersantHtml(f.properties, null) : layer._originalTooltip;
+                    if (baseTip) {
+                        layer.unbindTooltip();
+                        layer.bindTooltip(baseTip, { sticky: true, opacity: 0.98, className: 'sim-bassin-tooltip' });
+                        layer.bindPopup(baseTip);
+                    }
+                    layer._originalTooltip = null;
+                } else if (layer._originalTooltip) {
                     layer.unbindTooltip();
                     layer.bindTooltip(layer._originalTooltip, { sticky: true });
                     layer._originalTooltip = null;

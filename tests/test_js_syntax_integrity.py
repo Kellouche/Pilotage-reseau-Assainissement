@@ -33,3 +33,4 @@ def test_javascript_syntax_templates():
                     os.remove(tf_name)
 
     assert not erreurs, "Erreurs de syntaxe JavaScript détectées dans les templates :\n" + "\n---\n".join(erreurs)
+
