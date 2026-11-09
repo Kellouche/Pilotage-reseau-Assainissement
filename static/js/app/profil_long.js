@@ -20,6 +20,13 @@ window.profilLongState = {
 };
 
 /**
+ * Récupère l'instance Leaflet globale (carte ou map)
+ */
+function _getCarte() {
+    return window.carte || window.map || (typeof carte !== 'undefined' ? carte : null);
+}
+
+/**
  * Active ou désactive le mode de sélection sur la carte
  */
 function toggleProfilLongMode() {
@@ -27,17 +34,25 @@ function toggleProfilLongMode() {
     const btn = document.getElementById('btn-profil-long');
     const panel = document.getElementById('panel-profil-long');
     const banner = document.getElementById('profil-selection-banner');
+    const map = _getCarte();
 
     if (!state.active) {
         state.active = true;
         state.step = 'amont';
         if (btn) btn.classList.add('active');
 
+        // Fermer les popups de modification existantes
+        if (map) {
+            map.closePopup();
+            const mapEl = document.getElementById('map');
+            if (mapEl) mapEl.style.cursor = 'crosshair';
+        }
+
         // Afficher la bannière d'aide
         if (banner) {
             banner.style.display = 'flex';
             document.getElementById('profil-selection-text').innerHTML =
-                'Cliquez sur le <b>regard amont</b> sur la carte pour démarrer le profil...';
+                'Mode Profil en long actif : Cliquez sur le <b>regard amont</b> (vert) sur la carte...';
         }
 
         // Nettoyer les sélections précédentes si nouveau tracé
@@ -63,6 +78,9 @@ function annulerSelectionProfil() {
     const btn = document.getElementById('btn-profil-long');
     if (btn) btn.classList.remove('active');
 
+    const mapEl = document.getElementById('map');
+    if (mapEl) mapEl.style.cursor = '';
+
     const banner = document.getElementById('profil-selection-banner');
     if (banner) banner.style.display = 'none';
 
@@ -77,8 +95,9 @@ function fermerProfilLong() {
     if (panel) panel.style.display = 'none';
     annulerSelectionProfil();
 
-    if (window.map && window.profilLongState.highlightLayer) {
-        window.map.removeLayer(window.profilLongState.highlightLayer);
+    const map = _getCarte();
+    if (map && window.profilLongState.highlightLayer) {
+        map.removeLayer(window.profilLongState.highlightLayer);
         window.profilLongState.highlightLayer = null;
     }
 }
@@ -90,9 +109,11 @@ window.handleRegardClickForProfil = function(code, latlng) {
     const state = window.profilLongState;
     if (!state.active || !code) return;
 
-    if (!window.map) return;
+    const map = _getCarte();
+    if (!map) return;
+
     if (!state.markersLayer) {
-        state.markersLayer = L.layerGroup().addTo(window.map);
+        state.markersLayer = L.layerGroup().addTo(map);
     }
 
     if (state.step === 'amont') {
@@ -102,13 +123,13 @@ window.handleRegardClickForProfil = function(code, latlng) {
         const inpAmont = document.getElementById('input-profil-amont');
         if (inpAmont) inpAmont.value = state.nodeAmont;
 
-        // Placer un marqueur vert pulsing pour l'amont
+        // Placer un marqueur vert pour l'amont
         if (latlng) {
             const m = L.circleMarker(latlng, {
-                radius: 8,
+                radius: 9,
                 color: '#10b981',
                 fillColor: '#34d399',
-                fillOpacity: 0.9,
+                fillOpacity: 0.95,
                 weight: 3
             }).bindTooltip(`<b>Amont:</b> ${state.nodeAmont}`, { permanent: true, direction: 'top' });
             state.markersLayer.addLayer(m);
@@ -128,16 +149,19 @@ window.handleRegardClickForProfil = function(code, latlng) {
         const btn = document.getElementById('btn-profil-long');
         if (btn) btn.classList.remove('active');
 
+        const mapEl = document.getElementById('map');
+        if (mapEl) mapEl.style.cursor = '';
+
         const inpAval = document.getElementById('input-profil-aval');
         if (inpAval) inpAval.value = state.nodeAval;
 
         // Placer marqueur bleu pour l'aval
         if (latlng) {
             const m = L.circleMarker(latlng, {
-                radius: 8,
+                radius: 9,
                 color: '#0284c7',
                 fillColor: '#38bdf8',
-                fillOpacity: 0.9,
+                fillOpacity: 0.95,
                 weight: 3
             }).bindTooltip(`<b>Aval:</b> ${state.nodeAval}`, { permanent: true, direction: 'bottom' });
             state.markersLayer.addLayer(m);
@@ -307,7 +331,7 @@ function afficherProfilLong(data) {
                     borderWidth: 3,
                     pointRadius: 5,
                     pointBackgroundColor: data.segments.map(s => s.node_color || '#38bdf8'),
-                    fill: '-1', // Remplissage entre génératrice sup et radier pour matérialiser la conduite !
+                    fill: '-1', // Remplissage entre génératrice sup et radier pour matérialiser la conduite
                     tension: 0
                 },
                 {
@@ -384,7 +408,7 @@ function afficherProfilLong(data) {
                     },
                     title: {
                         display: true,
-                        text: 'Distance cumulée depuis l\'amont (mètres)',
+                        text: "Distance cumulée depuis l'amont (mètres)",
                         color: '#64748b',
                         font: { size: 11 }
                     }
@@ -411,11 +435,12 @@ function afficherProfilLong(data) {
  * Surligne le tracé sur la carte Leaflet
  */
 function _surlignerCheminCarte(segments) {
-    if (!window.map || !segments || segments.length === 0) return;
+    const map = _getCarte();
+    if (!map || !segments || segments.length === 0) return;
 
     const state = window.profilLongState;
     if (state.highlightLayer) {
-        window.map.removeLayer(state.highlightLayer);
+        map.removeLayer(state.highlightLayer);
         state.highlightLayer = null;
     }
 
@@ -445,10 +470,10 @@ function _surlignerCheminCarte(segments) {
             opacity: 0.9,
             dashArray: '8, 8',
             className: 'pulsing-profil-path'
-        }).addTo(window.map);
+        }).addTo(map);
 
         // Zoomer légèrement pour cadrer le profil
-        window.map.fitBounds(state.highlightLayer.getBounds(), { padding: [60, 60], maxZoom: 17 });
+        map.fitBounds(state.highlightLayer.getBounds(), { padding: [60, 60], maxZoom: 17 });
     }
 }
 
@@ -457,7 +482,8 @@ function _surlignerCheminCarte(segments) {
  */
 function _nettoyerMarqueursProfil() {
     const state = window.profilLongState;
-    if (state.markersLayer && window.map) {
+    const map = _getCarte();
+    if (state.markersLayer && map) {
         state.markersLayer.clearLayers();
     }
 }

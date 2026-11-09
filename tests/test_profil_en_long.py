@@ -82,3 +82,4 @@ def test_cockpit_includes_profil_long_components():
     assert "canvas-profil-long" in panel_html
     assert "input-profil-amont" in panel_html
     assert "input-profil-aval" in panel_html
+

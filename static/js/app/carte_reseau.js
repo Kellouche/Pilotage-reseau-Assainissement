@@ -218,14 +218,32 @@ function chargerDonneesInitiales() {
                                 }
 
                                 // Interception pour le Profil en Long hydraulique (Phase 6.A)
+                                // Si l'icône est active : tracé du profil sans ouvrir la fenêtre de modification
+                                // Si l'icône n'est pas active : la fenêtre de modification s'ouvre normalement
                                 layer.on('click', (e) => {
                                     if (window.profilLongState && window.profilLongState.active) {
+                                        L.DomEvent.stop(e);
+                                        const cMap = window.carte || window.map;
+                                        if (cMap) cMap.closePopup();
+                                        if (layer.closePopup) layer.closePopup();
+                                        setTimeout(() => {
+                                            if (cMap) cMap.closePopup();
+                                            if (layer.closePopup) layer.closePopup();
+                                        }, 10);
+
                                         const code = feature.properties.Code || feature.properties.code || feature.properties.id || feature.properties.nom;
                                         if (code && window.handleRegardClickForProfil) {
                                             window.handleRegardClickForProfil(code, e.latlng);
-                                            L.DomEvent.stopPropagation(e);
-                                            layer.closePopup();
                                         }
+                                        return false;
+                                    }
+                                });
+
+                                layer.on('popupopen', () => {
+                                    if (window.profilLongState && window.profilLongState.active) {
+                                        const cMap = window.carte || window.map;
+                                        if (cMap) cMap.closePopup();
+                                        if (layer.closePopup) layer.closePopup();
                                     }
                                 });
                             }
