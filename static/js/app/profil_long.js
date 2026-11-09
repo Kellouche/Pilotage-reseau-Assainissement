@@ -410,7 +410,7 @@ function afficherProfilLong(data) {
                     tension: 0.1
                 },
                 {
-                    label: 'Génératrice supérieure (Haut conduite)',
+                    label: 'Génératrice supérieure (haut de conduite)',
                     data: genSupData,
                     borderColor: '#64748b',
                     borderWidth: 1.5,
@@ -421,7 +421,7 @@ function afficherProfilLong(data) {
                     tension: 0
                 },
                 {
-                    label: "Fil d'eau (Cote radier)",
+                    label: "Fil d'eau (cote radier)",
                     data: radierData,
                     borderColor: '#475569',
                     backgroundColor: 'rgba(100, 116, 139, 0.10)',
@@ -432,7 +432,7 @@ function afficherProfilLong(data) {
                     tension: 0
                 },
                 {
-                    label: "Plan d'eau réel dans la conduite (WSP / Hauteur d'eau)",
+                    label: "Plan d'eau réel dans la conduite (WSP / hauteur d'eau)",
                     data: eauConduiteData,
                     borderColor: '#0284c7',
                     backgroundColor: 'rgba(14, 165, 233, 0.45)', // Remplissage bleu eau translucide
@@ -443,7 +443,7 @@ function afficherProfilLong(data) {
                     tension: 0
                 },
                 {
-                    label: 'Ligne de charge HGL (Zone de surpression hachurée)',
+                    label: 'Ligne de charge HGL (zone de surpression hachurée)',
                     data: hglData,
                     borderColor: '#f59e0b',
                     backgroundColor: patternHachures, // Hachures diagonales d'alerte entre WSP et HGL

@@ -267,7 +267,7 @@
                 datasets: [
                     {
                         type: 'bar',
-                        label: 'Précipitation (mm/h) — Hyétogramme',
+                        label: 'Précipitation (mm/h) — hyétogramme',
                         data: rainValues,
                         yAxisID: 'yRain',
                         backgroundColor: 'rgba(59, 130, 246, 0.70)',
@@ -279,7 +279,7 @@
                     },
                     {
                         type: 'line',
-                        label: 'Débit à l\'exutoire (m³/s) — Hydrogramme',
+                        label: 'Débit à l\'exutoire (m³/s) — hydrogramme',
                         data: outflowValues,
                         yAxisID: 'yFlow',
                         borderColor: '#38bdf8',
@@ -415,7 +415,7 @@
                 const step = (window.hyetoHydroState.data && window.hyetoHydroState.data.steps && window.hyetoHydroState.data.steps[stepIndex]) || null;
                 const ind = document.getElementById('hyeto-indicator-current-time');
                 if (ind && step) {
-                    ind.innerHTML = `Temps courant : <b>T = ${step.time_str}</b> (Pluie : <b>${(step.rainfall_mmh || 0).toFixed(1)} mm/h</b> &bull; Débit : <b>${(step.outflow_m3s || 0).toFixed(3)} m³/s</b>)`;
+                    ind.innerHTML = `Temps courant : <b>T = ${step.time_str}</b> (pluie : <b>${(step.rainfall_mmh || 0).toFixed(1)} mm/h</b> &bull; débit : <b>${(step.outflow_m3s || 0).toFixed(3)} m³/s</b>)`;
                 }
             }
         };

@@ -18,7 +18,7 @@ Objet : Modale de paramétrage de pluie, stations ANRH et déclenchement SWMM 5.
                     </div>
                     <div>
                         <h5 style="margin: 0; font-weight: 700; font-size: 1.05rem;">Simulation hydrodynamique EPA SWMM 5.2</h5>
-                        <small style="color: #94a3b8;">Résolution Saint-Venant 1D (DYNWAVE) &amp; hydrologie Horton</small>
+                        <small style="color: #94a3b8;">Résolution Saint-Venant 1D (DYNWAVE) et hydrologie Horton</small>
                     </div>
                 </div>
                 <button onclick="fermerModalSimulation()" style="background: transparent; border: none; color: #94a3b8; font-size: 24px; cursor: pointer; line-height: 1;">&times;</button>
@@ -29,7 +29,7 @@ Objet : Modale de paramétrage de pluie, stations ANRH et déclenchement SWMM 5.
                 <!-- Choix du Périmètre / Bassin Urbain -->
                 <div style="margin-bottom: 16px;">
                     <label style="font-size: 0.82rem; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 6px;">
-                        <i class="fas fa-sitemap me-1" style="color: #38bdf8;"></i> Périmètre de Simulation (Bassin Urbain)
+                        <i class="fas fa-sitemap me-1" style="color: #38bdf8;"></i> Périmètre de simulation (bassin urbain)
                     </label>
                     <select id="sim-select-bassin" style="width: 100%; padding: 10px 12px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #f8fafc; font-size: 0.88rem;">
                         <option value="" disabled selected>-- Sélectionnez un bassin versant sectorisé --</option>
@@ -93,19 +93,19 @@ Objet : Modale de paramétrage de pluie, stations ANRH et déclenchement SWMM 5.
                     </div>
                 </div>
 
-                <!-- Choix Station, Scénario & Intensité Pluviométrique Réglable (Référentiel ANRH / UHBC) -->
+                <!-- Choix station, scénario et intensité pluviométrique réglable (référentiel ANRH / UHBC) -->
                 <div style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                         <label style="font-size: 0.82rem; font-weight: 700; color: #38bdf8; margin: 0;">
-                            <i class="fas fa-cloud-showers-heavy me-1"></i> Référentiel Pluviométrique &amp; Sollicitation SWMM
+                            <i class="fas fa-cloud-showers-heavy me-1"></i> Référentiel pluviométrique et sollicitation SWMM
                         </label>
                         <span id="sim-pluvio-station-badge" style="font-size: 0.72rem; color: #38bdf8; background: rgba(56,189,248,0.12); padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(56,189,248,0.3); font-weight: 600;">Station ANRH Chlef Siège (010501)</span>
                     </div>
 
-                    <!-- Sélecteur de Station Hydro-Météo ANRH -->
+                    <!-- Sélecteur de station hydro-météo ANRH -->
                     <div style="margin-bottom: 10px;">
                         <label style="font-size: 0.75rem; color: #cbd5e1; display: block; margin-bottom: 4px;">
-                            <i class="fas fa-map-marker-alt me-1" style="color: #38bdf8;"></i> Station Hydro-Météorologique de Référence :
+                            <i class="fas fa-map-marker-alt me-1" style="color: #38bdf8;"></i> Station hydro-météorologique de référence :
                         </label>
                         <select id="sim-select-station" onchange="onChangementStationPluie(this.value)" style="width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 6px; color: #f8fafc; font-size: 0.82rem; font-weight: 600;">
                             <optgroup label="📍 Wilaya de Chlef (Bassin Versant 01 - Chélif) [ANRH / UHBC]">
@@ -127,22 +127,22 @@ Objet : Modale de paramétrage de pluie, stations ANRH et déclenchement SWMM 5.
                         </select>
                     </div>
 
-                    <!-- Scénario et Intensité Réglable -->
+                    <!-- Scénario et intensité réglable -->
                     <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 12px; align-items: start;">
                         <div>
-                            <label style="font-size: 0.75rem; color: #cbd5e1; display: block; margin-bottom: 4px;">Scénario Pluviométrique Validé :</label>
+                            <label style="font-size: 0.75rem; color: #cbd5e1; display: block; margin-bottom: 4px;">Scénario pluviométrique validé :</label>
                             <select id="sim-select-scenario" onchange="onChangementScenarioPluie(this.value)" style="width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #f8fafc; font-size: 0.82rem;">
-                                <option value="pluie_decennale" selected>🌧️ Pluie Décennale (T = 10 ans) [Standard Réglementaire ONA]</option>
-                                <option value="pluie_cinquantennale">⛈️ Pluie Cinquantennale (T = 50 ans) [Crise Majeure / Inondations]</option>
-                                <option value="pluie_centennale">🌊 Pluie Centennale (T = 100 ans) [Crue Historique Exceptionnelle]</option>
-                                <option value="pluie_biennale">🌦️ Pluie Biennale (T = 2 ans) [Pluie Courante / Confort Urbain]</option>
-                                <option value="pluie_orage_2h">⚡ Orage d'Été Brutal Méditerranéen [Averse Convective 2h — 92.5 mm/h]</option>
-                                <option value="temps_sec_pur">☀️ Temps Sec Pur (Étiage / Eaux Usées sans pluie — 0 mm/h)</option>
-                                <option value="personnalise">✏️ Saisie Manuelle Ingénieur (Intensité Personnalisée)</option>
+                                <option value="pluie_decennale" selected>🌧️ Pluie décennale (T = 10 ans) [standard réglementaire ONA]</option>
+                                <option value="pluie_cinquantennale">⛈️ Pluie cinquantennale (T = 50 ans) [crise majeure / inondations]</option>
+                                <option value="pluie_centennale">🌊 Pluie centennale (T = 100 ans) [crue historique exceptionnelle]</option>
+                                <option value="pluie_biennale">🌦️ Pluie biennale (T = 2 ans) [pluie courante / confort urbain]</option>
+                                <option value="pluie_orage_2h">⚡ Orage d'été brutal méditerranéen [averse convective 2 h — 92,5 mm/h]</option>
+                                <option value="temps_sec_pur">☀️ Temps sec pur (étiage / eaux usées sans pluie — 0 mm/h)</option>
+                                <option value="personnalise">✏️ Saisie manuelle ingénieur (intensité personnalisée)</option>
                             </select>
                         </div>
                         <div>
-                            <label style="font-size: 0.75rem; color: #cbd5e1; display: block; margin-bottom: 4px;">Intensité Pointe Imax (mm/h) :</label>
+                            <label style="font-size: 0.75rem; color: #cbd5e1; display: block; margin-bottom: 4px;">Intensité de pointe Imax (mm/h) :</label>
                             <div style="display: flex; align-items: center; gap: 4px;">
                                 <input type="number" id="sim-input-intensite-max" min="0" max="300" step="0.5" value="74.9" oninput="onChangementIntensitePluie(this.value)" style="width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid rgba(56, 189, 248, 0.5); border-radius: 6px; color: #38bdf8; font-size: 0.88rem; font-weight: 700; text-align: center;">
                                 <span style="font-size: 0.82rem; color: #94a3b8; font-weight: bold;">mm/h</span>
@@ -155,25 +155,25 @@ Objet : Modale de paramétrage de pluie, stations ANRH et déclenchement SWMM 5.
                     </div>
                 </div>
 
-                <!-- Occupation du Sol & Imperméabilisation (Palier 1 - Instantané) -->
+                <!-- Occupation du sol et imperméabilisation (palier 1 — instantané) -->
                 <div style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                         <label style="font-size: 0.82rem; font-weight: 700; color: #38bdf8; margin: 0;">
-                            <i class="fas fa-layer-group me-1"></i> Occupation du Sol &amp; Imperméabilisation Urbaine
+                            <i class="fas fa-layer-group me-1"></i> Occupation du sol et imperméabilisation urbaine
                         </label>
-                        <span style="font-size: 0.72rem; color: #38bdf8; background: rgba(56,189,248,0.12); padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(56,189,248,0.3); font-weight: 600;">Palier 1 - Sensibilité Instantanée</span>
+                        <span style="font-size: 0.72rem; color: #38bdf8; background: rgba(56,189,248,0.12); padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(56,189,248,0.3); font-weight: 600;">Palier 1 — Sensibilité instantanée</span>
                     </div>
                     <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 12px; align-items: start;">
                         <div>
-                            <label style="font-size: 0.75rem; color: #cbd5e1; display: block; margin-bottom: 4px;">Typologie Urbaine Dominante :</label>
+                            <label style="font-size: 0.75rem; color: #cbd5e1; display: block; margin-bottom: 4px;">Typologie urbaine dominante :</label>
                             <select id="sim-select-typologie-sol" style="width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #f8fafc; font-size: 0.82rem;">
-                                <option value="centre_urbain_dense">🏢 Centre urbain dense / Commercial (85%)</option>
-                                <option value="habitat_collectif">🏬 Habitat collectif / Cités denses (75%)</option>
-                                <option value="habitat_mixte" selected>🏘️ Habitat mixte / Tissu intermédiaire (65% - Défaut)</option>
-                                <option value="habitat_individuel">🏡 Habitat individuel / Pavillonnaire (50%)</option>
-                                <option value="zone_activites_indus">🏭 Zone industrielle &amp; Entrepôts (80%)</option>
-                                <option value="periurbain_semi_rural">🌾 Périurbain / Semi-rural lâche (35%)</option>
-                                <option value="espaces_verts_friches">🌳 Parcs / Espaces naturels / Friches (15%)</option>
+                                <option value="centre_urbain_dense">🏢 Centre urbain dense / commercial (85%)</option>
+                                <option value="habitat_collectif">🏬 Habitat collectif / cités denses (75%)</option>
+                                <option value="habitat_mixte" selected>🏘️ Habitat mixte / tissu intermédiaire (65% — défaut)</option>
+                                <option value="habitat_individuel">🏡 Habitat individuel / pavillonnaire (50%)</option>
+                                <option value="zone_activites_indus">🏭 Zone industrielle et entrepôts (80%)</option>
+                                <option value="periurbain_semi_rural">🌾 Périurbain / semi-rural lâche (35%)</option>
+                                <option value="espaces_verts_friches">🌳 Parcs / espaces naturels / friches (15%)</option>
                             </select>
                         </div>
                         <div>
@@ -193,19 +193,19 @@ Objet : Modale de paramétrage de pluie, stations ANRH et déclenchement SWMM 5.
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px;">
                     <div>
                         <label style="font-size: 0.82rem; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 6px;">
-                            <i class="fas fa-clock me-1" style="color: #38bdf8;"></i> Durée de Calcul
+                            <i class="fas fa-clock me-1" style="color: #38bdf8;"></i> Durée de calcul
                         </label>
                         <select id="sim-select-duree" style="width: 100%; padding: 10px 12px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #f8fafc; font-size: 0.88rem;">
-                            <option value="4.0" selected>4 heures (Événement &amp; Ressuyage)</option>
-                            <option value="2.0">2 heures (Court)</option>
+                            <option value="4.0" selected>4 heures (événement et ressuyage)</option>
+                            <option value="2.0">2 heures (court)</option>
                             <option value="6.0">6 heures</option>
                             <option value="12.0">12 heures</option>
-                            <option value="24.0">24 heures (Cycle journalier complet)</option>
+                            <option value="24.0">24 heures (cycle journalier complet)</option>
                         </select>
                     </div>
                     <div>
                         <label style="font-size: 0.82rem; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 6px;">
-                            <i class="fas fa-tachometer-alt me-1" style="color: #38bdf8;"></i> Pas de Routage (DYNWAVE)
+                            <i class="fas fa-tachometer-alt me-1" style="color: #38bdf8;"></i> Pas de routage (DYNWAVE)
                         </label>
                         <select id="sim-select-step" style="width: 100%; padding: 10px 12px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #f8fafc; font-size: 0.88rem;">
                             <option value="5" selected>5 secondes (Stabilité optimale Saint-Venant)</option>
@@ -260,11 +260,11 @@ Objet : Modale de paramétrage de pluie, stations ANRH et déclenchement SWMM 5.
                     <!-- En-tête périmètre simulé -->
                     <div id="sim-results-bassin-title" style="font-size: 0.82rem; color: #38bdf8; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 6px; padding: 6px 10px; margin-bottom: 12px; display: none;"></div>
 
-                    <!-- Cadre Hydro-Météorologique & Sollicitation Pluviométrique de Dimensionnement -->
+                    <!-- Cadre hydro-météorologique et sollicitation pluviométrique de dimensionnement -->
                     <div id="sim-pluvio-results-box" style="background: rgba(14, 165, 233, 0.08); border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                             <span style="font-size: 0.82rem; font-weight: 700; color: #38bdf8; display: flex; align-items: center; gap: 7px;">
-                                <i class="fas fa-cloud-showers-heavy"></i> Sollicitation pluviométrique &amp; station de référence
+                                <i class="fas fa-cloud-showers-heavy"></i> Sollicitation pluviométrique et station de référence
                             </span>
                             <span id="kpi-pluvio-station-badge" style="font-size: 0.72rem; background: rgba(56, 189, 248, 0.18); color: #7dd3fc; border: 1px solid rgba(56, 189, 248, 0.35); padding: 2px 8px; border-radius: 4px; font-weight: 700;">Station ANRH Chlef Siège (010501)</span>
                         </div>
@@ -365,24 +365,24 @@ Objet : Modale de paramétrage de pluie, stations ANRH et déclenchement SWMM 5.
                     <!-- Double Échelle de Surface : Urbaine Drainée vs Impluvium Global Convexe -->
                     <div style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem;">
                         <div>
-                            <span style="color: #94a3b8;">Surface Urbaine Drainée (Voronoï sans trous) :</span>
+                            <span style="color: #94a3b8;">Surface urbaine drainée (Voronoï sans trous) :</span>
                             <b id="kpi-surf-urbaine" style="color: #34d399; margin-left: 6px;">-- ha</b>
                         </div>
                         <div style="border-left: 1px solid rgba(255,255,255,0.12); padding-left: 14px;">
-                            <span style="color: #94a3b8;">Impluvium Global (Convex Hull) :</span>
+                            <span style="color: #94a3b8;">Impluvium global (enveloppe convexe) :</span>
                             <b id="kpi-surf-convexe" style="color: #38bdf8; margin-left: 6px;">5 430 ha</b>
-                            <span id="kpi-ratio-drainage" style="font-size: 0.72rem; color: #facc15; margin-left: 6px; font-weight: 700;">(Ratio: -- %)</span>
+                            <span id="kpi-ratio-drainage" style="font-size: 0.72rem; color: #facc15; margin-left: 6px; font-weight: 700;">(Ratio : -- %)</span>
                         </div>
                     </div>
 
-                    <!-- Analyse de Sensibilité du Buffer Voronoï (Arrière-Plan : 35m, 45m, 60m) -->
+                    <!-- Analyse de sensibilité du rayon Voronoï (arrière-plan : 35 m, 45 m, 60 m) -->
                     <div id="sim-buffer-sensitivity-block" style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 12px; padding: 14px 16px; margin-bottom: 16px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                             <div style="font-size: 0.86rem; font-weight: 700; color: #38bdf8; display: flex; align-items: center; gap: 7px;">
-                                <i class="fas fa-chart-line"></i> Analyse de Sensibilité du Buffer Voronoï (Scénarios 35m, 45m, 60m)
+                                <i class="fas fa-chart-line"></i> Analyse de sensibilité du rayon Voronoï (scénarios 35 m, 45 m, 60 m)
                             </div>
                             <span id="buffer-badge-recommande" style="font-size: 0.72rem; background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.35); padding: 2px 8px; border-radius: 4px; font-weight: 700;">
-                                ⭐ Inflexion Optimale : 45 m
+                                ⭐ Inflexion optimale : 45 m
                             </span>
                         </div>
                         <p style="font-size: 0.78rem; color: #94a3b8; margin: 0 0 12px 0; line-height: 1.4;">
@@ -396,25 +396,25 @@ Objet : Modale de paramétrage de pluie, stations ANRH et déclenchement SWMM 5.
 
                         <!-- Barre de progression relative de la surface -->
                         <div style="background: rgba(255,255,255,0.06); border-radius: 6px; height: 7px; overflow: hidden; display: flex; margin-bottom: 6px;">
-                            <div id="bar-buffer-35" style="width: 33.3%; background: #0284c7; height: 100%;" title="Buffer 35m"></div>
-                            <div id="bar-buffer-45" style="width: 33.3%; background: #10b981; height: 100%;" title="Buffer 45m (Optimal)"></div>
-                            <div id="bar-buffer-60" style="width: 33.4%; background: #f59e0b; height: 100%;" title="Buffer 60m"></div>
+                            <div id="bar-buffer-35" style="width: 33.3%; background: #0284c7; height: 100%;" title="Buffer 35 m"></div>
+                            <div id="bar-buffer-45" style="width: 33.3%; background: #10b981; height: 100%;" title="Buffer 45 m (optimal)"></div>
+                            <div id="bar-buffer-60" style="width: 33.4%; background: #f59e0b; height: 100%;" title="Buffer 60 m"></div>
                         </div>
                         <div style="display: flex; justify-content: space-between; font-size: 0.7rem; color: #64748b;">
-                            <span>35 m (Voirie stricte)</span>
-                            <span style="color: #34d399; font-weight: 700;">45 m (Cœurs d'îlots comblés)</span>
-                            <span>60 m (Élargi)</span>
+                            <span>35 m (voirie stricte)</span>
+                            <span style="color: #34d399; font-weight: 700;">45 m (cœurs d'îlots comblés)</span>
+                            <span>60 m (élargi)</span>
                         </div>
                     </div>
 
-                    <!-- Bouton d'accès direct à l'interprétation experte des Agents IA -->
+                    <!-- Bouton d'accès direct à l'interprétation experte des agents IA -->
                     <button onclick="fermerModalSimulation(); ouvrirModalInterpretation();" style="width: 100%; margin-bottom: 8px; padding: 12px 18px; background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%); color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 0.92rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 9px; box-shadow: 0 4px 14px rgba(168, 85, 247, 0.4); transition: transform 0.15s;" onmouseover="this.style.transform='scale(1.01)'" onmouseout="this.style.transform='scale(1)'">
-                        <i class="fas fa-brain"></i> Consulter l'Interprétation des Agents IA &amp; Prescriptions Travaux
+                        <i class="fas fa-brain"></i> Consulter l'interprétation des agents IA et prescriptions de travaux
                     </button>
 
                     <!-- Bouton d'impression directe du rapport complet PDF -->
                     <button onclick="imprimerDiagnosticTechniqueComplet()" style="width: 100%; margin-bottom: 14px; padding: 10px 16px; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.4); color: #d8b4fe; border-radius: 8px; font-weight: 700; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.15s;" onmouseover="this.style.background='rgba(168, 85, 247, 0.25)'" onmouseout="this.style.background='rgba(168, 85, 247, 0.15)'">
-                        <i class="fas fa-file-pdf"></i> Imprimer le Rapport d'Expertise Complet (PDF / Papier)
+                        <i class="fas fa-file-pdf"></i> Imprimer le rapport d'expertise complet (PDF / papier)
                     </button>
 
                     <!-- Téléchargements d'artefacts certifiés -->
@@ -429,7 +429,7 @@ Objet : Modale de paramétrage de pluie, stations ANRH et déclenchement SWMM 5.
 
                     <!-- Bouton pour voir la zone simulée sur la carte -->
                     <button onclick="fermerModalSimulation()" style="width: 100%; margin-top: 14px; padding: 11px 16px; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4); transition: filter 0.15s;" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter='brightness(1)'">
-                        <i class="fas fa-search-location"></i> Explorer la zone simulée sur la carte &amp; Quitter
+                        <i class="fas fa-search-location"></i> Explorer la zone simulée sur la carte et quitter
                     </button>
                 </div>
             </div>
