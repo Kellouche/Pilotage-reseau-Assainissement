@@ -1355,6 +1355,31 @@ def get_simulation_timeseries(
         if ts and ts.get("status") == "SUCCESS":
             return ts
 
+        # Génération à la volée si l'INP est disponible
+        inp_content = _DERNIERE_SIMULATION.get("inp_content")
+        if inp_content:
+            logger.info("Génération à la volée des séries temporelles (Phase 6.B)...")
+            try:
+                from src.domain.moteur_swmm.execution_solver import executer_solver_swmm
+                _, _, ts_gen = executer_solver_swmm(inp_content, return_timeseries=True)
+                if ts_gen and ts_gen.get("status") == "SUCCESS":
+                    _DERNIERE_SIMULATION["timeseries"] = ts_gen
+                    # Persister dans le cache disque
+                    try:
+                        gpkg_src = _DERNIERE_SIMULATION.get("source_gpkg")
+                        param_h = _DERNIERE_SIMULATION.get("param_hash")
+                        cid = _DERNIERE_SIMULATION.get("meta", {}).get("cluster_id") or 1
+                        if gpkg_src and param_h:
+                            cfile = _get_cache_simulation_file(Path(gpkg_src), cid, param_h)
+                            if cfile.exists():
+                                with open(cfile, "w", encoding="utf-8") as f:
+                                    json.dump(_DERNIERE_SIMULATION, f, ensure_ascii=False)
+                    except Exception as e_w:
+                        logger.warning("Échec persistance cache timeseries: %s", e_w)
+                    return ts_gen
+            except Exception as e_calc:
+                logger.warning("Erreur calcul à la volée timeseries: %s", e_calc)
+
     # 2. Chercher dans le cache cluster si demandé
     if cluster_id is not None:
         try:
