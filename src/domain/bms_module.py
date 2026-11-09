@@ -206,3 +206,4 @@ def creer_scenario_bms(
             "intensite_pic_mmh": i_max
         }
     }
+

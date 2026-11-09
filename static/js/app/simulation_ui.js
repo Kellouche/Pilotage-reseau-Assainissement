@@ -310,6 +310,13 @@ window.dessinerRaccordementsOrphelinsSurCarte = function() {
         };
 
         window.onChangementScenarioPluie = function(scenKey) {
+            if (scenKey === 'bms_onm') {
+                window.basculerModePluie('bms');
+                return;
+            }
+            if (window._modePluieActif === 'bms') {
+                window.basculerModePluie('projet');
+            }
             const info = window._scenariosPluieInfo[scenKey] || window._scenariosPluieInfo['pluie_decennale'];
             const inp = document.getElementById('sim-input-intensite-max');
             if (inp) inp.value = info.imax;
@@ -482,6 +489,123 @@ window.dessinerRaccordementsOrphelinsSurCarte = function() {
                 }
             }
         };
+
+        window.basculerSaisieTelegrammeBMS = function() {
+            const c = document.getElementById('sim-bms-telegramme-container');
+            if (c) {
+                c.style.display = (c.style.display === 'none' || !c.style.display) ? 'block' : 'none';
+                if (c.style.display === 'block') {
+                    const txt = document.getElementById('sim-bms-telegramme-texte');
+                    if (txt) txt.focus();
+                }
+            }
+        };
+
+        window.analyserEtAppliquerTelegrammeBMS = function() {
+            const txtEl = document.getElementById('sim-bms-telegramme-texte');
+            const texte = (txtEl && txtEl.value) ? txtEl.value.trim() : '';
+            if (!texte) {
+                alert("Veuillez coller le texte officiel du bulletin météorologique spécial (ONM).");
+                return;
+            }
+
+            // 1. Détection du niveau de vigilance (jaune, orange, rouge)
+            let vigTrouve = null;
+            if (/\b(rouge|red)\b/i.test(texte)) {
+                vigTrouve = 'rouge';
+            } else if (/\b(orange)\b/i.test(texte)) {
+                vigTrouve = 'orange';
+            } else if (/\b(jaune|yellow)\b/i.test(texte)) {
+                vigTrouve = 'jaune';
+            }
+            if (vigTrouve) {
+                const rad = document.querySelector(`input[name="bms-vigilance"][value="${vigTrouve}"]`);
+                if (rad) rad.checked = true;
+            }
+
+            // 2. Détection du cumul de pluie (ex: "30 à 50 mm", "40 mm", "20-40 mm")
+            const regPlage = /(\d+(?:[.,]\d+)?)\s*(?:à|a|-|\/)\s*(\d+(?:[.,]\d+)?)\s*mm/i;
+            const regUnique = /(\d+(?:[.,]\d+)?)\s*mm/i;
+            let cumulTrouve = null;
+
+            const matchPlage = texte.match(regPlage);
+            if (matchPlage) {
+                const c1 = parseFloat(matchPlage[1].replace(',', '.'));
+                const c2 = parseFloat(matchPlage[2].replace(',', '.'));
+                // Retenir la borne supérieure de l'averse ou la moyenne
+                cumulTrouve = Math.max(c1, c2);
+            } else {
+                const matchUnique = texte.match(regUnique);
+                if (matchUnique) {
+                    cumulTrouve = parseFloat(matchUnique[1].replace(',', '.'));
+                }
+            }
+
+            if (cumulTrouve && !isNaN(cumulTrouve) && cumulTrouve > 0) {
+                const cumulInput = document.getElementById('sim-bms-cumul-mm');
+                if (cumulInput) cumulInput.value = String(Math.round(cumulTrouve));
+            }
+
+            // 3. Détection des heures de validité (ex: "de 07h00 à 21h00", "07:00 au 21:00")
+            const regHeures = /(?:de|a partir de|du)?\s*(\d{1,2})[h:](\d{2})?\s*(?:à|a|-|au|\/)\s*(\d{1,2})[h:](\d{2})?/i;
+            const matchH = texte.match(regHeures);
+            if (matchH) {
+                const h1 = String(parseInt(matchH[1], 10)).padStart(2, '0');
+                const m1 = String(parseInt(matchH[2] || '0', 10)).padStart(2, '0');
+                const h2 = String(parseInt(matchH[3], 10)).padStart(2, '0');
+                const m2 = String(parseInt(matchH[4] || '0', 10)).padStart(2, '0');
+
+                const debEl = document.getElementById('sim-bms-heure-debut');
+                const finEl = document.getElementById('sim-bms-heure-fin');
+                if (debEl) debEl.value = `${h1}:${m1}`;
+                if (finEl) finEl.value = `${h2}:${m2}`;
+            }
+
+            // 4. Détection de date (ex: "12/11/2026", "12-11-2026")
+            const regDate = /(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/;
+            const matchDate = texte.match(regDate);
+            if (matchDate) {
+                const j = String(parseInt(matchDate[1], 10)).padStart(2, '0');
+                const m = String(parseInt(matchDate[2], 10)).padStart(2, '0');
+                const a = matchDate[3];
+                const dateEl = document.getElementById('sim-bms-date');
+                if (dateEl) dateEl.value = `${a}-${m}-${j}`;
+            }
+
+            // Fermer l'encadré et actualiser
+            const cont = document.getElementById('sim-bms-telegramme-container');
+            if (cont) cont.style.display = 'none';
+
+            window.onChangementParametresBMS();
+        };
+
+        window.telechargerOrdreMissionTerrain = function() {
+            window.location.href = '/api/v1/simulations/bms/ordre-mission-pdf';
+        };
+
+        window.basculerInfobulleBMS = function(event) {
+            if (event) event.stopPropagation();
+            const pop = document.getElementById('topbar-bms-popover');
+            if (!pop) return;
+            pop.style.display = (pop.style.display === 'none' || !pop.style.display) ? 'block' : 'none';
+        };
+
+        window.fermerInfobulleBMS = function(event) {
+            if (event) event.stopPropagation();
+            const pop = document.getElementById('topbar-bms-popover');
+            if (pop) pop.style.display = 'none';
+        };
+
+        // Fermer l'infobulle au clic extérieur
+        document.addEventListener('click', function(e) {
+            const pop = document.getElementById('topbar-bms-popover');
+            const pill = document.getElementById('topbar-bms-pill');
+            if (pop && pop.style.display === 'block') {
+                if (!pop.contains(e.target) && (!pill || !pill.contains(e.target))) {
+                    pop.style.display = 'none';
+                }
+            }
+        });
 
         window.declencherSimulationSWMM = function() {
             const scen = document.getElementById('sim-select-scenario').value;
@@ -708,6 +832,57 @@ window.dessinerRaccordementsOrphelinsSurCarte = function() {
                         }
                     } else {
                         bmsBanner.style.display = 'none';
+                    }
+                }
+
+                // Actualiser le badge discret BMS dans la barre supérieure (Header)
+                const topbarBmsPill = document.getElementById('topbar-bms-pill');
+                const topbarBmsLabel = document.getElementById('topbar-bms-label');
+                const topbarBmsPopover = document.getElementById('topbar-bms-popover-content');
+                const actionBmsMission = document.getElementById('action-item-bms-mission');
+
+                if (bmsInfo) {
+                    const vig = (bmsInfo.vigilance || 'orange').toLowerCase();
+                    const sym = bmsInfo.symbole || (vig === 'rouge' ? '🔴' : (vig === 'jaune' ? '🟡' : '🟠'));
+                    const col = vig === 'rouge' ? '#ef4444' : (vig === 'jaune' ? '#eab308' : '#f97316');
+                    const dText = bmsInfo.date_texte || '12 nov.';
+
+                    if (topbarBmsPill) {
+                        topbarBmsPill.style.display = 'inline-flex';
+                        topbarBmsPill.style.borderColor = col;
+                        topbarBmsPill.style.color = col;
+                    }
+                    if (topbarBmsLabel) {
+                        topbarBmsLabel.textContent = `BMS actif : ${dText} (${bmsInfo.heure_debut}-${bmsInfo.heure_fin}) • ${bmsInfo.cumul_mm} mm`;
+                    }
+                    if (topbarBmsPopover) {
+                        const qPeak = ((data.kpis && data.kpis.peak_outflow_m3s) || (data && data.peak_outflow_m3s) || 0).toFixed(3);
+                        const flCount = (data.kpis && data.kpis.flooded_nodes_count) || (data && data.flooded_nodes_count) || 0;
+                        const surCount = (data.kpis && data.kpis.surcharged_nodes_count) || (data && data.surcharged_nodes_count) || 0;
+
+                        topbarBmsPopover.innerHTML = `
+                            <div style="margin-bottom: 6px;"><b>Vigilance :</b> <span style="color: ${col}; font-weight: 800;">${sym} ${vig.toUpperCase()}</span></div>
+                            <div style="margin-bottom: 6px;"><b>Épisode :</b> ${dText} de ${bmsInfo.heure_debut} à ${bmsInfo.heure_fin} (${bmsInfo.duree_heures} h)</div>
+                            <div style="margin-bottom: 6px;"><b>Précipitations :</b> ${bmsInfo.cumul_mm} mm cumulés (crête ${(bmsInfo.intensite_pic_mmh || 0).toFixed(1)} mm/h)</div>
+                            <div style="margin-bottom: 6px;"><b>Débit à l'exutoire :</b> <span style="color: #38bdf8; font-weight: 700;">${qPeak} m³/s</span></div>
+                            <div style="color: #fca5a5;"><b>Diagnostic critique :</b> ${flCount} regard(s) débordant(s), ${surCount} en charge</div>
+                        `;
+                    }
+                    if (actionBmsMission) {
+                        actionBmsMission.classList.remove('disabled');
+                        actionBmsMission.style.opacity = '1';
+                        actionBmsMission.style.pointerEvents = 'auto';
+                        actionBmsMission.style.cursor = 'pointer';
+                    }
+                } else {
+                    if (topbarBmsPill) topbarBmsPill.style.display = 'none';
+                    const pop = document.getElementById('topbar-bms-popover');
+                    if (pop) pop.style.display = 'none';
+                    if (actionBmsMission) {
+                        actionBmsMission.classList.add('disabled');
+                        actionBmsMission.style.opacity = '0.45';
+                        actionBmsMission.style.pointerEvents = 'none';
+                        actionBmsMission.style.cursor = 'not-allowed';
                     }
                 }
                 

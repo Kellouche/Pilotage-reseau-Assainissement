@@ -8,7 +8,7 @@ Objet : Endpoints de lancement de simulation SWMM 5.2 et restitution des résult
 ================================================================================
 """
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status, Response
 from sqlalchemy.orm import Session
 from typing import List, Optional, Any, Dict, Union, Tuple
 from pathlib import Path
@@ -1100,6 +1100,50 @@ def download_latest_rpt(
         media_type="text/plain; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
+
+
+# ============================================================
+# ORDRE DE MISSION TERRAIN BMS (PDF POUR ÉQUIPES D'ASTREINTE ONA)
+# ============================================================
+
+@router.get("/bms/ordre-mission-pdf")
+def telecharger_ordre_mission_bms_pdf(
+    cluster_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
+):
+    """
+    Génère et télécharge l'ordre de mission terrain officiel (PDF)
+    pour les équipes d'intervention de l'ONA en cas d'alerte météo BMS.
+    Identifie la liste prioritaire des regards et collecteurs à curer et sécuriser.
+    """
+    global _DERNIERE_SIMULATION
+    from src.domain.bms_ordre_mission import generer_pdf_ordre_mission_bms
+
+    sim_data = _DERNIERE_SIMULATION if (_DERNIERE_SIMULATION and _est_simulation_valide(_DERNIERE_SIMULATION)) else {}
+    bms_info = sim_data.get("bms_info")
+
+    nom_bassin = (
+        sim_data.get("meta", {}).get("bassin_nom")
+        or sim_data.get("meta", {}).get("cluster_nom")
+        or "Bassin versant urbain"
+    )
+
+    pdf_bytes = generer_pdf_ordre_mission_bms(
+        simulation_data=sim_data,
+        bms_info=bms_info,
+        nom_bassin=nom_bassin
+    )
+
+    bassin_slug = re.sub(r'[^\w\-]+', '_', nom_bassin)[:30].strip('_') or "reseau"
+    filename = f"Ordre_Mission_Terrain_BMS_{bassin_slug}.pdf"
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
 
 
 # ============================================================

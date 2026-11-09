@@ -57,3 +57,4 @@ def test_creer_scenario_bms_structure():
     assert scen["hauteur_totale_mm"] == 35.0
     assert scen["duree_heures"] == 15.0  # 14h + 1h ressuyage
     assert len(scen["timeseries"]) > 0
+

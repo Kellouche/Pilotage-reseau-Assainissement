@@ -21,3 +21,12 @@ def test_bms_preview_fonction():
     assert data["hauteur_totale_mm"] == 35.0
     assert data["duree_bms_heures"] == 14.0
     assert len(data["timeseries"]) > 10
+
+
+def test_telecharger_ordre_mission_bms_pdf():
+    from api.routes.simulations import telecharger_ordre_mission_bms_pdf
+    resp = telecharger_ordre_mission_bms_pdf(cluster_id=None, db=None, tenant=None)
+    assert resp.status_code == 200
+    assert resp.media_type == "application/pdf"
+    assert resp.body.startswith(b"%PDF-")
+    assert "Ordre_Mission_Terrain_BMS" in resp.headers.get("Content-Disposition", "")

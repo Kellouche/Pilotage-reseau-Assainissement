@@ -149,6 +149,7 @@ Objet : Modale de paramétrage de pluie, stations ANRH et déclenchement SWMM 5.
                                     <option value="pluie_centennale">🌊 Pluie centennale (T = 100 ans) [crue historique exceptionnelle]</option>
                                     <option value="pluie_biennale">🌦️ Pluie biennale (T = 2 ans) [pluie courante / confort urbain]</option>
                                     <option value="pluie_orage_2h">⚡ Orage d'été brutal méditerranéen [averse convective 2 h — 92,5 mm/h]</option>
+                                    <option value="bms_onm">🚨 Scénario réel : Alerte météo spéciale (BMS ONM)</option>
                                     <option value="temps_sec_pur">☀️ Temps sec pur (étiage / eaux usées sans pluie — 0 mm/h)</option>
                                     <option value="personnalise">✏️ Saisie manuelle ingénieur (intensité personnalisée)</option>
                                 </select>
@@ -169,6 +170,29 @@ Objet : Modale de paramétrage de pluie, stations ANRH et déclenchement SWMM 5.
 
                     <!-- VOLET 2 : Alerte météo (BMS ONM) — Gestion de proximité et crise en temps réel -->
                     <div id="section-pluie-bms" style="display: none;">
+                        <!-- Bouton optionnel de saisie assistée par télégramme BMS -->
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span style="font-size: 0.72rem; color: #fbbf24; font-weight: 700;">
+                                <i class="fas fa-satellite-dish me-1"></i> Bulletin Météorologique Spécial (ONM)
+                            </span>
+                            <button type="button" id="btn-toggle-telegramme-bms" onclick="basculerSaisieTelegrammeBMS()" style="background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.5); color: #fbbf24; border-radius: 6px; padding: 4px 10px; font-size: 0.74rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 5px; transition: all 0.2s;">
+                                <i class="fas fa-paste"></i> Coller le texte du télégramme BMS
+                            </button>
+                        </div>
+
+                        <!-- Encadré pliable d'analyse de texte du télégramme -->
+                        <div id="sim-bms-telegramme-container" style="display: none; background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 8px; padding: 10px; margin-bottom: 12px;">
+                            <label style="font-size: 0.72rem; color: #cbd5e1; display: block; margin-bottom: 4px;">
+                                <i class="fas fa-file-alt me-1" style="color: #f59e0b;"></i> Texte du télégramme ONM :
+                            </label>
+                            <textarea id="sim-bms-telegramme-texte" rows="3" placeholder="Exemple : BULLETIN METEOROLOGIQUE SPECIAL N°45. PLUIES ORAGEUSES SUR CHLEF, VALIDITE DU 12/11/2026 DE 07H00 A 21H00. CUMUL ATTENDU : 30 A 50 MM. VIGILANCE ORANGE." style="width: 100%; box-sizing: border-box; background: #0f172a; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; color: #f8fafc; font-size: 0.76rem; padding: 6px 8px; font-family: inherit; resize: vertical;"></textarea>
+                            <div style="display: flex; justify-content: flex-end; gap: 6px; margin-top: 6px;">
+                                <button type="button" onclick="analyserEtAppliquerTelegrammeBMS()" style="background: linear-gradient(135deg, #f59e0b, #d97706); color: white; border: none; border-radius: 4px; padding: 5px 12px; font-size: 0.74rem; font-weight: 700; cursor: pointer;">
+                                    <i class="fas fa-magic me-1"></i> Extraire et appliquer automatiquement
+                                </button>
+                            </div>
+                        </div>
+
                         <!-- Ligne 1 : Niveau de vigilance officiel ONM -->
                         <div style="margin-bottom: 10px;">
                             <label style="font-size: 0.75rem; color: #cbd5e1; display: block; margin-bottom: 5px;">
@@ -209,19 +233,25 @@ Objet : Modale de paramétrage de pluie, stations ANRH et déclenchement SWMM 5.
                             </div>
                         </div>
 
-                        <!-- Ligne 3 : Plage horaire de validité du BMS (Heure début -> Heure fin) -->
-                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; align-items: end;">
+                        <!-- Ligne 3 : Plage horaire de validité du BMS (Date + Heure début -> Heure fin + Durée) -->
+                        <div style="display: grid; grid-template-columns: 1.1fr 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; align-items: end;">
                             <div>
                                 <label style="font-size: 0.72rem; color: #cbd5e1; display: block; margin-bottom: 3px;">
-                                    <i class="fas fa-hourglass-start me-1" style="color: #38bdf8;"></i> Début bulletin :
+                                    <i class="fas fa-calendar-alt me-1" style="color: #38bdf8;"></i> Date bulletin :
                                 </label>
-                                <input type="time" id="sim-bms-heure-debut" value="07:00" onchange="onChangementParametresBMS()" style="width: 100%; padding: 6px 8px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #f8fafc; font-size: 0.82rem; font-weight: 600; text-align: center;">
+                                <input type="date" id="sim-bms-date" value="2026-11-12" onchange="onChangementParametresBMS()" style="width: 100%; padding: 6px 6px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #f8fafc; font-size: 0.78rem; font-weight: 600; text-align: center;">
                             </div>
                             <div>
                                 <label style="font-size: 0.72rem; color: #cbd5e1; display: block; margin-bottom: 3px;">
-                                    <i class="fas fa-hourglass-end me-1" style="color: #38bdf8;"></i> Fin bulletin :
+                                    <i class="fas fa-hourglass-start me-1" style="color: #38bdf8;"></i> Début :
                                 </label>
-                                <input type="time" id="sim-bms-heure-fin" value="21:00" onchange="onChangementParametresBMS()" style="width: 100%; padding: 6px 8px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #f8fafc; font-size: 0.82rem; font-weight: 600; text-align: center;">
+                                <input type="time" id="sim-bms-heure-debut" value="07:00" onchange="onChangementParametresBMS()" style="width: 100%; padding: 6px 6px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #f8fafc; font-size: 0.82rem; font-weight: 600; text-align: center;">
+                            </div>
+                            <div>
+                                <label style="font-size: 0.72rem; color: #cbd5e1; display: block; margin-bottom: 3px;">
+                                    <i class="fas fa-hourglass-end me-1" style="color: #38bdf8;"></i> Fin :
+                                </label>
+                                <input type="time" id="sim-bms-heure-fin" value="21:00" onchange="onChangementParametresBMS()" style="width: 100%; padding: 6px 6px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #f8fafc; font-size: 0.82rem; font-weight: 600; text-align: center;">
                             </div>
                             <div>
                                 <span id="sim-bms-duree-badge" style="display: block; width: 100%; text-align: center; padding: 6px 4px; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 6px; color: #38bdf8; font-size: 0.78rem; font-weight: 700;">
