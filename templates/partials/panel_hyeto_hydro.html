@@ -1,0 +1,59 @@
+<!--
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-11-09
+Objet : Panneau flottant Hyétogramme ↔ Hydrogramme (Double-Axe superposé / inversé - Format A)
+================================================================================
+-->
+
+<div id="panel-hyeto-hydro" class="hyeto-hydro-container" style="display: none;">
+    <!-- En-tête du panneau flottant -->
+    <div class="hyeto-hydro-header" id="hyeto-hydro-drag-handle">
+        <div class="hyeto-hydro-title">
+            <i class="fas fa-cloud-showers-heavy" style="color: #60a5fa;"></i>
+            <span>Analyse Pluie ↔ Débit (Hyétogramme & Hydrogramme)</span>
+            <span id="badge-hyeto-rain" class="badge-pill badge-hyeto-rain" title="Intensité maximale de précipitation">🌧️ Imax : -- mm/h</span>
+            <span id="badge-hyeto-flow" class="badge-pill badge-hyeto-flow" title="Débit de pointe à l'exutoire">🌊 Qmax : -- m³/s</span>
+            <span id="badge-hyeto-lag" class="badge-pill badge-hyeto-lag" title="Décalage temporel (temps de réponse du bassin)">⏱️ Δt : -- min</span>
+            <span id="badge-hyeto-vol" class="badge-pill badge-hyeto-vol" title="Volume précipité vs volume évacué">💧 V : -- m³</span>
+            <span id="badge-hyeto-rc" class="badge-pill badge-hyeto-rc" title="Coefficient de ruissellement effectif C = V_écoulé / V_pluie">📊 C : -- %</span>
+        </div>
+
+        <div class="hyeto-hydro-controls">
+            <button class="btn-action-hyeto btn-play-sync" id="btn-hyeto-sync-play" onclick="timeSliderTogglePlay()" title="Lancer / suspendre l'animation synchronisée avec la carte">
+                <i class="fas fa-play" id="icon-hyeto-play"></i>
+                <span id="label-hyeto-play">Animer</span>
+            </button>
+            <button class="btn-action-hyeto btn-export" onclick="exporterHyetoHydroImage()" title="Télécharger l'image du double graphique en haute définition">
+                <i class="fas fa-download"></i> Image
+            </button>
+            <button class="btn-close-hyeto" onclick="fermerHyetoHydroPanel()" title="Fermer le panneau d'analyse">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Corps du graphique Canvas -->
+    <div class="hyeto-hydro-body">
+        <div class="hyeto-hydro-chart-wrapper">
+            <canvas id="canvas-hyeto-hydro"></canvas>
+        </div>
+
+        <!-- Légende pédagogique & diagnostic instantané -->
+        <div class="hyeto-hydro-footer">
+            <div class="hyeto-legend-item">
+                <span class="legend-swatch rain-swatch"></span>
+                <span><b>Hyétogramme de pluie</b> (barres descendantes, mm/h) — Sollicitation Chicago / Montana</span>
+            </div>
+            <div class="hyeto-legend-item">
+                <span class="legend-swatch flow-swatch"></span>
+                <span><b>Hydrogramme de crue</b> (courbe montante, m³/s) — Écoulement Saint-Venant 1D à l'exutoire</span>
+            </div>
+            <div class="hyeto-legend-item">
+                <span class="legend-swatch time-swatch"></span>
+                <span id="hyeto-indicator-current-time">Temps courant : <b>T = 00h 00m</b> (cliquez sur le graphe pour naviguer)</span>
+            </div>
+        </div>
+    </div>
+</div>

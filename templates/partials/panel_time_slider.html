@@ -63,8 +63,11 @@ Objet : Contrôleur temporel de l'onde de crue (Time Slider - Phase 6.B)
         </div>
 
         <!-- Mini-Hydrogramme dynamique -->
-        <div class="ts-hydrograph-container" title="Cliquez sur l'hydrogramme pour vous déplacer dans le temps">
+        <div class="ts-hydrograph-container" title="Cliquez pour naviguer ou ouvrir l'analyse Pluie ↔ Débit">
             <canvas id="canvas-ts-hydrograph"></canvas>
+            <button class="ts-btn-expand-hyeto" onclick="toggleHyetoHydroPanel()" title="Ouvrir l'analyse complète Pluie ↔ Débit (Hyétogramme & Hydrogramme)">
+                <i class="fas fa-expand-arrows-alt"></i>
+            </button>
         </div>
     </div>
 </div>

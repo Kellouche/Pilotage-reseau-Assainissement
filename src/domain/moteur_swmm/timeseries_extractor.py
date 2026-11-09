@@ -24,19 +24,91 @@ except ImportError:
     NodeAttribute = None
 
 
-def extraire_series_temporelles(out_path: str, max_steps: int = 60) -> Dict[str, Any]:
+def _extraire_hyetogramme_depuis_inp(inp_path: Optional[str]) -> List[tuple]:
+    """Extrait les couples (minute, intensite_mmh) depuis la section [TIMESERIES] d'un fichier .inp."""
+    if not inp_path or not os.path.exists(inp_path):
+        return []
+    ts_points = []
+    in_ts = False
+    try:
+        with open(inp_path, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                s = line.strip()
+                if not s or s.startswith(";"):
+                    continue
+                if s.startswith("["):
+                    in_ts = (s.upper() == "[TIMESERIES]")
+                    continue
+                if in_ts:
+                    parts = s.split()
+                    if len(parts) >= 3:
+                        t_str = parts[1]
+                        val_str = parts[2]
+                        try:
+                            t_parts = t_str.split(":")
+                            m = int(t_parts[0]) * 60 + int(t_parts[1])
+                            val = float(val_str)
+                            ts_points.append((m, val))
+                        except Exception:
+                            pass
+        ts_points.sort(key=lambda x: x[0])
+    except Exception as e:
+        logger.warning("Erreur lecture [TIMESERIES] depuis %s: %s", inp_path, e)
+    return ts_points
+
+
+def _extraire_surface_totale_inp(inp_path: Optional[str]) -> float:
+    """Extrait la surface totale du bassin versant (ha) depuis la section [SUBCATCHMENTS] d'un .inp."""
+    if not inp_path or not os.path.exists(inp_path):
+        return 0.0
+    tot_area = 0.0
+    in_sub = False
+    try:
+        with open(inp_path, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                s = line.strip()
+                if not s or s.startswith(";"):
+                    continue
+                if s.startswith("["):
+                    in_sub = (s.upper() == "[SUBCATCHMENTS]")
+                    continue
+                if in_sub:
+                    parts = s.split()
+                    if len(parts) >= 4:
+                        try:
+                            tot_area += float(parts[3])
+                        except Exception:
+                            pass
+    except Exception:
+        pass
+    return round(tot_area, 2)
+
+
+def _interpoler_pluie(ts_points: List[tuple], minute: int) -> float:
+    """Interpole l'intensité pluvieuse (mm/h) à la minute donnée."""
+    if not ts_points:
+        return 0.0
+    if minute <= ts_points[0][0]:
+        return float(ts_points[0][1])
+    if minute >= ts_points[-1][0]:
+        return float(ts_points[-1][1])
+    for i in range(len(ts_points) - 1):
+        m0, v0 = ts_points[i]
+        m1, v1 = ts_points[i + 1]
+        if m0 <= minute <= m1:
+            if m1 == m0:
+                return float(v0)
+            ratio = (minute - m0) / float(m1 - m0)
+            return round(v0 + ratio * (v1 - v0), 2)
+    return 0.0
+
+
+def extraire_series_temporelles(out_path: str, max_steps: int = 60, inp_path: Optional[str] = None) -> Dict[str, Any]:
     """
-    Extrait les séries temporelles pour l'animation de l'onde de crue (Time Slider).
+    Extrait les séries temporelles pour l'animation de l'onde de crue (Time Slider)
+    et le double-graphique Hyétogramme (pluie) ↔ Hydrogramme (crue).
     Lit le fichier binaire SWMM .out via pyswmm.Output et compile un profil temporel
     échantillonné fluide (jusqu'à max_steps pas de temps).
-
-    Retourne :
-      - duration_hours : durée totale simulée (heures)
-      - total_steps : nombre total de pas enregistrés
-      - sampled_count : nombre de pas échantillonnés
-      - peak_outflow_m3s : débit de pointe global à l'exutoire (m3/s)
-      - peak_time : heure du débit de pointe (ex: '01:45')
-      - steps : liste des états à chaque pas de temps échantillonné
     """
     if not os.path.exists(out_path) or os.path.getsize(out_path) == 0:
         logger.warning("Fichier .out introuvable ou vide: %s", out_path)
@@ -91,10 +163,19 @@ def extraire_series_temporelles(out_path: str, max_steps: int = 60) -> Dict[str,
                 except Exception:
                     pass
 
+            # Extraction des données de pluie et de surface du bassin depuis le .inp
+            hyeto_points = _extraire_hyetogramme_depuis_inp(inp_path)
+            total_surface_ha = _extraire_surface_totale_inp(inp_path)
+
             # Compilation des pas temporels échantillonnés
             steps_data: List[Dict[str, Any]] = []
             peak_outflow = 0.0
             peak_time_str = "00:00"
+            peak_outflow_minute = 0
+
+            peak_rain = 0.0
+            peak_rain_time_str = "00:00"
+            peak_rain_minute = 0
 
             start_dt = times[0]
             end_dt = times[-1]
@@ -116,6 +197,14 @@ def extraire_series_temporelles(out_path: str, max_steps: int = 60) -> Dict[str,
                 if cur_outflow > peak_outflow:
                     peak_outflow = cur_outflow
                     peak_time_str = time_str
+                    peak_outflow_minute = delta_min
+
+                # Intensité de précipitation (mm/h)
+                cur_rain = _interpoler_pluie(hyeto_points, delta_min)
+                if cur_rain > peak_rain:
+                    peak_rain = cur_rain
+                    peak_rain_time_str = time_str
+                    peak_rain_minute = delta_min
 
                 # Conduites actives (ne conserver que les valeurs significatives > 0.02 pour alléger le JSON)
                 active_links: Dict[str, float] = {}
@@ -138,12 +227,35 @@ def extraire_series_temporelles(out_path: str, max_steps: int = 60) -> Dict[str,
                     "original_index": idx,
                     "time_str": time_str,
                     "minute": delta_min,
+                    "rainfall_mmh": cur_rain,
                     "outflow_m3s": cur_outflow,
                     "surcharged_pipes_count": surcharged_pipes,
                     "flooded_nodes_count": len(flooded_nodes),
                     "flooded_nodes": flooded_nodes,
                     "links": active_links
                 })
+
+            # Calcul des bilans volumiques et hydrologiques globaux
+            # 1. Volume d'eau écoulé à l'exutoire (m3) par intégration trapézoïdale
+            total_outflow_vol_m3 = 0.0
+            for i in range(1, len(steps_data)):
+                dt_sec = (steps_data[i]["minute"] - steps_data[i - 1]["minute"]) * 60.0
+                q_avg = (steps_data[i]["outflow_m3s"] + steps_data[i - 1]["outflow_m3s"]) / 2.0
+                total_outflow_vol_m3 += q_avg * dt_sec
+            total_outflow_vol_m3 = round(total_outflow_vol_m3, 1)
+
+            # 2. Hauteur de pluie totale et volume précipité brut (m3)
+            total_precip_mm = 0.0
+            if hyeto_points:
+                for i in range(1, len(hyeto_points)):
+                    dt_h = (hyeto_points[i][0] - hyeto_points[i - 1][0]) / 60.0
+                    i_avg = (hyeto_points[i][1] + hyeto_points[i - 1][1]) / 2.0
+                    total_precip_mm += i_avg * dt_h
+            total_precip_mm = round(total_precip_mm, 2)
+
+            total_rain_vol_m3 = round(total_surface_ha * total_precip_mm * 10.0, 1) if total_surface_ha > 0 else 0.0
+            runoff_coef = round(total_outflow_vol_m3 / total_rain_vol_m3, 2) if total_rain_vol_m3 > 0 else 0.65
+            lag_time_min = max(0, peak_outflow_minute - peak_rain_minute)
 
             return {
                 "status": "SUCCESS",
@@ -153,8 +265,17 @@ def extraire_series_temporelles(out_path: str, max_steps: int = 60) -> Dict[str,
                 "sampled_count": len(steps_data),
                 "peak_outflow_m3s": peak_outflow,
                 "peak_time": peak_time_str,
+                "peak_rainfall_mmh": peak_rain,
+                "peak_rainfall_time": peak_rain_time_str,
+                "lag_time_minutes": lag_time_min,
+                "total_precipitation_mm": total_precip_mm,
+                "total_surface_ha": total_surface_ha,
+                "total_rain_volume_m3": total_rain_vol_m3,
+                "total_outflow_volume_m3": total_outflow_vol_m3,
+                "runoff_coefficient": runoff_coef,
                 "outfall_nodes": outfall_nodes,
                 "time_labels": [s["time_str"] for s in steps_data],
+                "rainfall_series": [s["rainfall_mmh"] for s in steps_data],
                 "outflow_series": [s["outflow_m3s"] for s in steps_data],
                 "steps": steps_data
             }

@@ -58,11 +58,11 @@ def executer_solver_swmm(inp_content: str, return_timeseries: bool = False):
             with open(rpt_path, "r", encoding="utf-8", errors="ignore") as rf:
                 rpt_text = rf.read()
 
-        # Extraction des séries temporelles (Phase 6.B) avant suppression du fichier binaire .out
+        # Extraction des séries temporelles (Phase 6.B & 6.C) avant suppression du fichier binaire .out
         if return_timeseries and os.path.exists(out_path):
             try:
                 from src.domain.moteur_swmm.timeseries_extractor import extraire_series_temporelles
-                timeseries_data = extraire_series_temporelles(out_path)
+                timeseries_data = extraire_series_temporelles(out_path, inp_path=tmp_inp)
             except Exception as e_ts:
                 logger.warning("Impossible d'extraire les séries temporelles: %s", e_ts)
                 timeseries_data = {"status": "ERROR", "error": str(e_ts), "steps": []}

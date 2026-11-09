@@ -60,6 +60,13 @@ Outils de visualisation interactive et de génération de fichiers SWMM 5.2 à p
   - Mise à jour en temps réel de la cartographie Leaflet (coloration des tronçons selon $Q(t)/Q_{\max}$ et statut des regards : sain, en charge dans la cheminée, ou débordant au sol).
   - Compteurs instantanés de crise : nombre de tronçons en surcharge et de regards débordants à chaque pas de temps.
   - Commandes de lecture multimédia (Play, Pause, vitesses $1\times, 2\times, 5\times$).
+- **Analyse Pluie ↔ Débit (Hyétogramme & Hydrogramme - Format A)** :
+  - Panneau flottant déplaçable (draggable) avec double-axe superposé / inversé aux normes internationales d'ingénierie hydrologique.
+  - **Hyétogramme de pluie descendant** (axe Y inversé, barres bleues $I(t)$ en mm/h) illustrant la pluie de projet (Chicago / Montana).
+  - **Hydrogramme de crue montant** (axe Y normal, courbe cyan avec remplissage $Q(t)$ en $\text{m}^3/\text{s}$) traduisant la réponse hydrodynamique Saint-Venant 1D à l'exutoire.
+  - Calcul et affichage dynamique des KPIs d'ingénierie : intensité crête $I_{\max}$, débit de pointe $Q_{\max}$, temps de réponse / lag time ($\Delta t = t_{Q_{\max}} - t_{I_{\max}}$), volume précipité brut ($V_{\text{pluie}}$), volume écoulé ($V_{\text{écoulé}}$) et coefficient de ruissellement effectif ($C_{\text{eff}}$).
+  - Curseur vertical orange synchronisé en temps réel avec le Time Slider et la carte Leaflet (clic sur le graphe pour naviguer dans le temps).
+  - Bouton d'export d'image haute définition (PNG).
 - **Barre d'Outils Flottante & Ergonomie UI/UX** :
   - Barre d'actions d'ingénierie repositionnée sur le bord gauche pour libérer l'espace cartographique.
   - Boîte à outils flottante entièrement déplaçable (draggable) à la souris avec possibilité de repli et de réouverture instantanée.

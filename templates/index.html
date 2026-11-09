@@ -46,6 +46,9 @@ Objet : Cockpit cartographique et SIG modulaire de simulation hydraulique SWMM 5
 
         <!-- Contrôleur Temporel Onde de Crue (Phase 6.B) -->
         {% include "partials/panel_time_slider.html" %}
+
+        <!-- Panneau d'Analyse Pluie ↔ Débit (Hyétogramme & Hydrogramme - Format A) -->
+        {% include "partials/panel_hyeto_hydro.html" %}
     </div> <!-- fin app-workspace -->
 
     <!-- Vue Intégrée Contrôle Qualité -->
@@ -84,6 +87,7 @@ Objet : Cockpit cartographique et SIG modulaire de simulation hydraulique SWMM 5
     <script src="/static/js/app/simulation_ui.js?v=5.2.5"></script>
     <script src="/static/js/app/profil_long.js?v=5.2.7"></script>
     <script src="/static/js/app/time_slider.js?v=5.2.9"></script>
+    <script src="/static/js/app/hyeto_hydro.js?v=5.2.9"></script>
     <script src="/static/js/app/app_init.js?v=5.2.5"></script>
 </body>
 </html>

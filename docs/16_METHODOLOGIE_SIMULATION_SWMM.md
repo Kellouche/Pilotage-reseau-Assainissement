@@ -360,6 +360,19 @@ Lors de chaque simulation dynamique sous pluie d'orage Chicago/Montana, le solve
 4. **Commandes de lecture** :
    Boutons Play / Pause, glissière temporelle navigable et sélecteur de vitesse d'accélération ($1\times, 2\times, 5\times$).
 
+### 12.3 Graphique Pédagogique Couplé « Hyétogramme ↔ Hydrogramme » (Format A)
+Pour éclairer la chaîne de transformation pluie-débit au profit des bureaux d'études et des services techniques :
+* **Axe supérieur inversé (Hyétogramme)** : Les barres bleues d'intensité pluvieuse $I(t)$ descendent du haut vers le bas, matérialisant l'averse de projet (loi de Montana / profil Chicago).
+* **Axe inférieur normal (Hydrogramme)** : La courbe cyan d'écoulement $Q(t)$ monte du bas vers le haut avec son aire remplie, illustrant la crue hydrodynamique Saint-Venant 1D à l'exutoire.
+* **Calculs des métriques hydrologiques clés** :
+  * **Intensité de pointe** $I_{\max}$ ($\text{mm/h}$) et heure du pic de pluie.
+  * **Débit de crête** $Q_{\max}$ ($\text{m}^3/\text{s}$) et heure du pic de crue.
+  * **Temps de réponse du bassin versant (Lag Time)** : $\Delta t = t_{Q_{\max}} - t_{I_{\max}}$.
+  * **Volume précipité brut** : $V_{\text{pluie}} = \text{Surface} \times P_{\text{cumul}} \times 10\text{ m}^3$.
+  * **Volume total évacué** : $V_{\text{écoulé}} = \int Q(t)\,dt\text{ m}^3$.
+  * **Coefficient de ruissellement effectif** : $C_{\text{eff}} = \frac{V_{\text{écoulé}}}{V_{\text{pluie}}}$.
+* **Curseur vertical interactif** : Un curseur orange synchronisé permet à l'ingénieur de cliquer n'importe où sur l'axe du temps pour inspecter l'état instantané du réseau sur la carte Leaflet.
+
 ---
 
 ## 13. Rapport d'Expertise Technique A4 & Analyse Multi-Agents (PDF)

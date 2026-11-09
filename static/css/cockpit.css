@@ -997,6 +997,32 @@ body {
     cursor: pointer;
 }
 
+.ts-btn-expand-hyeto {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #94a3b8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.65rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    z-index: 5;
+}
+
+.ts-btn-expand-hyeto:hover {
+    background: #0284c7;
+    border-color: #38bdf8;
+    color: #ffffff;
+    transform: scale(1.1);
+}
+
 /* Pulsation visuelle pour les regards en débordement */
 @keyframes radarPulse {
     0% {
@@ -1022,5 +1048,204 @@ body {
     border-radius: 50%;
     animation: radarPulse 1.2s infinite ease-out;
 }
+
+/* ==========================================================================
+   PANNEAU FLOTTANT HYÉTOGRAMME ↔ HYDROGRAMME (Format A - Double-Axe inversé)
+   ========================================================================== */
+
+.hyeto-hydro-container {
+    position: absolute;
+    top: 70px;
+    left: 320px;
+    width: 820px;
+    height: 480px;
+    max-width: calc(100vw - 360px);
+    max-height: calc(100vh - 100px);
+    background: rgba(15, 23, 42, 0.96);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    border-radius: 12px;
+    box-shadow: 0 20px 45px rgba(0, 0, 0, 0.7), 0 0 25px rgba(56, 189, 248, 0.15);
+    z-index: 1050;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: fadeInSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.hyeto-hydro-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: rgba(15, 23, 42, 0.98);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    cursor: grab;
+    user-select: none;
+}
+
+.hyeto-hydro-header:active {
+    cursor: grabbing;
+}
+
+.hyeto-hydro-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #f8fafc;
+    flex-wrap: wrap;
+}
+
+.badge-pill.badge-hyeto-rain {
+    background: rgba(59, 130, 246, 0.18);
+    color: #60a5fa;
+    border: 1px solid rgba(59, 130, 246, 0.4);
+}
+
+.badge-pill.badge-hyeto-flow {
+    background: rgba(56, 189, 248, 0.18);
+    color: #38bdf8;
+    border: 1px solid rgba(56, 189, 248, 0.4);
+}
+
+.badge-pill.badge-hyeto-lag {
+    background: rgba(245, 158, 11, 0.18);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.badge-pill.badge-hyeto-vol {
+    background: rgba(168, 85, 247, 0.18);
+    color: #c084fc;
+    border: 1px solid rgba(168, 85, 247, 0.4);
+}
+
+.badge-pill.badge-hyeto-rc {
+    background: rgba(16, 185, 129, 0.18);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.hyeto-hydro-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.btn-action-hyeto {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #e2e8f0;
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.15s ease;
+}
+
+.btn-action-hyeto:hover {
+    background: rgba(56, 189, 248, 0.2);
+    border-color: #38bdf8;
+    color: #ffffff;
+}
+
+.btn-action-hyeto.btn-play-sync {
+    background: rgba(16, 185, 129, 0.2);
+    border-color: rgba(16, 185, 129, 0.4);
+    color: #34d399;
+}
+
+.btn-action-hyeto.btn-play-sync:hover {
+    background: rgba(16, 185, 129, 0.35);
+    border-color: #10b981;
+    color: #ffffff;
+}
+
+.btn-close-hyeto {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: color 0.15s, background 0.15s;
+}
+
+.btn-close-hyeto:hover {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.12);
+}
+
+.hyeto-hydro-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 10px 14px;
+    gap: 8px;
+    min-height: 0;
+}
+
+.hyeto-hydro-chart-wrapper {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 8px 12px;
+}
+
+.hyeto-hydro-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 0.72rem;
+    color: #94a3b8;
+    gap: 16px;
+}
+
+.hyeto-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.legend-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    display: inline-block;
+}
+
+.legend-swatch.rain-swatch {
+    background: #3b82f6;
+    border: 1px solid #60a5fa;
+}
+
+.legend-swatch.flow-swatch {
+    background: #38bdf8;
+    border: 1px solid #ffffff;
+}
+
+.legend-swatch.time-swatch {
+    width: 2px;
+    height: 14px;
+    background: #f59e0b;
+    border-radius: 1px;
+}
+
 
 
