@@ -300,6 +300,108 @@ DrainPilot accepte le téléversement direct de fichiers `.inp` externes provena
 
 
 
+---
+
+## 11. Profil en Long Hydraulique, Plan d'Eau Réel (WSP) et Ligne de Charge (HGL)
+
+Le module de profil en long hydraulique restitue le comportement de l'écoulement gravitaire et en charge le long de n'importe quel axe d'assainissement entre un regard amont et un regard aval.
+
+### 11.1 Algorithme d'Extraction du Chemin Topologique
+1. **Recherche de chemin orienté (Dijkstra)** :
+   À partir du graphe topologique orienté amont $\rightarrow$ aval du cluster simulé, l'algorithme recherche le plus court chemin hydraulique continu reliant le nœud amont (`node_amont`) au nœud aval (`node_aval`).
+2. **Reconstitution des cotes altimétriques absolues** :
+   Pour chaque regard $i$ de la branche :
+   * **Cote radier (fil d'eau)** : $z_{\text{radier}, i}$ (en mètres NGF).
+   * **Génératrice supérieure (extrados / haut de conduite)** : 
+     $$z_{\text{haut}, i} = z_{\text{radier}, i} + \frac{D_i}{1000}$$
+   * **Cote du terrain naturel (MNT / tampon)** : $z_{\text{terrain}, i} = z_{\text{radier}, i} + \text{Profondeur}_i$.
+3. **Ligne de charge hydraulique réelle (HGL - Hydraulic Grade Line)** :
+   Extraite directement de la simulation dynamique EPA SWMM 5.2 :
+   $$HGL_i = z_{\text{radier}, i} + y_{\max, i}$$
+   où $y_{\max, i}$ est la hauteur d'eau maximale calculée au nœud $i$ par la résolution de Saint-Venant 1D.
+
+### 11.2 Représentation Graphique aux Standards d'Ingénierie
+* **Plan d'eau réel dans les canalisations (Water Surface Profile - WSP)** :
+  La conduite est représentée par un rectangle fermé entre le radier et l'extrados. Une couche bleue semi-transparente matérialise le remplissage d'eau réel :
+  $$y_{\text{eau}} = \min(y_{\text{noeud}}, D)$$
+  permettant d'identifier immédiatement si l'écoulement est à surface libre (partiellement rempli) ou à pleine section.
+* **Zone de mise en charge sous pression (Hachurage distinctif)** :
+  Lorsque $HGL > z_{\text{haut}}$, la conduite fonctionne sous pression. La colonne d'eau remonte dans la cheminée du regard : la zone d'énergie piézométrique comprise entre l'extrados de la canalisation et la ligne $HGL$ est visualisée avec un motif de hachures diagonales bleues.
+* **Détection du débordement en surface** :
+  Lorsque :
+  $$HGL \ge z_{\text{terrain}}$$
+  le regard est en situation de débordement critique au sol. Une pastille rouge vif et une alerte de crise sont générées automatiquement.
+* **Édition interactive & flexibilité** :
+  L'utilisateur peut définir la branche soit en cliquant sur deux regards sur la carte, soit en éditant directement les champs de texte **Amont :** et **Aval :** du panneau pour recalculer instantanément le profil.
+
+---
+
+## 12. Propagation Temporelle de l'Onde de Crue (Time Slider Dynamique)
+
+### 12.1 Extraction des Séries Temporelles SWMM 5.2
+Lors de chaque simulation dynamique sous pluie d'orage Chicago/Montana, le solveur enregistre les chroniques temporelles $Q(t)$ et $y(t)$ à chaque pas de calcul (typiquement toutes les 1 à 5 minutes sur une durée de 2 à 4 heures).
+
+### 12.2 Animation & Synchronisation Cartographique
+1. **Hydrogramme interactif d'exutoire** :
+   Un graphique vectoriel interactif affiche la courbe de débit à l'exutoire principal $Q_{\text{out}}(t)$. Un curseur temporel vertical orange indique la position courante $T$ dans l'épisode pluvieux.
+2. **Mise à jour dynamique de la cartographie Leaflet** :
+   À chaque déplacement du curseur (ou en lecture automatique) :
+   * **Canalisations** : La couleur de chaque tronçon s'adapte dynamiquement selon son taux de charge instantané :
+     * Vert : $Q(t) / Q_{\max} < 50\%$ (écoulement sain et libre)
+     * Jaune : $50\% \le Q(t) / Q_{\max} < 80\%$ (charge modérée)
+     * Orange : $80\% \le Q(t) / Q_{\max} < 100\%$ (charge critique)
+     * Rouge : $Q(t) / Q_{\max} \ge 100\%$ (mise en charge sous pression)
+   * **Regards de visite** : Les regards surchargés ou débordants au pas de temps $T$ sont mis en exergue par des cercles de couleur proportionnels à la charge.
+3. **Indicateurs de crise en temps réel** :
+   Le bandeau inférieur affiche en continu :
+   * Débit instantané à l'exutoire ($m^3/s$).
+   * Nombre de tronçons en surcharge au pas de temps courant.
+   * Nombre de regards en débordement effectif au sol.
+4. **Commandes de lecture** :
+   Boutons Play / Pause, glissière temporelle navigable et sélecteur de vitesse d'accélération ($1\times, 2\times, 5\times$).
+
+---
+
+## 13. Rapport d'Expertise Technique A4 & Analyse Multi-Agents (PDF)
+
+### 13.1 Architecture de Restitution Autonome (Zero-Dependency)
+Pour garantir une indépendance absolue vis-à-vis d'outils de conversion serveur lourds (tels que Chromium headless ou wkhtmltopdf), le module d'impression repose sur une génération HTML A4 d'ingénierie vectorielle directe avec déclenchement natif de l'impression / sauvegarde PDF du navigateur (`window.print()`).
+
+### 13.2 Consolidation des 5 Domaines d'Expertise IA
+Le rapport compile de manière exhaustive les analyses des 5 agents spécialisés :
+1. **Agent 1 — Diagnostic Causal & Hydraulique** :
+   Identification des causes primaires de dysfonctionnement (insuffisance de pente, goulots d'étranglement géométriques avec $D_{\text{aval}} < D_{\text{amont}}$, refoulement aval et mises en charge).
+2. **Agent 2 — Prescriptions Génie Civil & Recalibrage** :
+   Recommandations de diamètres normalisés (DN 400 à DN 1200), matériaux prescrits (Béton Armé 135A, PEHD annelé), linéaires métriques et estimation des coûts unitaires de terrassement et pose.
+3. **Agent 3 — Solutions d'Hydrologie Durable (GDO)** :
+   Dimensionnement des bassins d'orage et d'écrêtement amont ($m^3$), noues d'infiltration végétalisées le long des voiries et évaluation de l'abattement du débit de pointe.
+4. **Agent 4 — Matrice de Risques & Priorités d'Intervention** :
+   Classement hiérarchisé des travaux selon la criticité :
+   * **P1 (Urgence absolue - 3 mois)** : Risques avérés d'inondation de caves, chaussées primaires ou coupure de voiries d'intérêt national (ex. RN4).
+   * **P2 (Moyen terme - 12 mois)** : Résorption des goulots structurels majeurs.
+   * **P3 (Maintenance programmée)** : Curage régulier, réfection des joints et calage de tampons.
+5. **Agent 5 — Analyse Technico-Économique Multi-Critères & Décision d'Investissement** :
+   Comparatif rigoureux de 3 variantes d'aménagement :
+   * *Variante 1* : 100% Tout-Réseau (Recalibrage lourd sans rétention — investissement massif et perturbation de voirie maximale).
+   * *Variante 2* : 100% GDO pures (Bassins de rétention sans recalibrage — protection partielle insuffisante).
+   * *Variante 3 (Recommandée)* : Mixte optimisée (Recalibrage ciblé des goulots structurants + bassin d'écrêtement régulé — résorption intégrale avec économie budgétaire substantielle).
+
+### 13.3 Décomposition BPU & Indicateurs Décisionnels
+* **Bordereau des Prix Unitaires (BPU)** :
+  Décomposition analytique en 4 postes de dépenses :
+  * Terrassement et blindage de tranchée ($30\%$)
+  * Fourniture des tuyaux ($35\%$)
+  * Pose et remblai compacté à $95\%$ OPM ($20\%$)
+  * Réfection de chaussée en béton bitumineux ($15\%$)
+* **Ratios directeurs socio-économiques** :
+  * Coût au mètre linéaire rénové ($\text{DZD/ml}$).
+  * Coût par habitant équivalent protégé ($\text{DZD/hab}$).
+  * Dommages annuels moyens évités (EAD - *Expected Annual Damages*, en $\text{DZD/an}$).
+  * Période de retour sur investissement (*Payback* en années).
+  * Taux de Rentabilité Interne (TRI en $\%$) et Valeur Actuelle Nette actualisée à 20 ans (VAN).
+
+---
+
 ### 7.1 Exécution native sans virtualenv
 L'application fonctionne directement sur l'environnement Python standard du système sans exiger l'activation d'un environnement virtuel (`.venv`).
 
@@ -312,4 +414,5 @@ os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 ```
 Cette variable doit impérativement être déclarée avant tout import de `geopandas`, `scipy` ou `numpy`.
+
 

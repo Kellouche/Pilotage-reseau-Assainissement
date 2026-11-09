@@ -150,6 +150,7 @@ L'API de SWMM Platform SaaS expose une architecture RESTful moderne sous le pré
 | `GET` | `/api/v1/simulations/latest` | Récupération immédiate des résultats et couches thématiques de la dernière simulation (persistance sans recalcul). | — | `200 OK` |
 | `GET` | `/api/v1/simulations/download/inp` | Téléchargement direct du fichier source modèle `.INP` assemblé pour la dernière simulation. | — | `200 OK (INP)` |
 | `GET` | `/api/v1/simulations/download/rpt` | Téléchargement officiel du rapport de calcul complet `.RPT` certifié EPA SWMM. | — | `200 OK (RPT)` |
+| `GET` | `/api/v1/simulations/profil-en-long` | Calcul du profil en long hydraulique et de la ligne de charge ($HGL$) le long du chemin amont-aval sélectionné. | `node_amont: str`, `node_aval: str` | `200 OK (Profil & Alertes)` |
 
 ### 9.2 Endpoints des Tâches Asynchrones & Historique :
 

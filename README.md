@@ -46,6 +46,28 @@ Outils de visualisation interactive et de génération de fichiers SWMM 5.2 à p
   - Sélecteur de typologie urbaine dominante (Centre urbain dense, Collectif, Pavillonnaire, Mixte, Périurbain) et surcharge manuelle du taux d'imperméabilisation (`% Imperv`).
   - Diagnostic hydraulique en temps réel : débits de pointe, erreurs de continuité, mise en charge des conduites ($Q/Q_{\max}$), identification des surcharges et des débordements en surface.
   - Restitution cartographique aux normes d'ingénierie : cercles nets et discrets (Débordement 5.5 px, Surcharge 4.0 px, Normal 2.5 px), sans animation pulsante invasive.
+- **Profil en Long Hydraulique & Ligne de Charge (HGL)** :
+  - Tracé longitudinal amont-aval interactif (Terrain naturel MNT, Génératrice supérieure / haut de conduite, Cote radier / fil d'eau).
+  - Ligne de charge piézométrique réelle ($HGL$) issue de la résolution Saint-Venant 1D complète (`pyswmm` / `DYNWAVE`).
+  - Affichage du plan d'eau réel (**Water Surface Profile / WSP**) en remplissage bleu dans la conduite.
+  - Hachurage géométrique distinctif de la zone de mise en charge sous pression entre l'extrados et la HGL ($HGL > z_{\text{haut conduite}}$).
+  - Détection automatique et surbrillance des points de débordement critique au sol ($HGL \ge z_{\text{terrain}}$).
+  - Saisie interactive par sélection sur carte ou édition manuelle directe des regards Amont / Aval (`input-profil-amont`, `input-profil-aval`).
+  - Volet de préconisations d'ingénierie par tronçon (recalibrage DN, réfection de pente, création de bassin tampon).
+- **Animation Temporelle de l'Onde de Crue (Time Slider)** :
+  - Propagation spatio-temporelle dynamique de l'onde de submersion le long des collecteurs gravitaires.
+  - Graphe interactif de l'hydrogramme de crue à l'exutoire avec curseur temporel synchronisé ($T$).
+  - Mise à jour en temps réel de la cartographie Leaflet (coloration des tronçons selon $Q(t)/Q_{\max}$ et statut des regards : sain, en charge dans la cheminée, ou débordant au sol).
+  - Compteurs instantanés de crise : nombre de tronçons en surcharge et de regards débordants à chaque pas de temps.
+  - Commandes de lecture multimédia (Play, Pause, vitesses $1\times, 2\times, 5\times$).
+- **Barre d'Outils Flottante & Ergonomie UI/UX** :
+  - Barre d'actions d'ingénierie repositionnée sur le bord gauche pour libérer l'espace cartographique.
+  - Boîte à outils flottante entièrement déplaçable (draggable) à la souris avec possibilité de repli et de réouverture instantanée.
+- **Rapport d'Expertise Technique A4 Haute Définition (PDF / Impression)** :
+  - Synthèse automatisée complète sans dépendance externe, formatée pour l'impression A4 et l'export PDF vectoriel.
+  - Consolidation des 5 agents d'expertise IA : Diagnostic causal (Agent 1), Prescriptions Génie Civil et recalibrage (Agent 2), Gestion Durable des Eaux Pluviales / GDO (Agent 3), Matrice de criticité et priorités P1/P2/P3 (Agent 4), et Analyse financière multi-variantes (Agent 5).
+  - Décomposition analytique du Bordereau des Prix Unitaires (BPU) : terrassement, fourniture des tuyaux, pose et remblai, réfection de chaussée.
+  - Évaluation de rentabilité socio-économique : coût par ml rénové, coût par habitant équivalent protégé, dommages annuels moyens évités (EAD), délai de récupération (Payback), TRI et VAN actualisée sur 20 ans.
 - **Gestion dynamique des jeux de données & caches multi-tenants** :
   - Invalidation et synchronisation immédiate des mémoires caches (graphe, clusters, sous-bassins, dernière simulation) lors du téléversement ou du changement de jeu de données.
   - Actualisation dynamique des statistiques d'en-tête et du panneau latéral selon la zone ou le projet sélectionné.

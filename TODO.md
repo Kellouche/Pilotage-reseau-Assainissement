@@ -62,14 +62,15 @@
 
 ### Phase 7bis — Moteur Hydrodynamique EPA SWMM 5.2 Réel
 
-- [ ] Générateur hydrologique de surface Voronoï/Thiessen (`[SUBCATCHMENTS]`, `%Imperv`, Horton)
-- [ ] Hyétogrammes de pluie de projet Montana / Chicago (`[RAINGAGES]`, `[TIMESERIES]`)
-- [ ] Sollicitations de temps sec (`[DWF]`) avec patterns horaires journaliers
-- [ ] Traduction des singularités (`[WEIRS]`, `[PUMPS]`, `[STORAGE]`, `[OUTFALLS]`)
-- [ ] Intégration du moteur natif compilé `pyswmm` (Saint-Venant 1D / `DYNWAVE`)
-- [ ] Parser binaire `.out` pour extraction des chroniques temporelles ($Q(t), y(t), V(t)$)
-- [ ] Time Slider temporel et animation de l'onde de crue sur la carte Leaflet
-- [ ] Profil en long hydraulique dynamique animé avec ligne piézométrique
+- [X] Générateur hydrologique de surface Voronoï/Thiessen (`[SUBCATCHMENTS]`, `%Imperv`, Horton)
+- [X] Hyétogrammes de pluie de projet Montana / Chicago (`[RAINGAGES]`, `[TIMESERIES]`)
+- [X] Sollicitations de temps sec (`[DWF]`) avec patterns horaires journaliers
+- [X] Traduction des singularités (`[WEIRS]`, `[PUMPS]`, `[STORAGE]`, `[OUTFALLS]`)
+- [X] Intégration du moteur natif compilé `pyswmm` (Saint-Venant 1D / `DYNWAVE`)
+- [X] Parser binaire `.out` pour extraction des chroniques temporelles ($Q(t), y(t), V(t)$)
+- [X] Time Slider temporel et animation dynamique de l'onde de crue sur la carte Leaflet
+- [X] Profil en long hydraulique interactif & Ligne de Charge (HGL Saint-Venant 1D, WSP, hachures sous pression)
+- [X] Édition et impression du Rapport d'Expertise Technique A4 (PDF multi-agents & BPU)
 
 ---
 
