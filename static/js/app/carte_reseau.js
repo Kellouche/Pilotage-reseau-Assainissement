@@ -435,6 +435,9 @@ function initDraggableToolbar() {
     }
 }
 
+window.toggleToolbarCollapse = toggleToolbarCollapse;
+window.initDraggableToolbar = initDraggableToolbar;
+
 // Initialisation dès que le DOM est prêt
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initDraggableToolbar);

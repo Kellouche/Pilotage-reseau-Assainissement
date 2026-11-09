@@ -386,13 +386,6 @@ function _nettoyerRadarDebordement() {
         afficherResultatsSimulation(window._dernierResultatSimulation);
     }
 }
-        const map = _getCarteTS();
-        if (map && map.hasLayer(state.radarGroup)) {
-            map.removeLayer(state.radarGroup);
-        }
-        state.radarGroup = null;
-    }
-}
 
 /**
  * Démarre ou suspend la lecture continue
@@ -499,6 +492,15 @@ function timeSliderSetSpeed(multiplier) {
         timeSliderPlay();
     }
 }
+
+// Export global sur window
+window.toggleTimeSlider = toggleTimeSlider;
+window.timeSliderTogglePlay = timeSliderTogglePlay;
+window.timeSliderPlay = timeSliderPlay;
+window.timeSliderPause = timeSliderPause;
+window.timeSliderSeek = timeSliderSeek;
+window.timeSliderStep = timeSliderStep;
+window.timeSliderSetSpeed = timeSliderSetSpeed;
 
 // Raccourci clavier : Barre d'espace pour Play/Pause
 document.addEventListener('keydown', (e) => {
