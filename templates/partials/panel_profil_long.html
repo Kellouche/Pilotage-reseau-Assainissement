@@ -1,0 +1,68 @@
+<!--
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-09
+Objet : Panneau rétractable du profil en long hydraulique interactif (Phase 6.A)
+================================================================================
+-->
+
+<div id="panel-profil-long" class="profil-long-container" style="display: none;">
+    <!-- En-tête du panneau -->
+    <div class="profil-long-header">
+        <div class="profil-long-title">
+            <i class="fas fa-chart-line" style="color: #38bdf8;"></i>
+            <span>Profil en Long Hydraulique & Ligne de Charge (HGL)</span>
+            <span id="badge-profil-troncons" class="badge-pill" style="display: none;">0 tronçons</span>
+            <span id="badge-profil-longueur" class="badge-pill" style="display: none; background: rgba(56, 189, 248, 0.15); color: #38bdf8;">0 m</span>
+            <span id="badge-profil-surcharges" class="badge-pill" style="display: none; background: rgba(239, 68, 68, 0.2); color: #ef4444;">0 surcharge</span>
+        </div>
+
+        <!-- Sélecteurs manuels amont/aval -->
+        <div class="profil-long-controls">
+            <div class="profil-node-select-box">
+                <span class="node-tag amont">Amont :</span>
+                <input type="text" id="input-profil-amont" placeholder="Regard départ..." readonly>
+            </div>
+            <button class="btn-swap-nodes" title="Inverser amont / aval" onclick="inverserRegardsProfil()">
+                <i class="fas fa-exchange-alt"></i>
+            </button>
+            <div class="profil-node-select-box">
+                <span class="node-tag aval">Aval :</span>
+                <input type="text" id="input-profil-aval" placeholder="Regard arrivée..." readonly>
+            </div>
+            <button class="btn-action-profil btn-tracer" onclick="rafraichirProfilLong()">
+                <i class="fas fa-play"></i> Actualiser
+            </button>
+            <button class="btn-action-profil btn-export" onclick="exporterProfilImage()" title="Télécharger l'image du profil">
+                <i class="fas fa-download"></i> Image
+            </button>
+            <button class="btn-close-profil" onclick="fermerProfilLong()" title="Fermer le profil en long">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Bannière d'instruction en mode sélection -->
+    <div id="profil-selection-banner" class="profil-selection-banner" style="display: none;">
+        <i class="fas fa-mouse-pointer fa-bounce" style="color: #38bdf8; margin-right: 8px;"></i>
+        <span id="profil-selection-text">Cliquez sur le <b>regard amont</b> sur la carte pour démarrer le profil...</span>
+        <button class="btn-annuler-selection" onclick="annulerSelectionProfil()">Annuler</button>
+    </div>
+
+    <!-- Corps du graphique -->
+    <div class="profil-long-body">
+        <div class="profil-chart-wrapper">
+            <canvas id="canvas-profil-long"></canvas>
+        </div>
+
+        <!-- Volet d'alertes & diagnostic hydraulique -->
+        <div id="profil-alertes-container" class="profil-alertes-sidebar" style="display: none;">
+            <div class="alertes-title">
+                <i class="fas fa-exclamation-triangle" style="color: #f59e0b;"></i> Diagnostic & Alertes
+            </div>
+            <div id="profil-alertes-list" class="alertes-list"></div>
+        </div>
+    </div>
+</div>

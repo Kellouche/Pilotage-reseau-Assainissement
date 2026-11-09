@@ -216,6 +216,18 @@ function chargerDonneesInitiales() {
                                     window.regardProperties.push(feature.properties);
                                     layer.bindPopup(regardPopup(feature, index));
                                 }
+
+                                // Interception pour le Profil en Long hydraulique (Phase 6.A)
+                                layer.on('click', (e) => {
+                                    if (window.profilLongState && window.profilLongState.active) {
+                                        const code = feature.properties.Code || feature.properties.code || feature.properties.id || feature.properties.nom;
+                                        if (code && window.handleRegardClickForProfil) {
+                                            window.handleRegardClickForProfil(code, e.latlng);
+                                            L.DomEvent.stopPropagation(e);
+                                            layer.closePopup();
+                                        }
+                                    }
+                                });
                             }
                         }).addTo(couches[type]);
                     });

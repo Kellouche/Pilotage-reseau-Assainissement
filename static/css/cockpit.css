@@ -422,3 +422,261 @@ body {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
+
+/* ==========================================================================
+   PROFIL EN LONG HYDRAULIQUE & LIGNE DE CHARGE (Phase 6.A)
+   ========================================================================== */
+
+.profil-long-container {
+    position: absolute;
+    bottom: 0;
+    left: 280px; /* Aligné avec la sidebar d'ingénierie */
+    right: 0;
+    height: 310px;
+    background: rgba(15, 23, 42, 0.96);
+    backdrop-filter: blur(12px);
+    border-top: 2px solid #38bdf8;
+    box-shadow: 0 -8px 25px rgba(0, 0, 0, 0.5);
+    z-index: 2100;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+    user-select: none;
+}
+
+@media (max-width: 900px) {
+    .profil-long-container {
+        left: 0;
+    }
+}
+
+.profil-long-header {
+    height: 44px;
+    min-height: 44px;
+    background: rgba(30, 41, 59, 0.8);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 14px;
+    gap: 12px;
+}
+
+.profil-long-title {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #f8fafc;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+}
+
+.profil-long-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.profil-node-select-box {
+    display: flex;
+    align-items: center;
+    background: #0f172a;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    padding: 2px 6px;
+}
+
+.profil-node-select-box .node-tag {
+    font-size: 0.72rem;
+    font-weight: 700;
+    margin-right: 4px;
+}
+
+.profil-node-select-box .node-tag.amont {
+    color: #10b981;
+}
+
+.profil-node-select-box .node-tag.aval {
+    color: #38bdf8;
+}
+
+.profil-node-select-box input {
+    background: transparent;
+    border: none;
+    color: #f1f5f9;
+    font-size: 0.78rem;
+    font-family: 'JetBrains Mono', monospace;
+    width: 90px;
+    outline: none;
+}
+
+.btn-swap-nodes {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #94a3b8;
+    border-radius: 4px;
+    padding: 4px 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-swap-nodes:hover {
+    color: #38bdf8;
+    background: rgba(56, 189, 248, 0.15);
+}
+
+.btn-action-profil {
+    font-size: 0.76rem;
+    font-weight: 600;
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.2s;
+}
+
+.btn-action-profil.btn-tracer {
+    background: #0284c7;
+    color: #fff;
+}
+
+.btn-action-profil.btn-tracer:hover {
+    background: #0369a1;
+}
+
+.btn-action-profil.btn-export {
+    background: rgba(255, 255, 255, 0.08);
+    color: #cbd5e1;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.btn-action-profil.btn-export:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: #f8fafc;
+}
+
+.btn-close-profil {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.btn-close-profil:hover {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.15);
+}
+
+.profil-selection-banner {
+    background: linear-gradient(90deg, rgba(2, 132, 199, 0.25), rgba(15, 23, 42, 0.4));
+    border-bottom: 1px solid rgba(56, 189, 248, 0.3);
+    padding: 6px 14px;
+    font-size: 0.8rem;
+    color: #e0f2fe;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.btn-annuler-selection {
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    color: #fca5a5;
+    font-size: 0.72rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.profil-long-body {
+    flex: 1;
+    display: flex;
+    padding: 8px 12px;
+    gap: 12px;
+    overflow: hidden;
+}
+
+.profil-chart-wrapper {
+    flex: 1;
+    height: 100%;
+    position: relative;
+    background: rgba(10, 15, 30, 0.6);
+    border-radius: 6px;
+    padding: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.profil-chart-wrapper canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.profil-alertes-sidebar {
+    width: 250px;
+    background: rgba(15, 23, 42, 0.8);
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    flex-direction: column;
+    padding: 8px;
+    font-size: 0.75rem;
+}
+
+.profil-alertes-sidebar .alertes-title {
+    font-weight: 700;
+    color: #f8fafc;
+    margin-bottom: 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.profil-alertes-sidebar .alertes-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.alerte-card {
+    background: rgba(255, 255, 255, 0.04);
+    border-left: 3px solid #f59e0b;
+    border-radius: 4px;
+    padding: 5px 8px;
+}
+
+.alerte-card.surcharge {
+    border-left-color: #ef4444;
+}
+
+.alerte-card.critique {
+    border-left-color: #f97316;
+}
+
+.alerte-card.debordement {
+    border-left-color: #dc2626;
+    background: rgba(220, 38, 38, 0.1);
+}
+
+.alerte-card .alerte-msg {
+    font-weight: 600;
+    color: #e2e8f0;
+}
+
+.alerte-card .alerte-reco {
+    font-size: 0.7rem;
+    color: #94a3b8;
+    margin-top: 2px;
+}
+

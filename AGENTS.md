@@ -24,3 +24,4 @@
 
 - Chaque endpoint et requête de persistance doit garantir l'isolation stricte par `org_id`.
 - Respecter scrupuleusement la règle furtive *stealth 404* (aucune fuite d'information inter-organisations).
+

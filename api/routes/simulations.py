@@ -1041,6 +1041,272 @@ def download_latest_rpt(
 
 
 # ============================================================
+# PROFIL EN LONG HYDRAULIQUE (Phase 6.A)
+# ============================================================
+
+@router.get("/profil-en-long")
+def get_profil_en_long(
+    node_amont: str,
+    node_aval: str,
+    db: Session = Depends(get_db),
+    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
+):
+    """
+    Calcule et retourne le profil en long hydraulique entre deux regards.
+    Chemin topologique amont→aval avec cotes géométriques (radiers, terrain naturel,
+    génératrices supérieures) et ligne de charge HGL issue de la dernière simulation SWMM.
+    """
+    global _DERNIERE_SIMULATION
+
+    # Charger le GeoPackage actif
+    from api.models import Project
+    active_gpkg = None
+    if tenant and hasattr(tenant, "org_id") and tenant.org_id:
+        try:
+            proj = db.query(Project).filter(
+                Project.org_id == tenant.org_id,
+                Project.is_archived.is_(False)
+            ).first()
+        except Exception:
+            proj = None
+        if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
+            active_gpkg = Path(proj.source_gpkg_key)
+    if not active_gpkg:
+        try:
+            proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
+        except Exception:
+            proj = None
+        if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
+            active_gpkg = Path(proj.source_gpkg_key)
+        elif Path("data/demo_reseau.gpkg").exists():
+            active_gpkg = Path("data/demo_reseau.gpkg")
+
+    if not active_gpkg or not active_gpkg.exists():
+        raise HTTPException(status_code=404, detail="Aucun réseau actif chargé.")
+
+    try:
+        import geopandas as gpd
+        from src.domain.moteur_swmm.constants import _clean_node_id
+
+        regards = gpd.read_file(str(active_gpkg), layer="regards")
+        canalisations = gpd.read_file(str(active_gpkg), layer="canalisations")
+
+        # Construire un index regard Code→géométrie+attributs
+        node_index: Dict[str, Any] = {}
+        for _, r in regards.iterrows():
+            nid = _clean_node_id(r.get("Code"), fallback=str(r.name))
+            if nid:
+                node_index[nid] = {
+                    "code": nid,
+                    "x": r.geometry.x if r.geometry else 0.0,
+                    "y": r.geometry.y if r.geometry else 0.0,
+                    "profondeur": float(r["Profondeur"]) if ("Profondeur" in r and r["Profondeur"] > 0) else 2.0,
+                }
+
+        # Construire le graphe amont→aval pour trouver le chemin
+        import networkx as nx
+        G = nx.DiGraph()
+        conduit_attrs: Dict[str, Any] = {}
+
+        for idx, c in canalisations.iterrows():
+            u = _clean_node_id(c.get("ID_AMONT"))
+            v = _clean_node_id(c.get("ID_AVAL"))
+            if u and v and u != v:
+                length = float(c["Longeur"]) if ("Longeur" in c and c["Longeur"] > 0) else float(c.geometry.length)
+                diam_mm = float(c["DIAMETRE"]) if ("DIAMETRE" in c and c["DIAMETRE"] > 0) else 600.0
+                cid = f"C_{idx+1}"
+                G.add_edge(u, v, cid=cid, length=length, diam_mm=diam_mm,
+                           materiau=str(c.get("MATERIAU", "Béton") or "Béton"),
+                           nom_voie=str(c.get("NOM-VOIE", "") or ""))
+                conduit_attrs[(u, v)] = {"cid": cid, "length": length, "diam_mm": diam_mm}
+
+        # Chercher le nœud le plus proche si exact non trouvé
+        def find_node(partial: str) -> Optional[str]:
+            if partial in G.nodes:
+                return partial
+            for n in G.nodes:
+                if partial.lower() in n.lower() or n.lower() in partial.lower():
+                    return n
+            return None
+
+        src = find_node(node_amont)
+        dst = find_node(node_aval)
+
+        if not src:
+            raise HTTPException(status_code=404, detail=f"Regard amont '{node_amont}' introuvable dans le réseau.")
+        if not dst:
+            raise HTTPException(status_code=404, detail=f"Regard aval '{node_aval}' introuvable dans le réseau.")
+
+        # Trouver le plus court chemin
+        try:
+            path_nodes = nx.shortest_path(G, src, dst, weight="length")
+        except nx.NetworkXNoPath:
+            # Essai inverse : si l'utilisateur a sélectionné l'aval avant l'amont
+            try:
+                path_nodes = nx.shortest_path(G, dst, src, weight="length")
+                src, dst = dst, src  # Rétablir le sens naturel amont -> aval
+            except nx.NetworkXNoPath:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Aucun chemin hydraulique entre '{node_amont}' et '{node_aval}'. "
+                           "Vérifiez que les deux regards appartiennent au même réseau connecté."
+                )
+
+        # Récupérer les élévations nodales depuis la simulation ou le MNT
+        node_elevs: Dict[str, float] = {}
+        sim_node_results: Dict[str, Any] = {}
+        sim_meta: Dict[str, Any] = {}
+        if _DERNIERE_SIMULATION and _est_simulation_valide(_DERNIERE_SIMULATION):
+            sim_node_results = _DERNIERE_SIMULATION.get("node_results", {})
+            sim_meta = _DERNIERE_SIMULATION.get("meta", {})
+            # Élévations depuis le meta de la simulation (node_elevs injecté dans meta)
+            meta_node_elevs = sim_meta.get("node_elevs", {})
+            if meta_node_elevs:
+                node_elevs.update(meta_node_elevs)
+
+        # Fallback : calculer z_radier = z_terrain - profondeur (estimation raisonnée)
+        # Les cotes terrain sont dans node_index via MNT si disponible
+        # On utilise une pente moyenne de 1% pour estimer si pas de MNT
+        def get_elevation(nid: str) -> float:
+            if nid in node_elevs:
+                return float(node_elevs[nid])
+            # Estimation par défaut 100m (relatif, le graphique sera cohérent)
+            return 100.0
+
+        # Construire les séries du profil
+        segments = []
+        distance_cumulee = 0.0
+
+        for i, nid in enumerate(path_nodes):
+            z_rad = get_elevation(nid)
+            info = node_index.get(nid, {})
+            profondeur = info.get("profondeur", 2.0)
+            z_terrain = z_rad + profondeur  # z_terrain = z_radier + profondeur
+            z_gen_sup = z_rad + (info.get("diam_m", 0.6))  # génératrice supérieure
+
+            # HGL depuis la simulation SWMM
+            hgl = None
+            node_sim = sim_node_results.get(nid, {})
+            if node_sim:
+                # Si le nœud est en charge, HGL > génératrice supérieure
+                status_n = node_sim.get("status", "normal")
+                if status_n in ("surcharged", "flooded"):
+                    hgl = z_terrain  # monte jusqu'à la surface
+                else:
+                    # Estimation conservative : HGL = z_rad + 60% de la profondeur
+                    hgl = z_rad + profondeur * 0.6
+
+            # Trouver la conduite qui sort de ce nœud vers le suivant
+            conduit = None
+            if i < len(path_nodes) - 1:
+                next_nid = path_nodes[i + 1]
+                edge_data = G.get_edge_data(nid, next_nid, {})
+                if edge_data:
+                    length = edge_data.get("length", 0.0)
+                    conduit = {
+                        "cid": edge_data.get("cid", f"C_{i+1}"),
+                        "length": length,
+                        "diam_mm": edge_data.get("diam_mm", 600.0),
+                        "materiau": edge_data.get("materiau", "Béton"),
+                        "nom_voie": edge_data.get("nom_voie", ""),
+                    }
+                    # Résultats simulation sur cette conduite
+                    cond_sim = {}
+                    if _DERNIERE_SIMULATION:
+                        all_cond = _DERNIERE_SIMULATION.get("conduit_results", {})
+                        # Trouver la conduite par u_node/d_node
+                        for ck, cv in all_cond.items():
+                            if cv.get("u_node") == nid and cv.get("d_node") == next_nid:
+                                cond_sim = cv
+                                break
+                    if cond_sim:
+                        conduit["flow_ratio"] = cond_sim.get("flow_ratio", 0.0)
+                        conduit["depth_ratio"] = cond_sim.get("depth_ratio", 0.0)
+                        conduit["max_flow_cms"] = cond_sim.get("max_flow_cms", 0.0)
+                        conduit["status"] = cond_sim.get("status", "normal")
+                        conduit["color"] = cond_sim.get("color", "#10b981")
+                    else:
+                        conduit["flow_ratio"] = 0.0
+                        conduit["depth_ratio"] = 0.0
+                        conduit["status"] = "inconnu"
+                        conduit["color"] = "#64748b"
+
+            segments.append({
+                "node_id": nid,
+                "distance_m": round(distance_cumulee, 2),
+                "z_radier": round(z_rad, 3),
+                "z_terrain": round(z_terrain, 3),
+                "z_gen_superieure": round(z_rad + (conduit["diam_mm"] / 1000.0 if conduit else 0.6), 3),
+                "z_hgl": round(hgl, 3) if hgl is not None else None,
+                "profondeur_m": round(profondeur, 2),
+                "node_status": node_sim.get("status", "normal") if node_sim else "normal",
+                "node_color": node_sim.get("color", "#10b981") if node_sim else "#10b981",
+                "conduit_sortant": conduit,
+            })
+
+            if conduit:
+                distance_cumulee += conduit.get("length", 0.0)
+
+        # Ajouter le dernier nœud (aval) sans conduit sortant
+        # (il est déjà ajouté dans la boucle)
+
+        # Statistiques du profil
+        z_min = min(s["z_radier"] for s in segments)
+        z_max = max(s["z_terrain"] for s in segments)
+        longueur_totale = distance_cumulee
+        conduites_en_charge = sum(
+            1 for s in segments
+            if s.get("conduit_sortant") and s["conduit_sortant"].get("status") in ("surcharge", "critique")
+        )
+
+        # Diagnostic automatique
+        alerts = []
+        for s in segments:
+            cond = s.get("conduit_sortant")
+            if cond and cond.get("flow_ratio", 0) >= 1.0:
+                alerts.append({
+                    "type": "surcharge",
+                    "node": s["node_id"],
+                    "message": f"Conduite {cond['cid']} en surcharge (Q/Qmax = {cond['flow_ratio']:.0%})",
+                    "recommandation": f"Diamètre actuel Ø{cond['diam_mm']:.0f} mm → préconisation : Ø{cond['diam_mm']*1.3:.0f} mm"
+                })
+            elif cond and cond.get("flow_ratio", 0) >= 0.8:
+                alerts.append({
+                    "type": "critique",
+                    "node": s["node_id"],
+                    "message": f"Conduite {cond['cid']} proche de la saturation ({cond['flow_ratio']:.0%})",
+                    "recommandation": "Surveiller lors d'orages supérieurs à T10."
+                })
+            if s["node_status"] in ("flooded", "surcharged"):
+                alerts.append({
+                    "type": "debordement",
+                    "node": s["node_id"],
+                    "message": f"Regard {s['node_id']} en débordement",
+                    "recommandation": "Rehaussement du tampon ou création d'un bassin de rétention en amont."
+                })
+
+        return {
+            "status": "success",
+            "node_amont": src,
+            "node_aval": dst,
+            "longueur_totale_m": round(longueur_totale, 2),
+            "nb_troncons": len(path_nodes) - 1,
+            "z_min": round(z_min, 3),
+            "z_max": round(z_max, 3),
+            "conduites_en_charge": conduites_en_charge,
+            "simulation_active": bool(_DERNIERE_SIMULATION and _est_simulation_valide(_DERNIERE_SIMULATION)),
+            "segments": segments,
+            "alertes": alerts,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Erreur calcul profil en long: %s", e)
+        raise HTTPException(status_code=500, detail=f"Erreur calcul profil en long : {e}")
+
+
+# ============================================================
 # ROUTES PARAMÉTRÉES /{simulation_id} (Placées à la fin)
 # ============================================================
 

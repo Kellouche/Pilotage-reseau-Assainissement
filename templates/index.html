@@ -40,6 +40,9 @@ Objet : Cockpit cartographique et SIG modulaire de simulation hydraulique SWMM 5
 
         <!-- Carte Leaflet Principale -->
         <div id="map"></div>
+
+        <!-- Panneau Profil en Long Hydraulique (Phase 6.A) -->
+        {% include "partials/panel_profil_long.html" %}
     </div> <!-- fin app-workspace -->
 
     <!-- Vue Intégrée Contrôle Qualité -->
@@ -56,6 +59,7 @@ Objet : Cockpit cartographique et SIG modulaire de simulation hydraulique SWMM 5
 
     <!-- Bibliothèques Externes -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
     <!-- Modules Applicatifs JavaScript Découpés (<600 lignes) avec Cache-Busting -->
     <script src="/static/js/app/common.js?v=5.2.5"></script>
@@ -75,6 +79,7 @@ Objet : Cockpit cartographique et SIG modulaire de simulation hydraulique SWMM 5
     <script src="/static/js/app/resultats_affichage.js?v=5.2.5"></script>
     <script src="/static/js/app/resultats_actions.js?v=5.2.5"></script>
     <script src="/static/js/app/simulation_ui.js?v=5.2.5"></script>
+    <script src="/static/js/app/profil_long.js?v=5.2.5"></script>
     <script src="/static/js/app/app_init.js?v=5.2.5"></script>
 </body>
 </html>
