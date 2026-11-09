@@ -88,3 +88,41 @@ TS_SCENARIO                 02:00      0.00
 
     area = _extraire_surface_totale_inp(str(inp_file))
     assert area == 6.3
+
+
+def test_enrichir_timeseries_pluie_fallback():
+    """Vérifie l'enrichissement automatique de la pluie sur un timeseries sans rainfall_series."""
+    from src.domain.moteur_swmm.timeseries_extractor import enrichir_timeseries_pluie
+
+    raw_ts = {
+        "status": "SUCCESS",
+        "duration_hours": 4.0,
+        "steps": [
+            {"step_index": 0, "minute": 0, "time_str": "00:00", "outflow_m3s": 0.0},
+            {"step_index": 1, "minute": 30, "time_str": "00:30", "outflow_m3s": 0.25},
+            {"step_index": 2, "minute": 60, "time_str": "01:00", "outflow_m3s": 1.80},
+            {"step_index": 3, "minute": 64, "time_str": "01:04", "outflow_m3s": 2.23},
+            {"step_index": 4, "minute": 90, "time_str": "01:30", "outflow_m3s": 0.90},
+            {"step_index": 5, "minute": 240, "time_str": "04:00", "outflow_m3s": 0.0}
+        ]
+    }
+    sim_data = {
+        "meta": {
+            "pluvio_scenario_key": "pluie_decennale",
+            "pluvio_intensite_max_mmh": 74.9,
+            "total_area_ha": 50.0,
+            "pluvio_hauteur_totale_mm": 56.0
+        }
+    }
+
+    enriched = enrichir_timeseries_pluie(raw_ts, sim_data)
+    assert "rainfall_series" in enriched
+    assert len(enriched["rainfall_series"]) == 6
+    assert enriched["peak_rainfall_mmh"] == 74.9
+    assert enriched["peak_rainfall_time"] == "01:00"
+    assert enriched["lag_time_minutes"] == 4  # 64 min - 60 min
+    assert enriched["total_rain_volume_m3"] > 0
+    assert enriched["total_outflow_volume_m3"] > 0
+    assert 0.0 <= enriched["runoff_coefficient"] <= 1.0
+
+

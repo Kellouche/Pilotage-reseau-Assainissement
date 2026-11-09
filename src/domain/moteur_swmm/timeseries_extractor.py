@@ -103,6 +103,101 @@ def _interpoler_pluie(ts_points: List[tuple], minute: int) -> float:
     return 0.0
 
 
+def enrichir_timeseries_pluie(ts: Dict[str, Any], sim_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Garantit que l'objet timeseries contient la série de précipitation (rainfall_series)
+    et les métriques hydrologiques (peak_rainfall_mmh, lag_time_minutes, volumes, runoff_coefficient).
+    Si ces données sont absentes (cas des simulations en cache historique), elles sont reconstituées
+    dynamiquement à partir du scénario de pluie et de la surface du bassin versant.
+    """
+    if not ts or ts.get("status") != "SUCCESS" or not ts.get("steps"):
+        return ts
+
+    # Si la série de pluie est déjà présente et non nulle, rien à faire
+    rf_series = ts.get("rainfall_series")
+    peak_rf = ts.get("peak_rainfall_mmh")
+    if rf_series and len(rf_series) > 0 and peak_rf and peak_rf > 0:
+        return ts
+
+    meta = sim_data.get("meta", {}) if isinstance(sim_data, dict) else {}
+    from src.domain.moteur_swmm.constants import SCENARIOS_PLUIE
+
+    # 1. Identifier le scénario et l'intensité maximale de référence
+    scen_key = meta.get("pluvio_scenario_key") or "pluie_decennale"
+    if scen_key not in SCENARIOS_PLUIE:
+        scen_key = "pluie_decennale"
+    scen = SCENARIOS_PLUIE[scen_key]
+
+    intensite_max = float(meta.get("pluvio_intensite_max_mmh") or meta.get("intensite_max_mmh") or scen.get("intensite_max_defaut", 62.0))
+    ts_base = scen.get("timeseries", [("00:00", 0.0), ("01:00", 62.0), ("04:00", 0.0)])
+    max_base = max((v for _, v in ts_base), default=62.0)
+    scale = (intensite_max / max_base) if max_base > 0 else 1.0
+
+    # Construire la liste de points (minute, intensite_mmh)
+    ts_points = []
+    for t_str, v in ts_base:
+        try:
+            parts = t_str.split(":")
+            m = int(parts[0]) * 60 + int(parts[1])
+            ts_points.append((m, round(float(v) * scale, 2)))
+        except Exception:
+            pass
+    ts_points.sort(key=lambda x: x[0])
+
+    # 2. Remplir rainfall_mmh pour chaque pas échantillonné
+    steps = ts["steps"]
+    peak_rain_found = 0.0
+    peak_rain_time = "01:00"
+    peak_rain_min = 60
+
+    peak_outflow_found = 0.0
+    peak_outflow_min = 60
+
+    for s in steps:
+        m = s.get("minute", 0)
+        r = _interpoler_pluie(ts_points, m)
+        s["rainfall_mmh"] = r
+        if r > peak_rain_found:
+            peak_rain_found = r
+            peak_rain_time = s.get("time_str", "01:00")
+            peak_rain_min = m
+
+        q = s.get("outflow_m3s", 0.0)
+        if q > peak_outflow_found:
+            peak_outflow_found = q
+            peak_outflow_min = m
+
+    new_rainfall_series = [s.get("rainfall_mmh", 0.0) for s in steps]
+
+    # 3. Calcul des volumes
+    # Volume d'eau écoulé à l'exutoire (m3)
+    total_outflow_vol_m3 = 0.0
+    for i in range(1, len(steps)):
+        dt_sec = (steps[i]["minute"] - steps[i - 1]["minute"]) * 60.0
+        q_avg = (steps[i].get("outflow_m3s", 0.0) + steps[i - 1].get("outflow_m3s", 0.0)) / 2.0
+        total_outflow_vol_m3 += q_avg * dt_sec
+    total_outflow_vol_m3 = round(total_outflow_vol_m3, 1)
+
+    # Surface et pluie totale
+    total_surface_ha = float(meta.get("total_area_ha") or meta.get("surface_totale_ha") or 117.67)
+    total_precip_mm = float(meta.get("pluvio_hauteur_totale_mm") or 53.23)
+    total_rain_vol_m3 = round(total_surface_ha * total_precip_mm * 10.0, 1)
+    runoff_coef = round(total_outflow_vol_m3 / total_rain_vol_m3, 2) if total_rain_vol_m3 > 0 else 0.65
+    lag_time_min = max(0, peak_outflow_min - peak_rain_min)
+
+    ts["rainfall_series"] = new_rainfall_series
+    ts["peak_rainfall_mmh"] = round(peak_rain_found or intensite_max, 1)
+    ts["peak_rainfall_time"] = peak_rain_time
+    ts["lag_time_minutes"] = lag_time_min
+    ts["total_precipitation_mm"] = total_precip_mm
+    ts["total_surface_ha"] = total_surface_ha
+    ts["total_rain_volume_m3"] = total_rain_vol_m3
+    ts["total_outflow_volume_m3"] = total_outflow_vol_m3
+    ts["runoff_coefficient"] = runoff_coef
+
+    return ts
+
+
 def extraire_series_temporelles(out_path: str, max_steps: int = 60, inp_path: Optional[str] = None) -> Dict[str, Any]:
     """
     Extrait les séries temporelles pour l'animation de l'onde de crue (Time Slider)

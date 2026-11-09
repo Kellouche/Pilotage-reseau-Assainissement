@@ -1410,10 +1410,20 @@ def get_simulation_timeseries(
     """
     global _DERNIERE_SIMULATION
 
+    # Si la mémoire est vide (ex: redémarrage serveur), restaurer automatiquement la dernière simulation
+    if not _DERNIERE_SIMULATION or not _est_simulation_valide(_DERNIERE_SIMULATION):
+        try:
+            get_latest_simulation(db=db, tenant=tenant)
+        except Exception:
+            pass
+
     # 1. Vérifier si _DERNIERE_SIMULATION contient les séries temporelles
     if _DERNIERE_SIMULATION and _est_simulation_valide(_DERNIERE_SIMULATION):
         ts = _DERNIERE_SIMULATION.get("timeseries")
         if ts and ts.get("status") == "SUCCESS":
+            from src.domain.moteur_swmm.timeseries_extractor import enrichir_timeseries_pluie
+            ts = enrichir_timeseries_pluie(ts, _DERNIERE_SIMULATION)
+            _DERNIERE_SIMULATION["timeseries"] = ts
             return ts
 
         # Génération à la volée si l'INP est disponible
@@ -1448,7 +1458,10 @@ def get_simulation_timeseries(
             if cid_int in _CACHE_SIMULATIONS_PAR_CLUSTER:
                 cached = _CACHE_SIMULATIONS_PAR_CLUSTER[cid_int]
                 if cached and "timeseries" in cached and cached["timeseries"].get("status") == "SUCCESS":
-                    return cached["timeseries"]
+                    from src.domain.moteur_swmm.timeseries_extractor import enrichir_timeseries_pluie
+                    ts_cluster = enrichir_timeseries_pluie(cached["timeseries"], cached)
+                    cached["timeseries"] = ts_cluster
+                    return ts_cluster
         except Exception:
             pass
 
