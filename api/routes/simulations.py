@@ -1086,6 +1086,7 @@ def get_profil_en_long(
 
     try:
         import geopandas as gpd
+        import pandas as pd
         from src.domain.moteur_swmm.constants import _clean_node_id
 
         regards = gpd.read_file(str(active_gpkg), layer="regards")
@@ -1096,11 +1097,16 @@ def get_profil_en_long(
         for _, r in regards.iterrows():
             nid = _clean_node_id(r.get("Code"), fallback=str(r.name))
             if nid:
+                prof = float(r["Profondeur"]) if ("Profondeur" in r and r["Profondeur"] is not None and not pd.isna(r["Profondeur"]) and float(r["Profondeur"]) > 0) else 2.0
+                cotetn = float(r["COTETN"]) if ("COTETN" in r and r["COTETN"] is not None and not pd.isna(r["COTETN"]) and float(r["COTETN"]) > 0) else None
+                cotrad = float(r["COTRAD"]) if ("COTRAD" in r and r["COTRAD"] is not None and not pd.isna(r["COTRAD"]) and float(r["COTRAD"]) > 0) else None
                 node_index[nid] = {
                     "code": nid,
                     "x": r.geometry.x if r.geometry else 0.0,
                     "y": r.geometry.y if r.geometry else 0.0,
-                    "profondeur": float(r["Profondeur"]) if ("Profondeur" in r and r["Profondeur"] > 0) else 2.0,
+                    "profondeur": prof,
+                    "cotetn": cotetn,
+                    "cotrad": cotrad,
                 }
 
         # Construire le graphe amont→aval pour trouver le chemin
@@ -1164,25 +1170,46 @@ def get_profil_en_long(
             if meta_node_elevs:
                 node_elevs.update(meta_node_elevs)
 
-        # Fallback : calculer z_radier = z_terrain - profondeur (estimation raisonnée)
-        # Les cotes terrain sont dans node_index via MNT si disponible
-        # On utilise une pente moyenne de 1% pour estimer si pas de MNT
-        def get_elevation(nid: str) -> float:
-            if nid in node_elevs:
-                return float(node_elevs[nid])
-            # Estimation par défaut 100m (relatif, le graphique sera cohérent)
-            return 100.0
-
         # Construire les séries du profil
         segments = []
         distance_cumulee = 0.0
 
         for i, nid in enumerate(path_nodes):
-            z_rad = get_elevation(nid)
             info = node_index.get(nid, {})
             profondeur = info.get("profondeur", 2.0)
-            z_terrain = z_rad + profondeur  # z_terrain = z_radier + profondeur
-            z_gen_sup = z_rad + (info.get("diam_m", 0.6))  # génératrice supérieure
+            cotrad = info.get("cotrad")
+            cotetn = info.get("cotetn")
+
+            # Détermination de z_radier
+            if cotrad is not None:
+                z_rad = cotrad
+            elif cotetn is not None:
+                z_rad = cotetn - profondeur
+            elif nid in node_elevs:
+                z_rad = float(node_elevs[nid])
+            else:
+                z_rad = 100.0 - (distance_cumulee * 0.01)
+
+            # Détermination de z_terrain
+            if cotetn is not None:
+                z_terrain = cotetn
+            else:
+                z_terrain = z_rad + profondeur
+
+            # Déterminer le diamètre de conduite local pour la génératrice supérieure
+            diam_m = 0.6
+            if i < len(path_nodes) - 1:
+                next_n = path_nodes[i + 1]
+                e = G.get_edge_data(nid, next_n, {})
+                if e and "diam_mm" in e:
+                    diam_m = float(e["diam_mm"]) / 1000.0
+            elif i > 0:
+                prev_n = path_nodes[i - 1]
+                e = G.get_edge_data(prev_n, nid, {})
+                if e and "diam_mm" in e:
+                    diam_m = float(e["diam_mm"]) / 1000.0
+
+            z_gen_sup = z_rad + diam_m
 
             # HGL depuis la simulation SWMM
             hgl = None
@@ -1193,8 +1220,8 @@ def get_profil_en_long(
                 if status_n in ("surcharged", "flooded"):
                     hgl = z_terrain  # monte jusqu'à la surface
                 else:
-                    # Estimation conservative : HGL = z_rad + 60% de la profondeur
-                    hgl = z_rad + profondeur * 0.6
+                    # Estimation hydraulique standard en surface libre
+                    hgl = z_rad + min(profondeur * 0.6, diam_m * 0.8)
 
             # Trouver la conduite qui sort de ce nœud vers le suivant
             conduit = None
@@ -1317,6 +1344,8 @@ def get_simulation(
     tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
 ):
     """Récupère une simulation par ID."""
+    if simulation_id in ("profil-en-long", "latest", "run", "recalculate", "export", "bassin"):
+        raise HTTPException(status_code=404, detail=f"Endpoint '{simulation_id}' non trouvé")
     org_id = tenant.org.id if tenant else None
     sim = crud.get_simulation(db, simulation_id, org_id=org_id)
     if not sim:
