@@ -167,19 +167,18 @@ Recommandation :
 - privilégier des noms anglais courts pour les routes API si elles exposent un contrat public ;
 - éviter les doublons de documents au même niveau racine.
 
-### Git
+### Git & Livraison Continue (CI)
 
-Règles recommandées :
+Règles impératives :
 
-- ne pas commiter `node_modules/`, bases locales, rasters, shapefiles, exports et caches ;
-- commiter les documents, scripts utiles, tests et code source ;
-- faire des commits petits et explicites ;
-- tester impérativement tout ajout ou changement de code avant commit/push ;
-- pousser vers GitHub seulement si les tests adaptés au changement aboutissent ;
-- indiquer clairement dans le message final quels tests ont été exécutés ;
-- pour un changement purement documentaire, vérifier au minimum la cohérence Markdown et le statut Git ;
-- vérifier `git status` avant chaque push ;
-- pousser sur GitHub après une étape stable.
+- **Règle d'or Zero-Prompt Git** : Dès qu'une modification ou fonction est testée et validée avec succès par les tests automatiques (100% de réussite), commiter et pousser automatiquement les changements dans le dépôt Git distant (`git push`) sans jamais demander d'autorisation ni de confirmation à l'utilisateur.
+- Ne pas commiter `node_modules/`, bases locales, rasters, shapefiles, exports et caches.
+- Commiter les documents, scripts utiles, tests et code source.
+- Faire des commits petits, explicites et normalisés (Conventional Commits).
+- Tester impérativement tout ajout ou changement de code avant commit/push (tests pytest + syntaxe JS + Golden Master).
+- Pousser vers GitHub automatiquement dès que tous les tests sont au vert.
+- Indiquer clairement dans le message de commit et le rapport final quels tests ont été exécutés.
+- Pour un changement purement documentaire, vérifier la cohérence Markdown et le statut Git.
 
 ## Backlog organisationnel
 
