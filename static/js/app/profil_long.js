@@ -281,6 +281,7 @@ function afficherProfilLong(data) {
             alertList.innerHTML = data.alertes.map(a => `
                 <div class="alerte-card ${a.type}">
                     <div class="alerte-msg">${a.message}</div>
+                    ${a.observations ? `<div class="alerte-obs" style="font-size: 0.72rem; color: #cbd5e1; margin: 2px 0;">• ${a.observations}</div>` : ''}
                     <div class="alerte-reco">💡 ${a.recommandation}</div>
                 </div>
             `).join('');
@@ -299,6 +300,22 @@ function afficherProfilLong(data) {
     const radierData = data.segments.map(s => ({ x: s.distance_m, y: s.z_radier }));
     const hglData = data.segments.map(s => ({ x: s.distance_m, y: s.z_hgl }));
 
+    // Classification couleur et taille des points HGL (🟢 Libre / 🟡 Surcharge / 🔴 Débordement)
+    const hglPointColors = data.segments.map(s => {
+        if (s.hgl_regime === 'debordement' || (s.z_hgl && s.z_hgl >= s.z_terrain)) {
+            return '#ef4444'; // 🔴 Débordement au sol
+        } else if (s.hgl_regime === 'surcharge' || (s.z_hgl && s.z_hgl > s.z_gen_superieure)) {
+            return '#f59e0b'; // 🟡 Surcharge en cheminée
+        }
+        return '#10b981'; // 🟢 Écoulement libre
+    });
+
+    const hglPointRadius = data.segments.map(s => {
+        if (s.hgl_regime === 'debordement' || (s.z_hgl && s.z_hgl >= s.z_terrain)) return 7;
+        if (s.hgl_regime === 'surcharge' || (s.z_hgl && s.z_hgl > s.z_gen_superieure)) return 5.5;
+        return 4;
+    });
+
     const ctx = document.getElementById('canvas-profil-long');
     if (!ctx) return;
 
@@ -316,9 +333,9 @@ function afficherProfilLong(data) {
                     label: 'Terrain naturel (MNT)',
                     data: terrainData,
                     borderColor: '#10b981',
-                    backgroundColor: 'rgba(16, 185, 129, 0.08)',
-                    borderWidth: 2,
-                    pointRadius: 4,
+                    backgroundColor: 'rgba(16, 185, 129, 0.06)',
+                    borderWidth: 2.2,
+                    pointRadius: 4.5,
                     pointBackgroundColor: '#10b981',
                     fill: false,
                     tension: 0.1
@@ -328,8 +345,8 @@ function afficherProfilLong(data) {
                     data: genSupData,
                     borderColor: '#94a3b8',
                     borderWidth: 1.5,
-                    borderDash: [4, 4],
-                    pointRadius: 2,
+                    borderDash: [5, 4],
+                    pointRadius: 2.5,
                     pointBackgroundColor: '#94a3b8',
                     fill: false,
                     tension: 0
@@ -338,31 +355,32 @@ function afficherProfilLong(data) {
                     label: "Fil d'eau (Cote radier)",
                     data: radierData,
                     borderColor: '#38bdf8',
-                    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+                    backgroundColor: 'rgba(56, 189, 248, 0.18)',
                     borderWidth: 3,
                     pointRadius: 5,
                     pointBackgroundColor: data.segments.map(s => s.node_color || '#38bdf8'),
-                    fill: '-1', // Remplissage entre génératrice sup et radier pour matérialiser la conduite
+                    fill: '-1', // Remplissage pour matérialiser l'épaisseur physique de la conduite
                     tension: 0
                 },
                 {
-                    label: 'Ligne de charge (HGL après simulation)',
+                    label: 'Ligne de charge HGL (🟢 Libre / 🟡 Surcharge / 🔴 Débordement)',
                     data: hglData,
                     borderColor: '#f59e0b',
-                    backgroundColor: 'rgba(245, 158, 11, 0.18)',
-                    borderWidth: 2.5,
-                    borderDash: [6, 3],
-                    pointRadius: 4,
-                    pointBackgroundColor: '#f59e0b',
+                    backgroundColor: 'rgba(245, 158, 11, 0.22)',
+                    borderWidth: 3.5,
+                    pointRadius: hglPointRadius,
+                    pointBackgroundColor: hglPointColors,
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 1.5,
                     fill: false,
-                    tension: 0.2
+                    tension: 0.15
                 }
             ]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            animation: { duration: 400 },
+            animation: { duration: 350 },
             interaction: {
                 mode: 'index',
                 intersect: false
@@ -372,31 +390,50 @@ function afficherProfilLong(data) {
                     position: 'top',
                     labels: {
                         color: '#cbd5e1',
-                        font: { size: 11, family: 'Plus Jakarta Sans' },
-                        boxWidth: 12,
+                        font: { size: 11, family: 'Plus Jakarta Sans', weight: '600' },
+                        boxWidth: 14,
                         padding: 10
                     }
                 },
                 tooltip: {
-                    backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                    backgroundColor: 'rgba(15, 23, 42, 0.96)',
                     titleColor: '#38bdf8',
                     bodyColor: '#e2e8f0',
-                    borderColor: 'rgba(255, 255, 255, 0.15)',
-                    borderWidth: 1,
-                    padding: 10,
+                    borderColor: 'rgba(56, 189, 248, 0.4)',
+                    borderWidth: 1.5,
+                    padding: 12,
                     callbacks: {
                         title: function(items) {
                             const idx = items[0].dataIndex;
                             const s = data.segments[idx];
                             return `Regard : ${s.node_id} (Distance : ${s.distance_m} m)`;
                         },
+                        beforeBody: function(items) {
+                            const idx = items[0].dataIndex;
+                            const s = data.segments[idx];
+                            if (s.hgl_regime === 'debordement' || (s.z_hgl && s.z_hgl >= s.z_terrain)) {
+                                return `🔴 ÉTAT : DÉBORDEMENT AU SOL (HGL ≥ Terrain)`;
+                            } else if (s.hgl_regime === 'surcharge' || (s.z_hgl && s.z_hgl > s.z_gen_superieure)) {
+                                return `🟡 ÉTAT : SURCHARGE EN CHARGE (HGL > Voûte)`;
+                            }
+                            return `🟢 ÉTAT : ÉCOULEMENT LIBRE SAIN (HGL < Voûte)`;
+                        },
                         afterBody: function(items) {
                             const idx = items[0].dataIndex;
                             const s = data.segments[idx];
                             const lines = [
-                                `• Profondeur regard : ${s.profondeur_m} m`,
-                                `• État nœud : ${s.node_status}`
+                                `• Profondeur regard : ${s.profondeur_m} m`
                             ];
+
+                            if (s.pression_m && s.pression_m > 0) {
+                                lines.push(`• Charge au-dessus voûte : +${s.pression_m} m (Pression)`);
+                            }
+                            if (s.revanche_m && s.revanche_m > 0) {
+                                lines.push(`• Revanche avant tampon : ${s.revanche_m} m`);
+                            } else if (s.hgl_regime === 'debordement' || (s.z_hgl && s.z_hgl >= s.z_terrain)) {
+                                lines.push(`• Tampon atteint : Débordement actif sur voirie`);
+                            }
+
                             if (s.conduit_sortant) {
                                 const c = s.conduit_sortant;
                                 lines.push(`• Conduite aval : ${c.cid} (Ø${c.diam_mm} mm, L=${c.length}m)`);

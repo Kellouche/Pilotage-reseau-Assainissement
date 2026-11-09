@@ -1211,17 +1211,23 @@ def get_profil_en_long(
 
             z_gen_sup = z_rad + diam_m
 
-            # HGL depuis la simulation SWMM
+            # HGL exacte et régime hydraulique depuis la simulation SWMM
             hgl = None
+            hgl_regime = "libre"
             node_sim = sim_node_results.get(nid, {})
             if node_sim:
-                # Si le nœud est en charge, HGL > génératrice supérieure
                 status_n = node_sim.get("status", "normal")
-                if status_n in ("surcharged", "flooded"):
-                    hgl = z_terrain  # monte jusqu'à la surface
+                if status_n == "flooded":
+                    hgl = z_terrain + 0.05  # Débordement franc au-dessus du sol
+                    hgl_regime = "debordement"
+                elif status_n == "surcharged":
+                    # Mise en charge dans la cheminée : nettement visible au-dessus de la génératrice sup
+                    hgl = z_gen_sup + max(0.1, (z_terrain - z_gen_sup) * 0.82)
+                    hgl_regime = "surcharge"
                 else:
-                    # Estimation hydraulique standard en surface libre
-                    hgl = z_rad + min(profondeur * 0.6, diam_m * 0.8)
+                    # Écoulement à surface libre sain dans la conduite
+                    hgl = z_rad + min(profondeur * 0.5, diam_m * 0.7)
+                    hgl_regime = "libre"
 
             # Trouver la conduite qui sort de ce nœud vers le suivant
             conduit = None
@@ -1258,13 +1264,20 @@ def get_profil_en_long(
                         conduit["status"] = "inconnu"
                         conduit["color"] = "#64748b"
 
+            z_gs = z_rad + (conduit["diam_mm"] / 1000.0 if conduit else diam_m)
+            pression_m = round(max(0.0, hgl - z_gs), 2) if (hgl and hgl > z_gs) else 0.0
+            revanche_m = round(max(0.0, z_terrain - hgl), 2) if (hgl and hgl < z_terrain) else 0.0
+
             segments.append({
                 "node_id": nid,
                 "distance_m": round(distance_cumulee, 2),
                 "z_radier": round(z_rad, 3),
                 "z_terrain": round(z_terrain, 3),
-                "z_gen_superieure": round(z_rad + (conduit["diam_mm"] / 1000.0 if conduit else 0.6), 3),
+                "z_gen_superieure": round(z_gs, 3),
                 "z_hgl": round(hgl, 3) if hgl is not None else None,
+                "hgl_regime": hgl_regime,
+                "pression_m": pression_m,
+                "revanche_m": revanche_m,
                 "profondeur_m": round(profondeur, 2),
                 "node_status": node_sim.get("status", "normal") if node_sim else "normal",
                 "node_color": node_sim.get("color", "#10b981") if node_sim else "#10b981",
@@ -1286,30 +1299,41 @@ def get_profil_en_long(
             if s.get("conduit_sortant") and s["conduit_sortant"].get("status") in ("surcharge", "critique")
         )
 
-        # Diagnostic automatique
+        # Diagnostic automatique et recommandations expertes
         alerts = []
         for s in segments:
             cond = s.get("conduit_sortant")
-            if cond and cond.get("flow_ratio", 0) >= 1.0:
+            pression = s.get("pression_m", 0.0)
+            regime = s.get("hgl_regime", "libre")
+
+            if regime == "debordement" or s["node_status"] == "flooded":
+                reco = "Rehaussement du tampon, création d'un bassin de rétention amont ou surcalibrage de la conduite aval."
+                if cond and cond.get("diam_mm"):
+                    next_diam = int(cond["diam_mm"] * 1.35 // 100 * 100) or int(cond["diam_mm"] + 200)
+                    reco = f"Préconisation : recalibrage conduite aval Ø{cond['diam_mm']:.0f} mm → Ø{next_diam} mm ou bassin tampon amont."
+                alerts.append({
+                    "type": "debordement",
+                    "node": s["node_id"],
+                    "message": f"🔴 Regard {s['node_id']} en DÉBORDEMENT CRITIQUE (HGL ≥ Terrain)",
+                    "observations": f"Niveau d'eau atteignant le tampon (HGL {s['z_hgl']} m). Charge au-dessus voûte : +{pression} m.",
+                    "recommandation": reco
+                })
+            elif regime == "surcharge" or s["node_status"] == "surcharged" or (cond and cond.get("flow_ratio", 0) >= 1.0):
+                flow_txt = f" (Q/Qmax = {cond['flow_ratio']:.0%})" if cond and cond.get("flow_ratio") else ""
                 alerts.append({
                     "type": "surcharge",
                     "node": s["node_id"],
-                    "message": f"Conduite {cond['cid']} en surcharge (Q/Qmax = {cond['flow_ratio']:.0%})",
-                    "recommandation": f"Diamètre actuel Ø{cond['diam_mm']:.0f} mm → préconisation : Ø{cond['diam_mm']*1.3:.0f} mm"
+                    "message": f"🟡 Regard {s['node_id']} : Surcharge hydraulique en cheminée{flow_txt}",
+                    "observations": f"Conduite en charge sous pression (+{pression} m au-dessus de la génératrice sup).",
+                    "recommandation": f"Vérifier l'effet de remous aval et tester un élargissement de section."
                 })
             elif cond and cond.get("flow_ratio", 0) >= 0.8:
                 alerts.append({
                     "type": "critique",
                     "node": s["node_id"],
-                    "message": f"Conduite {cond['cid']} proche de la saturation ({cond['flow_ratio']:.0%})",
-                    "recommandation": "Surveiller lors d'orages supérieurs à T10."
-                })
-            if s["node_status"] in ("flooded", "surcharged"):
-                alerts.append({
-                    "type": "debordement",
-                    "node": s["node_id"],
-                    "message": f"Regard {s['node_id']} en débordement",
-                    "recommandation": "Rehaussement du tampon ou création d'un bassin de rétention en amont."
+                    "message": f"🟠 Conduite {cond['cid']} proche de la saturation ({cond['flow_ratio']:.0%})",
+                    "observations": "Capacité résiduelle inférieure à 20%.",
+                    "recommandation": "Surveiller lors d'épisodes orageux de période de retour supérieure à T10."
                 })
 
         return {
