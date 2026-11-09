@@ -37,6 +37,17 @@ function toggleProfilLongMode() {
     const map = _getCarte();
 
     if (!state.active) {
+        // VÉRIFICATION : Une simulation doit être active pour pouvoir générer le profil en long hydraulique (HGL)
+        const hasSim = !!(window._dernierResultatSimulation && 
+                          window._dernierResultatSimulation.conduit_results && 
+                          Object.keys(window._dernierResultatSimulation.conduit_results).length > 0);
+
+        if (!hasSim) {
+            alert("Lancer une simulation pour avoir un profil en long");
+            if (panel) panel.style.display = 'none';
+            return;
+        }
+
         state.active = true;
         state.step = 'amont';
         if (btn) btn.classList.add('active');

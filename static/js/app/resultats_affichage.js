@@ -270,6 +270,33 @@
                         layer.bindPopup(popupHtml);
                         layer.bindTooltip(`<b>${isFlooded ? '🚨 Débordement' : (isSurcharged ? '⚠️ Surcharge' : 'Regard')} : ${cleanNid}</b>${isFlooded ? ` (${volTooltipStr})` : ''}`, { direction: 'top', offset: [0, -6], opacity: 0.98 });
                         
+                        // Interception pour le Profil en Long hydraulique (Phase 6.A)
+                        layer.on('click', function(e) {
+                            if (window.profilLongState && window.profilLongState.active) {
+                                L.DomEvent.stop(e);
+                                const cMap = window.carte || window.map;
+                                if (cMap) cMap.closePopup();
+                                if (this.closePopup) this.closePopup();
+                                setTimeout(() => {
+                                    if (cMap) cMap.closePopup();
+                                    if (this.closePopup) this.closePopup();
+                                }, 10);
+
+                                if (cleanNid && window.handleRegardClickForProfil) {
+                                    window.handleRegardClickForProfil(cleanNid, e.latlng);
+                                }
+                                return false;
+                            }
+                        });
+
+                        layer.on('popupopen', function() {
+                            if (window.profilLongState && window.profilLongState.active) {
+                                const cMap = window.carte || window.map;
+                                if (cMap) cMap.closePopup();
+                                if (this.closePopup) this.closePopup();
+                            }
+                        });
+
                         // Interaction de survol épurée sans bringToFront
                         layer.on('mouseover', function() {
                             const curR = isFlooded ? 5.5 : (isSurcharged ? 4.0 : 2.5);
