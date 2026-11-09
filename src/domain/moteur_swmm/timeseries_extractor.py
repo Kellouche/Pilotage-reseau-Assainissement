@@ -166,3 +166,4 @@ def extraire_series_temporelles(out_path: str, max_steps: int = 60) -> Dict[str,
             "error": str(e),
             "steps": []
         }
+

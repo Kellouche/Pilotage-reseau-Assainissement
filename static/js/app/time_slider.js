@@ -285,39 +285,46 @@ function _appliquerCouleursConduites(activeLinks) {
     if (!window.couches || !window.couches.res_conduites) return;
     activeLinks = activeLinks || {};
 
+    // Indexation inverse des conduites u->d vers link_id (depuis la simulation SWMM)
+    const cRes = (window._dernierResultatSimulation && window._dernierResultatSimulation.conduit_results) || {};
+    const linkIdByNodes = {};
+    Object.values(cRes).forEach(r => {
+        const u = String(r.u_node || '').replace(/\.0$/, '').trim();
+        const d = String(r.d_node || '').replace(/\.0$/, '').trim();
+        if (u && d && r.link_id) {
+            linkIdByNodes[`${u}->${d}`] = r.link_id;
+            linkIdByNodes[`${d}->${u}`] = r.link_id;
+        }
+    });
+
     window.couches.res_conduites.eachLayer(layer => {
         if (!layer.feature || !layer.feature.properties) return;
         const p = layer.feature.properties;
         const u = String(p.ID_AMONT || p.id_amont || '').replace(/\.0$/, '').trim();
         const d = String(p.ID_AVAL || p.id_aval || '').replace(/\.0$/, '').trim();
 
-        // Récupérer le link_id ou chercher par extrémités
+        // Trouver le link_id SWMM correspondant
+        const lid = linkIdByNodes[`${u}->${d}`] || p.cid;
         let linkRatio = 0.0;
-        if (activeLinks[p.cid]) {
+        if (lid && activeLinks[lid] !== undefined) {
+            linkRatio = activeLinks[lid];
+        } else if (p.cid && activeLinks[p.cid] !== undefined) {
             linkRatio = activeLinks[p.cid];
-        } else {
-            // Chercher par clé de conduite
-            for (const [k, ratio] of Object.entries(activeLinks)) {
-                if (k.includes(`${u}`) && k.includes(`${d}`)) {
-                    linkRatio = ratio;
-                    break;
-                }
-            }
         }
 
-        // Palette hydraulique selon le taux de charge Q/Qmax à cet instant
+        // Palette hydraulique fixe et nette selon le taux de charge instantané
         let col = '#10b981'; // < 50% Sain (Vert/Cyan)
-        let weight = 4.0;
+        let weight = 3.5;
 
         if (linkRatio >= 1.0) {
-            col = '#8b5cf6'; // Violet : Surpression / saturation complète
-            weight = 6.5;
+            col = '#dc2626'; // Rouge brique : Surcharge complète / sous pression
+            weight = 6.0;
         } else if (linkRatio >= 0.8) {
-            col = '#ef4444'; // Rouge vif : En charge (> 80%)
-            weight = 5.5;
+            col = '#f97316'; // Orange vif : En charge (> 80%)
+            weight = 5.0;
         } else if (linkRatio >= 0.5) {
-            col = '#f59e0b'; // Orange : Modéré (50% - 80%)
-            weight = 4.5;
+            col = '#f59e0b'; // Jaune ambré : Modéré (50% - 80%)
+            weight = 4.2;
         }
 
         layer.setStyle({
@@ -329,55 +336,56 @@ function _appliquerCouleursConduites(activeLinks) {
 }
 
 /**
- * Marque les regards débordants à l'instant t avec pulsation radar
+ * Colorie nettement les regards selon leur état instantané à l'instant t :
+ * - Rouge brique fixe si le regard déborde en surface (au sol)
+ * - Bleu normal si le regard est sous contrôle
  */
 function _appliquerRegardsDebordants(floodedNodeIds) {
-    const map = _getCarteTS();
-    if (!map) return;
+    if (!window.couches || !window.couches.res_regards) return;
+    const floodedSet = new Set((floodedNodeIds || []).map(String));
 
-    _nettoyerRadarDebordement();
+    window.couches.res_regards.eachLayer(layer => {
+        if (!layer.feature || !layer.feature.properties) return;
+        const p = layer.feature.properties;
+        const rawCode = p.Code !== undefined ? p.Code : (p.code !== undefined ? p.code : (p.CODE || p.id || ''));
+        const nid = String(rawCode).replace(/\.0$/, '').trim();
 
-    if (!floodedNodeIds || floodedNodeIds.length === 0) return;
-
-    window.timeSliderState.radarGroup = L.layerGroup().addTo(map);
-    const floodedSet = new Set(floodedNodeIds.map(String));
-
-    // Chercher les coordonnées des regards débordants dans _rawNetworkData
-    if (window._rawNetworkData && window._rawNetworkData.couches && window._rawNetworkData.couches.regards) {
-        const geo = window._rawNetworkData.couches.regards;
-        const features = geo.features || [];
-
-        features.forEach(f => {
-            const p = f.properties || {};
-            const rawCode = p.Code !== undefined ? p.Code : (p.code !== undefined ? p.code : (p.CODE || p.id || ''));
-            const nid = String(rawCode).replace(/\.0$/, '').trim();
-
-            if (floodedSet.has(nid) && f.geometry && f.geometry.coordinates) {
-                const coords = f.geometry.coordinates;
-                const latlng = L.latLng(coords[1], coords[0]);
-
-                const marker = L.circleMarker(latlng, {
-                    radius: 9,
-                    className: 'debordement-radar-marker',
-                    color: '#ffffff',
-                    fillColor: '#ef4444',
-                    fillOpacity: 0.95,
-                    weight: 2
-                }).bindTooltip(`⚠️ <b>Regard ${nid}</b> en débordement actif`, { direction: 'top' });
-
-                window.timeSliderState.radarGroup.addLayer(marker);
+        if (floodedSet.has(nid)) {
+            // Regard en débordement actif au sol à cet instant (Rouge brique net et fixe)
+            layer.setStyle({
+                radius: 7.0,
+                fillColor: '#dc2626',
+                color: '#ffffff',
+                weight: 2.0,
+                fillOpacity: 1.0
+            });
+            if (layer.getTooltip()) {
+                layer.setTooltipContent(`⚠️ <b>Regard ${nid}</b> : DÉBORDEMENT ACTIF AU SOL`);
             }
-        });
-    }
+        } else {
+            // Regard sous contrôle (Bleu cyan discret)
+            layer.setStyle({
+                radius: 4.5,
+                fillColor: '#38bdf8',
+                color: '#0f172a',
+                weight: 1.0,
+                fillOpacity: 0.8
+            });
+            if (layer.getTooltip()) {
+                layer.setTooltipContent(`Regard ${nid}`);
+            }
+        }
+    });
 }
 
 /**
- * Nettoie le groupe Leaflet des marqueurs radar
+ * Rétablit le style d'origine des regards de simulation à la fermeture
  */
 function _nettoyerRadarDebordement() {
-    const state = window.timeSliderState;
-    if (state.radarGroup) {
-        state.radarGroup.clearLayers();
+    if (window._dernierResultatSimulation && typeof afficherResultatsSimulation === 'function') {
+        afficherResultatsSimulation(window._dernierResultatSimulation);
+    }
+}
         const map = _getCarteTS();
         if (map && map.hasLayer(state.radarGroup)) {
             map.removeLayer(state.radarGroup);
@@ -507,3 +515,4 @@ document.addEventListener('keydown', (e) => {
         }
     }
 });
+

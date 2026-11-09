@@ -7,27 +7,37 @@ Date de modification : 2026-11-08
 Objet : Barre d'outils flottante d'édition hydraulique et sectorisation manuelle
 ================================================================================
 -->
-    <!-- Barre d'outils d'édition (déplacée hors de map) -->
+    <!-- Barre d'outils d'édition flottante et déplaçable (Draggable) -->
     <div class="edit-toolbar" id="main-edit-toolbar">
-        <button class="tool-btn tool-tip" id="btn-create-bassin" data-tip="Nouveau bassin (polygone)">
-            <i class="fas fa-draw-polygon"></i>
-        </button>
-        <button class="tool-btn tool-tip" id="btn-merge-bassin" data-tip="Fusionner les bassins" disabled>
-            <i class="fas fa-link"></i>
-        </button>
-        <button class="tool-btn tool-tip" id="btn-delete-bassin" data-tip="Supprimer" disabled>
-            <i class="fas fa-trash-alt"></i>
-        </button>
-        <hr style="border: 0.5px solid rgba(255,255,255,0.1); margin: 4px 0;">
-        <button class="tool-btn tool-tip" id="btn-save-edit" data-tip="Enregistrer les modifications" disabled>
-            <i class="fas fa-save"></i>
-        </button>
-        <hr style="border: 0.5px solid rgba(255,255,255,0.1); margin: 4px 0;">
-        <button class="tool-btn tool-tip" id="btn-profil-long" data-tip="Profil en long hydraulique (HGL)" onclick="toggleProfilLongMode()">
-            <i class="fas fa-chart-line" style="color: #38bdf8;"></i>
-        </button>
-        <button class="tool-btn tool-tip" id="btn-time-slider" data-tip="Animation onde de crue (Time Slider)" onclick="toggleTimeSlider()">
-            <i class="fas fa-play-circle" style="color: #f59e0b;"></i>
-        </button>
+        <!-- Poignée de déplacement et contrôle de repli -->
+        <div class="toolbar-header-drag" id="toolbar-drag-handle" title="Maintenir enfoncé pour déplacer la barre d'outils">
+            <i class="fas fa-grip-vertical toolbar-grip-icon"></i>
+            <button class="toolbar-collapse-btn" id="btn-collapse-toolbar" onclick="toggleToolbarCollapse(event)" title="Réduire / Agrandir la barre d'outils">
+                <i class="fas fa-chevron-left" id="icon-collapse-toolbar"></i>
+            </button>
+        </div>
+
+        <div class="toolbar-buttons-container" id="toolbar-buttons-container">
+            <button class="tool-btn tool-tip" id="btn-create-bassin" data-tip="Nouveau bassin (polygone)">
+                <i class="fas fa-draw-polygon"></i>
+            </button>
+            <button class="tool-btn tool-tip" id="btn-merge-bassin" data-tip="Fusionner les bassins" disabled>
+                <i class="fas fa-link"></i>
+            </button>
+            <button class="tool-btn tool-tip" id="btn-delete-bassin" data-tip="Supprimer" disabled>
+                <i class="fas fa-trash-alt"></i>
+            </button>
+            <hr style="border: 0.5px solid rgba(255,255,255,0.1); margin: 4px 0;">
+            <button class="tool-btn tool-tip" id="btn-save-edit" data-tip="Enregistrer les modifications" disabled>
+                <i class="fas fa-save"></i>
+            </button>
+            <hr style="border: 0.5px solid rgba(255,255,255,0.1); margin: 4px 0;">
+            <button class="tool-btn tool-tip" id="btn-profil-long" data-tip="Profil en long hydraulique (HGL)" onclick="toggleProfilLongMode()">
+                <i class="fas fa-chart-line" style="color: #38bdf8;"></i>
+            </button>
+            <button class="tool-btn tool-tip" id="btn-time-slider" data-tip="Animation onde de crue (Time Slider)" onclick="toggleTimeSlider()">
+                <i class="fas fa-play-circle" style="color: #f59e0b;"></i>
+            </button>
+        </div>
     </div>
 

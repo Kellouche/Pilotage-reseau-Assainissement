@@ -331,3 +331,113 @@ function chargerDonneesInitiales() {
                 return window.lancerPartitionnementBassins(null, null, false, false);
             }
         };
+
+/**
+ * ================================================================================
+ * BARRE D'OUTILS FLOTTANTE, DÉPLAÇABLE (DRAGGABLE) ET PLIABLE
+ * ================================================================================
+ */
+function toggleToolbarCollapse(e) {
+    if (e) e.stopPropagation();
+    const toolbar = document.getElementById('main-edit-toolbar');
+    const icon = document.getElementById('icon-collapse-toolbar');
+    if (!toolbar) return;
+
+    toolbar.classList.toggle('collapsed');
+    const isCollapsed = toolbar.classList.contains('collapsed');
+
+    if (icon) {
+        icon.className = isCollapsed ? 'fas fa-chevron-right' : 'fas fa-chevron-left';
+    }
+    localStorage.setItem('drainpilot_toolbar_collapsed', isCollapsed ? '1' : '0');
+}
+
+function initDraggableToolbar() {
+    const toolbar = document.getElementById('main-edit-toolbar');
+    const handle = document.getElementById('toolbar-drag-handle');
+    if (!toolbar || !handle) return;
+
+    // Restaurer l'état réduit si mémorisé
+    if (localStorage.getItem('drainpilot_toolbar_collapsed') === '1') {
+        toolbar.classList.add('collapsed');
+        const icon = document.getElementById('icon-collapse-toolbar');
+        if (icon) icon.className = 'fas fa-chevron-right';
+    }
+
+    // Restaurer la position si mémorisée
+    const savedPos = localStorage.getItem('drainpilot_toolbar_pos');
+    if (savedPos) {
+        try {
+            const pos = JSON.parse(savedPos);
+            if (pos.top && pos.left) {
+                toolbar.style.top = `${pos.top}px`;
+                toolbar.style.left = `${pos.left}px`;
+                toolbar.style.right = 'auto';
+            }
+        } catch (err) {}
+    }
+
+    let isDragging = false;
+    let startX = 0, startY = 0;
+    let initialLeft = 0, initialTop = 0;
+
+    handle.addEventListener('mousedown', (e) => {
+        // Ne pas déclencher le drag si on clique sur le bouton collapse
+        if (e.target.closest('#btn-collapse-toolbar')) return;
+
+        isDragging = true;
+        toolbar.classList.add('is-dragging');
+        startX = e.clientX;
+        startY = e.clientY;
+
+        const rect = toolbar.getBoundingClientRect();
+        initialLeft = rect.left;
+        initialTop = rect.top;
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+        e.preventDefault();
+    });
+
+    function onMouseMove(e) {
+        if (!isDragging) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+
+        let newLeft = initialLeft + dx;
+        let newTop = initialTop + dy;
+
+        // Limites écran
+        const maxLeft = window.innerWidth - toolbar.offsetWidth - 10;
+        const maxTop = window.innerHeight - toolbar.offsetHeight - 10;
+
+        newLeft = Math.max(10, Math.min(newLeft, maxLeft));
+        newTop = Math.max(55, Math.min(newTop, maxTop));
+
+        toolbar.style.left = `${newLeft}px`;
+        toolbar.style.top = `${newTop}px`;
+        toolbar.style.right = 'auto';
+    }
+
+    function onMouseUp() {
+        if (!isDragging) return;
+        isDragging = false;
+        toolbar.classList.remove('is-dragging');
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+
+        // Mémoriser la position
+        const rect = toolbar.getBoundingClientRect();
+        localStorage.setItem('drainpilot_toolbar_pos', JSON.stringify({
+            top: Math.round(rect.top),
+            left: Math.round(rect.left)
+        }));
+    }
+}
+
+// Initialisation dès que le DOM est prêt
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initDraggableToolbar);
+} else {
+    initDraggableToolbar();
+}
