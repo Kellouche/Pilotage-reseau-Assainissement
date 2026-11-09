@@ -1334,6 +1334,52 @@ def get_profil_en_long(
 
 
 # ============================================================
+# ANIMATION TEMPORELLE & TIME SLIDER (Phase 6.B)
+# ============================================================
+
+@router.get("/timeseries")
+def get_simulation_timeseries(
+    cluster_id: Optional[Union[int, str]] = None,
+    db: Session = Depends(get_db),
+    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
+):
+    """
+    Retourne les séries temporelles extraites du fichier binaire .out de SWMM
+    pour animer la propagation de l'onde de crue (Time Slider).
+    """
+    global _DERNIERE_SIMULATION
+
+    # 1. Vérifier si _DERNIERE_SIMULATION contient les séries temporelles
+    if _DERNIERE_SIMULATION and _est_simulation_valide(_DERNIERE_SIMULATION):
+        ts = _DERNIERE_SIMULATION.get("timeseries")
+        if ts and ts.get("status") == "SUCCESS":
+            return ts
+
+    # 2. Chercher dans le cache cluster si demandé
+    if cluster_id is not None:
+        try:
+            cid_int = int(cluster_id)
+            if cid_int in _CACHE_SIMULATIONS_PAR_CLUSTER:
+                cached = _CACHE_SIMULATIONS_PAR_CLUSTER[cid_int]
+                if cached and "timeseries" in cached and cached["timeseries"].get("status") == "SUCCESS":
+                    return cached["timeseries"]
+        except Exception:
+            pass
+
+    # 3. Si aucune simulation active avec séries temporelles
+    if not _DERNIERE_SIMULATION or not _est_simulation_valide(_DERNIERE_SIMULATION):
+        raise HTTPException(
+            status_code=404,
+            detail="Aucune simulation active disponible. Veuillez lancer une simulation SWMM au préalable pour activer l'animation temporelle."
+        )
+
+    raise HTTPException(
+        status_code=404,
+        detail="Séries temporelles non disponibles pour cette simulation. Relancez la simulation pour générer les données dynamiques."
+    )
+
+
+# ============================================================
 # ROUTES PARAMÉTRÉES /{simulation_id} (Placées à la fin)
 # ============================================================
 
@@ -1344,7 +1390,7 @@ def get_simulation(
     tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
 ):
     """Récupère une simulation par ID."""
-    if simulation_id in ("profil-en-long", "latest", "run", "recalculate", "export", "bassin"):
+    if simulation_id in ("profil-en-long", "timeseries", "latest", "run", "recalculate", "export", "bassin"):
         raise HTTPException(status_code=404, detail=f"Endpoint '{simulation_id}' non trouvé")
     org_id = tenant.org.id if tenant else None
     sim = crud.get_simulation(db, simulation_id, org_id=org_id)

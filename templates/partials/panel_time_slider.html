@@ -1,0 +1,70 @@
+<!--
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-04-20
+Date de modification : 2026-11-09
+Objet : Contrôleur temporel de l'onde de crue (Time Slider - Phase 6.B)
+================================================================================
+-->
+
+<div id="panel-time-slider" class="time-slider-dock" style="display: none;">
+    <!-- En-tête / Barre supérieure du contrôleur -->
+    <div class="time-slider-header">
+        <div class="time-slider-title">
+            <i class="fas fa-wave-square" style="color: #f59e0b; margin-right: 6px;"></i>
+            <span>Propagation Temporelle de l'Onde de Crue</span>
+            <span id="badge-time-status" class="badge-ts badge-info">Prêt</span>
+        </div>
+        <div class="time-slider-kpis">
+            <span class="ts-kpi-pill">
+                <i class="fas fa-water me-1" style="color: #38bdf8;"></i> Exutoire : <b id="ts-val-outflow">0.000 m³/s</b>
+            </span>
+            <span class="ts-kpi-pill">
+                <i class="fas fa-tachometer-alt me-1" style="color: #f59e0b;"></i> Surcharges : <b id="ts-val-surcharges">0 tronçons</b>
+            </span>
+            <span class="ts-kpi-pill">
+                <i class="fas fa-exclamation-triangle me-1" style="color: #ef4444;"></i> Débordements : <b id="ts-val-debordements">0 regards</b>
+            </span>
+        </div>
+        <button class="ts-close-btn" onclick="toggleTimeSlider(false)" title="Fermer l'animation">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+
+    <!-- Corps : Commandes + Slider + Mini-Hydrogramme -->
+    <div class="time-slider-body">
+        <!-- Commandes de lecture -->
+        <div class="ts-controls">
+            <button class="ts-btn" id="ts-btn-prev" onclick="timeSliderStep(-1)" title="Pas précédent">
+                <i class="fas fa-step-backward"></i>
+            </button>
+            <button class="ts-btn ts-btn-play" id="ts-btn-play" onclick="timeSliderTogglePlay()" title="Lecture / Pause (Espace)">
+                <i class="fas fa-play" id="ts-icon-play"></i>
+            </button>
+            <button class="ts-btn" id="ts-btn-next" onclick="timeSliderStep(1)" title="Pas suivant">
+                <i class="fas fa-step-forward"></i>
+            </button>
+            <div class="ts-speed-selector">
+                <button class="ts-btn-speed active" data-speed="1" onclick="timeSliderSetSpeed(1)">1x</button>
+                <button class="ts-btn-speed" data-speed="2" onclick="timeSliderSetSpeed(2)">2x</button>
+                <button class="ts-btn-speed" data-speed="5" onclick="timeSliderSetSpeed(5)">5x</button>
+            </div>
+        </div>
+
+        <!-- Curseur Temporel -->
+        <div class="ts-timeline-container">
+            <div class="ts-timeline-labels">
+                <span id="ts-label-start">00:00</span>
+                <span class="ts-label-current" id="ts-label-current">T = 00h 00m</span>
+                <span id="ts-label-end">04:00</span>
+            </div>
+            <input type="range" id="ts-range-slider" min="0" max="0" value="0" class="ts-slider" oninput="timeSliderSeek(this.value)">
+        </div>
+
+        <!-- Mini-Hydrogramme dynamique -->
+        <div class="ts-hydrograph-container" title="Cliquez sur l'hydrogramme pour vous déplacer dans le temps">
+            <canvas id="canvas-ts-hydrograph"></canvas>
+        </div>
+    </div>
+</div>

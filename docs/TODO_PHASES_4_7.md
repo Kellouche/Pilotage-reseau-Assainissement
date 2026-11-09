@@ -16,11 +16,11 @@
   - [x] Mise en évidence visuelle des conduites en charge (HGL > génératrice supérieure) et alertes
   - [x] Panneau accordéon rétractable avec Chart.js et export PNG en 1 clic
 
-- [ ] **6.B — Animation temporelle de l'onde de crue (Time Slider)**
-  - Curseur temporel 0 h → 24 h exploitant le fichier binaire `.out` de SWMM
-  - Coloration dynamique des conduites selon le taux de charge Q/Qmax à chaque pas de temps
-  - Clignotement et marquage visuel des regards en débordement
-  - Affichage du débit instantané à l'exutoire (hydrogramme Chart.js mis à jour en temps réel)
+- [x] **6.B — Animation temporelle de l'onde de crue (Time Slider)**
+  - [x] Curseur temporel 0 h → 24 h exploitant le fichier binaire `.out` de SWMM via `timeseries_extractor`
+  - [x] Coloration dynamique des conduites selon le taux de charge Q/Qmax à chaque pas de temps
+  - [x] Clignotement et marquage visuel radar des regards en débordement
+  - [x] Affichage du débit instantané à l'exutoire (mini-hydrogramme Chart.js mis à jour en temps réel et navigation au clic)
 
 - [ ] **6.C — Générateur de Rapport de Diagnostic en 1 clic (PDF)**
   - Synthèse complète : cartographie du réseau, liste des contre-pentes, anomalies critiques

@@ -153,8 +153,9 @@ class MoteurSWMM:
             raccordements_orphelins=raccordements_orphelins,
         )
 
-        rpt_text, _ = executer_solver_swmm(inp_content)
+        rpt_text, _, timeseries = executer_solver_swmm(inp_content, return_timeseries=True)
         kpis = self._analyser_rapport_swmm(rpt_text, meta)
+        kpis["timeseries"] = timeseries or {}
 
         # 1. Calcul en arrière-plan de la sensibilité aux 3 cas de buffers (35, 45, 60m)
         try:
