@@ -12,38 +12,37 @@
         // IMPRESSION COMPLÈTE DU RAPPORT D'EXPERTISE (PDF / PAPIER)
         // ==========================================
         window.imprimerDiagnosticTechniqueComplet = function() {
-            const simData = window._dernierResultatSimulation;
-            if (!simData) {
-                alert("Aucun résultat de simulation active à imprimer. Veuillez d'abord exécuter une simulation SWMM 5.2.");
-                return;
-            }
+            try {
+                const simData = window._dernierResultatSimulation;
+                if (!simData) {
+                    alert("Aucun résultat de simulation active à imprimer. Veuillez d'abord exécuter une simulation SWMM 5.2.");
+                    return;
+                }
 
-            const meta = simData.meta || {};
-            const k = simData.kpis || {};
-            const agents = simData.agents_expertise || {};
-            const bufferSens = simData.buffer_sensitivity || {};
+                const meta = simData.meta || {};
+                const k = simData.kpis || {};
+                const agents = simData.agents_expertise || {};
+                const bufferSens = simData.buffer_sensitivity || {};
 
-            const diag = agents.diagnostic_causal || {};
-            const gc = agents.prescriptions_genie_civil || {};
-            const lid = agents.solutions_hydrologie_durable || {};
-            const risk = agents.matrice_risques || {};
-            const finance = agents.analyse_variantes_financiere || {};
-            const synth = agents.synthese_executive || {};
+                const diag = agents.diagnostic_causal || {};
+                const gc = agents.prescriptions_genie_civil || {};
+                const lid = agents.solutions_hydrologie_durable || {};
+                const risk = agents.matrice_risques || {};
+                const finance = agents.analyse_variantes_financiere || {};
+                const synth = agents.synthese_executive || {};
 
-            const variantes = finance.variantes || [];
-            const ratios = finance.ratios_directeurs || {};
+                const variantes = finance.variantes || [];
+                const ratios = finance.ratios_directeurs || {};
 
-            const projectName = (window._rawNetworkData && window._rawNetworkData.project_name) ? window._rawNetworkData.project_name : 'Réseau Urbain';
-            const dateStr = new Date().toLocaleString('fr-FR', { dateStyle: 'full', timeStyle: 'short' });
+                const projectName = (window._rawNetworkData && window._rawNetworkData.project_name) ? window._rawNetworkData.project_name : 'Réseau Urbain';
+                const dateStr = new Date().toLocaleString('fr-FR', { dateStyle: 'full', timeStyle: 'short' });
 
-            const printWin = window.open('', '_blank');
-            if (!printWin) {
-                alert("Veuillez autoriser l'ouverture des fenêtres pop-up dans votre navigateur pour générer le rapport PDF.");
-                return;
-            }
+                const verdict = synth.verdict || "ANALYSE EXPERTE MULTI-AGENTS SWMM 5.2";
+                const verdictColor = synth.couleur || "#0284c7";
 
-            const verdict = synth.verdict || "ANALYSE EXPERTE MULTI-AGENTS SWMM 5.2";
-            const verdictColor = synth.couleur || "#0284c7";
+                const formatCout = (typeof window.formaterCoutDZD === 'function')
+                    ? window.formaterCoutDZD
+                    : (val) => Number(val || 0).toLocaleString('fr-FR', { maximumFractionDigits: 0 }) + ' DZD';
 
             // Tableau Risques (Agent 4)
             let riskRows = '';
@@ -76,7 +75,7 @@
                             <td><b>${a.conduite || a.cible || '--'}</b></td>
                             <td>${a.type_risque || a.probleme || '--'}</td>
                             <td>${a.action_requise || a.action || '--'}</td>
-                            <td style="text-align: right; font-weight: 700;">${window.formaterCoutDZD(a.estimation_cout_dzd)}</td>
+                            <td style="text-align: right; font-weight: 700;">${formatCout(a.estimation_cout_dzd)}</td>
                             <td style="text-align: center;">${a.delai_recommande || '--'}</td>
                         </tr>
                     `;
@@ -141,8 +140,8 @@
                             <td style="text-align: right; font-weight: 700;">${r.nb_troncons}</td>
                             <td style="text-align: right; font-weight: 700;">${Number(r.lineaire_ml).toFixed(1)} ml</td>
                             <td style="text-align: right;">${r.pct_lineaire}%</td>
-                            <td style="text-align: right;">${window.formaterCoutDZD(r.cout_unitaire_ml_dzd)} / ml</td>
-                            <td style="text-align: right; font-weight: 700; color: #0284c7;">${window.formaterCoutDZD(r.cout_total_dzd)}</td>
+                            <td style="text-align: right;">${formatCout(r.cout_unitaire_ml_dzd)} / ml</td>
+                            <td style="text-align: right; font-weight: 700; color: #0284c7;">${formatCout(r.cout_total_dzd)}</td>
                             <td style="text-align: right;">${r.pct_budget}%</td>
                         </tr>
                     `;
@@ -177,7 +176,7 @@
                             <td style="text-align: right; font-weight: 700; color: #0284c7;">DN ${dn}</td>
                             <td>${mat}</td>
                             <td style="text-align: right;">${Number(long).toFixed(1)} m</td>
-                            <td style="text-align: right; font-weight: 700;">${window.formaterCoutDZD(cout)}</td>
+                            <td style="text-align: right; font-weight: 700;">${formatCout(cout)}</td>
                         </tr>
                     `;
                 });
@@ -251,7 +250,7 @@
                             <td style="text-align: right;">${v.recalibrage_ml > 0 ? Number(v.recalibrage_ml).toFixed(1) + ' ml' : '--'}</td>
                             <td style="text-align: right;">${v.volume_retention_m3 > 0 ? Number(v.volume_retention_m3).toFixed(0) + ' m³' : '--'}</td>
                             <td style="text-align: right; font-weight: 800; color: ${isRec ? '#16a34a' : '#0f172a'};">
-                                ${window.formaterCoutDZD(v.cout_total_dzd)}
+                                ${formatCout(v.cout_total_dzd)}
                             </td>
                             <td>${v.gain_hydraulique}</td>
                             <td>${v.impact_voirie}</td>
@@ -271,7 +270,7 @@
                         <td><b>Variante 1 : 100 % tout-réseau</b><br><small style="color:#64748b;">Recalibrage intégral 7.6 km sans bassin</small></td>
                         <td style="text-align: right;">7 591,9 ml</td>
                         <td style="text-align: right;">--</td>
-                        <td style="text-align: right; font-weight: 700;">${window.formaterCoutDZD(330964500)}</td>
+                        <td style="text-align: right; font-weight: 700;">${formatCout(330964500)}</td>
                         <td>100 % théorique (sans abattement de pointe)</td>
                         <td>TRÈS ÉLEVÉ (coupure RN4, paralysie urbaine)</td>
                         <td>TRÈS ÉLEVÉ (crue brute à l'exutoire)</td>
@@ -282,7 +281,7 @@
                         <td><b>Variante 2 : 100 % GDO pures</b><br><small style="color:#64748b;">Bassin d'orage 18 500 m³ sans recalibrage réseau</small></td>
                         <td style="text-align: right;">--</td>
                         <td style="text-align: right;">18 500 m³</td>
-                        <td style="text-align: right; font-weight: 700;">${window.formaterCoutDZD(112500000)}</td>
+                        <td style="text-align: right; font-weight: 700;">${formatCout(112500000)}</td>
                         <td>Partiel (~62 % réduction débordements)</td>
                         <td>Faible (hors voies circulées)</td>
                         <td>Faible (bon écrêtement)</td>
@@ -293,7 +292,7 @@
                         <td><b>Variante 3 : Mixte optimisée</b><br><small style="color:#64748b;">Recalibrage ciblé 97 goulots + Bassin 6 595 m³</small></td>
                         <td style="text-align: right;">4 112,8 ml</td>
                         <td style="text-align: right;">6 595 m³</td>
-                        <td style="text-align: right; font-weight: 800; color: #16a34a;">${window.formaterCoutDZD(240384400)}</td>
+                        <td style="text-align: right; font-weight: 800; color: #16a34a;">${formatCout(240384400)}</td>
                         <td>100 % résorption intégrale (Saint-Venant vérifié)</td>
                         <td>Modéré et phasable (P1 / P2)</td>
                         <td>MINIMAL (pointe écrêtée de 1,73 à 0,65 m³/s)</td>
@@ -304,7 +303,20 @@
             }
 
 
-            const docHtml = window._construireHtmlRapportDiagnostic(simData, meta, k, agents, bufferSens, diag, gc, lid, risk, finance, synth, variantes, ratios, contError, surchargedNodes, floodedNodes, peakOutflow, nbConduites, nbNormal, nbVigilance, nbSurcharge, verdict, verdictCouleur, pName, clusterNom, dateStr);
+            const params = {
+                simData, meta, k, agents, bufferSens, diag, gc, lid, risk, finance, synth,
+                variantes, ratios, projectName, dateStr, verdict, verdictColor,
+                riskRows, surchRows, bottleRows, gcRecapRows, gcRows, lidRows, bufRows, varRows,
+                bpuTerrassement, bpuFourniture, bpuPose, bpuChaussee
+            };
+
+            const docHtml = window._construireHtmlRapportDiagnostic(params);
+
+            const printWin = window.open('', '_blank');
+            if (!printWin) {
+                alert("Veuillez autoriser l'ouverture des fenêtres pop-up dans votre navigateur pour générer le rapport PDF.");
+                return;
+            }
 
             printWin.document.open();
             printWin.document.write(docHtml);
@@ -317,4 +329,8 @@
                     console.warn("Impression auto popup:", e);
                 }
             }, 350);
-        };
+        } catch (err) {
+            console.error("Erreur génération rapport diagnostic:", err);
+            alert("Impossible de générer le rapport d'expertise :\n" + (err && err.message ? err.message : err));
+        }
+    };

@@ -8,7 +8,72 @@
  * ================================================================================
  */
 
-window._construireHtmlRapportDiagnostic = function(simData, meta, k, agents, bufferSens, diag, gc, lid, risk, finance, synth, variantes, ratios, contError, surchargedNodes, floodedNodes, peakOutflow, nbConduites, nbNormal, nbVigilance, nbSurcharge, verdict, verdictCouleur, pName, clusterNom, dateStr) {
+window._construireHtmlRapportDiagnostic = function(simDataOrParams, metaArg, kArg, agentsArg, bufferSensArg, diagArg, gcArg, lidArg, riskArg, financeArg, synthArg, variantesArg, ratiosArg, contErrorArg, surchargedNodesArg, floodedNodesArg, peakOutflowArg, nbConduitesArg, nbNormalArg, nbVigilanceArg, nbSurchargeArg, verdictArg, verdictCouleurArg, pNameArg, clusterNomArg, dateStrArg) {
+    let p = {};
+    if (simDataOrParams && typeof simDataOrParams === 'object' && ('simData' in simDataOrParams || 'riskRows' in simDataOrParams)) {
+        p = simDataOrParams;
+    } else {
+        p = {
+            simData: simDataOrParams,
+            meta: metaArg,
+            k: kArg,
+            agents: agentsArg,
+            bufferSens: bufferSensArg,
+            diag: diagArg,
+            gc: gcArg,
+            lid: lidArg,
+            risk: riskArg,
+            finance: financeArg,
+            synth: synthArg,
+            variantes: variantesArg,
+            ratios: ratiosArg,
+            verdict: verdictArg,
+            verdictColor: verdictCouleurArg,
+            projectName: pNameArg,
+            clusterNom: clusterNomArg,
+            dateStr: dateStrArg
+        };
+    }
+
+    const simData = p.simData || window._dernierResultatSimulation || {};
+    const meta = p.meta || simData.meta || {};
+    const k = p.k || simData.kpis || {};
+    const agents = p.agents || simData.agents_expertise || {};
+    const bufferSens = p.bufferSens || simData.buffer_sensitivity || {};
+
+    const diag = p.diag || agents.diagnostic_causal || {};
+    const gc = p.gc || agents.prescriptions_genie_civil || {};
+    const lid = p.lid || agents.solutions_hydrologie_durable || {};
+    const risk = p.risk || agents.matrice_risques || {};
+    const finance = p.finance || agents.analyse_variantes_financiere || {};
+    const synth = p.synth || agents.synthese_executive || {};
+
+    const variantes = p.variantes || finance.variantes || [];
+    const ratios = p.ratios || finance.ratios_directeurs || {};
+
+    const projectName = p.projectName || (window._rawNetworkData && window._rawNetworkData.project_name) || 'Réseau Urbain';
+    const dateStr = p.dateStr || new Date().toLocaleString('fr-FR', { dateStyle: 'full', timeStyle: 'short' });
+    const verdict = p.verdict || synth.verdict || "ANALYSE EXPERTE MULTI-AGENTS SWMM 5.2";
+    const verdictColor = p.verdictColor || synth.couleur || "#0284c7";
+
+    const riskRows = p.riskRows || '<tr><td colspan="6" style="text-align:center; color:#64748b;">Aucun risque immédiat recensé.</td></tr>';
+    const surchRows = p.surchRows || '<tr><td colspan="6" style="text-align:center; color:#64748b;">Aucun tronçon en surcharge sévère.</td></tr>';
+    const bottleRows = p.bottleRows || '<tr><td colspan="5" style="text-align:center; color:#64748b;">Aucun goulot d\'étranglement identifié.</td></tr>';
+    const gcRecapRows = p.gcRecapRows || '<tr><td colspan="9" style="text-align:center; color:#64748b;">Aucun recalibrage structurel requis.</td></tr>';
+    const gcRows = p.gcRows || '<tr><td colspan="7" style="text-align:center; color:#64748b;">Capacité gravitaire actuelle satisfaisante.</td></tr>';
+    const lidRows = p.lidRows || '';
+    const bufRows = p.bufRows || '';
+    const varRows = p.varRows || '';
+
+    const bpuTerrassement = p.bpuTerrassement || Math.round((gc.cout_global_estime_dzd || 0) * 0.30);
+    const bpuFourniture = p.bpuFourniture || Math.round((gc.cout_global_estime_dzd || 0) * 0.35);
+    const bpuPose = p.bpuPose || Math.round((gc.cout_global_estime_dzd || 0) * 0.20);
+    const bpuChaussee = p.bpuChaussee || Math.round((gc.cout_global_estime_dzd || 0) * 0.15);
+
+    const formatCout = (typeof window.formaterCoutDZD === 'function')
+        ? window.formaterCoutDZD
+        : (val) => Number(val || 0).toLocaleString('fr-FR', { maximumFractionDigits: 0 }) + ' DZD';
+
     const docHtml = `
 <!DOCTYPE html>
 <html lang="fr">
@@ -193,7 +258,7 @@ window._construireHtmlRapportDiagnostic = function(simData, meta, k, agents, buf
     <!-- 2. Matrice des Risques & Plan d'Action (Agent 4) -->
     <div class="section-title">
         <span>2. Plan d'action priorisé et matrice des risques (Agent 4)</span>
-        <span style="font-size: 7.5pt; color: #64748b;">Budget total estimé : <b>${window.formaterCoutDZD(gc.cout_global_estime_dzd)}</b></span>
+        <span style="font-size: 7.5pt; color: #64748b;">Budget total estimé : <b>${formatCout(gc.cout_global_estime_dzd)}</b></span>
     </div>
     <div class="agent-memo-box">
         <div class="agent-memo-title">🎯 Note de hiérarchisation multicritère &bull; Expert risques et exploitation (Agent 4)</div>
@@ -318,7 +383,7 @@ window._construireHtmlRapportDiagnostic = function(simData, meta, k, agents, buf
                 <td style="text-align: right;"><b>${Number(gc.metres_lineaires_totaux || 0).toFixed(1)} ml</b></td>
                 <td style="text-align: right;">100%</td>
                 <td style="text-align: right;">--</td>
-                <td style="text-align: right; color: #0284c7;"><b>${window.formaterCoutDZD(gc.cout_global_estime_dzd)}</b></td>
+                <td style="text-align: right; color: #0284c7;"><b>${formatCout(gc.cout_global_estime_dzd)}</b></td>
                 <td style="text-align: right;">100%</td>
             </tr>
         </tfoot>
@@ -328,19 +393,19 @@ window._construireHtmlRapportDiagnostic = function(simData, meta, k, agents, buf
     <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 8px;">
         <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; padding: 5px 8px; font-size: 7.5pt;">
             <span style="color: #64748b; display: block; font-size: 6.8pt; text-transform: uppercase;">1. Terrassement et blindage (30 %)</span>
-            <b style="color: #0f172a; font-size: 8.2pt;">${window.formaterCoutDZD(bpuTerrassement)}</b>
+            <b style="color: #0f172a; font-size: 8.2pt;">${formatCout(bpuTerrassement)}</b>
         </div>
         <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; padding: 5px 8px; font-size: 7.5pt;">
             <span style="color: #64748b; display: block; font-size: 6.8pt; text-transform: uppercase;">2. Fourniture des tuyaux (35 %)</span>
-            <b style="color: #0f172a; font-size: 8.2pt;">${window.formaterCoutDZD(bpuFourniture)}</b>
+            <b style="color: #0f172a; font-size: 8.2pt;">${formatCout(bpuFourniture)}</b>
         </div>
         <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; padding: 5px 8px; font-size: 7.5pt;">
             <span style="color: #64748b; display: block; font-size: 6.8pt; text-transform: uppercase;">3. Pose et remblai à 95 % OPM (20 %)</span>
-            <b style="color: #0f172a; font-size: 8.2pt;">${window.formaterCoutDZD(bpuPose)}</b>
+            <b style="color: #0f172a; font-size: 8.2pt;">${formatCout(bpuPose)}</b>
         </div>
         <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; padding: 5px 8px; font-size: 7.5pt;">
             <span style="color: #64748b; display: block; font-size: 6.8pt; text-transform: uppercase;">4. Réfection de chaussée en béton bitumineux (15 %)</span>
-            <b style="color: #0f172a; font-size: 8.2pt;">${window.formaterCoutDZD(bpuChaussee)}</b>
+            <b style="color: #0f172a; font-size: 8.2pt;">${formatCout(bpuChaussee)}</b>
         </div>
     </div>
 
@@ -372,7 +437,7 @@ window._construireHtmlRapportDiagnostic = function(simData, meta, k, agents, buf
     <!-- 5. Analyse Multi-Critères des Variantes d'Aménagement & Décision d'Investissement (Agent 5) -->
     <div class="section-title">
         <span>5. Analyse multicritère des variantes d'aménagement et décision d'investissement (Agent 5)</span>
-        <span style="font-size: 7.5pt; color: #16a34a;">Économie scénario mixte : <b>${window.formaterCoutDZD(finance.economie_realisee_dzd || 90580100)} (-${finance.economie_pourcentage || 27.4}%)</b></span>
+        <span style="font-size: 7.5pt; color: #16a34a;">Économie scénario mixte : <b>${formatCout(finance.economie_realisee_dzd || 90580100)} (-${finance.economie_pourcentage || 27.4}%)</b></span>
     </div>
     <div class="agent-memo-box">
         <div class="agent-memo-title">💼 Analyse technico-économique et rentabilité socio-économique &bull; Expert financier et marchés publics (Agent 5)</div>
@@ -383,17 +448,17 @@ window._construireHtmlRapportDiagnostic = function(simData, meta, k, agents, buf
     <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 8px;">
         <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; padding: 5px 8px; font-size: 7.5pt;">
             <span style="color: #64748b; display: block; font-size: 6.8pt; text-transform: uppercase;">Coût au mètre linéaire rénové</span>
-            <b style="color: #0284c7; font-size: 8.5pt;">${window.formaterCoutDZD(ratios.cout_par_ml_renove_dzd || 47870)} / ml</b>
+            <b style="color: #0284c7; font-size: 8.5pt;">${formatCout(ratios.cout_par_ml_renove_dzd || 47870)} / ml</b>
             <small style="color: #64748b; display: block; font-size: 6.8pt;">Base 4 112.8 ml ciblés</small>
         </div>
         <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; padding: 5px 8px; font-size: 7.5pt;">
             <span style="color: #64748b; display: block; font-size: 6.8pt; text-transform: uppercase;">Coût par habitant équivalent</span>
-            <b style="color: #0284c7; font-size: 8.5pt;">${window.formaterCoutDZD(ratios.cout_par_habitant_protege_dzd || 16025)} / hab</b>
+            <b style="color: #0284c7; font-size: 8.5pt;">${formatCout(ratios.cout_par_habitant_protege_dzd || 16025)} / hab</b>
             <small style="color: #64748b; display: block; font-size: 6.8pt;">Bassin ~15 000 hab protégés</small>
         </div>
         <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 4px; padding: 5px 8px; font-size: 7.5pt;">
             <span style="color: #16a34a; display: block; font-size: 6.8pt; text-transform: uppercase; font-weight: 700;">Dommages annuels évités (EAD)</span>
-            <b style="color: #15803d; font-size: 8.5pt;">${window.formaterCoutDZD(ratios.dommages_annuels_evites_dzd || 45000000)} / an</b>
+            <b style="color: #15803d; font-size: 8.5pt;">${formatCout(ratios.dommages_annuels_evites_dzd || 45000000)} / an</b>
             <small style="color: #16a34a; display: block; font-size: 6.8pt;">Voirie, caves, RN4, pompage ONA</small>
         </div>
         <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 4px; padding: 5px 8px; font-size: 7.5pt;">
