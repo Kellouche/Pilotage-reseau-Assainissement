@@ -21,16 +21,16 @@ Objet : Panneau rétractable du profil en long hydraulique interactif (Phase 6.A
 
         <!-- Sélecteurs manuels amont/aval -->
         <div class="profil-long-controls">
-            <div class="profil-node-select-box">
+            <div class="profil-node-select-box" title="Saisissez le regard amont ou cliquez sur la carte">
                 <span class="node-tag amont">Amont :</span>
-                <input type="text" id="input-profil-amont" placeholder="Regard départ..." readonly>
+                <input type="text" id="input-profil-amont" placeholder="Regard départ..." onchange="synchroniserInputProfilAmont(this.value)" onkeydown="if(event.key==='Enter') rafraichirProfilLong()">
             </div>
             <button class="btn-swap-nodes" title="Inverser amont / aval" onclick="inverserRegardsProfil()">
                 <i class="fas fa-exchange-alt"></i>
             </button>
-            <div class="profil-node-select-box">
+            <div class="profil-node-select-box" title="Saisissez le regard aval ou cliquez sur la carte">
                 <span class="node-tag aval">Aval :</span>
-                <input type="text" id="input-profil-aval" placeholder="Regard arrivée..." readonly>
+                <input type="text" id="input-profil-aval" placeholder="Regard arrivée..." onchange="synchroniserInputProfilAval(this.value)" onkeydown="if(event.key==='Enter') rafraichirProfilLong()">
             </div>
             <button class="btn-action-profil btn-tracer" onclick="rafraichirProfilLong()">
                 <i class="fas fa-play"></i> Actualiser

@@ -77,6 +77,24 @@ function chargerDonneesInitiales() {
                             const index = window.conduitProperties.length;
                             window.conduitProperties.push(feature.properties);
                             layer.bindPopup(conduitPopup(feature, index));
+
+                            // Interception si le mode Profil en Long est actif pour faciliter le clic
+                            layer.on('click', (e) => {
+                                if (window.profilLongState && window.profilLongState.active) {
+                                    L.DomEvent.stop(e);
+                                    const cMap = window.carte || window.map;
+                                    if (cMap) cMap.closePopup();
+                                    if (layer.closePopup) layer.closePopup();
+                                    const p = feature.properties || {};
+                                    const targetNode = (window.profilLongState.step === 'amont')
+                                        ? (p.ID_AMONT || p.id_amont || p.ID1 || p.Node1)
+                                        : (p.ID_AVAL || p.id_aval || p.ID2 || p.Node2);
+                                    if (targetNode && window.handleRegardClickForProfil) {
+                                        window.handleRegardClickForProfil(targetNode, e.latlng);
+                                    }
+                                    return false;
+                                }
+                            });
                         }
                     }).addTo(couches.conduites);
 
@@ -231,7 +249,8 @@ function chargerDonneesInitiales() {
                                             if (layer.closePopup) layer.closePopup();
                                         }, 10);
 
-                                        const code = feature.properties.Code || feature.properties.code || feature.properties.id || feature.properties.nom;
+                                        const p = feature.properties || {};
+                                        const code = p.Code || p.code || p.CODE || p.id || p.ID || p.Id || p.nom || p.NOM || p.Nom || p.CODEPRR || p.NUMERO || feature.id;
                                         if (code && window.handleRegardClickForProfil) {
                                             window.handleRegardClickForProfil(code, e.latlng);
                                         }

@@ -187,36 +187,94 @@ window.handleRegardClickForProfil = function(code, latlng) {
 };
 
 /**
- * Inverse les regards amont et aval
+ * Crée un motif de hachures diagonales pour la zone de charge piézométrique (HGL > Plan d'eau)
  */
-function inverserRegardsProfil() {
-    const state = window.profilLongState;
-    if (!state.nodeAmont || !state.nodeAval) return;
+function _creerPatternHachures(couleurLigne, couleurFond, espacement) {
+    const pCanvas = document.createElement('canvas');
+    const size = espacement || 10;
+    pCanvas.width = size;
+    pCanvas.height = size;
+    const pctx = pCanvas.getContext('2d');
 
-    const tmp = state.nodeAmont;
-    state.nodeAmont = state.nodeAval;
-    state.nodeAval = tmp;
+    if (couleurFond) {
+        pctx.fillStyle = couleurFond;
+        pctx.fillRect(0, 0, size, size);
+    }
 
-    const inpA = document.getElementById('input-profil-amont');
-    const inpB = document.getElementById('input-profil-aval');
-    if (inpA) inpA.value = state.nodeAmont;
-    if (inpB) inpB.value = state.nodeAval;
+    pctx.strokeStyle = couleurLigne || 'rgba(239, 68, 68, 0.45)';
+    pctx.lineWidth = 1.8;
+    pctx.beginPath();
+    pctx.moveTo(0, size);
+    pctx.lineTo(size, 0);
+    pctx.stroke();
 
-    chargerProfilLong(state.nodeAmont, state.nodeAval);
+    pctx.beginPath();
+    pctx.moveTo(-1, 1);
+    pctx.lineTo(1, -1);
+    pctx.stroke();
+
+    pctx.beginPath();
+    pctx.moveTo(size - 1, size + 1);
+    pctx.lineTo(size + 1, size - 1);
+    pctx.stroke();
+
+    return pctx.createPattern(pCanvas, 'repeat');
 }
 
 /**
- * Rafraîchit le profil actuel
+ * Synchronise la saisie manuelle dans le champ regard amont
+ */
+window.synchroniserInputProfilAmont = function(val) {
+    if (val && val.trim()) {
+        window.profilLongState.nodeAmont = val.trim();
+    }
+};
+
+/**
+ * Synchronise la saisie manuelle dans le champ regard aval
+ */
+window.synchroniserInputProfilAval = function(val) {
+    if (val && val.trim()) {
+        window.profilLongState.nodeAval = val.trim();
+    }
+};
+
+/**
+ * Inverse les regards amont et aval
+ */
+function inverserRegardsProfil() {
+    const inpA = document.getElementById('input-profil-amont');
+    const inpB = document.getElementById('input-profil-aval');
+    const a = inpA ? inpA.value.trim() : (window.profilLongState.nodeAmont || '');
+    const b = inpB ? inpB.value.trim() : (window.profilLongState.nodeAval || '');
+    if (!a && !b) return;
+
+    window.profilLongState.nodeAmont = b;
+    window.profilLongState.nodeAval = a;
+
+    if (inpA) inpA.value = b;
+    if (inpB) inpB.value = a;
+
+    if (a && b) {
+        chargerProfilLong(b, a);
+    }
+}
+
+/**
+ * Rafraîchit le profil actuel (supporte la saisie manuelle directe au clavier)
  */
 function rafraichirProfilLong() {
     const inpA = document.getElementById('input-profil-amont');
     const inpB = document.getElementById('input-profil-aval');
-    const a = inpA ? inpA.value.trim() : window.profilLongState.nodeAmont;
-    const b = inpB ? inpB.value.trim() : window.profilLongState.nodeAval;
+    const a = inpA ? inpA.value.trim() : (window.profilLongState.nodeAmont || '');
+    const b = inpB ? inpB.value.trim() : (window.profilLongState.nodeAval || '');
+
     if (a && b) {
+        window.profilLongState.nodeAmont = a;
+        window.profilLongState.nodeAval = b;
         chargerProfilLong(a, b);
     } else {
-        alert("Veuillez d'abord sélectionner un regard amont et un regard aval.");
+        alert("Veuillez saisir ou sélectionner un regard amont et un regard aval.");
     }
 }
 
@@ -331,7 +389,10 @@ function afficherProfilLong(data) {
         window.profilLongState.chartInstance.destroy();
     }
 
-    // Création du graphique Chart.js avec Plan d'Eau Réel dans la Conduite (Water Surface Profile - WSP)
+    // Motif de hachures diagonales pour la colonne de charge piézométrique (HGL > Plan d'eau réel)
+    const patternHachures = _creerPatternHachures('rgba(239, 68, 68, 0.45)', 'rgba(245, 158, 11, 0.08)', 10);
+
+    // Création du graphique Chart.js avec Plan d'Eau Réel dans la Conduite et Zone de Charge Hachurée
     window.profilLongState.chartInstance = new Chart(ctx, {
         type: 'line',
         data: {
@@ -382,16 +443,16 @@ function afficherProfilLong(data) {
                     tension: 0
                 },
                 {
-                    label: 'Ligne de charge HGL (🟢 Libre / 🟡 Surcharge / 🔴 Débordement)',
+                    label: 'Ligne de charge HGL (Zone de surpression hachurée)',
                     data: hglData,
                     borderColor: '#f59e0b',
-                    backgroundColor: 'rgba(245, 158, 11, 0.18)',
+                    backgroundColor: patternHachures, // Hachures diagonales d'alerte entre WSP et HGL
                     borderWidth: 3.5,
                     pointRadius: hglPointRadius,
                     pointBackgroundColor: hglPointColors,
                     pointBorderColor: '#ffffff',
                     pointBorderWidth: 1.5,
-                    fill: false,
+                    fill: '-1', // Hachure la zone de mise en charge vers le Plan d'eau réel (Dataset 3)
                     tension: 0.15
                 }
             ]

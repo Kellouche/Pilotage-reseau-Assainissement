@@ -172,6 +172,21 @@
                             this.setStyle({ weight: initW, opacity: 1.0 });
                             this.closeTooltip();
                         });
+
+                        // Clic sur conduite en mode profil en long : capture le regard cible sans ouvrir de popup
+                        layer.on('click', function(e) {
+                            if (window.profilLongState && window.profilLongState.active) {
+                                L.DomEvent.stop(e);
+                                const cMap = window.carte || window.map;
+                                if (cMap) cMap.closePopup();
+                                if (this.closePopup) this.closePopup();
+                                const targetNode = (window.profilLongState.step === 'amont') ? u : d;
+                                if (targetNode && window.handleRegardClickForProfil) {
+                                    window.handleRegardClickForProfil(targetNode, e.latlng);
+                                }
+                                return false;
+                            }
+                        });
                     }
                 }).addTo(couches.res_conduites);
             }
