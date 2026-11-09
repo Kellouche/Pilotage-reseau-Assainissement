@@ -97,61 +97,156 @@ Objet : Modale de paramétrage de pluie, stations ANRH et déclenchement SWMM 5.
                 <div style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                         <label style="font-size: 0.82rem; font-weight: 700; color: #38bdf8; margin: 0;">
-                            <i class="fas fa-cloud-showers-heavy me-1"></i> Référentiel pluviométrique et sollicitation SWMM
+                            <i class="fas fa-cloud-showers-heavy me-1"></i> Sollicitation pluviométrique et météo
                         </label>
                         <span id="sim-pluvio-station-badge" style="font-size: 0.72rem; color: #38bdf8; background: rgba(56,189,248,0.12); padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(56,189,248,0.3); font-weight: 600;">Station ANRH Chlef Siège (010501)</span>
                     </div>
 
-                    <!-- Sélecteur de station hydro-météo ANRH -->
-                    <div style="margin-bottom: 10px;">
-                        <label style="font-size: 0.75rem; color: #cbd5e1; display: block; margin-bottom: 4px;">
-                            <i class="fas fa-map-marker-alt me-1" style="color: #38bdf8;"></i> Station hydro-météorologique de référence :
-                        </label>
-                        <select id="sim-select-station" onchange="onChangementStationPluie(this.value)" style="width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 6px; color: #f8fafc; font-size: 0.82rem; font-weight: 600;">
-                            <optgroup label="📍 Wilaya de Chlef (Bassin Versant 01 - Chélif) [ANRH / UHBC]">
-                                <option value="chlef_anrh_siege" selected>🏢 Station ANRH Chlef Siège (Ech-Cheliff) [Code 010501 - Alt. 154m - UHBC Réf.]</option>
-                                <option value="chlef_ponteba_oum_drou">🌾 Station Pontéba (Oum Drou) [Code 010502 - Alt. 142m]</option>
-                                <option value="chlef_oued_fodda">🌊 Station Oued Fodda (Vallée &amp; Barrage) [Code 010505 - Alt. 180m]</option>
-                                <option value="chlef_benairia_dahra">⛰️ Station Bénaïria (Massif du Dahra) [Code 010508 - Alt. 480m]</option>
-                                <option value="chlef_domaine_si_tayeb">🚜 Station Domaine Si Tayeb [Code 010512 - Alt. 165m]</option>
-                                <option value="chlef_tenes_littoral">⚓ Station Ténès (Côte Méditerranéenne) [Code 010520 - Alt. 15m]</option>
-                                <option value="chlef_boukadir">🏜️ Station Boukadir (Bas Chélif Ouest) [Code 010525 - Alt. 110m]</option>
-                            </optgroup>
-                            <optgroup label="🌍 Autres Bassins Régionaux">
-                                <option value="ain_defla_khemis">Station Khemis Miliana (Haut Chélif - 010403)</option>
-                                <option value="mascara_ghriss">Station ANRH Mascara-Ghriss (Bassin Macta - 040702)</option>
-                                <option value="alger_port">Station Alger Port / Cap Caxine (Côtiers Algérois - 020301)</option>
-                                <option value="oran_senia">Station Oran Es-Sénia (Oranie - 050201)</option>
-                                <option value="constantine_aeroport">Station Constantine Aïn El Bey (Bassin 03 - 030401)</option>
-                            </optgroup>
-                        </select>
+                    <!-- Sélecteur de mode ergonomique : Projet réglementaire vs Alerte météo BMS -->
+                    <div style="display: flex; gap: 6px; margin-bottom: 12px; background: rgba(15, 23, 42, 0.6); padding: 4px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.1);">
+                        <button type="button" id="tab-mode-pluie-projet" onclick="basculerModePluie('projet')" style="flex: 1; padding: 6px 10px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; border: none; cursor: pointer; transition: all 0.2s; background: #0284c7; color: white;">
+                            <i class="fas fa-drafting-compass me-1"></i> Pluie de projet réglementaire (Montana)
+                        </button>
+                        <button type="button" id="tab-mode-pluie-bms" onclick="basculerModePluie('bms')" style="flex: 1; padding: 6px 10px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; border: none; cursor: pointer; transition: all 0.2s; background: transparent; color: #94a3b8;">
+                            <i class="fas fa-exclamation-triangle me-1" style="color: #f59e0b;"></i> Alerte météo (BMS ONM)
+                        </button>
                     </div>
 
-                    <!-- Scénario et intensité réglable -->
-                    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 12px; align-items: start;">
-                        <div>
-                            <label style="font-size: 0.75rem; color: #cbd5e1; display: block; margin-bottom: 4px;">Scénario pluviométrique validé :</label>
-                            <select id="sim-select-scenario" onchange="onChangementScenarioPluie(this.value)" style="width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #f8fafc; font-size: 0.82rem;">
-                                <option value="pluie_decennale" selected>🌧️ Pluie décennale (T = 10 ans) [standard réglementaire ONA]</option>
-                                <option value="pluie_cinquantennale">⛈️ Pluie cinquantennale (T = 50 ans) [crise majeure / inondations]</option>
-                                <option value="pluie_centennale">🌊 Pluie centennale (T = 100 ans) [crue historique exceptionnelle]</option>
-                                <option value="pluie_biennale">🌦️ Pluie biennale (T = 2 ans) [pluie courante / confort urbain]</option>
-                                <option value="pluie_orage_2h">⚡ Orage d'été brutal méditerranéen [averse convective 2 h — 92,5 mm/h]</option>
-                                <option value="temps_sec_pur">☀️ Temps sec pur (étiage / eaux usées sans pluie — 0 mm/h)</option>
-                                <option value="personnalise">✏️ Saisie manuelle ingénieur (intensité personnalisée)</option>
+                    <!-- VOLET 1 : Pluie de projet réglementaire (Montana / Chicago) -->
+                    <div id="section-pluie-projet">
+                        <!-- Sélecteur de station hydro-météo ANRH -->
+                        <div style="margin-bottom: 10px;">
+                            <label style="font-size: 0.75rem; color: #cbd5e1; display: block; margin-bottom: 4px;">
+                                <i class="fas fa-map-marker-alt me-1" style="color: #38bdf8;"></i> Station hydro-météorologique de référence :
+                            </label>
+                            <select id="sim-select-station" onchange="onChangementStationPluie(this.value)" style="width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 6px; color: #f8fafc; font-size: 0.82rem; font-weight: 600;">
+                                <optgroup label="📍 Wilaya de Chlef (Bassin Versant 01 - Chélif) [ANRH / UHBC]">
+                                    <option value="chlef_anrh_siege" selected>🏢 Station ANRH Chlef Siège (Ech-Cheliff) [Code 010501 - Alt. 154m - UHBC Réf.]</option>
+                                    <option value="chlef_ponteba_oum_drou">🌾 Station Pontéba (Oum Drou) [Code 010502 - Alt. 142m]</option>
+                                    <option value="chlef_oued_fodda">🌊 Station Oued Fodda (Vallée &amp; Barrage) [Code 010505 - Alt. 180m]</option>
+                                    <option value="chlef_benairia_dahra">⛰️ Station Bénaïria (Massif du Dahra) [Code 010508 - Alt. 480m]</option>
+                                    <option value="chlef_domaine_si_tayeb">🚜 Station Domaine Si Tayeb [Code 010512 - Alt. 165m]</option>
+                                    <option value="chlef_tenes_littoral">⚓ Station Ténès (Côte Méditerranéenne) [Code 010520 - Alt. 15m]</option>
+                                    <option value="chlef_boukadir">🏜️ Station Boukadir (Bas Chélif Ouest) [Code 010525 - Alt. 110m]</option>
+                                </optgroup>
+                                <optgroup label="🌍 Autres Bassins Régionaux">
+                                    <option value="ain_defla_khemis">Station Khemis Miliana (Haut Chélif - 010403)</option>
+                                    <option value="mascara_ghriss">Station ANRH Mascara-Ghriss (Bassin Macta - 040702)</option>
+                                    <option value="alger_port">Station Alger Port / Cap Caxine (Côtiers Algérois - 020301)</option>
+                                    <option value="oran_senia">Station Oran Es-Sénia (Oranie - 050201)</option>
+                                    <option value="constantine_aeroport">Station Constantine Aïn El Bey (Bassin 03 - 030401)</option>
+                                </optgroup>
                             </select>
                         </div>
-                        <div>
-                            <label style="font-size: 0.75rem; color: #cbd5e1; display: block; margin-bottom: 4px;">Intensité de pointe Imax (mm/h) :</label>
-                            <div style="display: flex; align-items: center; gap: 4px;">
-                                <input type="number" id="sim-input-intensite-max" min="0" max="300" step="0.5" value="74.9" oninput="onChangementIntensitePluie(this.value)" style="width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid rgba(56, 189, 248, 0.5); border-radius: 6px; color: #38bdf8; font-size: 0.88rem; font-weight: 700; text-align: center;">
-                                <span style="font-size: 0.82rem; color: #94a3b8; font-weight: bold;">mm/h</span>
+
+                        <!-- Scénario et intensité réglable -->
+                        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 12px; align-items: start;">
+                            <div>
+                                <label style="font-size: 0.75rem; color: #cbd5e1; display: block; margin-bottom: 4px;">Scénario pluviométrique validé :</label>
+                                <select id="sim-select-scenario" onchange="onChangementScenarioPluie(this.value)" style="width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #f8fafc; font-size: 0.82rem;">
+                                    <option value="pluie_decennale" selected>🌧️ Pluie décennale (T = 10 ans) [standard réglementaire ONA]</option>
+                                    <option value="pluie_cinquantennale">⛈️ Pluie cinquantennale (T = 50 ans) [crise majeure / inondations]</option>
+                                    <option value="pluie_centennale">🌊 Pluie centennale (T = 100 ans) [crue historique exceptionnelle]</option>
+                                    <option value="pluie_biennale">🌦️ Pluie biennale (T = 2 ans) [pluie courante / confort urbain]</option>
+                                    <option value="pluie_orage_2h">⚡ Orage d'été brutal méditerranéen [averse convective 2 h — 92,5 mm/h]</option>
+                                    <option value="temps_sec_pur">☀️ Temps sec pur (étiage / eaux usées sans pluie — 0 mm/h)</option>
+                                    <option value="personnalise">✏️ Saisie manuelle ingénieur (intensité personnalisée)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="font-size: 0.75rem; color: #cbd5e1; display: block; margin-bottom: 4px;">Intensité de pointe Imax (mm/h) :</label>
+                                <div style="display: flex; align-items: center; gap: 4px;">
+                                    <input type="number" id="sim-input-intensite-max" min="0" max="300" step="0.5" value="74.9" oninput="onChangementIntensitePluie(this.value)" style="width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid rgba(56, 189, 248, 0.5); border-radius: 6px; color: #38bdf8; font-size: 0.88rem; font-weight: 700; text-align: center;">
+                                    <span style="font-size: 0.82rem; color: #94a3b8; font-weight: bold;">mm/h</span>
+                                </div>
                             </div>
                         </div>
+                        <div id="sim-pluvio-info-note" style="color: #94a3b8; font-size: 0.72rem; margin-top: 8px; line-height: 1.4; background: rgba(15,23,42,0.5); padding: 6px 10px; border-radius: 6px; border-left: 3px solid #38bdf8;">
+                            <i class="fas fa-info-circle me-1" style="color: #38bdf8;"></i>
+                            <span id="sim-pluvio-note-text">Paramétrage ANRH Chlef Siège (UHBC) : Formule Montana I(t) = 9.334 · t⁻⁰·⁷⁴⁵ &bull; Hyétogramme Chicago centré (tc = 15 min) &bull; P₂₄ = 56.0 mm &bull; Hauteur cumulée P = 42.8 mm [Standard Réglementaire ONA].</span>
+                        </div>
                     </div>
-                    <div id="sim-pluvio-info-note" style="color: #94a3b8; font-size: 0.72rem; margin-top: 8px; line-height: 1.4; background: rgba(15,23,42,0.5); padding: 6px 10px; border-radius: 6px; border-left: 3px solid #38bdf8;">
-                        <i class="fas fa-info-circle me-1" style="color: #38bdf8;"></i>
-                        <span id="sim-pluvio-note-text">Paramétrage ANRH Chlef Siège (UHBC) : Formule Montana I(t) = 9.334 · t⁻⁰·⁷⁴⁵ &bull; Hyétogramme Chicago centré (tc = 15 min) &bull; P₂₄ = 56.0 mm &bull; Hauteur cumulée P = 42.8 mm [Standard Réglementaire ONA].</span>
+
+                    <!-- VOLET 2 : Alerte météo (BMS ONM) — Gestion de proximité et crise en temps réel -->
+                    <div id="section-pluie-bms" style="display: none;">
+                        <!-- Ligne 1 : Niveau de vigilance officiel ONM -->
+                        <div style="margin-bottom: 10px;">
+                            <label style="font-size: 0.75rem; color: #cbd5e1; display: block; margin-bottom: 5px;">
+                                <i class="fas fa-shield-alt me-1" style="color: #f59e0b;"></i> Niveau de vigilance du bulletin météo spécial :
+                            </label>
+                            <div style="display: flex; gap: 8px;">
+                                <label class="bms-vigilance-btn" id="lbl-bms-vigilance-jaune" style="flex: 1; text-align: center; padding: 6px; border-radius: 6px; border: 1px solid #eab308; background: rgba(234, 179, 8, 0.1); color: #facc15; font-size: 0.78rem; font-weight: 700; cursor: pointer;">
+                                    <input type="radio" name="bms-vigilance" value="jaune" onchange="onChangementParametresBMS()" style="display: none;">
+                                    🟡 Jaune
+                                </label>
+                                <label class="bms-vigilance-btn active" id="lbl-bms-vigilance-orange" style="flex: 1; text-align: center; padding: 6px; border-radius: 6px; border: 1.5px solid #f97316; background: rgba(249, 115, 22, 0.25); color: #fb923c; font-size: 0.78rem; font-weight: 800; cursor: pointer; box-shadow: 0 0 10px rgba(249, 115, 22, 0.2);">
+                                    <input type="radio" name="bms-vigilance" value="orange" checked onchange="onChangementParametresBMS()" style="display: none;">
+                                    🟠 Orange
+                                </label>
+                                <label class="bms-vigilance-btn" id="lbl-bms-vigilance-rouge" style="flex: 1; text-align: center; padding: 6px; border-radius: 6px; border: 1px solid #ef4444; background: rgba(239, 68, 68, 0.1); color: #f87171; font-size: 0.78rem; font-weight: 700; cursor: pointer;">
+                                    <input type="radio" name="bms-vigilance" value="rouge" onchange="onChangementParametresBMS()" style="display: none;">
+                                    🔴 Rouge
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Ligne 2 : Précipitations cumulées annoncées (mm) + Raccourcis rapides -->
+                        <div style="margin-bottom: 10px; background: rgba(15, 23, 42, 0.45); padding: 8px 10px; border-radius: 6px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                                <label style="font-size: 0.75rem; color: #cbd5e1; margin: 0;">
+                                    <i class="fas fa-tint me-1" style="color: #60a5fa;"></i> Hauteur de pluie cumulée annoncée :
+                                </label>
+                                <div style="display: flex; gap: 4px;">
+                                    <button type="button" onclick="setBMSCumul(20)" style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: #cbd5e1; border-radius: 4px; padding: 1px 6px; font-size: 0.7rem; cursor: pointer;">20 mm</button>
+                                    <button type="button" onclick="setBMSCumul(30)" style="background: rgba(56,189,248,0.2); border: 1px solid #38bdf8; color: #38bdf8; border-radius: 4px; padding: 1px 6px; font-size: 0.7rem; cursor: pointer; font-weight: 700;">30 mm</button>
+                                    <button type="button" onclick="setBMSCumul(40)" style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: #cbd5e1; border-radius: 4px; padding: 1px 6px; font-size: 0.7rem; cursor: pointer;">40 mm</button>
+                                    <button type="button" onclick="setBMSCumul(60)" style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: #cbd5e1; border-radius: 4px; padding: 1px 6px; font-size: 0.7rem; cursor: pointer;">60 mm</button>
+                                </div>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <input type="number" id="sim-bms-cumul-mm" min="5" max="250" step="1" value="30" oninput="onChangementParametresBMS()" style="flex: 1; padding: 6px 10px; background: #0f172a; border: 1px solid rgba(56, 189, 248, 0.5); border-radius: 6px; color: #38bdf8; font-size: 0.88rem; font-weight: 700; text-align: center;">
+                                <span style="font-size: 0.82rem; color: #94a3b8; font-weight: bold;">mm cumulés</span>
+                            </div>
+                        </div>
+
+                        <!-- Ligne 3 : Plage horaire de validité du BMS (Heure début -> Heure fin) -->
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; align-items: end;">
+                            <div>
+                                <label style="font-size: 0.72rem; color: #cbd5e1; display: block; margin-bottom: 3px;">
+                                    <i class="fas fa-hourglass-start me-1" style="color: #38bdf8;"></i> Début bulletin :
+                                </label>
+                                <input type="time" id="sim-bms-heure-debut" value="07:00" onchange="onChangementParametresBMS()" style="width: 100%; padding: 6px 8px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #f8fafc; font-size: 0.82rem; font-weight: 600; text-align: center;">
+                            </div>
+                            <div>
+                                <label style="font-size: 0.72rem; color: #cbd5e1; display: block; margin-bottom: 3px;">
+                                    <i class="fas fa-hourglass-end me-1" style="color: #38bdf8;"></i> Fin bulletin :
+                                </label>
+                                <input type="time" id="sim-bms-heure-fin" value="21:00" onchange="onChangementParametresBMS()" style="width: 100%; padding: 6px 8px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #f8fafc; font-size: 0.82rem; font-weight: 600; text-align: center;">
+                            </div>
+                            <div>
+                                <span id="sim-bms-duree-badge" style="display: block; width: 100%; text-align: center; padding: 6px 4px; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 6px; color: #38bdf8; font-size: 0.78rem; font-weight: 700;">
+                                    ⏱️ 14 h d'alerte
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Ligne 4 : Allure temporelle de l'averse -->
+                        <div style="margin-bottom: 8px;">
+                            <label style="font-size: 0.72rem; color: #cbd5e1; display: block; margin-bottom: 3px;">
+                                <i class="fas fa-wave-square me-1" style="color: #38bdf8;"></i> Répartition temporelle de l'épisode pluvieux :
+                            </label>
+                            <select id="sim-bms-profil" onchange="onChangementParametresBMS()" style="width: 100%; padding: 7px 10px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: #f8fafc; font-size: 0.78rem;">
+                                <option value="cloche" selected>📈 Orage avec pic d'intensité (cloche dissymétrique — pic à 35 % de la durée) [Recommandé]</option>
+                                <option value="orage_concentre">⚡ Averse orageuse concentrée (crête violente de 2 h au cœur du BMS)</option>
+                                <option value="uniforme">🌧️ Pluie continue régulière (intensité horaire uniforme)</option>
+                            </select>
+                        </div>
+
+                        <!-- Ligne 5 : Synthèse dynamique de l'alerte BMS -->
+                        <div id="sim-bms-preview-note" style="color: #e2e8f0; font-size: 0.73rem; line-height: 1.4; background: rgba(15, 23, 42, 0.75); padding: 8px 10px; border-radius: 6px; border-left: 3px solid #f59e0b;">
+                            <i class="fas fa-broadcast-tower me-1" style="color: #f59e0b;"></i>
+                            <span id="sim-bms-preview-text">Alerte BMS Vigilance Orange — Cumul de 30 mm prévu entre 07:00 et 21:00 (14 h). Intensité de crête estimée : 5,2 mm/h.</span>
+                        </div>
                     </div>
                 </div>
 
@@ -259,6 +354,21 @@ Objet : Modale de paramétrage de pluie, stations ANRH et déclenchement SWMM 5.
 
                     <!-- En-tête périmètre simulé -->
                     <div id="sim-results-bassin-title" style="font-size: 0.82rem; color: #38bdf8; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 6px; padding: 6px 10px; margin-bottom: 12px; display: none;"></div>
+
+                    <!-- Bandeau d'alerte spécifique si simulation d'un BMS -->
+                    <div id="sim-bms-alert-banner" style="display: none; background: rgba(249, 115, 22, 0.15); border: 1.5px solid #f97316; border-radius: 8px; padding: 10px 14px; margin-bottom: 12px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                            <span id="bms-banner-title" style="font-size: 0.86rem; font-weight: 800; color: #fb923c;">
+                                🟠 Bulletin Météorologique Spécial (BMS ONM) — Vigilance Orange
+                            </span>
+                            <span id="bms-banner-badge" style="font-size: 0.72rem; background: #ea580c; color: white; padding: 2px 8px; border-radius: 4px; font-weight: 700;">
+                                Alerte de crise
+                            </span>
+                        </div>
+                        <div id="bms-banner-desc" style="font-size: 0.76rem; color: #fed7aa; margin-top: 4px; line-height: 1.4;">
+                            Précipitations de 30 mm modélisées sur 14 h (07:00 → 21:00).
+                        </div>
+                    </div>
 
                     <!-- Cadre hydro-météorologique et sollicitation pluviométrique de dimensionnement -->
                     <div id="sim-pluvio-results-box" style="background: rgba(14, 165, 233, 0.08); border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px;">

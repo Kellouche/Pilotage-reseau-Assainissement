@@ -159,6 +159,14 @@ class SimulationRunRequest(BaseModel):
     station_id: Optional[str] = "chlef_anrh_siege"
     raccordements_orphelins: Optional[List[Dict[str, Any]]] = None
     force_recalculate: Optional[bool] = False
+    # Paramètres de simulation d'un Bulletin Météorologique Spécial (BMS ONM)
+    bms_mode: Optional[bool] = False
+    bms_vigilance: Optional[str] = "orange"
+    bms_cumul_mm: Optional[float] = 30.0
+    bms_heure_debut: Optional[str] = "07:00"
+    bms_heure_fin: Optional[str] = "21:00"
+    bms_duree_heures: Optional[float] = None
+    bms_profil: Optional[str] = "cloche"
 
 SimulationRunRequest.model_rebuild()
 
@@ -198,6 +206,12 @@ def _generer_cle_cache_simulation(gpkg_path: Path, payload: SimulationRunRequest
         "intensite_max_mmh": float(payload.intensite_max_mmh) if payload.intensite_max_mmh is not None else None,
         "station_id": str(payload.station_id or "chlef_anrh_siege"),
         "raccordements_orphelins": orph_ids,
+        "bms_mode": bool(payload.bms_mode),
+        "bms_vigilance": str(payload.bms_vigilance or "orange"),
+        "bms_cumul_mm": float(payload.bms_cumul_mm or 30.0),
+        "bms_heure_debut": str(payload.bms_heure_debut or "07:00"),
+        "bms_heure_fin": str(payload.bms_heure_fin or "21:00"),
+        "bms_profil": str(payload.bms_profil or "cloche"),
     }
 
     serialized = json.dumps(params_dict, sort_keys=True, ensure_ascii=False)
@@ -392,6 +406,7 @@ def _construire_reponse_simulation(resultat: Dict[str, Any], cached: bool = Fals
             "pluvio_hauteur_totale_mm": resultat.get("meta", {}).get("pluvio_hauteur_totale_mm"),
             "pluvio_p24_mm": resultat.get("meta", {}).get("pluvio_p24_mm"),
             "pluvio_source": resultat.get("meta", {}).get("pluvio_source"),
+            "bms_info": resultat.get("meta", {}).get("bms_info"),
             "flooded_nodes_count": resultat.get("flooded_nodes_count"),
             "surcharged_nodes_count": resultat.get("surcharged_nodes_count", 0),
             "flooded_nodes": resultat.get("flooded_nodes", [])[:15],
@@ -505,6 +520,34 @@ def get_simulation_scenarios(station_id: Optional[str] = "chlef_anrh_siege"):
     }
 
 
+class BMSPreviewRequest(BaseModel):
+    cumul_pluie_mm: float = 30.0
+    duree_heures: Optional[float] = None
+    heure_debut: str = "07:00"
+    heure_fin: str = "21:00"
+    niveau_vigilance: str = "orange"
+    type_profil: str = "cloche"
+    wilaya: str = "Chlef"
+    station_id: str = "chlef_anrh_siege"
+
+
+@router.post("/pluviometrie/bms-preview")
+def preview_bms_scenario(payload: BMSPreviewRequest):
+    """Génère l'hyétogramme prévisionnel et les indicateurs clés d'un BMS pour aperçu instantané."""
+    from src.domain.bms_module import creer_scenario_bms
+    scen = creer_scenario_bms(
+        cumul_pluie_mm=payload.cumul_pluie_mm,
+        duree_heures=payload.duree_heures,
+        heure_debut=payload.heure_debut,
+        heure_fin=payload.heure_fin,
+        niveau_vigilance=payload.niveau_vigilance,
+        type_profil=payload.type_profil,
+        wilaya=payload.wilaya,
+        station_id=payload.station_id,
+    )
+    return scen
+
+
 @router.get("/ouvrages-proches")
 def get_simulation_ouvrages_proches(
     cluster_id: str,
@@ -611,6 +654,24 @@ def run_native_swmm_simulation(
     # 4. Exécution de la simulation SWMM 5.2 complète si paramètres modifiés ou non en cache
     moteur = MoteurSWMM()
     try:
+        scenario_bms_dict = None
+        if payload.bms_mode or payload.scenario_key == "bms_alerte":
+            from src.domain.bms_module import creer_scenario_bms
+            scenario_bms_dict = creer_scenario_bms(
+                cumul_pluie_mm=payload.bms_cumul_mm or 30.0,
+                duree_heures=payload.bms_duree_heures,
+                heure_debut=payload.bms_heure_debut or "07:00",
+                heure_fin=payload.bms_heure_fin or "21:00",
+                niveau_vigilance=payload.bms_vigilance or "orange",
+                type_profil=payload.bms_profil or "cloche",
+                station_id=payload.station_id or "chlef_anrh_siege",
+            )
+            payload.scenario_key = "bms_alerte"
+            if payload.duree_heures is None:
+                payload.duree_heures = scenario_bms_dict["duree_heures"]
+            if payload.intensite_max_mmh is None:
+                payload.intensite_max_mmh = scenario_bms_dict["intensite_max_defaut"]
+
         resultat = moteur.executer_simulation(
             gpkg_path=gpkg_path,
             scenario_key=payload.scenario_key,
@@ -625,6 +686,7 @@ def run_native_swmm_simulation(
             intensite_max_mmh=payload.intensite_max_mmh,
             station_id=payload.station_id,
             raccordements_orphelins=payload.raccordements_orphelins,
+            scenario_personnalise=scenario_bms_dict,
         )
         resultat["source_gpkg"] = str(gpkg_path.resolve())
         resultat["project_name"] = project_name or gpkg_path.stem

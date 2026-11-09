@@ -472,6 +472,7 @@ def generer_lignes_sections_inp(
         "pluvio_p24_mm": scen.get("hauteur_p24_mm", 56.0),
         "pluvio_source": scen.get("source", ""),
         "pluvio_description": scen.get("description", ""),
+        "bms_info": scen.get("bms_metadata"),
         "raccordements_orphelins": [item[0] for item in racc_orph_valides],
     }
 

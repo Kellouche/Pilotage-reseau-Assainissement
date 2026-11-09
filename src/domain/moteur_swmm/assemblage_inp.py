@@ -46,6 +46,7 @@ def assembler_modele_inp_impl(
     intensite_max_mmh: Optional[float] = None,
     station_id: Optional[str] = "chlef_anrh_siege",
     raccordements_orphelins: Optional[List[Dict[str, Any]]] = None,
+    scenario_personnalise: Optional[Dict[str, Any]] = None,
 ) -> Tuple[str, Dict[str, Any], gpd.GeoDataFrame, gpd.GeoDataFrame]:
     """
     Génère l'intégralité du contenu textuel conforme au standard EPA SWMM 5.2 .inp.
@@ -86,7 +87,10 @@ def assembler_modele_inp_impl(
         from src.domain.referentiel_pluvio import generer_scenarios_swmm_pour_station
         scenarios_actifs = generer_scenarios_swmm_pour_station(st_id)
     except Exception:
-        scenarios_actifs = SCENARIOS_PLUIE
+        scenarios_actifs = dict(SCENARIOS_PLUIE)
+
+    if scenario_personnalise and isinstance(scenario_personnalise, dict):
+        scenarios_actifs[scenario_key] = scenario_personnalise
 
     if scenario_key not in scenarios_actifs:
         scenario_key = "pluie_decennale"

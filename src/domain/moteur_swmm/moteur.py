@@ -55,6 +55,7 @@ class MoteurSWMM:
         intensite_max_mmh: Optional[float] = None,
         station_id: Optional[str] = "chlef_anrh_siege",
         raccordements_orphelins: Optional[List[Dict[str, Any]]] = None,
+        scenario_personnalise: Optional[Dict[str, Any]] = None,
     ) -> Tuple[str, Dict[str, Any]]:
         """
         Génère l'intégralité du contenu textuel conforme au standard EPA SWMM 5.2 .inp.
@@ -78,6 +79,7 @@ class MoteurSWMM:
             intensite_max_mmh=intensite_max_mmh,
             station_id=station_id,
             raccordements_orphelins=raccordements_orphelins,
+            scenario_personnalise=scenario_personnalise,
         )
         self._last_regards = regards_used.copy()
         self._last_canalisations = canalisations_used.copy()
@@ -122,6 +124,7 @@ class MoteurSWMM:
         intensite_max_mmh: Optional[float] = None,
         station_id: Optional[str] = "chlef_anrh_siege",
         raccordements_orphelins: Optional[List[Dict[str, Any]]] = None,
+        scenario_personnalise: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Exécute la simulation complète avec pyswmm et extrait les KPIs hydrauliques.
@@ -151,6 +154,7 @@ class MoteurSWMM:
             intensite_max_mmh=intensite_max_mmh,
             station_id=station_id,
             raccordements_orphelins=raccordements_orphelins,
+            scenario_personnalise=scenario_personnalise,
         )
 
         rpt_text, _, timeseries = executer_solver_swmm(inp_content, return_timeseries=True)

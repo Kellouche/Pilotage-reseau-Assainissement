@@ -194,6 +194,21 @@
         if (bLag) bLag.innerHTML = `⏱️ <b>Δt (Lag) :</b> ${lagMin} min`;
         if (bVol) bVol.innerHTML = `💧 <b>V<sub>pluie</sub> :</b> ${Math.round(vRain).toLocaleString('fr-FR')} m³ &bull; <b>V<sub>écoulé</sub> :</b> ${Math.round(vFlow).toLocaleString('fr-FR')} m³`;
         if (bRc) bRc.innerHTML = `📊 <b>C<sub>eff</sub> :</b> ${rc} %`;
+
+        // Prise en compte du contexte d'alerte météo BMS
+        const meta = (window._dernierResultatSimulation && window._dernierResultatSimulation.meta) || {};
+        const kpis = (window._dernierResultatSimulation && window._dernierResultatSimulation.kpis) || {};
+        const bmsInfo = meta.bms_info || kpis.bms_info;
+        const legendRainText = document.getElementById('hyeto-legend-rain-text');
+        if (legendRainText) {
+            if (bmsInfo) {
+                const vig = (bmsInfo.vigilance || 'orange').toUpperCase();
+                const sym = bmsInfo.symbole || (vig === 'ROUGE' ? '🔴' : (vig === 'JAUNE' ? '🟡' : '🟠'));
+                legendRainText.innerHTML = `<b>Hyétogramme de pluie</b> (barres descendantes, mm/h) — ${sym} Sollicitation BMS ONM (${vig}, ${bmsInfo.cumul_mm || 30} mm sur ${bmsInfo.duree_heures || 14} h)`;
+            } else {
+                legendRainText.innerHTML = `<b>Hyétogramme de pluie</b> (barres descendantes, mm/h) — sollicitation Chicago / Montana`;
+            }
+        }
     }
 
     /**
