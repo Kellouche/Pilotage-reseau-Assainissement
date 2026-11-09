@@ -71,6 +71,17 @@ function toggleTimeSlider(forceState) {
         if (panel) panel.style.display = 'flex';
         if (btn) btn.classList.add('active');
 
+        // S'assurer que les couches de résultats SWMM sont bien montées sur Leaflet
+        if (window._dernierResultatSimulation && typeof afficherResultatsSimulation === 'function') {
+            if (!window.couches || !window.couches.res_conduites || window.couches.res_conduites.getLayers().length === 0) {
+                try {
+                    afficherResultatsSimulation(window._dernierResultatSimulation);
+                } catch (e_aff) {
+                    console.warn("Affichage préalable simulation:", e_aff);
+                }
+            }
+        }
+
         // Initialiser ou réinitialiser le contrôleur
         _initTimeSliderUI();
         timeSliderSeek(0);
@@ -279,10 +290,26 @@ function timeSliderSeek(stepIndex) {
 }
 
 /**
+ * Parcourt récursivement toutes les entités Leaflet d'un groupe ou d'un L.GeoJSON
+ */
+function _itererEntitesLeaflet(group, fn) {
+    if (!group) return;
+    if (typeof group.eachLayer !== 'function') return;
+
+    group.eachLayer(layer => {
+        if (layer.feature && layer.feature.properties) {
+            fn(layer);
+        } else if (typeof layer.eachLayer === 'function') {
+            _itererEntitesLeaflet(layer, fn);
+        }
+    });
+}
+
+/**
  * Applique la coloration dynamique instantanée aux conduites de la carte
  */
 function _appliquerCouleursConduites(activeLinks) {
-    if (!window.couches || !window.couches.res_conduites) return;
+    if (!window.couches) return;
     activeLinks = activeLinks || {};
 
     // Indexation inverse des conduites u->d vers link_id (depuis la simulation SWMM)
@@ -297,8 +324,7 @@ function _appliquerCouleursConduites(activeLinks) {
         }
     });
 
-    window.couches.res_conduites.eachLayer(layer => {
-        if (!layer.feature || !layer.feature.properties) return;
+    const traiterConduite = (layer) => {
         const p = layer.feature.properties;
         const u = String(p.ID_AMONT || p.id_amont || '').replace(/\.0$/, '').trim();
         const d = String(p.ID_AVAL || p.id_aval || '').replace(/\.0$/, '').trim();
@@ -327,12 +353,22 @@ function _appliquerCouleursConduites(activeLinks) {
             weight = 4.2;
         }
 
-        layer.setStyle({
-            color: col,
-            weight: weight,
-            opacity: 0.95
-        });
-    });
+        if (typeof layer.setStyle === 'function') {
+            layer.setStyle({
+                color: col,
+                weight: weight,
+                opacity: 0.95
+            });
+        }
+    };
+
+    // Parcourir à la fois la couche de résultat SWMM et la couche physique de base
+    if (window.couches.res_conduites) {
+        _itererEntitesLeaflet(window.couches.res_conduites, traiterConduite);
+    }
+    if (window.couches.conduites) {
+        _itererEntitesLeaflet(window.couches.conduites, traiterConduite);
+    }
 }
 
 /**
@@ -341,14 +377,15 @@ function _appliquerCouleursConduites(activeLinks) {
  * - Bleu normal si le regard est sous contrôle
  */
 function _appliquerRegardsDebordants(floodedNodeIds) {
-    if (!window.couches || !window.couches.res_regards) return;
+    if (!window.couches) return;
     const floodedSet = new Set((floodedNodeIds || []).map(String));
 
-    window.couches.res_regards.eachLayer(layer => {
-        if (!layer.feature || !layer.feature.properties) return;
+    const traiterRegard = (layer) => {
         const p = layer.feature.properties;
         const rawCode = p.Code !== undefined ? p.Code : (p.code !== undefined ? p.code : (p.CODE || p.id || ''));
         const nid = String(rawCode).replace(/\.0$/, '').trim();
+
+        if (typeof layer.setStyle !== 'function') return;
 
         if (floodedSet.has(nid)) {
             // Regard en débordement actif au sol à cet instant (Rouge brique net et fixe)
@@ -359,7 +396,7 @@ function _appliquerRegardsDebordants(floodedNodeIds) {
                 weight: 2.0,
                 fillOpacity: 1.0
             });
-            if (layer.getTooltip()) {
+            if (layer.getTooltip && layer.getTooltip()) {
                 layer.setTooltipContent(`⚠️ <b>Regard ${nid}</b> : DÉBORDEMENT ACTIF AU SOL`);
             }
         } else {
@@ -371,11 +408,19 @@ function _appliquerRegardsDebordants(floodedNodeIds) {
                 weight: 1.0,
                 fillOpacity: 0.8
             });
-            if (layer.getTooltip()) {
+            if (layer.getTooltip && layer.getTooltip()) {
                 layer.setTooltipContent(`Regard ${nid}`);
             }
         }
-    });
+    };
+
+    // Parcourir à la fois la couche de regards SWMM et la couche de base
+    if (window.couches.res_regards) {
+        _itererEntitesLeaflet(window.couches.res_regards, traiterRegard);
+    }
+    if (window.couches.regards) {
+        _itererEntitesLeaflet(window.couches.regards, traiterRegard);
+    }
 }
 
 /**

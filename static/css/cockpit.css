@@ -340,8 +340,8 @@ body {
 .tool-tip:hover::after {
     content: attr(data-tip);
     position: absolute;
-    left: calc(100% + 12px);
-    right: auto;
+    right: calc(100% + 12px);
+    left: auto;
     top: 50%;
     transform: translateY(-50%);
     background: rgba(15, 23, 42, 0.96);
@@ -360,13 +360,13 @@ body {
 .tool-tip:hover::before {
     content: '';
     position: absolute;
-    left: calc(100% + 6px);
-    right: auto;
+    right: calc(100% + 6px);
+    left: auto;
     top: 50%;
     transform: translateY(-50%);
-    border-width: 5px 6px 5px 0;
+    border-width: 5px 0 5px 6px;
     border-style: solid;
-    border-color: transparent rgba(56, 189, 248, 0.5) transparent transparent;
+    border-color: transparent transparent transparent rgba(56, 189, 248, 0.5);
     z-index: 3001;
     pointer-events: none;
 }

@@ -1089,8 +1089,12 @@ def get_profil_en_long(
         import pandas as pd
         from src.domain.moteur_swmm.constants import _clean_node_id
 
-        regards = gpd.read_file(str(active_gpkg), layer="regards")
-        canalisations = gpd.read_file(str(active_gpkg), layer="canalisations")
+        layers = gpd.list_layers(str(active_gpkg))["name"].tolist()
+        regard_layer = next((l for l in layers if "regard" in l.lower()), "regards")
+        pipe_layer = next((l for l in layers if any(k in l.lower() for k in ["canalisat", "conduit", "pipe", "troncon"]) and "désaffect" not in l.lower() and "desaffect" not in l.lower()), "canalisations")
+
+        regards = gpd.read_file(str(active_gpkg), layer=regard_layer)
+        canalisations = gpd.read_file(str(active_gpkg), layer=pipe_layer)
 
         # Construire un index regard Code→géométrie+attributs
         node_index: Dict[str, Any] = {}
@@ -1111,28 +1115,36 @@ def get_profil_en_long(
 
         # Construire le graphe amont→aval pour trouver le chemin
         import networkx as nx
-        G = nx.DiGraph()
-        conduit_attrs: Dict[str, Any] = {}
+        from src.domain.graphe_reseau import construire_graphe
 
-        for idx, c in canalisations.iterrows():
-            u = _clean_node_id(c.get("ID_AMONT"))
-            v = _clean_node_id(c.get("ID_AVAL"))
-            if u and v and u != v:
-                length = float(c["Longeur"]) if ("Longeur" in c and c["Longeur"] > 0) else float(c.geometry.length)
-                diam_mm = float(c["DIAMETRE"]) if ("DIAMETRE" in c and c["DIAMETRE"] > 0) else 600.0
-                cid = f"C_{idx+1}"
-                G.add_edge(u, v, cid=cid, length=length, diam_mm=diam_mm,
-                           materiau=str(c.get("MATERIAU", "Béton") or "Béton"),
-                           nom_voie=str(c.get("NOM-VOIE", "") or ""))
-                conduit_attrs[(u, v)] = {"cid": cid, "length": length, "diam_mm": diam_mm}
+        G = construire_graphe(str(active_gpkg))
+        if len(G.edges) == 0:
+            for idx, c in canalisations.iterrows():
+                u = _clean_node_id(c.get("ID_AMONT"))
+                v = _clean_node_id(c.get("ID_AVAL"))
+                if u and v and u != v:
+                    length = float(c["Longeur"]) if ("Longeur" in c and c["Longeur"] > 0) else float(c.geometry.length)
+                    diam_mm = float(c["DIAMETRE"]) if ("DIAMETRE" in c and c["DIAMETRE"] > 0) else 600.0
+                    cid = f"C_{idx+1}"
+                    G.add_edge(u, v, cid=cid, length=length, diam_mm=diam_mm,
+                               materiau=str(c.get("MATERIAU", "Béton") or "Béton"),
+                               nom_voie=str(c.get("NOM-VOIE", "") or ""))
 
-        # Chercher le nœud le plus proche si exact non trouvé
+        # Chercher le nœud dans le réseau
         def find_node(partial: str) -> Optional[str]:
-            if partial in G.nodes:
-                return partial
+            p_str = str(partial).strip()
+            p_clean = _clean_node_id(p_str)
+            if p_clean in G.nodes:
+                return p_clean
+            if p_str in G.nodes:
+                return p_str
             for n in G.nodes:
-                if partial.lower() in n.lower() or n.lower() in partial.lower():
+                if p_clean == _clean_node_id(n) or p_str.lower() == str(n).lower():
                     return n
+            if len(p_str) >= 3:
+                for n in G.nodes:
+                    if p_str.lower() in str(n).lower():
+                        return n
             return None
 
         src = find_node(node_amont)
@@ -1152,16 +1164,30 @@ def get_profil_en_long(
                 path_nodes = nx.shortest_path(G, dst, src, weight="length")
                 src, dst = dst, src  # Rétablir le sens naturel amont -> aval
             except nx.NetworkXNoPath:
-                raise HTTPException(
-                    status_code=422,
-                    detail=f"Aucun chemin hydraulique entre '{node_amont}' et '{node_aval}'. "
-                           "Vérifiez que les deux regards appartiennent au même réseau connecté."
-                )
+                # Tentative en non orienté si des conduites sont numérisées à contre-sens
+                try:
+                    G_undir = G.to_undirected()
+                    path_nodes = nx.shortest_path(G_undir, src, dst, weight="length")
+                except nx.NetworkXNoPath:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"Aucun chemin hydraulique entre '{node_amont}' et '{node_aval}'. "
+                               "Vérifiez que les deux regards appartiennent au même réseau connecté."
+                    )
 
         # Récupérer les élévations nodales depuis la simulation ou le MNT
         node_elevs: Dict[str, float] = {}
         sim_node_results: Dict[str, Any] = {}
         sim_meta: Dict[str, Any] = {}
+        if not _DERNIERE_SIMULATION or not _est_simulation_valide(_DERNIERE_SIMULATION):
+            if active_gpkg and Path(active_gpkg).exists():
+                try:
+                    restored = _charger_derniere_simulation_disque_ou_db(Path(active_gpkg), db, proj)
+                    if restored and _est_simulation_valide(restored):
+                        _DERNIERE_SIMULATION = restored
+                except Exception as e_rest:
+                    logger.warning("Échec restauration simulation pour profil en long: %s", e_rest)
+
         if _DERNIERE_SIMULATION and _est_simulation_valide(_DERNIERE_SIMULATION):
             sim_node_results = _DERNIERE_SIMULATION.get("node_results", {})
             sim_meta = _DERNIERE_SIMULATION.get("meta", {})
@@ -1200,14 +1226,14 @@ def get_profil_en_long(
             diam_m = 0.6
             if i < len(path_nodes) - 1:
                 next_n = path_nodes[i + 1]
-                e = G.get_edge_data(nid, next_n, {})
-                if e and "diam_mm" in e:
-                    diam_m = float(e["diam_mm"]) / 1000.0
+                e = G.get_edge_data(nid, next_n) or G.get_edge_data(next_n, nid) or {}
+                if e:
+                    diam_m = float(e.get("diam_mm") or e.get("diametre_mm") or 600.0) / 1000.0
             elif i > 0:
                 prev_n = path_nodes[i - 1]
-                e = G.get_edge_data(prev_n, nid, {})
-                if e and "diam_mm" in e:
-                    diam_m = float(e["diam_mm"]) / 1000.0
+                e = G.get_edge_data(prev_n, nid) or G.get_edge_data(nid, prev_n) or {}
+                if e:
+                    diam_m = float(e.get("diam_mm") or e.get("diametre_mm") or 600.0) / 1000.0
 
             z_gen_sup = z_rad + diam_m
 
@@ -1233,13 +1259,15 @@ def get_profil_en_long(
             conduit = None
             if i < len(path_nodes) - 1:
                 next_nid = path_nodes[i + 1]
-                edge_data = G.get_edge_data(nid, next_nid, {})
+                edge_data = G.get_edge_data(nid, next_nid) or G.get_edge_data(next_nid, nid) or {}
                 if edge_data:
-                    length = edge_data.get("length", 0.0)
+                    geom = edge_data.get("geometry")
+                    length = float(edge_data.get("length") or (geom.length if geom else 15.0))
+                    diam_mm = float(edge_data.get("diam_mm") or edge_data.get("diametre_mm") or 600.0)
                     conduit = {
-                        "cid": edge_data.get("cid", f"C_{i+1}"),
-                        "length": length,
-                        "diam_mm": edge_data.get("diam_mm", 600.0),
+                        "cid": edge_data.get("cid") or edge_data.get("id") or f"C_{i+1}",
+                        "length": round(length, 2),
+                        "diam_mm": diam_mm,
                         "materiau": edge_data.get("materiau", "Béton"),
                         "nom_voie": edge_data.get("nom_voie", ""),
                     }
@@ -1268,12 +1296,21 @@ def get_profil_en_long(
             pression_m = round(max(0.0, hgl - z_gs), 2) if (hgl and hgl > z_gs) else 0.0
             revanche_m = round(max(0.0, z_terrain - hgl), 2) if (hgl and hgl < z_terrain) else 0.0
 
+            # Cote du plan d'eau réel dans la conduite (Water Surface Profile - WSP)
+            # Si en charge : la conduite est 100% pleine d'eau (z_eau = z_gs)
+            # Si écoulement libre : z_eau = min(z_gs, max(z_rad, hgl))
+            if hgl is not None:
+                z_eau_conduite = z_gs if hgl >= z_gs else max(z_rad, hgl)
+            else:
+                z_eau_conduite = z_rad
+
             segments.append({
                 "node_id": nid,
                 "distance_m": round(distance_cumulee, 2),
                 "z_radier": round(z_rad, 3),
                 "z_terrain": round(z_terrain, 3),
                 "z_gen_superieure": round(z_gs, 3),
+                "z_eau_conduite": round(z_eau_conduite, 3),
                 "z_hgl": round(hgl, 3) if hgl is not None else None,
                 "hgl_regime": hgl_regime,
                 "pression_m": pression_m,

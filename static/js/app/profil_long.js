@@ -225,7 +225,6 @@ function rafraichirProfilLong() {
  */
 function chargerProfilLong(nodeAmont, nodeAval) {
     const panel = document.getElementById('panel-profil-long');
-    if (panel) panel.style.display = 'flex';
 
     const url = `/api/v1/simulations/profil-en-long?node_amont=${encodeURIComponent(nodeAmont)}&node_aval=${encodeURIComponent(nodeAval)}`;
 
@@ -240,11 +239,19 @@ function chargerProfilLong(nodeAmont, nodeAval) {
         })
         .then(data => {
             window.profilLongState.lastData = data;
+            if (panel) panel.style.display = 'flex';
             afficherProfilLong(data);
         })
         .catch(err => {
             console.error("Erreur profil en long:", err);
-            alert(`Impossible de générer le profil en long :\n${err.message}`);
+            if (panel) panel.style.display = 'none';
+            const msg = (err && err.message) ? err.message : '';
+            if (msg.includes("Simulation non trouvée") || msg.includes("non trouvée") || msg.includes("404")) {
+                alert("Lancer une simulation pour avoir un profil en long");
+            } else {
+                alert(`Impossible de générer le profil en long :\n${msg}`);
+            }
+            annulerSelectionProfil();
         });
 }
 
@@ -298,6 +305,7 @@ function afficherProfilLong(data) {
     const terrainData = data.segments.map(s => ({ x: s.distance_m, y: s.z_terrain }));
     const genSupData = data.segments.map(s => ({ x: s.distance_m, y: s.z_gen_superieure }));
     const radierData = data.segments.map(s => ({ x: s.distance_m, y: s.z_radier }));
+    const eauConduiteData = data.segments.map(s => ({ x: s.distance_m, y: s.z_eau_conduite !== undefined ? s.z_eau_conduite : s.z_radier }));
     const hglData = data.segments.map(s => ({ x: s.distance_m, y: s.z_hgl }));
 
     // Classification couleur et taille des points HGL (🟢 Libre / 🟡 Surcharge / 🔴 Débordement)
@@ -323,7 +331,7 @@ function afficherProfilLong(data) {
         window.profilLongState.chartInstance.destroy();
     }
 
-    // Création du graphique Chart.js
+    // Création du graphique Chart.js avec Plan d'Eau Réel dans la Conduite (Water Surface Profile - WSP)
     window.profilLongState.chartInstance = new Chart(ctx, {
         type: 'line',
         data: {
@@ -333,7 +341,7 @@ function afficherProfilLong(data) {
                     label: 'Terrain naturel (MNT)',
                     data: terrainData,
                     borderColor: '#10b981',
-                    backgroundColor: 'rgba(16, 185, 129, 0.06)',
+                    backgroundColor: 'transparent',
                     borderWidth: 2.2,
                     pointRadius: 4.5,
                     pointBackgroundColor: '#10b981',
@@ -343,30 +351,41 @@ function afficherProfilLong(data) {
                 {
                     label: 'Génératrice supérieure (Haut conduite)',
                     data: genSupData,
-                    borderColor: '#94a3b8',
+                    borderColor: '#64748b',
                     borderWidth: 1.5,
                     borderDash: [5, 4],
                     pointRadius: 2.5,
-                    pointBackgroundColor: '#94a3b8',
+                    pointBackgroundColor: '#64748b',
                     fill: false,
                     tension: 0
                 },
                 {
                     label: "Fil d'eau (Cote radier)",
                     data: radierData,
-                    borderColor: '#38bdf8',
-                    backgroundColor: 'rgba(56, 189, 248, 0.18)',
-                    borderWidth: 3,
-                    pointRadius: 5,
-                    pointBackgroundColor: data.segments.map(s => s.node_color || '#38bdf8'),
-                    fill: '-1', // Remplissage pour matérialiser l'épaisseur physique de la conduite
+                    borderColor: '#475569',
+                    backgroundColor: 'rgba(100, 116, 139, 0.10)',
+                    borderWidth: 2.5,
+                    pointRadius: 4.5,
+                    pointBackgroundColor: data.segments.map(s => s.node_color || '#475569'),
+                    fill: '-1', // Matérialise le vide physique intérieur de la conduite
+                    tension: 0
+                },
+                {
+                    label: "Plan d'eau réel dans la conduite (WSP / Hauteur d'eau)",
+                    data: eauConduiteData,
+                    borderColor: '#0284c7',
+                    backgroundColor: 'rgba(14, 165, 233, 0.45)', // Remplissage bleu eau translucide
+                    borderWidth: 2.5,
+                    pointRadius: 3.5,
+                    pointBackgroundColor: '#0284c7',
+                    fill: '-1', // Remplit vers le radier (Dataset 2)
                     tension: 0
                 },
                 {
                     label: 'Ligne de charge HGL (🟢 Libre / 🟡 Surcharge / 🔴 Débordement)',
                     data: hglData,
                     borderColor: '#f59e0b',
-                    backgroundColor: 'rgba(245, 158, 11, 0.22)',
+                    backgroundColor: 'rgba(245, 158, 11, 0.18)',
                     borderWidth: 3.5,
                     pointRadius: hglPointRadius,
                     pointBackgroundColor: hglPointColors,
@@ -421,7 +440,10 @@ function afficherProfilLong(data) {
                         afterBody: function(items) {
                             const idx = items[0].dataIndex;
                             const s = data.segments[idx];
+                            const zEau = s.z_eau_conduite !== undefined ? s.z_eau_conduite : s.z_radier;
+                            const hEau = Math.max(0, zEau - s.z_radier);
                             const lines = [
+                                `• Plan d'eau conduite (WSP) : ${zEau.toFixed(2)} m (Hauteur d'eau : ${hEau.toFixed(2)} m)`,
                                 `• Profondeur regard : ${s.profondeur_m} m`
                             ];
 
