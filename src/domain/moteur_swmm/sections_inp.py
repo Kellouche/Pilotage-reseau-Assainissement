@@ -104,7 +104,12 @@ def generer_lignes_sections_inp(
     ts_base = scen.get("timeseries", [("00:00", 0.0), ("04:00", 0.0)])
     max_base = max((v for _, v in ts_base), default=scen.get("intensite_max_defaut", 62.0))
 
-    if intensite_max_mmh is not None and intensite_max_mmh >= 0.0:
+    # Détection BMS : si le scénario vient de scenario_personnalise avec bms_metadata,
+    # l'hyétogramme est déjà correctement normalisé (cumul exact + forme dynamique).
+    # Ne PAS le rescaler — utiliser tel quel.
+    is_bms = bool(scen.get("bms_metadata", {}).get("is_bms"))
+
+    if intensite_max_mmh is not None and intensite_max_mmh >= 0.0 and not is_bms:
         active_i_max = round(float(intensite_max_mmh), 2)
         if max_base > 0:
             scale_factor = active_i_max / max_base
