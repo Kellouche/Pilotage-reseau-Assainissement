@@ -55,6 +55,17 @@ function toggleTimeSlider(forceState) {
             badgeCrit.classList.remove('hidden');
         }
 
+        // Rétablir la légende flottante si elle était affichée
+        const leg = document.getElementById('sim-floating-legend');
+        if (leg) leg.style.display = 'block';
+
+        // Déplier la toolbar d'édition si elle était repliée
+        const toolbar = document.getElementById('main-edit-toolbar');
+        const collapseBtn = document.getElementById('btn-collapse-toolbar');
+        if (toolbar && collapseBtn && toolbar.classList.contains('collapsed')) {
+            toggleToolbarCollapse({ preventDefault: () => {} });
+        }
+
         // Nettoyer les marqueurs de débordement radar
         _nettoyerRadarDebordement();
 
@@ -90,6 +101,17 @@ function toggleTimeSlider(forceState) {
         const badgeCrit = document.getElementById('map-criticality-badge');
         if (badgeCrit) {
             badgeCrit.classList.add('hidden');
+        }
+
+        // Masquer la légende flottante pendant l'animation
+        const leg = document.getElementById('sim-floating-legend');
+        if (leg) leg.style.display = 'none';
+
+        // Replier la toolbar d'édition
+        const toolbar = document.getElementById('main-edit-toolbar');
+        const collapseBtn = document.getElementById('btn-collapse-toolbar');
+        if (toolbar && collapseBtn && !toolbar.classList.contains('collapsed')) {
+            toggleToolbarCollapse({ preventDefault: () => {} });
         }
 
         // Afficher le badge "État hydraulique à l'instant T" dans l'en-tête du player
