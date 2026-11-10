@@ -12,27 +12,19 @@ function chargerDonneesInitiales() {
             // Montrer l'overlay de chargement
             montrerChargement(true);
 
-            // === NETTOYAGE : sauvegarder l'état du réseau courant et tout vider ===
-            const reseauActuel = (window._rawNetworkData && window._rawNetworkData.project_name)
-                ? window._rawNetworkData.project_name
-                : (window._dernierResultatSimulation && window._dernierResultatSimulation.meta
-                    ? (window._dernierResultatSimulation.meta.project_name || window._dernierResultatSimulation.meta.cluster_nom || window._dernierResultatSimulation.meta.cluster_id)
-                    : null);
-            if (reseauActuel) {
-                window.nettoyerEtatReseau(reseauActuel);
+            // === INITIALISATION : appel à reinitialiserProjetVierge (bouton "Réinitialiser vers un espace vierge")
+            // Garde contre la récursion infinie car reinitialiserProjetVierge() appelle chargerDonneesInitiales()
+            if (!window._reinitialising_vierge) {
+                window._reinitialising_vierge = true;
+                if (typeof window.reinitialiserProjetVierge === 'function') {
+                    window.reinitialiserProjetVierge();
+                    return; // Attendre que reinitialiserProjetVierge() rappelle chargerDonneesInitiales()
+                }
+                window._reinitialising_vierge = false;
             }
+            window._reinitialising_vierge = false;
 
-            // Réinitialiser systématiquement l'affichage et les caches de données du modèle précédent
-            if (typeof reinitialiserAffichageSimulation === 'function') {
-                reinitialiserAffichageSimulation();
-            }
-            window._dernierResultatSimulation = null;
-            window._clustersData = null;
-            window._bassinNoms = {};
-            window._bassinBounds = {};
-            _selectedClusterId = null;
-            if (typeof clusterCouche !== 'undefined' && clusterCouche) clusterCouche.clearLayers();
-            if (typeof _activeClusterLayer !== 'undefined' && _activeClusterLayer) _activeClusterLayer.clearLayers();
+            // === NETTOYAGE : sauvegarder l'état du réseau courant et tout vider ===
             
             const bSel = document.getElementById('bassin-select');
             if (bSel) bSel.innerHTML = '<option value="">-- Réseau complet ou choisir un bassin --</option>';

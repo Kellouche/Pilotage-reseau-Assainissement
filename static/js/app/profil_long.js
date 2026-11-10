@@ -72,6 +72,10 @@ function toggleProfilLongMode() {
         // Si le panneau est fermé, l'ouvrir s'il y a déjà des données
         if (panel && panel.style.display === 'none' && state.lastData) {
             panel.style.display = 'flex';
+            // Initialiser le déplacement du panneau (draggable)
+            if (typeof _initProfilLongDraggable === 'function') {
+                _initProfilLongDraggable();
+            }
         } else {
             annulerSelectionProfil();
         }
@@ -298,6 +302,10 @@ function chargerProfilLong(nodeAmont, nodeAval) {
         .then(data => {
             window.profilLongState.lastData = data;
             if (panel) panel.style.display = 'flex';
+            // Initialiser le déplacement du panneau (draggable)
+            if (typeof _initProfilLongDraggable === 'function') {
+                _initProfilLongDraggable();
+            }
             afficherProfilLong(data);
         })
         .catch(err => {
@@ -635,3 +643,44 @@ function exporterProfilImage() {
     a.download = `profil_long_${nodeA}_vers_${nodeB}.png`;
     a.click();
 }
+
+/**
+ * Initialise le déplacement à la souris (Draggable) du panneau Profil en long
+ */
+function _initProfilLongDraggable() {
+    const panel = document.getElementById('panel-profil-long');
+    const handle = document.getElementById('profil-long-drag-handle');
+    if (!panel || !handle || panel._draggableInitDone) return;
+
+    panel._draggableInitDone = true;
+    let startX, startY, origX, origY;
+
+    handle.addEventListener('mousedown', (e) => {
+        if (e.target.closest('button') || e.target.closest('input') || e.target.closest('.btn-close-profil')) return;
+        e.preventDefault();
+        startX = e.clientX;
+        startY = e.clientY;
+        origX = panel.offsetLeft;
+        origY = panel.offsetTop;
+
+        const onMouseMove = (ev) => {
+            const dx = ev.clientX - startX;
+            const dy = ev.clientY - startY;
+            panel.style.left = `${origX + dx}px`;
+            panel.style.top = `${origY + dy}px`;
+            panel.style.right = 'auto';
+            panel.style.bottom = 'auto';
+        };
+
+        const onMouseUp = () => {
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+        };
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+    });
+}
+
+// Exposer pour appel depuis d'autres modules si nécessaire
+window.initProfilLongDraggable = _initProfilLongDraggable;

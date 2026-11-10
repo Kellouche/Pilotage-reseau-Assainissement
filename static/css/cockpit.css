@@ -532,6 +532,11 @@ body {
     justify-content: space-between;
     padding: 0 14px;
     gap: 12px;
+    cursor: grab;
+}
+
+.profil-long-header:active {
+    cursor: grabbing;
 }
 
 .profil-long-title {
