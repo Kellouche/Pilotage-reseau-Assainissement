@@ -119,6 +119,121 @@ if (fetchCalls.length !== 1 || fetchCalls[0] !== expected) {
         os.remove(tf_name)
 
 
+def test_resultats_regard_normal_cliquable_en_mode_profil():
+    """Vérifie qu'un regard simulé en écoulement normal (sans entrée détaillée
+    dans node_results) conserve bien son interception de clic pour le profil."""
+    js_path = Path("static/js/app/resultats_affichage.js").resolve()
+    harness = r'''
+const fs = require('fs');
+const vm = require('vm');
+const sourcePath = process.argv[2];
+const source = fs.readFileSync(sourcePath, 'utf8');
+const createdLayers = [];
+const layerGroup = () => ({
+    addTo() { return this; },
+    addLayer() { return this; },
+    clearLayers() {},
+    bringToFront() { return this; },
+    getLayers() { return []; },
+    getBounds() { return null; },
+    eachLayer() {}
+});
+const nodesGeo = {
+    type: 'FeatureCollection',
+    features: [{
+        type: 'Feature',
+        properties: { Code: '2288' },
+        geometry: { type: 'Point', coordinates: [0, 0] }
+    }]
+};
+const carte = {
+    getPane: () => null,
+    createPane: () => ({ style: {} }),
+    hasLayer: () => false,
+    removeLayer: () => {},
+    closePopup: () => {},
+    fitBounds: () => {}
+};
+const couches = {
+    conduites: layerGroup(),
+    regards: layerGroup(),
+    rejets: layerGroup(),
+    step: layerGroup(),
+    res_conduites: layerGroup(),
+    res_regards: layerGroup()
+};
+const L = {
+    geoJSON: (geojson, options = {}) => ({
+        addTo: () => {
+            (geojson.features || []).forEach((feature) => {
+                if (options.filter && !options.filter(feature)) return;
+                const layer = {
+                    feature,
+                    handlers: {},
+                    bindTooltip() { return this; },
+                    bindPopup() { return this; },
+                    on(event, fn) { this.handlers[event] = fn; return this; },
+                    setStyle() { return this; },
+                    getTooltip() { return null; },
+                    openTooltip() {},
+                    closeTooltip() {},
+                    closePopup() {}
+                };
+                if (options.onEachFeature) options.onEachFeature(feature, layer);
+                createdLayers.push(layer);
+            });
+            return this;
+        }
+    }),
+    DomEvent: { stop() {} },
+    polyline: () => ({ bindPopup() { return this; }, bindTooltip() { return this; }, addTo() { return this; } })
+};
+const calls = [];
+const sandbox = {
+    window: {
+        profilLongState: { active: true, step: 'amont' },
+        handleRegardClickForProfil: (code) => calls.push(code),
+        _rawNetworkData: { couches: { regards: nodesGeo } }
+    },
+    carte,
+    couches,
+    L,
+    document: { getElementById: () => null },
+    setTimeout: (fn) => fn(),
+    console
+};
+vm.createContext(sandbox);
+vm.runInContext(source, sandbox);
+sandbox.window.afficherResultatsSimulation({
+    conduit_results: {},
+    node_results: {},
+    meta: { simulated_nodes: ['2288'], raccordements_orphelins: [] }
+});
+const layer = createdLayers.find((l) => l.feature.properties.Code === '2288');
+if (!layer || typeof layer.handlers.click !== 'function') {
+    console.error('Le regard normal ne possède pas de handler click profil');
+    process.exit(1);
+}
+layer.handlers.click.call(layer, { latlng: { lat: 1, lng: 2 } });
+if (calls.length !== 1 || calls[0] !== '2288') {
+    console.error(`Sélection profil inattendue : ${JSON.stringify(calls)}`);
+    process.exit(1);
+}
+'''
+    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as tf:
+        tf.write(harness)
+        tf_name = tf.name
+    try:
+        result = subprocess.run(
+            ["node", tf_name, str(js_path)],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr or result.stdout
+    finally:
+        os.remove(tf_name)
+
+
 def test_cockpit_includes_profil_long_components():
     """Vérifie la bonne intégration dans le template HTML et la barre d'outils du Cockpit."""
     root = Path(__file__).resolve().parent.parent

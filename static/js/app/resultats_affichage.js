@@ -261,6 +261,27 @@
                         const nid = String(rawCode).trim();
                         const cleanNid = nid.endsWith('.0') ? nid.slice(0, -2) : nid;
                         const r = nRes[cleanNid] || nRes[nid] || (cleanNid ? nRes[parseInt(cleanNid)] : null);
+
+                        // Interception pour le Profil en Long hydraulique (Phase 6.A)
+                        // Doit être attachée même sans résultat détaillé (écoulement normal)
+                        layer.on('click', function(e) {
+                            if (window.profilLongState && window.profilLongState.active) {
+                                L.DomEvent.stop(e);
+                                const cMap = window.carte || window.map;
+                                if (cMap) cMap.closePopup();
+                                if (this.closePopup) this.closePopup();
+                                setTimeout(() => {
+                                    if (cMap) cMap.closePopup();
+                                    if (this.closePopup) this.closePopup();
+                                }, 10);
+
+                                if (cleanNid && window.handleRegardClickForProfil) {
+                                    window.handleRegardClickForProfil(cleanNid, e.latlng);
+                                }
+                                return false;
+                            }
+                        });
+
                         if (!r) {
                             layer.bindTooltip(`Regard ${cleanNid} (Écoulement normal)`, { sticky: true });
                             return;
@@ -293,25 +314,6 @@
                         layer.bindPopup(popupHtml);
                         layer.bindTooltip(`<b>${isFlooded ? '🚨 Débordement' : (isSurcharged ? '⚠️ Surcharge' : 'Regard')} : ${cleanNid}</b>${isFlooded ? ` (${volTooltipStr})` : ''}`, { direction: 'top', offset: [0, -6], opacity: 0.98 });
                         
-                        // Interception pour le Profil en Long hydraulique (Phase 6.A)
-                        layer.on('click', function(e) {
-                            if (window.profilLongState && window.profilLongState.active) {
-                                L.DomEvent.stop(e);
-                                const cMap = window.carte || window.map;
-                                if (cMap) cMap.closePopup();
-                                if (this.closePopup) this.closePopup();
-                                setTimeout(() => {
-                                    if (cMap) cMap.closePopup();
-                                    if (this.closePopup) this.closePopup();
-                                }, 10);
-
-                                if (cleanNid && window.handleRegardClickForProfil) {
-                                    window.handleRegardClickForProfil(cleanNid, e.latlng);
-                                }
-                                return false;
-                            }
-                        });
-
                         layer.on('popupopen', function() {
                             if (window.profilLongState && window.profilLongState.active) {
                                 const cMap = window.carte || window.map;
