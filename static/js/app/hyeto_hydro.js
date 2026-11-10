@@ -30,6 +30,12 @@
         const panel = document.getElementById('panel-hyeto-hydro');
         if (!panel) return;
 
+        const btn = document.getElementById('btn-hyeto-hydro');
+        if (btn && btn.disabled) {
+            alert("Aucune simulation disponible pour ce réseau. Veuillez d'abord lancer une simulation SWMM 5.2.");
+            return;
+        }
+
         if (window.hyetoHydroState.visible) {
             window.fermerHyetoHydroPanel();
         } else {

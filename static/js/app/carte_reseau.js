@@ -30,7 +30,10 @@ function chargerDonneesInitiales() {
             if (simBSel) simBSel.innerHTML = '<option value="" disabled selected>-- Sélectionnez un bassin versant sectorisé --</option>';
             const badgeSb = document.getElementById('badge-subcatchments-count');
             if (badgeSb) { badgeSb.innerHTML = '-- SB'; badgeSb.style.background = ''; }
-            
+
+            // Désactiver les boutons d'animation et d'analyse hydrologique au chargement d'un nouveau réseau
+            _desactiverBoutonsHydro();
+
             fetch('/api/v1/layers')
                 .then(r => r.json())
                 .then(d => {
@@ -332,12 +335,20 @@ function chargerDonneesInitiales() {
                                 chargerDerniereSimulation();
                             }
                             montrerChargement(false);
+                            // Vérifier si une simulation est restaurée et réactiver les boutons si nécessaire
+                            if (typeof _desactiverBoutonsHydro === 'function') {
+                                setTimeout(() => _desactiverBoutonsHydro(), 500);
+                            }
                         }, null, false, false);
                     } else {
                         if (typeof chargerDerniereSimulation === 'function') {
                             chargerDerniereSimulation();
                         }
                         montrerChargement(false);
+                        // Vérifier si une simulation est restaurée et réactiver les boutons si nécessaire
+                        if (typeof _desactiverBoutonsHydro === 'function') {
+                            setTimeout(() => _desactiverBoutonsHydro(), 500);
+                        }
                     }
                 })
                 .catch(e => {
@@ -459,6 +470,35 @@ function initDraggableToolbar() {
 
 window.toggleToolbarCollapse = toggleToolbarCollapse;
 window.initDraggableToolbar = initDraggableToolbar;
+
+/**
+ * Désactive les boutons d'animation et d'analyse hydrologique
+ * si aucune simulation n'est disponible pour le réseau courant
+ */
+function _desactiverBoutonsHydro() {
+    const btnTimeSlider = document.getElementById('btn-time-slider');
+    const btnHyetoHydro = document.getElementById('btn-hyeto-hydro');
+
+    // Vérifier si une simulation est disponible
+    const hasSim = !!(window._dernierResultatSimulation &&
+                      window._dernierResultatSimulation.conduit_results &&
+                      Object.keys(window._dernierResultatSimulation.conduit_results).length > 0);
+
+    // Désactiver visuellement et fonctionnellement
+    if (btnTimeSlider) {
+        btnTimeSlider.disabled = !hasSim;
+        btnTimeSlider.style.opacity = hasSim ? '1' : '0.4';
+        btnTimeSlider.style.cursor = hasSim ? 'pointer' : 'not-allowed';
+        btnTimeSlider.title = hasSim ? 'Animation onde de crue (Time Slider)' : 'Aucune simulation disponible';
+    }
+
+    if (btnHyetoHydro) {
+        btnHyetoHydro.disabled = !hasSim;
+        btnHyetoHydro.style.opacity = hasSim ? '1' : '0.4';
+        btnHyetoHydro.style.cursor = hasSim ? 'pointer' : 'not-allowed';
+        btnHyetoHydro.title = hasSim ? 'Analyse pluie ↔ débit (hyétogramme et hydrogramme)' : 'Aucune simulation disponible';
+    }
+}
 
 // Initialisation dès que le DOM est prêt
 if (document.readyState === 'loading') {

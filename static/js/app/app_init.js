@@ -12,6 +12,11 @@
         // INITIALISATION ET DÉMARRAGE DU COCKPIT
         // ==========================================
         function initialiserCockpit() {
+            // 0. Désactiver les boutons d'animation et d'analyse hydrologique par défaut
+            if (typeof _desactiverBoutonsHydro === 'function') {
+                _desactiverBoutonsHydro();
+            }
+
             // 1. Initialiser le profil utilisateur et la barre SaaS
             if (typeof initSaaSNavbar === 'function') {
                 initSaaSNavbar();

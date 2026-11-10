@@ -15,6 +15,11 @@
             if (!data || !data.conduit_results || !data.node_results) return;
             window._dernierResultatSimulation = data;
 
+            // Réactiver les boutons d'animation et d'analyse hydrologique si une simulation est disponible
+            if (typeof _desactiverBoutonsHydro === 'function') {
+                _desactiverBoutonsHydro();
+            }
+
             // Assurer l'existence de panes z-index dédiés pour que les résultats SWMM soient toujours visibles au-dessus des sous-bassins et clusters
             if (!carte.getPane('swmmResultsPane')) {
                 const p = carte.createPane('swmmResultsPane');

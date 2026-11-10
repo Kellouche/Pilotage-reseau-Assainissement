@@ -35,6 +35,13 @@ function toggleTimeSlider(forceState) {
     const state = window.timeSliderState;
     const panel = document.getElementById('panel-time-slider');
     const btn = document.getElementById('btn-time-slider');
+
+    // Vérifier si le bouton est désactivé (pas de simulation)
+    if (btn && btn.disabled) {
+        alert("Aucune simulation disponible pour ce réseau. Veuillez d'abord lancer une simulation SWMM 5.2.");
+        return;
+    }
+
     const newState = (forceState !== undefined) ? forceState : !state.active;
 
     if (!newState) {
