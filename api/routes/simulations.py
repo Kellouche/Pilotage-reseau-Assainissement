@@ -1161,7 +1161,7 @@ def telecharger_ordre_mission_bms_pdf(
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        headers={"Content-Disposition": f'inline; filename="{filename}"'}
     )
 
 
