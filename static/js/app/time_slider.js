@@ -71,6 +71,12 @@ function toggleTimeSlider(forceState) {
         if (panel) panel.style.display = 'flex';
         if (btn) btn.classList.add('active');
 
+        // Afficher le badge "État hydraulique à l'instant T" dans l'en-tête du player
+        const badgeInstant = document.getElementById('badge-instant-state');
+        if (badgeInstant) {
+            badgeInstant.classList.remove('hidden');
+        }
+
         // S'assurer que les couches de résultats SWMM sont bien montées sur Leaflet
         if (window._dernierResultatSimulation && typeof afficherResultatsSimulation === 'function') {
             if (!window.couches || !window.couches.res_conduites || window.couches.res_conduites.getLayers().length === 0) {

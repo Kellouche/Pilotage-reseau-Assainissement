@@ -42,6 +42,12 @@
                 leg.style.display = 'block';
             }
 
+            // Afficher le badge "Enveloppe de criticité" sur la carte (maximums observés)
+            const badgeCrit = document.getElementById('map-criticality-badge');
+            if (badgeCrit) {
+                badgeCrit.classList.remove('hidden');
+            }
+
             // Masquer les couches physiques brutes et les clusters pour éviter tout conflit de couleur avec la simulation
             if (typeof clusterCouche !== 'undefined' && clusterCouche && carte.hasLayer(clusterCouche)) {
                 carte.removeLayer(clusterCouche);
