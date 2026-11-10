@@ -16,7 +16,11 @@
         visible: false,
         chartInstance: null,
         data: null,
-        isDragging: false
+        isDragging: false,
+        playing: false,
+        currentStep: 0,
+        intervalId: null,
+        baseIntervalMs: 500
     };
 
     /**
@@ -80,6 +84,7 @@
 
         window.hyetoHydroState.data = tsData;
         window.hyetoHydroState.visible = true;
+        window.hyetoHydroState.currentStep = 0;
         panel.style.display = 'flex';
 
         if (btn) btn.classList.add('active');
@@ -116,6 +121,13 @@
 
         // Initialiser ou actualiser le graphique Chart.js
         _initialiserChartHyetoHydro(tsData);
+
+        // Initialiser l'indicateur de temps avec le premier pas
+        const ind = document.getElementById('hyeto-indicator-current-time');
+        if (ind && tsData.steps && tsData.steps[0]) {
+            const step0 = tsData.steps[0];
+            ind.innerHTML = `Temps courant : <b>T = ${step0.time_str}</b> (pluie : <b>${(step0.rainfall_mmh || 0).toFixed(1)} mm/h</b> &bull; débit : <b>${(step0.outflow_m3s || 0).toFixed(3)} m³/s</b>)`;
+        }
     };
 
     /**
@@ -282,6 +294,9 @@
         if (panel) panel.style.display = 'none';
         if (btn) btn.classList.remove('active');
         window.hyetoHydroState.visible = false;
+
+        // Arrêter l'animation locale
+        _hyetoPause();
     };
 
     /**
@@ -355,11 +370,11 @@
         const yRainMax = maxRain * 2.6; // étalement vertical pour laisser le bas libre
         const yFlowMax = maxFlow * 1.35; // étalement vertical pour laisser le haut libre
 
-        // Plugin curseur vertical orange synchronisé avec Time Slider
+        // Plugin curseur vertical orange autonome
         const verticalCursorPlugin = {
             id: 'hyetoHydroVerticalCursor',
             afterDraw: (chart) => {
-                const stepIdx = (window.timeSliderState && window.timeSliderState.currentStep) || 0;
+                const stepIdx = window.hyetoHydroState.currentStep || 0;
                 const meta = chart.getDatasetMeta(1); // meta du débit
                 if (!meta || !meta.data || !meta.data[stepIdx]) return;
 
@@ -549,6 +564,84 @@
             }
         };
     }
+
+    /**
+     * Synchronise l'icône et le label du bouton "Animer" avec l'état de lecture
+     */
+    function _syncHyetoPlayButton() {
+        const state = window.hyetoHydroState;
+        if (!state) return;
+
+        const icon = document.getElementById('icon-hyeto-play');
+        const label = document.getElementById('label-hyeto-play');
+        if (!icon || !label) return;
+
+        if (state.playing) {
+            icon.className = 'fas fa-pause';
+            label.textContent = 'Pause';
+        } else {
+            icon.className = 'fas fa-play';
+            label.textContent = 'Animer';
+        }
+    }
+
+    /**
+     * Lance l'animation locale du panneau Hyétogramme
+     */
+    function _hyetoPlay() {
+        const state = window.hyetoHydroState;
+        if (state.playing || !state.data || !state.data.steps) return;
+
+        state.playing = true;
+        _syncHyetoPlayButton();
+
+        const interval = state.baseIntervalMs;
+
+        state.intervalId = setInterval(() => {
+            let nextIdx = state.currentStep + 1;
+            if (nextIdx >= state.data.steps.length) {
+                nextIdx = 0;
+            }
+            state.currentStep = nextIdx;
+
+            // Rafraîchir le curseur vertical et l'indicateur
+            if (state.chartInstance) {
+                state.chartInstance.draw();
+                const step = state.data.steps[nextIdx];
+                const ind = document.getElementById('hyeto-indicator-current-time');
+                if (ind && step) {
+                    ind.innerHTML = `Temps courant : <b>T = ${step.time_str}</b> (pluie : <b>${(step.rainfall_mmh || 0).toFixed(1)} mm/h</b> &bull; débit : <b>${(step.outflow_m3s || 0).toFixed(3)} m³/s</b>)`;
+                }
+            }
+        }, interval);
+    }
+
+    /**
+     * Suspend l'animation locale du panneau Hyétogramme
+     */
+    function _hyetoPause() {
+        const state = window.hyetoHydroState;
+        state.playing = false;
+
+        if (state.intervalId) {
+            clearInterval(state.intervalId);
+            state.intervalId = null;
+        }
+
+        _syncHyetoPlayButton();
+    }
+
+    /**
+     * Bascule lecture/pause du panneau Hyétogramme (autonome)
+     */
+    window.hyetoTogglePlay = function() {
+        const state = window.hyetoHydroState;
+        if (state.playing) {
+            _hyetoPause();
+        } else {
+            _hyetoPlay();
+        }
+    };
 
     /**
      * Exporte l'image du double graphique en PNG haute définition
