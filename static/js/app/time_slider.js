@@ -57,14 +57,18 @@ function toggleTimeSlider(forceState) {
 
         // Rétablir la légende flottante si elle était affichée
         const leg = document.getElementById('sim-floating-legend');
-        if (leg) leg.style.display = 'block';
+        if (leg) {
+            leg.style.display = 'block';
+            leg.classList.add('active-legend');
+        }
 
         // Déplier la toolbar d'édition si elle était repliée
         const toolbar = document.getElementById('main-edit-toolbar');
-        const collapseBtn = document.getElementById('btn-collapse-toolbar');
-        if (toolbar && collapseBtn && toolbar.classList.contains('collapsed')) {
-            toggleToolbarCollapse({ preventDefault: () => {} });
+        if (toolbar && toolbar.classList.contains('collapsed')) {
+            toolbar.classList.remove('collapsed');
         }
+        const icon = document.getElementById('icon-collapse-toolbar');
+        if (icon) icon.className = 'fas fa-chevron-left';
 
         // Nettoyer les marqueurs de débordement radar
         _nettoyerRadarDebordement();
@@ -94,11 +98,6 @@ function toggleTimeSlider(forceState) {
         if (panel) panel.style.display = 'flex';
         if (btn) btn.classList.add('active');
 
-        // Forcer le redessin du canvas chart (nouvelle position en haut)
-        if (state.chartInstance) {
-            state.chartInstance.resize();
-        }
-
         // Initialiser le déplacement du panneau (comme hyeto-hydro)
         _initTimeSliderDraggable();
 
@@ -115,12 +114,13 @@ function toggleTimeSlider(forceState) {
             leg.classList.remove('active-legend');
         }
 
-        // Replier la toolbar d'édition
+        // Replier la toolbar d'édition (forcer l'état collapsed)
         const toolbar = document.getElementById('main-edit-toolbar');
-        const collapseBtn = document.getElementById('btn-collapse-toolbar');
-        if (toolbar && collapseBtn && !toolbar.classList.contains('collapsed')) {
-            toggleToolbarCollapse({ preventDefault: () => {} });
+        if (toolbar && !toolbar.classList.contains('collapsed')) {
+            toolbar.classList.add('collapsed');
         }
+        const icon = document.getElementById('icon-collapse-toolbar');
+        if (icon) icon.className = 'fas fa-chevron-right';
 
         // Afficher le badge "État hydraulique à l'instant T" dans l'en-tête du player
         const badgeInstant = document.getElementById('badge-instant-state');
@@ -142,6 +142,14 @@ function toggleTimeSlider(forceState) {
         // Initialiser ou réinitialiser le contrôleur
         _initTimeSliderUI();
         timeSliderSeek(0);
+
+        // Forcer le redessin du canvas chart après affichage du panneau (position en haut)
+        setTimeout(() => {
+            if (state.chartInstance) {
+                state.chartInstance.resize();
+                state.chartInstance.update();
+            }
+        }, 150);
     });
 }
 
