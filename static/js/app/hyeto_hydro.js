@@ -84,6 +84,30 @@
 
         if (btn) btn.classList.add('active');
 
+        // Mettre à jour le texte du bouton selon le type de simulation
+        const meta = (window._dernierResultatSimulation && window._dernierResultatSimulation.meta) || {};
+        const kpis = (window._dernierResultatSimulation && window._dernierResultatSimulation.kpis) || {};
+        const bmsInfo = meta.bms_info || kpis.bms_info;
+        const btnLabel = document.getElementById('label-hyeto-fiche');
+        const btnFiche = document.getElementById('btn-hyeto-bms-mission');
+        if (bmsInfo) {
+            if (btnLabel) btnLabel.textContent = 'Ordre de mission';
+            if (btnFiche) {
+                btnFiche.title = 'Télécharger l\'ordre de mission terrain BMS (PDF)';
+                btnFiche.style.background = 'rgba(239, 68, 68, 0.2)';
+                btnFiche.style.borderColor = 'rgba(239, 68, 68, 0.6)';
+                btnFiche.style.color = '#fca5a5';
+            }
+        } else {
+            if (btnLabel) btnLabel.textContent = 'Fiche de synthèse';
+            if (btnFiche) {
+                btnFiche.title = 'Afficher la fiche de synthèse hydrologique';
+                btnFiche.style.background = 'rgba(56, 189, 248, 0.2)';
+                btnFiche.style.borderColor = 'rgba(56, 189, 248, 0.6)';
+                btnFiche.style.color = '#38bdf8';
+            }
+        }
+
         // Initialiser le système draggable si ce n'est pas déjà fait
         _initHyetoHydroDraggable();
 
@@ -158,6 +182,96 @@
             ? Math.round((data.total_outflow_volume_m3 / data.total_rain_volume_m3) * 100) / 100
             : 0.65;
     }
+
+    /**
+     * Gère l'action du bouton "Fiche terrain" selon le type de simulation :
+     * - BMS (Bulletin Météo Spécial) : télécharge l'ordre de mission terrain PDF
+     * - Pluie réglementaire (Montana/Chicago) : affiche la fiche de synthèse hydrologique
+     */
+    window.gererActionFicheTerrain = function() {
+        const meta = (window._dernierResultatSimulation && window._dernierResultatSimulation.meta) || {};
+        const kpis = (window._dernierResultatSimulation && window._dernierResultatSimulation.kpis) || {};
+        const bmsInfo = meta.bms_info || kpis.bms_info;
+
+        if (bmsInfo) {
+            // Cas BMS : télécharger l'ordre de mission terrain
+            window.telechargerOrdreMissionTerrain();
+        } else {
+            // Cas pluie réglementaire : afficher la fiche de synthèse hydrologique
+            _afficherFicheSyntheseHydrologique();
+        }
+    };
+
+    /**
+     * Affiche la fiche de synthèse hydrologique pour une simulation pluie réglementaire
+     */
+    function _afficherFicheSyntheseHydrologique() {
+        const meta = (window._dernierResultatSimulation && window._dernierResultatSimulation.meta) || {};
+        const kpis = (window._dernierResultatSimulation && window._dernierResultatSimulation.kpis) || {};
+        const ts = (window._dernierResultatSimulation && window._dernierResultatSimulation.timeseries) || {};
+
+        const surfaceHa = parseFloat(meta.total_area_ha || meta.surface_totale_ha || 0);
+        const iMax = parseFloat(meta.pluvio_intensite_max_mmh || kpis.pluvio_intensite_max_mmh || ts.peak_rainfall_mmh || 0);
+        const volumePluieMm = parseFloat(meta.pluvio_hauteur_totale_mm || kpis.pluvio_hauteur_totale_mm || ts.total_precipitation_mm || 0);
+        const volumePluieM3 = Math.round(surfaceHa * volumePluieMm * 10.0) || ts.total_rain_volume_m3 || 0;
+        const debitMax = parseFloat(kpis.peak_outflow_m3s || ts.peak_outflow_m3s || 0);
+        const tempsReponse = parseInt(ts.lag_time_minutes || 0) || 0;
+        const volumeEcoule = Math.round(ts.total_outflow_volume_m3 || 0);
+        const ceff = ts.runoff_coefficient !== undefined ? Math.round(ts.runoff_coefficient * 100) : 0;
+
+        let interpretation = "";
+        if (ceff >= 60) {
+            interpretation = "Bassin très réactif • Temps de concentration très court";
+        } else if (ceff >= 30) {
+            interpretation = "Bassin modérément réactif • Temps de concentration court";
+        } else if (ceff >= 10) {
+            interpretation = "Bassin faiblement réactif • Temps de concentration modéré";
+        } else {
+            interpretation = "Bassin peu réactif • Temps de concentration long";
+        }
+
+        const html = `
+        <div style="background: rgba(15, 23, 42, 0.95); border: 1.5px solid #38bdf8; border-radius: 10px; padding: 16px; max-width: 500px; margin: 20px auto; color: #f8fafc; font-family: 'Inter', sans-serif;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                <i class="fas fa-file-alt" style="color: #38bdf8; font-size: 1.2rem;"></i>
+                <h2 style="margin: 0; font-size: 1.1rem; color: #f8fafc;">Fiche de synthèse hydrologique</h2>
+            </div>
+            <hr style="border: 0; border-top: 1px solid #334155; margin: 8px 0;">
+            
+            <div style="margin-bottom: 10px;">
+                <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3px;">SYNTHÈSE HYDROLOGIQUE</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; font-size: 0.85rem;">
+                    <div><b>Surface drainée :</b> ${surfaceHa.toLocaleString('fr-FR')} ha</div>
+                    <div><b>Pluie :</b></div>
+                    <div style="margin-left: 16px;">• Intensité max : ${iMax.toFixed(1)} mm/h</div>
+                    <div style="margin-left: 16px;">• Volume : ${volumePluieM3.toLocaleString('fr-FR')} m³</div>
+                    <div><b>Réponse :</b></div>
+                    <div style="margin-left: 16px;">• Débit max : ${debitMax.toFixed(3)} m³/s</div>
+                    <div style="margin-left: 16px;">• Temps de réponse : ${tempsReponse} min</div>
+                    <div style="margin-left: 16px;">• Volume écoulé : ${volumeEcoule.toLocaleString('fr-FR')} m³</div>
+                    <div><b>Interprétation :</b></div>
+                    <div style="margin-left: 16px;">• Ceff = ${ceff} %</div>
+                    <div style="margin-left: 16px;">• ${interpretation}</div>
+                </div>
+            </div>
+            
+            <div style="text-align: right; margin-top: 12px;">
+                <button onclick="this.closest('.fiche-synthese-modal').remove()" style="background: #38bdf8; color: #0f172a; border: none; padding: 6px 16px; border-radius: 5px; font-weight: 700; cursor: pointer;">Fermer</button>
+            </div>
+        </div>
+        `;
+
+        const modal = document.createElement('div');
+        modal.className = 'fiche-synthese-modal';
+        modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 9999;';
+        modal.innerHTML = html;
+        document.body.appendChild(modal);
+
+        // Fermer sur clic outside le contenu
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) modal.remove();
+        });
+    };
 
     /**
      * Ferme le panneau

@@ -21,9 +21,9 @@ Objet : Panneau flottant Hyétogramme ↔ Hydrogramme (Double-Axe superposé / i
         </div>
 
         <div class="hyeto-hydro-controls">
-            <button class="btn-action-hyeto" id="btn-hyeto-bms-mission" onclick="telechargerOrdreMissionTerrain()" title="Télécharger l'ordre de mission terrain pour les équipes d'astreinte ONA" style="background: rgba(245, 158, 11, 0.2); border: 1px solid rgba(245, 158, 11, 0.6); color: #fbbf24;">
+            <button class="btn-action-hyeto" id="btn-hyeto-bms-mission" onclick="gererActionFicheTerrain()" title="Télécharger l'ordre de mission terrain pour les équipes d'astreinte ONA" style="background: rgba(245, 158, 11, 0.2); border: 1px solid rgba(245, 158, 11, 0.6); color: #fbbf24;">
                 <i class="fas fa-file-pdf"></i>
-                <span>Fiche terrain</span>
+                <span id="label-hyeto-fiche">Fiche terrain</span>
             </button>
             <button class="btn-action-hyeto btn-play-sync" id="btn-hyeto-sync-play" onclick="timeSliderTogglePlay()" title="Lancer / suspendre l'animation synchronisée avec la carte">
                 <i class="fas fa-play" id="icon-hyeto-play"></i>
