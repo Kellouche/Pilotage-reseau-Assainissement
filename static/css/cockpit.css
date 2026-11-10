@@ -765,7 +765,7 @@ body {
 
 .time-slider-dock {
     position: absolute;
-    bottom: 24px;
+    top: 24px;
     left: 50%;
     transform: translateX(-50%);
     width: min(880px, 92vw);
