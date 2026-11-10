@@ -22,7 +22,8 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 def generer_pdf_ordre_mission_bms(
     simulation_data: Dict[str, Any],
     bms_info: Optional[Dict[str, Any]] = None,
-    nom_bassin: Optional[str] = None
+    nom_bassin: Optional[str] = None,
+    adresse: Optional[str] = None
 ) -> bytes:
     """
     Génère un ordre de mission terrain officiel (PDF) pour les équipes d'astreinte de l'ONA
@@ -123,6 +124,7 @@ def generer_pdf_ordre_mission_bms(
     duree_h = bms.get("duree_heures") or 14.0
     date_texte = bms.get("date_texte") or datetime.now().strftime("%d/%m/%Y")
     bassin = nom_bassin or simulation_data.get("meta", {}).get("bassin_nom") or "Bassin versant urbain"
+    adresse_texte = adresse or simulation_data.get("meta", {}).get("adresse") or bms.get("adresse") or ""
 
     vig_color = colors.HexColor('#ea580c') if vigilance == "ORANGE" else (
         colors.HexColor('#dc2626') if vigilance == "ROUGE" else colors.HexColor('#ca8a04')
@@ -155,6 +157,22 @@ def generer_pdf_ordre_mission_bms(
     ]))
     story.append(t_bms)
     story.append(Spacer(1, 0.3 * cm))
+
+    # Cartouche d'adresse d'intervention (si fournie)
+    if adresse_texte:
+        adresse_html = (
+            f"<b>ADRESSE D'INTERVENTION :</b> {adresse_texte}"
+        )
+        data_adresse = [[Paragraph(adresse_html, ParagraphStyle('AdresseIntervention', fontName='Helvetica', fontSize=9, leading=13, textColor=colors.HexColor('#0f172a'), alignment=1))]]
+        t_adresse = Table(data_adresse, colWidths=[18 * cm])
+        t_adresse.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f8fafc')),
+            ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ]))
+        story.append(t_adresse)
+        story.append(Spacer(1, 0.3 * cm))
 
     # 3. Synthèse des calculs prévisionnels SWMM 5.2
     story.append(Paragraph("1. Diagnostic hydraulique prévisionnel (Simulation SWMM 5.2)", style_section))

@@ -37,7 +37,8 @@ def test_generer_pdf_ordre_mission_bms_succes():
     pdf_bytes = generer_pdf_ordre_mission_bms(
         simulation_data=simulation_data,
         bms_info=bms_info,
-        nom_bassin="Bassin Versant Centre Chlef"
+        nom_bassin="Bassin Versant Centre Chlef",
+        adresse="Rue des Jardins, 13000 Chlef, Algérie"
     )
 
     assert isinstance(pdf_bytes, bytes)
@@ -50,7 +51,8 @@ def test_generer_pdf_ordre_mission_bms_donnees_vides():
     pdf_bytes = generer_pdf_ordre_mission_bms(
         simulation_data={},
         bms_info=None,
-        nom_bassin=None
+        nom_bassin=None,
+        adresse=None
     )
     assert isinstance(pdf_bytes, bytes)
     assert pdf_bytes.startswith(b"%PDF-")
