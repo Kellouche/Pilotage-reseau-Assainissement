@@ -1371,12 +1371,17 @@ def get_profil_en_long(
             # Essai inverse : si l'utilisateur a sélectionné l'aval avant l'amont
             try:
                 path_nodes = nx.shortest_path(G, dst, src, weight="length")
-                src, dst = dst, src  # Rétablir le sens naturel amont -> aval
+                # Rétablir le sens naturel amont -> aval
+                path_nodes = path_nodes[::-1]
+                src, dst = dst, src
             except nx.NetworkXNoPath:
                 # Tentative en non orienté si des conduites sont numérisées à contre-sens
                 try:
                     G_undir = G.to_undirected()
                     path_nodes = nx.shortest_path(G_undir, src, dst, weight="length")
+                    # Réaligner le chemin pour qu'il commence toujours par l'amont (src)
+                    if path_nodes and path_nodes[0] != src:
+                        path_nodes = path_nodes[::-1]
                 except nx.NetworkXNoPath:
                     raise HTTPException(
                         status_code=422,

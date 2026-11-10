@@ -48,13 +48,17 @@ def test_profil_en_long_success():
 
 
 def test_profil_en_long_reverse_auto_fallback():
-    """Vérifie que l'algorithme retrouve le chemin amont/aval même si l'ordre est inversé."""
+    """Vérifie que l'algorithme retrouve le chemin amont/aval même si l'ordre est inversé,
+    et que les segments commencent bien par l'amont."""
     db = SessionLocal()
     try:
         res = get_profil_en_long(node_amont="2672", node_aval="2674", db=db)
         assert res["status"] == "success"
         assert res["nb_troncons"] >= 1
         assert res["longueur_totale_m"] > 0
+        # Vérifier que le premier segment correspond bien à l'amont demandé
+        assert res["segments"][0]["node_id"] == "2672"
+        assert res["segments"][-1]["node_id"] == "2674"
     finally:
         db.close()
 
