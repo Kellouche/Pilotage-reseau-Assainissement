@@ -555,6 +555,7 @@
             _originalTimeSliderSeek(stepIndex);
             // Rafraîchir le curseur vertical du panneau Hyétogramme s'il est ouvert
             if (window.hyetoHydroState.visible && window.hyetoHydroState.chartInstance) {
+                window.hyetoHydroState.currentStep = stepIndex;
                 window.hyetoHydroState.chartInstance.draw();
                 const step = (window.hyetoHydroState.data && window.hyetoHydroState.data.steps && window.hyetoHydroState.data.steps[stepIndex]) || null;
                 const ind = document.getElementById('hyeto-indicator-current-time');
@@ -562,6 +563,28 @@
                     ind.innerHTML = `Temps courant : <b>T = ${step.time_str}</b> (pluie : <b>${(step.rainfall_mmh || 0).toFixed(1)} mm/h</b> &bull; débit : <b>${(step.outflow_m3s || 0).toFixed(3)} m³/s</b>)`;
                 }
             }
+        };
+    }
+
+    /**
+     * Hook pour synchroniser le bouton "Animer" du panneau Hyétogramme avec l'état de lecture du time slider
+     */
+    const _originalTimeSliderPlay = window.timeSliderPlay;
+    const _originalTimeSliderPause = window.timeSliderPause;
+    if (typeof _originalTimeSliderPlay === 'function' && typeof _originalTimeSliderPause === 'function') {
+        window.timeSliderPlay = function() {
+            _originalTimeSliderPlay();
+            window.hyetoHydroState.playing = true;
+            _syncHyetoPlayButton();
+        };
+        window.timeSliderPause = function() {
+            _originalTimeSliderPause();
+            window.hyetoHydroState.playing = false;
+            if (window.hyetoHydroState.intervalId) {
+                clearInterval(window.hyetoHydroState.intervalId);
+                window.hyetoHydroState.intervalId = null;
+            }
+            _syncHyetoPlayButton();
         };
     }
 
@@ -586,11 +609,19 @@
     }
 
     /**
-     * Lance l'animation locale du panneau Hyétogramme
+     * Lance l'animation du panneau Hyétogramme en synchronisant le time slider
      */
     function _hyetoPlay() {
         const state = window.hyetoHydroState;
         if (state.playing || !state.data || !state.data.steps) return;
+
+        // Activer le time slider s'il ne l'est pas déjà
+        const tsState = window.timeSliderState;
+        if (tsState && !tsState.active) {
+            if (typeof window.toggleTimeSlider === 'function') {
+                window.toggleTimeSlider(true);
+            }
+        }
 
         state.playing = true;
         _syncHyetoPlayButton();
@@ -603,6 +634,11 @@
                 nextIdx = 0;
             }
             state.currentStep = nextIdx;
+
+            // Synchroniser avec le time slider pour mettre à jour la carte
+            if (typeof window.timeSliderSeek === 'function') {
+                window.timeSliderSeek(nextIdx);
+            }
 
             // Rafraîchir le curseur vertical et l'indicateur
             if (state.chartInstance) {
@@ -617,7 +653,7 @@
     }
 
     /**
-     * Suspend l'animation locale du panneau Hyétogramme
+     * Suspend l'animation du panneau Hyétogramme
      */
     function _hyetoPause() {
         const state = window.hyetoHydroState;
@@ -628,11 +664,16 @@
             state.intervalId = null;
         }
 
+        // Suspendre aussi le time slider
+        if (typeof window.timeSliderPause === 'function') {
+            window.timeSliderPause();
+        }
+
         _syncHyetoPlayButton();
     }
 
     /**
-     * Bascule lecture/pause du panneau Hyétogramme (autonome)
+     * Bascule lecture/pause du panneau Hyétogramme
      */
     window.hyetoTogglePlay = function() {
         const state = window.hyetoHydroState;
