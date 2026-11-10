@@ -1279,7 +1279,6 @@ body {
     display: flex;
     align-items: center;
     gap: 6px;
-    cursor: help;
     user-select: none;
 }
 
@@ -1298,27 +1297,6 @@ body {
     white-space: nowrap;
 }
 
-/* Tooltip pour le badge map */
-.map-criticality-badge:hover::after {
-    content: attr(title);
-    position: absolute;
-    top: calc(100% + 8px);
-    right: 0;
-    transform: translateX(0%);
-    background: rgba(15, 23, 42, 0.95);
-    color: #f8fafc;
-    padding: 10px 14px;
-    border-radius: 6px;
-    font-size: 0.8rem;
-    line-height: 1.5;
-    white-space: pre-wrap;
-    max-width: 420px;
-    z-index: 9999;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    pointer-events: none;
-    border: 1px solid rgba(245, 158, 11, 0.3);
-}
-
 /* Badge Player - État hydraulique à l'instant T */
 .player-instant-badge {
     background: rgba(56, 189, 248, 0.15);
@@ -1332,7 +1310,6 @@ body {
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    cursor: help;
     user-select: none;
     margin-right: 12px;
 }
@@ -1340,26 +1317,6 @@ body {
 .player-instant-badge .badge-icon {
     font-size: 0.9rem;
     line-height: 1;
-}
-
-/* Tooltip pour le badge player */
-.player-instant-badge:hover::after {
-    content: attr(title);
-    position: absolute;
-    top: calc(100% + 6px);
-    left: 0;
-    background: rgba(15, 23, 42, 0.95);
-    color: #f8fafc;
-    padding: 10px 14px;
-    border-radius: 6px;
-    font-size: 0.8rem;
-    line-height: 1.5;
-    white-space: pre-wrap;
-    max-width: 420px;
-    z-index: 9999;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    pointer-events: none;
-    border: 1px solid rgba(56, 189, 248, 0.3);
 }
 
 /* Cache les badges par défaut (affichés uniquement quand une simulation est active) */
