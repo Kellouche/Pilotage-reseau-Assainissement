@@ -17,7 +17,8 @@ window.timeSliderState = {
     intervalId: null,
     data: null,
     chartInstance: null,
-    radarGroup: null
+    radarGroup: null,
+    legendWasVisible: false
 };
 
 /**
@@ -55,11 +56,16 @@ function toggleTimeSlider(forceState) {
             badgeCrit.classList.remove('hidden');
         }
 
-        // Rétablir la légende flottante si elle était affichée
+        // Restaurer la légende flottante à son état précédent (avant ouverture panneau)
         const leg = document.getElementById('sim-floating-legend');
         if (leg) {
-            leg.style.display = 'block';
-            leg.classList.add('active-legend');
+            if (state.legendWasVisible) {
+                leg.style.display = 'block';
+                leg.classList.add('active-legend');
+            } else {
+                leg.style.display = 'none';
+                leg.classList.remove('active-legend');
+            }
         }
 
         // Déplier la toolbar d'édition si elle était repliée
@@ -76,6 +82,12 @@ function toggleTimeSlider(forceState) {
         // Rétablir la coloration standard SWMM de la simulation
         if (window._dernierResultatSimulation && typeof afficherResultatsSimulation === 'function') {
             afficherResultatsSimulation(window._dernierResultatSimulation);
+            // Après afficherResultatsSimulation (qui force l'affichage de la légende),
+            // ré-appliquer l'état stocké si la légende devait rester cachée
+            if (leg && !state.legendWasVisible) {
+                leg.style.display = 'none';
+                leg.classList.remove('active-legend');
+            }
         }
         return;
     }
@@ -98,6 +110,14 @@ function toggleTimeSlider(forceState) {
         if (panel) panel.style.display = 'flex';
         if (btn) btn.classList.add('active');
 
+        // Sauvegarder l'état de la légende avant de la cacher
+        const leg = document.getElementById('sim-floating-legend');
+        if (leg) {
+            state.legendWasVisible = leg.classList.contains('active-legend') && leg.style.display !== 'none';
+            leg.style.display = 'none';
+            leg.classList.remove('active-legend');
+        }
+
         // Initialiser le déplacement du panneau (comme hyeto-hydro)
         _initTimeSliderDraggable();
 
@@ -105,13 +125,6 @@ function toggleTimeSlider(forceState) {
         const badgeCrit = document.getElementById('map-criticality-badge');
         if (badgeCrit) {
             badgeCrit.classList.add('hidden');
-        }
-
-        // Masquer la légende flottante pendant l'animation
-        const leg = document.getElementById('sim-floating-legend');
-        if (leg) {
-            leg.style.display = 'none';
-            leg.classList.remove('active-legend');
         }
 
         // Replier la toolbar d'édition (forcer l'état collapsed)
@@ -133,6 +146,11 @@ function toggleTimeSlider(forceState) {
             if (!window.couches || !window.couches.res_conduites || window.couches.res_conduites.getLayers().length === 0) {
                 try {
                     afficherResultatsSimulation(window._dernierResultatSimulation);
+                    // Re-cacher la légende après afficherResultatsSimulation (qui force l'affichage)
+                    if (leg) {
+                        leg.style.display = 'none';
+                        leg.classList.remove('active-legend');
+                    }
                 } catch (e_aff) {
                     console.warn("Affichage préalable simulation:", e_aff);
                 }
