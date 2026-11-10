@@ -230,7 +230,14 @@ function _creerPatternHachures(couleurLigne, couleurFond, espacement) {
  */
 window.synchroniserInputProfilAmont = function(val) {
     if (val && val.trim()) {
-        window.profilLongState.nodeAmont = val.trim();
+        const v = val.trim();
+        window.profilLongState.nodeAmont = v;
+        window.profilLongState.nodeAval = null; // Reset aval si amont change
+        window.profilLongState.step = 'amont'; // Réinitialiser la machine à états
+        const inpB = document.getElementById('input-profil-aval');
+        if (inpB) inpB.value = '';
+        // Mettre à jour le marqueur carte pour l'amont
+        _mettreAJourMarqueurRegard(v, 'amont');
     }
 };
 
@@ -239,9 +246,89 @@ window.synchroniserInputProfilAmont = function(val) {
  */
 window.synchroniserInputProfilAval = function(val) {
     if (val && val.trim()) {
-        window.profilLongState.nodeAval = val.trim();
+        const v = val.trim();
+        window.profilLongState.nodeAval = v;
+        window.profilLongState.step = 'amont'; // Réinitialiser la machine à états
+        // Mettre à jour le marqueur carte pour l'aval
+        _mettreAJourMarqueurRegard(v, 'aval');
     }
 };
+
+/**
+ * Met à jour le marqueur carte pour un regard donné (après saisie manuelle)
+ */
+function _mettreAJourMarqueurRegard(code, role) {
+    const map = _getCarte();
+    if (!map || !code) return;
+    const ll = _trouverCoordonneesRegard(code);
+    if (!ll) return;
+    // Supprimer ancien marqueur de ce rôle
+    const state = window.profilLongState;
+    if (state.markersLayer) {
+        // On ne peut pas cibler un seul marqueur facilement, on reconstruit
+        // Les marqueurs seront recalculés au prochain chargement de profil
+    }
+    // Afficher un marqueur temporaire pour ce regard
+    const color = role === 'amont' ? '#10b981' : '#0284c7';
+    const fillColor = role === 'amont' ? '#34d399' : '#38bdf8';
+    const label = role === 'amont' ? 'Amont' : 'Aval';
+    if (state.markersLayer) {
+        state.markersLayer.clearLayers();
+        const m = L.circleMarker(ll, {
+            radius: 9,
+            color: color,
+            fillColor: fillColor,
+            fillOpacity: 0.95,
+            weight: 3
+        }).bindTooltip(`<b>${label}:</b> ${code}`, { permanent: true, direction: 'top' });
+        state.markersLayer.addLayer(m);
+    }
+}
+
+/**
+ * Valide que nodeAmont est hydrauliquement en amont de nodeAval
+ * en parcourant le graphe des conduits depuis les résultats de simulation
+ */
+function _validerOrientationAmontAval(nodeAmont, nodeAval) {
+    if (!nodeAmont || !nodeAval) return { valide: false, message: 'Deux regards requis' };
+    if (nodeAmont === nodeAval) return { valide: false, message: 'Amont et aval doivent être différents' };
+
+    const sim = window._dernierResultatSimulation;
+    if (!sim || !sim.conduit_results) {
+        // Pas de données de simulation : on accepte mais on prévient
+        return { valide: true, message: 'Aucune donnée de simulation pour valider l\'orientation' };
+    }
+
+    const conduits = sim.conduit_results;
+    // Construire un ensemble d'arêtes dirigées : node_amont -> node_aval
+    const edges = new Set();
+    for (const cid of Object.keys(conduits)) {
+        const c = conduits[cid];
+        const nA = c.node_amont || c.node_amont_id || c.amont || c.from_node || c.node1;
+        const nV = c.node_aval || c.node_aval_id || c.aval || c.to_node || c.node2;
+        if (nA && nV) {
+            edges.add(`${String(nA).trim()}->${String(nV).trim()}`);
+        }
+    }
+
+    // Recherche BFS depuis nodeAmont vers nodeAval
+    const visited = new Set();
+    const queue = [nodeAmont];
+    visited.add(nodeAmont);
+    while (queue.length > 0) {
+        const current = queue.shift();
+        if (current === nodeAval) return { valide: true, message: 'Orientation valide' };
+        for (const edge of edges) {
+            const [src, dst] = edge.split('->');
+            if (src === current && !visited.has(dst)) {
+                visited.add(dst);
+                queue.push(dst);
+            }
+        }
+    }
+
+    return { valide: false, message: `Aucun chemin hydraulique de ${nodeAmont} vers ${nodeAval}. Vérifiez l'orientation amont → aval.` };
+}
 
 /**
  * Inverse les regards amont et aval
@@ -259,6 +346,11 @@ function inverserRegardsProfil() {
     if (inpA) inpA.value = b;
     if (inpB) inpB.value = a;
 
+    // Mettre à jour les marqueurs carte
+    if (state.markersLayer) state.markersLayer.clearLayers();
+    if (a) _mettreAJourMarqueurRegard(b, 'amont');
+    if (b) _mettreAJourMarqueurRegard(a, 'aval');
+
     if (a && b) {
         chargerProfilLong(b, a);
     }
@@ -273,13 +365,21 @@ function rafraichirProfilLong() {
     const a = inpA ? inpA.value.trim() : (window.profilLongState.nodeAmont || '');
     const b = inpB ? inpB.value.trim() : (window.profilLongState.nodeAval || '');
 
-    if (a && b) {
-        window.profilLongState.nodeAmont = a;
-        window.profilLongState.nodeAval = b;
-        chargerProfilLong(a, b);
-    } else {
+    if (!a || !b) {
         alert("Veuillez saisir ou sélectionner un regard amont et un regard aval.");
+        return;
     }
+
+    // Validation hydraulique : vérifier que a est en amont de b
+    const validation = _validerOrientationAmontAval(a, b);
+    if (!validation.valide) {
+        alert(validation.message);
+        return;
+    }
+
+    window.profilLongState.nodeAmont = a;
+    window.profilLongState.nodeAval = b;
+    chargerProfilLong(a, b);
 }
 
 /**
@@ -287,6 +387,16 @@ function rafraichirProfilLong() {
  */
 function chargerProfilLong(nodeAmont, nodeAval) {
     const panel = document.getElementById('panel-profil-long');
+
+    // Validation de sécurité : vérifier l'orientation avant l'appel API
+    if (nodeAmont && nodeAval) {
+        const validation = _validerOrientationAmontAval(nodeAmont, nodeAval);
+        if (!validation.valide) {
+            alert(validation.message);
+            annulerSelectionProfil();
+            return;
+        }
+    }
 
     const url = `/api/v1/simulations/profil-en-long?node_amont=${encodeURIComponent(nodeAmont)}&node_aval=${encodeURIComponent(nodeAval)}`;
 
@@ -571,6 +681,33 @@ function afficherProfilLong(data) {
 }
 
 /**
+ * Récupère les coordonnées géographiques d'un regard depuis toutes les couches de points
+ */
+function _trouverCoordonneesRegard(code) {
+    if (!code || !window.couches) return null;
+    const codeTrim = String(code).trim();
+    const types = ['regards', 'rejets', 'stations', 'step', 'ouvrages'];
+    let found = null;
+    for (const type of types) {
+        const couche = window.couches[type];
+        if (couche && typeof couche.eachLayer === 'function') {
+            couche.eachLayer(l => {
+                if (found) return;
+                if (l.feature && l.feature.properties) {
+                    const p = l.feature.properties;
+                    const c = p.Code || p.code || p.CODE || p.id || p.ID || p.Id || p.nom || p.NOM || p.Nom || p.CODEPRR || p.NUMERO || (l.feature && l.feature.id);
+                    if (c && String(c).trim() === codeTrim) {
+                        found = l.getLatLng();
+                    }
+                }
+            });
+        }
+        if (found) break;
+    }
+    return found;
+}
+
+/**
  * Surligne le tracé sur la carte Leaflet
  */
 function _surlignerCheminCarte(segments) {
@@ -583,24 +720,12 @@ function _surlignerCheminCarte(segments) {
         state.highlightLayer = null;
     }
 
-    // Récupérer les coordonnées géographiques des regards
+    // Récupérer les coordonnées géographiques des regards depuis TOUTES les couches de points
     const latlngs = [];
-    if (window.couches && window.couches.regards) {
-        const coordsMap = {};
-        window.couches.regards.eachLayer(l => {
-            if (l.feature && l.feature.properties) {
-                const code = l.feature.properties.Code || l.feature.properties.code || l.feature.properties.id;
-                if (code) {
-                    coordsMap[String(code).trim()] = l.getLatLng();
-                }
-            }
-        });
-
-        segments.forEach(s => {
-            const ll = coordsMap[String(s.node_id).trim()];
-            if (ll) latlngs.push(ll);
-        });
-    }
+    segments.forEach(s => {
+        const ll = _trouverCoordonneesRegard(s.node_id);
+        if (ll) latlngs.push(ll);
+    });
 
     if (latlngs.length >= 2) {
         state.highlightLayer = L.polyline(latlngs, {
