@@ -567,25 +567,135 @@
     }
 
     /**
-     * Hook pour synchroniser le bouton "Animer" du panneau Hyétogramme avec l'état de lecture du time slider
+     * Parcourt récursivement toutes les entités Leaflet d'un groupe ou d'un L.GeoJSON
      */
-    const _originalTimeSliderPlay = window.timeSliderPlay;
-    const _originalTimeSliderPause = window.timeSliderPause;
-    if (typeof _originalTimeSliderPlay === 'function' && typeof _originalTimeSliderPause === 'function') {
-        window.timeSliderPlay = function() {
-            _originalTimeSliderPlay();
-            window.hyetoHydroState.playing = true;
-            _syncHyetoPlayButton();
-        };
-        window.timeSliderPause = function() {
-            _originalTimeSliderPause();
-            window.hyetoHydroState.playing = false;
-            if (window.hyetoHydroState.intervalId) {
-                clearInterval(window.hyetoHydroState.intervalId);
-                window.hyetoHydroState.intervalId = null;
+    function _itererEntitesLeaflet(group, fn) {
+        if (!group) return;
+        if (typeof group.eachLayer !== 'function') return;
+
+        group.eachLayer(layer => {
+            if (layer.feature && layer.feature.properties) {
+                fn(layer);
+            } else if (typeof layer.eachLayer === 'function') {
+                _itererEntitesLeaflet(layer, fn);
             }
-            _syncHyetoPlayButton();
+        });
+    }
+
+    /**
+     * Applique la coloration dynamique instantanée aux conduites de la carte
+     */
+    function _appliquerCouleursConduites(activeLinks) {
+        if (!window.couches) return;
+        activeLinks = activeLinks || {};
+
+        // Indexation inverse des conduites u->d vers link_id (depuis la simulation SWMM)
+        const cRes = (window._dernierResultatSimulation && window._dernierResultatSimulation.conduit_results) || {};
+        const linkIdByNodes = {};
+        Object.values(cRes).forEach(r => {
+            const u = String(r.u_node || '').replace(/\.0$/, '').trim();
+            const d = String(r.d_node || '').replace(/\.0$/, '').trim();
+            if (u && d && r.link_id) {
+                linkIdByNodes[`${u}->${d}`] = r.link_id;
+                linkIdByNodes[`${d}->${u}`] = r.link_id;
+            }
+        });
+
+        const traiterConduite = (layer) => {
+            const p = layer.feature.properties;
+            const u = String(p.ID_AMONT || p.id_amont || '').replace(/\.0$/, '').trim();
+            const d = String(p.ID_AVAL || p.id_aval || '').replace(/\.0$/, '').trim();
+
+            // Trouver le link_id SWMM correspondant
+            const lid = linkIdByNodes[`${u}->${d}`] || p.cid;
+            let linkRatio = 0.0;
+            if (lid && activeLinks[lid] !== undefined) {
+                linkRatio = activeLinks[lid];
+            } else if (p.cid && activeLinks[p.cid] !== undefined) {
+                linkRatio = activeLinks[p.cid];
+            }
+
+            // Palette hydraulique fixe et nette selon le taux de charge instantané
+            let col = '#10b981'; // < 50% Sain (Vert/Cyan)
+            let weight = 3.5;
+
+            if (linkRatio >= 1.0) {
+                col = '#dc2626'; // Rouge brique : Surcharge complète / sous pression
+                weight = 6.0;
+            } else if (linkRatio >= 0.8) {
+                col = '#f97316'; // Orange vif : En charge (> 80%)
+                weight = 5.0;
+            } else if (linkRatio >= 0.5) {
+                col = '#f59e0b'; // Jaune ambré : Modéré (50% - 80%)
+                weight = 4.2;
+            }
+
+            if (typeof layer.setStyle === 'function') {
+                layer.setStyle({
+                    color: col,
+                    weight: weight,
+                    opacity: 0.95
+                });
+            }
         };
+
+        // Parcourir à la fois la couche de résultat SWMM et la couche physique de base
+        if (window.couches.res_conduites) {
+            _itererEntitesLeaflet(window.couches.res_conduites, traiterConduite);
+        }
+        if (window.couches.conduites) {
+            _itererEntitesLeaflet(window.couches.conduites, traiterConduite);
+        }
+    }
+
+    /**
+     * Colorie nettement les regards selon leur état instantané à l'instant t
+     */
+    function _appliquerRegardsDebordants(floodedNodeIds) {
+        if (!window.couches) return;
+        const floodedSet = new Set((floodedNodeIds || []).map(String));
+
+        const traiterRegard = (layer) => {
+            const p = layer.feature.properties;
+            const rawCode = p.Code !== undefined ? p.Code : (p.code !== undefined ? p.code : (p.CODE || p.id || ''));
+            const nid = String(rawCode).replace(/\.0$/, '').trim();
+
+            if (typeof layer.setStyle !== 'function') return;
+
+            if (floodedSet.has(nid)) {
+                // Regard en débordement actif au sol à cet instant (Rouge brique net et fixe)
+                layer.setStyle({
+                    radius: 7.0,
+                    fillColor: '#dc2626',
+                    color: '#ffffff',
+                    weight: 2.0,
+                    fillOpacity: 1.0
+                });
+                if (layer.getTooltip && layer.getTooltip()) {
+                    layer.setTooltipContent(`⚠️ <b>Regard ${nid}</b> : DÉBORDEMENT ACTIF AU SOL`);
+                }
+            } else {
+                // Regard sous contrôle (Bleu cyan discret)
+                layer.setStyle({
+                    radius: 4.5,
+                    fillColor: '#38bdf8',
+                    color: '#0f172a',
+                    weight: 1.0,
+                    fillOpacity: 0.8
+                });
+                if (layer.getTooltip && layer.getTooltip()) {
+                    layer.setTooltipContent(`Regard ${nid}`);
+                }
+            }
+        };
+
+        // Parcourir à la fois la couche de regards SWMM et la couche de base
+        if (window.couches.res_regards) {
+            _itererEntitesLeaflet(window.couches.res_regards, traiterRegard);
+        }
+        if (window.couches.regards) {
+            _itererEntitesLeaflet(window.couches.regards, traiterRegard);
+        }
     }
 
     /**
@@ -609,19 +719,11 @@
     }
 
     /**
-     * Lance l'animation du panneau Hyétogramme en synchronisant le time slider
+     * Lance l'animation du panneau Hyétogramme (autonome)
      */
     function _hyetoPlay() {
         const state = window.hyetoHydroState;
         if (state.playing || !state.data || !state.data.steps) return;
-
-        // Activer le time slider s'il ne l'est pas déjà
-        const tsState = window.timeSliderState;
-        if (tsState && !tsState.active) {
-            if (typeof window.toggleTimeSlider === 'function') {
-                window.toggleTimeSlider(true);
-            }
-        }
 
         state.playing = true;
         _syncHyetoPlayButton();
@@ -635,15 +737,19 @@
             }
             state.currentStep = nextIdx;
 
-            // Synchroniser avec le time slider pour mettre à jour la carte
-            if (typeof window.timeSliderSeek === 'function') {
-                window.timeSliderSeek(nextIdx);
+            const step = state.data.steps[nextIdx];
+
+            // Mettre à jour la carte directement (sans time slider)
+            if (step.links) {
+                _appliquerCouleursConduites(step.links);
+            }
+            if (step.flooded_nodes) {
+                _appliquerRegardsDebordants(step.flooded_nodes);
             }
 
             // Rafraîchir le curseur vertical et l'indicateur
             if (state.chartInstance) {
                 state.chartInstance.draw();
-                const step = state.data.steps[nextIdx];
                 const ind = document.getElementById('hyeto-indicator-current-time');
                 if (ind && step) {
                     ind.innerHTML = `Temps courant : <b>T = ${step.time_str}</b> (pluie : <b>${(step.rainfall_mmh || 0).toFixed(1)} mm/h</b> &bull; débit : <b>${(step.outflow_m3s || 0).toFixed(3)} m³/s</b>)`;
@@ -662,11 +768,6 @@
         if (state.intervalId) {
             clearInterval(state.intervalId);
             state.intervalId = null;
-        }
-
-        // Suspendre aussi le time slider
-        if (typeof window.timeSliderPause === 'function') {
-            window.timeSliderPause();
         }
 
         _syncHyetoPlayButton();
