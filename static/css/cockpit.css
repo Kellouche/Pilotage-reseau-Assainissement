@@ -1258,7 +1258,7 @@ body {
 /* Badge Map - Enveloppe de criticité (maximums observés sur toute l'événement) */
 .map-criticality-badge {
     position: absolute;
-    bottom: 20px;
+    top: 20px;
     right: 20px;
     z-index: 1100;
     background: rgba(245, 158, 11, 0.15);
@@ -1297,9 +1297,9 @@ body {
 .map-criticality-badge:hover::after {
     content: attr(title);
     position: absolute;
-    bottom: calc(100% + 8px);
+    top: calc(100% + 8px);
     right: 0;
-    transform: translateX(-50%);
+    transform: translateX(0%);
     background: rgba(15, 23, 42, 0.95);
     color: #f8fafc;
     padding: 10px 14px;
