@@ -667,8 +667,11 @@ def run_native_swmm_simulation(
                 station_id=payload.station_id or "chlef_anrh_siege",
             )
             payload.scenario_key = "bms_alerte"
-            if payload.duree_heures is None:
-                payload.duree_heures = scenario_bms_dict["duree_heures"]
+            # Durée de simulation = durée BMS + marge de 3h pour propagation onde de crue jusqu'à l'exutoire
+            bms_duree = scenario_bms_dict.get("duree_bms_heures", scenario_bms_dict.get("duree_heures", 3.0))
+            min_sim_duration = bms_duree + 3.0
+            if payload.duree_heures is None or payload.duree_heures < min_sim_duration:
+                payload.duree_heures = min_sim_duration
             if payload.intensite_max_mmh is None:
                 payload.intensite_max_mmh = scenario_bms_dict["intensite_max_defaut"]
 
@@ -691,6 +694,21 @@ def run_native_swmm_simulation(
         resultat["source_gpkg"] = str(gpkg_path.resolve())
         resultat["project_name"] = project_name or gpkg_path.stem
         resultat["param_hash"] = param_hash
+
+        # Corriger peak_outflow_m3s depuis les séries temporelles si le RPT donne 0.0
+        # (cas où la durée de simulation est trop courte pour capturer le pic à l'exutoire)
+        ts = resultat.get("timeseries")
+        if ts and ts.get("status") == "SUCCESS" and ts.get("peak_outflow_m3s", 0.0) > 0:
+            rpt_peak = resultat.get("peak_outflow_m3s", 0.0)
+            ts_peak = ts.get("peak_outflow_m3s", 0.0)
+            if rpt_peak == 0.0 or ts_peak > rpt_peak:
+                logger.info(f"Correction peak_outflow_m3s: RPT={rpt_peak:.3f} -> Timeseries={ts_peak:.3f} m³/s")
+                resultat["peak_outflow_m3s"] = ts_peak
+                resultat["peak_time_str"] = ts.get("peak_time")
+                # Corriger aussi les KPIs dérivés
+                resultat["q_exutoire_m3s"] = round(ts_peak, 3)
+                resultat["q_genere_m3s"] = round(ts_peak + resultat.get("q_deleste_m3s", 0.0), 3)
+
         _DERNIERE_SIMULATION = resultat
 
         # 5. Persistance sur disque et en base de données SQLite

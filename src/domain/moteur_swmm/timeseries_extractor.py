@@ -109,6 +109,7 @@ def enrichir_timeseries_pluie(ts: Dict[str, Any], sim_data: Dict[str, Any]) -> D
     et les métriques hydrologiques (peak_rainfall_mmh, lag_time_minutes, volumes, runoff_coefficient).
     Si ces données sont absentes (cas des simulations en cache historique), elles sont reconstituées
     dynamiquement à partir du scénario de pluie et de la surface du bassin versant.
+    Gère aussi les scénarios BMS dont l'hyétogramme est déjà dans meta.bms_info.
     """
     if not ts or ts.get("status") != "SUCCESS" or not ts.get("steps"):
         return ts
@@ -120,29 +121,65 @@ def enrichir_timeseries_pluie(ts: Dict[str, Any], sim_data: Dict[str, Any]) -> D
         return ts
 
     meta = sim_data.get("meta", {}) if isinstance(sim_data, dict) else {}
-    from src.domain.moteur_swmm.constants import SCENARIOS_PLUIE
 
-    # 1. Identifier le scénario et l'intensité maximale de référence
-    scen_key = meta.get("pluvio_scenario_key") or "pluie_decennale"
-    if scen_key not in SCENARIOS_PLUIE:
-        scen_key = "pluie_decennale"
-    scen = SCENARIOS_PLUIE[scen_key]
+    # 1. Détection scénario BMS : l'hyétogramme est dans meta.bms_info ou meta.bms_metadata
+    bms_meta = meta.get("bms_info") or meta.get("bms_metadata")
+    is_bms = bool(bms_meta and bms_meta.get("is_bms"))
 
-    intensite_max = float(meta.get("pluvio_intensite_max_mmh") or meta.get("intensite_max_mmh") or scen.get("intensite_max_defaut", 62.0))
-    ts_base = scen.get("timeseries", [("00:00", 0.0), ("01:00", 62.0), ("04:00", 0.0)])
-    max_base = max((v for _, v in ts_base), default=62.0)
-    scale = (intensite_max / max_base) if max_base > 0 else 1.0
+    if is_bms:
+        # Utiliser l'hyétogramme BMS original stocké dans le scénario
+        # Il faut le récupérer depuis l'inp ou le reconstruire depuis bms_metadata
+        # Pour l'instant, reconstruire depuis bms_metadata
+        cumul_mm = float(bms_meta.get("cumul_mm", 30.0))
+        duree_h = float(bms_meta.get("duree_heures", 14.0))
+        type_profil = bms_meta.get("type_profil", "cloche")
+        heure_debut = bms_meta.get("heure_debut", "07:00")
+        heure_fin = bms_meta.get("heure_fin", "21:00")
 
-    # Construire la liste de points (minute, intensite_mmh)
-    ts_points = []
-    for t_str, v in ts_base:
-        try:
-            parts = t_str.split(":")
-            m = int(parts[0]) * 60 + int(parts[1])
-            ts_points.append((m, round(float(v) * scale, 2)))
-        except Exception:
-            pass
-    ts_points.sort(key=lambda x: x[0])
+        from src.domain.bms_module import generer_hyetogramme_bms, calculer_duree_heures
+        if duree_h <= 0:
+            duree_h = calculer_duree_heures(heure_debut, heure_fin)
+
+        ts_base_raw, i_max = generer_hyetogramme_bms(
+            cumul_pluie_mm=cumul_mm,
+            duree_heures=duree_h,
+            type_profil=type_profil,
+            pas_minutes=15
+        )
+        # ts_base_raw est List[Tuple[str, float]] avec format HH:MM
+        # Convertir en minutes
+        ts_points = []
+        for t_str, val in ts_base_raw:
+            try:
+                parts = t_str.split(":")
+                m = int(parts[0]) * 60 + int(parts[1])
+                ts_points.append((m, float(val)))
+            except Exception:
+                pass
+        ts_points.sort(key=lambda x: x[0])
+        intensite_max = i_max
+    else:
+        # Scénario legacy (ANRH Montana etc.)
+        from src.domain.moteur_swmm.constants import SCENARIOS_PLUIE
+        scen_key = meta.get("pluvio_scenario_key") or "pluie_decennale"
+        if scen_key not in SCENARIOS_PLUIE:
+            scen_key = "pluie_decennale"
+        scen = SCENARIOS_PLUIE[scen_key]
+
+        intensite_max = float(meta.get("pluvio_intensite_max_mmh") or meta.get("intensite_max_mmh") or scen.get("intensite_max_defaut", 62.0))
+        ts_base = scen.get("timeseries", [("00:00", 0.0), ("01:00", 62.0), ("04:00", 0.0)])
+        max_base = max((v for _, v in ts_base), default=62.0)
+        scale = (intensite_max / max_base) if max_base > 0 else 1.0
+
+        ts_points = []
+        for t_str, v in ts_base:
+            try:
+                parts = t_str.split(":")
+                m = int(parts[0]) * 60 + int(parts[1])
+                ts_points.append((m, round(float(v) * scale, 2)))
+            except Exception:
+                pass
+        ts_points.sort(key=lambda x: x[0])
 
     # 2. Remplir rainfall_mmh pour chaque pas échantillonné
     steps = ts["steps"]
