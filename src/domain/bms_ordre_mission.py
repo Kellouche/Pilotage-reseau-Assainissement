@@ -19,11 +19,49 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
 
 
+def _detecter_adresse_intervention(
+    simulation_data: Dict[str, Any],
+    bassin: str
+) -> str:
+    """
+    Détecte automatiquement l'adresse d'intervention depuis les données de simulation.
+    Priorité : regard inondé > regard en charge > nom du bassin.
+    """
+    meta = simulation_data.get("meta", {}) if isinstance(simulation_data, dict) else {}
+
+    # 1. Regard inondé (priorité absolue)
+    flooded_nodes = simulation_data.get("flooded_nodes", []) if isinstance(simulation_data, dict) else []
+    if flooded_nodes:
+        for fn in flooded_nodes[:3]:
+            if isinstance(fn, dict):
+                node_id = fn.get("node") or fn.get("name") or ""
+                if node_id:
+                    return f"Bassin {bassin} — Regard {node_id} (débordement)"
+            elif isinstance(fn, str):
+                return f"Bassin {bassin} — Regard {fn} (débordement)"
+
+    # 2. Regard en charge (surcharge hydraulique)
+    node_results = simulation_data.get("node_results", {}) if isinstance(simulation_data, dict) else {}
+    if isinstance(node_results, dict):
+        for nid, ninfo in node_results.items():
+            if isinstance(ninfo, dict) and ninfo.get("status") == "surcharged":
+                return f"Bassin {bassin} — Regard {nid} (mise en charge)"
+
+    # 3. Conduite surchargée
+    conduit_results = simulation_data.get("conduit_results", {}) if isinstance(simulation_data, dict) else {}
+    if isinstance(conduit_results, dict):
+        for cid, cinfo in conduit_results.items():
+            if isinstance(cinfo, dict) and cinfo.get("flow_ratio", 0) >= 1.0:
+                return f"Bassin {bassin} — Conduite {cid} (surcharge Q/Qmax ≥ 100%)"
+
+    # 4. Fallback : nom du bassin seul
+    return f"Bassin {bassin}"
+
+
 def generer_pdf_ordre_mission_bms(
     simulation_data: Dict[str, Any],
     bms_info: Optional[Dict[str, Any]] = None,
-    nom_bassin: Optional[str] = None,
-    adresse: Optional[str] = None
+    nom_bassin: Optional[str] = None
 ) -> bytes:
     """
     Génère un ordre de mission terrain officiel (PDF) pour les équipes d'astreinte de l'ONA
@@ -124,7 +162,8 @@ def generer_pdf_ordre_mission_bms(
     duree_h = bms.get("duree_heures") or 14.0
     date_texte = bms.get("date_texte") or datetime.now().strftime("%d/%m/%Y")
     bassin = nom_bassin or simulation_data.get("meta", {}).get("bassin_nom") or "Bassin versant urbain"
-    adresse_texte = adresse or simulation_data.get("meta", {}).get("adresse") or bms.get("adresse") or ""
+    # Détection automatique de l'adresse d'intervention depuis les données de simulation
+    adresse_texte = _detecter_adresse_intervention(simulation_data, bassin)
 
     vig_color = colors.HexColor('#ea580c') if vigilance == "ORANGE" else (
         colors.HexColor('#dc2626') if vigilance == "ROUGE" else colors.HexColor('#ca8a04')

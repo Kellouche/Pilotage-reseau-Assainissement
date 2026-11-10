@@ -1127,7 +1127,6 @@ def download_latest_rpt(
 @router.get("/bms/ordre-mission-pdf")
 def telecharger_ordre_mission_bms_pdf(
     cluster_id: Optional[str] = None,
-    adresse: Optional[str] = None,
     db: Session = Depends(get_db),
     tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
 ):
@@ -1151,8 +1150,7 @@ def telecharger_ordre_mission_bms_pdf(
     pdf_bytes = generer_pdf_ordre_mission_bms(
         simulation_data=sim_data,
         bms_info=bms_info,
-        nom_bassin=nom_bassin,
-        adresse=adresse
+        nom_bassin=nom_bassin
     )
 
     bassin_slug = re.sub(r'[^\w\-]+', '_', nom_bassin)[:30].strip('_') or "reseau"

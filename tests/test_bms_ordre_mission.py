@@ -37,8 +37,7 @@ def test_generer_pdf_ordre_mission_bms_succes():
     pdf_bytes = generer_pdf_ordre_mission_bms(
         simulation_data=simulation_data,
         bms_info=bms_info,
-        nom_bassin="Bassin Versant Centre Chlef",
-        adresse="Rue des Jardins, 13000 Chlef, Algérie"
+        nom_bassin="Bassin Versant Centre Chlef"
     )
 
     assert isinstance(pdf_bytes, bytes)
@@ -46,13 +45,47 @@ def test_generer_pdf_ordre_mission_bms_succes():
     assert pdf_bytes.startswith(b"%PDF-")
 
 
+def test_detecter_adresse_intervention_regard_inonde():
+    """Vérifie que l'adresse détectée priorise un regard inondé."""
+    from src.domain.bms_ordre_mission import _detecter_adresse_intervention
+    sim_data = {
+        "flooded_nodes": [{"node": "J_102", "peak_flood_flow_cms": 0.42}],
+        "meta": {"bassin_nom": "Bassin Versant Centre Chlef"}
+    }
+    adresse = _detecter_adresse_intervention(sim_data, "Bassin Versant Centre Chlef")
+    assert "J_102" in adresse
+    assert "débordement" in adresse
+
+
+def test_detecter_adresse_intervention_regard_surcharge():
+    """Vérifie que l'adresse détectée utilise un regard en charge si pas d'inondation."""
+    from src.domain.bms_ordre_mission import _detecter_adresse_intervention
+    sim_data = {
+        "node_results": {
+            "J_108": {"status": "surcharged"},
+            "J_110": {"status": "surcharged"}
+        },
+        "meta": {"bassin_nom": "Bassin Versant Centre Chlef"}
+    }
+    adresse = _detecter_adresse_intervention(sim_data, "Bassin Versant Centre Chlef")
+    assert "J_108" in adresse
+    assert "mise en charge" in adresse
+
+
+def test_detecter_adresse_intervention_fallback_bassin():
+    """Vérifie que le fallback utilise le nom du bassin."""
+    from src.domain.bms_ordre_mission import _detecter_adresse_intervention
+    sim_data = {"meta": {"bassin_nom": "Bassin Versant Centre Chlef"}}
+    adresse = _detecter_adresse_intervention(sim_data, "Bassin Versant Centre Chlef")
+    assert "Bassin Versant Centre Chlef" in adresse
+
+
 def test_generer_pdf_ordre_mission_bms_donnees_vides():
     """Vérifie que la fonction gère gracieusement les données minimales ou vides."""
     pdf_bytes = generer_pdf_ordre_mission_bms(
         simulation_data={},
         bms_info=None,
-        nom_bassin=None,
-        adresse=None
+        nom_bassin=None
     )
     assert isinstance(pdf_bytes, bytes)
     assert pdf_bytes.startswith(b"%PDF-")

@@ -580,10 +580,7 @@ window.dessinerRaccordementsOrphelinsSurCarte = function() {
         };
 
         window.telechargerOrdreMissionTerrain = function() {
-            const adresseEl = document.getElementById('sim-bms-adresse');
-            const adresse = adresseEl ? adresseEl.value.trim() : '';
-            const url = '/api/v1/simulations/bms/ordre-mission-pdf' + (adresse ? '?adresse=' + encodeURIComponent(adresse) : '');
-            window.location.href = url;
+            window.location.href = '/api/v1/simulations/bms/ordre-mission-pdf';
         };
 
         window.basculerInfobulleBMS = function(event) {
