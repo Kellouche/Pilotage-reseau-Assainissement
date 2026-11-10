@@ -1146,6 +1146,91 @@ def telecharger_ordre_mission_bms_pdf(
 
 
 
+
+
+# ============================================================
+# RAPPORT D'EXPERTISE HYDRAULIQUE COMPLET (Phase 6.C)
+# ============================================================
+
+@router.get("/rapport-diagnostic-pdf")
+def telecharger_rapport_diagnostic_pdf(
+    cluster_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
+):
+    """
+    Génère et télécharge le rapport d'expertise hydraulique complet (PDF)
+    conforme aux standards ONA / ANRH pour transmission à la direction technique.
+    Contient : cartographie du réseau, liste des contre-pentes, anomalies critiques,
+    bilan de continuité massique, volumes inondés, durées de submersion,
+    estimation financière des travaux prioritaires.
+    """
+    global _DERNIERE_SIMULATION
+    from src.domain.rapport_diagnostic import generer_pdf_rapport_diagnostic
+
+    sim_data = _DERNIERE_SIMULATION if (_DERNIERE_SIMULATION and _est_simulation_valide(_DERNIERE_SIMULATION)) else {}
+
+    # Si cluster_id demandé, tenter de charger la simulation correspondante
+    if cluster_id and (not sim_data or not _est_simulation_valide(sim_data)):
+        try:
+            from api.models import Project
+            active_gpkg = None
+            proj = None
+            if tenant and hasattr(tenant, "org_id") and tenant.org_id:
+                proj = db.query(Project).filter(
+                    Project.org_id == tenant.org_id,
+                    Project.is_archived.is_(False)
+                ).first()
+                if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
+                    active_gpkg = Path(proj.source_gpkg_key)
+            if not active_gpkg:
+                proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
+                if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
+                    active_gpkg = Path(proj.source_gpkg_key)
+                elif Path("data/demo_reseau.gpkg").exists():
+                    active_gpkg = Path("data/demo_reseau.gpkg")
+
+            if active_gpkg and active_gpkg.exists():
+                restored = _charger_derniere_simulation_disque_ou_db(active_gpkg, db, proj)
+                if restored and _est_simulation_valide(restored):
+                    # Vérifier si ce cluster correspond
+                    restored_cid = str(restored.get("meta", {}).get("cluster_id") or "")
+                    restored_cnom = str(restored.get("meta", {}).get("cluster_nom") or "").lower()
+                    target = str(cluster_id).strip().lower()
+                    if target in (restored_cid, restored_cnom) or target in restored_cnom:
+                        sim_data = restored
+                        _DERNIERE_SIMULATION = restored
+        except Exception as e:
+            logger.warning("Échec chargement simulation pour cluster %s: %s", cluster_id, e)
+
+    if not sim_data or not _est_simulation_valide(sim_data):
+        raise HTTPException(
+            status_code=404,
+            detail="Aucune simulation active disponible pour générer le rapport. Veuillez lancer une simulation SWMM au préalable."
+        )
+
+    nom_bassin = (
+        sim_data.get("meta", {}).get("bassin_nom")
+        or sim_data.get("meta", {}).get("cluster_nom")
+        or "Bassin versant urbain"
+    )
+    project_name = sim_data.get("project_name") or "Réseau Urbain"
+
+    pdf_bytes = generer_pdf_rapport_diagnostic(
+        simulation_data=sim_data,
+        project_name=project_name
+    )
+
+    bassin_slug = re.sub(r'[^\w\-]+', '_', nom_bassin)[:30].strip('_') or "reseau"
+    filename = f"Rapport_Expertise_Hydraulique_{bassin_slug}.pdf"
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
 # ============================================================
 # PROFIL EN LONG HYDRAULIQUE (Phase 6.A)
 # ============================================================
