@@ -789,6 +789,11 @@ body {
     font-size: 0.8rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     padding-bottom: 6px;
+    cursor: grab;
+}
+
+.time-slider-header:active {
+    cursor: grabbing;
 }
 
 .time-slider-title {

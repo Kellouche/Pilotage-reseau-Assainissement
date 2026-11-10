@@ -83,6 +83,9 @@ function toggleTimeSlider(forceState) {
         if (panel) panel.style.display = 'flex';
         if (btn) btn.classList.add('active');
 
+        // Initialiser le déplacement du panneau (comme hyeto-hydro)
+        _initTimeSliderDraggable();
+
         // Masquer le badge "Enveloppe de criticité" pendant l'animation
         const badgeCrit = document.getElementById('map-criticality-badge');
         if (badgeCrit) {
@@ -586,4 +589,43 @@ document.addEventListener('keydown', (e) => {
         }
     }
 });
+
+/**
+ * Initialise le déplacement à la souris (Draggable) du panneau Time Slider
+ */
+function _initTimeSliderDraggable() {
+    const panel = document.getElementById('panel-time-slider');
+    const handle = document.getElementById('time-slider-drag-handle');
+    if (!panel || !handle || panel._draggableInitDone) return;
+
+    panel._draggableInitDone = true;
+    let startX, startY, origX, origY;
+
+    handle.addEventListener('mousedown', (e) => {
+        if (e.target.closest('button') || e.target.closest('.badge-pill')) return;
+        e.preventDefault();
+        startX = e.clientX;
+        startY = e.clientY;
+        origX = panel.offsetLeft;
+        origY = panel.offsetTop;
+
+        const onMouseMove = (ev) => {
+            const dx = ev.clientX - startX;
+            const dy = ev.clientY - startY;
+            panel.style.left = `${origX + dx}px`;
+            panel.style.top = `${origY + dy}px`;
+            panel.style.right = 'auto';
+            panel.style.bottom = 'auto';
+            panel.style.transform = 'none';
+        };
+
+        const onMouseUp = () => {
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+        };
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+    });
+}
 
