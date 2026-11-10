@@ -12,6 +12,16 @@ function chargerDonneesInitiales() {
             // Montrer l'overlay de chargement
             montrerChargement(true);
 
+            // === NETTOYAGE : sauvegarder l'état du réseau courant et tout vider ===
+            const reseauActuel = (window._rawNetworkData && window._rawNetworkData.project_name)
+                ? window._rawNetworkData.project_name
+                : (window._dernierResultatSimulation && window._dernierResultatSimulation.meta
+                    ? (window._dernierResultatSimulation.meta.project_name || window._dernierResultatSimulation.meta.cluster_nom || window._dernierResultatSimulation.meta.cluster_id)
+                    : null);
+            if (reseauActuel) {
+                window.nettoyerEtatReseau(reseauActuel);
+            }
+
             // Réinitialiser systématiquement l'affichage et les caches de données du modèle précédent
             if (typeof reinitialiserAffichageSimulation === 'function') {
                 reinitialiserAffichageSimulation();
@@ -41,6 +51,11 @@ function chargerDonneesInitiales() {
                     if (d.project_name) {
                         const lbl = document.getElementById('topbar-project-label');
                         if (lbl) lbl.textContent = d.project_name;
+                    }
+
+                    // Restaurer l'état du bureau (positions panneaux, toolbar, légende) pour ce réseau
+                    if (d.project_name) {
+                        window.restaurerEtatBureau(d.project_name);
                     }
 
                     // Vider les couches précédentes
@@ -463,3 +478,229 @@ if (document.readyState === 'loading') {
 } else {
     initDraggableToolbar();
 }
+
+// ==========================================
+// GESTION DE L'ÉTAT DU BUREAU PAR RÉSEAU
+// Sauvegarde/restauration des positions de panneaux,
+// état de la toolbar, légende et badges.
+// ==========================================
+
+window.etatBureau = window.etatBureau || {};
+
+/**
+ * Sauvegarde l'état complet du bureau (positions, visibilité, toolbar, légende)
+ * pour un réseau donné, avant nettoyage/changement.
+ */
+window.sauvegarderEtatBureau = function(reseauId) {
+    if (!reseauId) return;
+
+    const etat = {
+        timestamp: Date.now(),
+        panels: {},
+        floatingLegend: null,
+        toolbar: null
+    };
+
+    // Panneau hyéto-hydro
+    const hyetoPanel = document.getElementById('panel-hyeto-hydro');
+    if (hyetoPanel) {
+        const r = hyetoPanel.getBoundingClientRect();
+        etat.panels.hyetoHydro = {
+            visible: hyetoPanel.style.display !== 'none',
+            x: r.left, y: r.top, w: r.width, h: r.height
+        };
+    }
+
+    // Panneau time slider
+    const tsPanel = document.getElementById('panel-time-slider');
+    if (tsPanel) {
+        const r = tsPanel.getBoundingClientRect();
+        etat.panels.timeSlider = {
+            visible: tsPanel.style.display !== 'none',
+            x: r.left, y: r.top, w: r.width, h: r.height
+        };
+    }
+
+    // Panneau profil en long
+    const plPanel = document.querySelector('.profil-long-container');
+    if (plPanel) {
+        const r = plPanel.getBoundingClientRect();
+        etat.panels.profilLong = {
+            visible: plPanel.style.display !== 'none',
+            x: r.left, y: r.top, w: r.width, h: r.height
+        };
+    }
+
+    // Toolbar d'édition
+    const toolbar = document.getElementById('main-edit-toolbar');
+    if (toolbar) {
+        const r = toolbar.getBoundingClientRect();
+        etat.toolbar = {
+            visible: toolbar.style.display !== 'none',
+            collapsed: toolbar.classList.contains('collapsed'),
+            x: r.left, y: r.top
+        };
+    }
+
+    // Légende flottante
+    const leg = document.getElementById('sim-floating-legend');
+    if (leg) {
+        etat.floatingLegend = {
+            visible: leg.classList.contains('active-legend') && leg.style.display !== 'none'
+        };
+    }
+
+    window.etatBureau[reseauId] = etat;
+};
+
+/**
+ * Restaure l'état du bureau (positions, visibilité, toolbar, légende)
+ * pour un réseau donné.
+ */
+window.restaurerEtatBureau = function(reseauId) {
+    if (!reseauId || !window.etatBureau[reseauId]) return;
+
+    const etat = window.etatBureau[reseauId];
+
+    // Restaurer hyéto-hydro
+    if (etat.panels && etat.panels.hyetoHydro) {
+        const panel = document.getElementById('panel-hyeto-hydro');
+        if (panel) {
+            panel.style.display = etat.panels.hyetoHydro.visible ? 'flex' : 'none';
+            if (etat.panels.hyetoHydro.x !== undefined) {
+                panel.style.left = etat.panels.hyetoHydro.x + 'px';
+                panel.style.top = etat.panels.hyetoHydro.y + 'px';
+                panel.style.right = 'auto';
+                panel.style.bottom = 'auto';
+            }
+        }
+    }
+
+    // Restaurer time slider
+    if (etat.panels && etat.panels.timeSlider) {
+        const panel = document.getElementById('panel-time-slider');
+        if (panel) {
+            panel.style.display = etat.panels.timeSlider.visible ? 'flex' : 'none';
+            if (etat.panels.timeSlider.x !== undefined) {
+                panel.style.left = etat.panels.timeSlider.x + 'px';
+                panel.style.top = etat.panels.timeSlider.y + 'px';
+                panel.style.right = 'auto';
+                panel.style.bottom = 'auto';
+            }
+        }
+    }
+
+    // Restaurer profil en long
+    if (etat.panels && etat.panels.profilLong) {
+        const panel = document.querySelector('.profil-long-container');
+        if (panel) {
+            panel.style.display = etat.panels.profilLong.visible ? 'flex' : 'none';
+            if (etat.panels.profilLong.x !== undefined) {
+                panel.style.left = etat.panels.profilLong.x + 'px';
+                panel.style.top = etat.panels.profilLong.y + 'px';
+                panel.style.right = 'auto';
+                panel.style.bottom = 'auto';
+            }
+        }
+    }
+
+    // Restaurer toolbar
+    if (etat.toolbar) {
+        const toolbar = document.getElementById('main-edit-toolbar');
+        if (toolbar) {
+            toolbar.style.display = etat.toolbar.visible ? 'block' : 'none';
+            if (etat.toolbar.collapsed) toolbar.classList.add('collapsed');
+            else toolbar.classList.remove('collapsed');
+            const icon = document.getElementById('icon-collapse-toolbar');
+            if (icon) icon.className = etat.toolbar.collapsed ? 'fas fa-chevron-right' : 'fas fa-chevron-left';
+            if (etat.toolbar.x !== undefined) {
+                toolbar.style.left = etat.toolbar.x + 'px';
+                toolbar.style.top = etat.toolbar.y + 'px';
+                toolbar.style.right = 'auto';
+            }
+        }
+    }
+
+    // Restaurer légende flottante
+    if (etat.floatingLegend !== null) {
+        const leg = document.getElementById('sim-floating-legend');
+        if (leg) {
+            if (etat.floatingLegend.visible) {
+                leg.style.display = 'block';
+                leg.classList.add('active-legend');
+            } else {
+                leg.style.display = 'none';
+                leg.classList.remove('active-legend');
+            }
+        }
+    }
+};
+
+/**
+ * Nettoie l'état du réseau avant chargement d'un nouveau réseau.
+ * Sauvegarde l'état courant, détruit les graphiques, vide les caches,
+ * masque toutes les couches de résultats.
+ */
+window.nettoyerEtatReseau = function(reseauId) {
+    // Sauvegarder l'état courant avant nettoyage
+    if (reseauId) window.sauvegarderEtatBureau(reseauId);
+
+    // Masquer immédiatement les couches de résultats SWMM
+    if (typeof reinitialiserAffichageSimulation === 'function') {
+        reinitialiserAffichageSimulation();
+    }
+
+    // Vider les caches de simulation et de données
+    window._dernierResultatSimulation = null;
+    window._clustersData = null;
+    window._bassinNoms = {};
+    window._bassinBounds = {};
+    window._selectedClusterId = null;
+    window._simulationsCache = {};
+
+    // Détruire les graphiques Chart.js pour libérer la mémoire et éviter les courbes fantômes
+    if (window.hyetoHydroState && window.hyetoHydroState.chartInstance) {
+        try { window.hyetoHydroState.chartInstance.destroy(); } catch(e) {}
+        window.hyetoHydroState.chartInstance = null;
+    }
+    if (window.timeSliderState && window.timeSliderState.chartInstance) {
+        try { window.timeSliderState.chartInstance.destroy(); } catch(e) {}
+        window.timeSliderState.chartInstance = null;
+    }
+
+    // Nettoyer marqueurs de débordement radar
+    if (typeof _nettoyerRadarDebordement === 'function') {
+        _nettoyerRadarDebordement();
+    }
+
+    // Masquer les badges d'interface
+    const badgeCrit = document.getElementById('map-criticality-badge');
+    if (badgeCrit) badgeCrit.classList.add('hidden');
+    const badgeInstant = document.getElementById('badge-instant-state');
+    if (badgeInstant) badgeInstant.classList.add('hidden');
+
+    // Réinitialiser la toolbar (déplier)
+    const toolbar = document.getElementById('main-edit-toolbar');
+    if (toolbar) toolbar.classList.remove('collapsed');
+    const icon = document.getElementById('icon-collapse-toolbar');
+    if (icon) icon.className = 'fas fa-chevron-left';
+
+    // Masquer la légende flottante
+    const leg = document.getElementById('sim-floating-legend');
+    if (leg) {
+        leg.style.display = 'none';
+        leg.classList.remove('active-legend');
+    }
+
+    // Vider toutes les couches Leaflet de résultats et physiques
+    if (typeof clusterCouche !== 'undefined' && clusterCouche) clusterCouche.clearLayers();
+    if (typeof _activeClusterLayer !== 'undefined' && _activeClusterLayer) _activeClusterLayer.clearLayers();
+    if (typeof couches !== 'undefined') {
+        Object.values(couches).forEach(l => l.clearLayers());
+    }
+
+    // Vider les raccordements orphelins
+    if (window._coucheRaccordementsOrphelins) {
+        try { window._coucheRaccordementsOrphelins.clearLayers(); } catch(e) {}
+    }
+};
