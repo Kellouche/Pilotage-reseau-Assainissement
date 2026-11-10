@@ -43,6 +43,18 @@ function toggleTimeSlider(forceState) {
         if (panel) panel.style.display = 'none';
         if (btn) btn.classList.remove('active');
 
+        // Masquer le badge "État à l'instant T"
+        const badgeInstant = document.getElementById('badge-instant-state');
+        if (badgeInstant) {
+            badgeInstant.classList.add('hidden');
+        }
+
+        // Rétablir le badge "Enveloppe de criticité" sur la carte
+        const badgeCrit = document.getElementById('map-criticality-badge');
+        if (badgeCrit && window._dernierResultatSimulation) {
+            badgeCrit.classList.remove('hidden');
+        }
+
         // Nettoyer les marqueurs de débordement radar
         _nettoyerRadarDebordement();
 
@@ -70,6 +82,12 @@ function toggleTimeSlider(forceState) {
         state.active = true;
         if (panel) panel.style.display = 'flex';
         if (btn) btn.classList.add('active');
+
+        // Masquer le badge "Enveloppe de criticité" pendant l'animation
+        const badgeCrit = document.getElementById('map-criticality-badge');
+        if (badgeCrit) {
+            badgeCrit.classList.add('hidden');
+        }
 
         // Afficher le badge "État hydraulique à l'instant T" dans l'en-tête du player
         const badgeInstant = document.getElementById('badge-instant-state');

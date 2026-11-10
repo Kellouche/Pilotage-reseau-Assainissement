@@ -43,8 +43,10 @@
             }
 
             // Afficher le badge "Enveloppe de criticité" sur la carte (maximums observés)
+// Seulement si le player temporel n'est pas ouvert
             const badgeCrit = document.getElementById('map-criticality-badge');
-            if (badgeCrit) {
+            const tsActive = window.timeSliderState && window.timeSliderState.active;
+            if (badgeCrit && !tsActive) {
                 badgeCrit.classList.remove('hidden');
             }
 
