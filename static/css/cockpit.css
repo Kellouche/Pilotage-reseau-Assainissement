@@ -1070,7 +1070,7 @@ body {
     width: 820px;
     height: 480px;
     max-width: calc(100vw - 360px);
-    max-height: calc(100vh - 100px);
+    max-height: 480px;
     background: rgba(15, 23, 42, 0.96);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
