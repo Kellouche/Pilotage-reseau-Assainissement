@@ -15,6 +15,12 @@ Objet : Contrôleur temporel de l'onde de crue (Time Slider - Phase 6.B)
             <i class="fas fa-wave-square" style="color: #f59e0b; margin-right: 6px;"></i>
             <span>Propagation temporelle de l'onde de crue</span>
             <span id="badge-time-status" class="badge-ts badge-info">Prêt</span>
+            <!-- Badge État hydraulique à l'instant T -->
+            <span id="badge-instant-state" class="player-instant-badge hidden"
+                  title="Cette vue représente l'état réel du réseau au temps courant de la simulation. Les couleurs, débits, surcharges et débordements correspondent uniquement à cet instant.">
+                <span class="badge-icon">🔵</span>
+                <span class="badge-label">État hydraulique à l'instant T</span>
+            </span>
         </div>
         <div class="time-slider-kpis">
             <span class="ts-kpi-pill">

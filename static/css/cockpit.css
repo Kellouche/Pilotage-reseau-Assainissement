@@ -1249,3 +1249,119 @@ body {
 
 
 
+/* ==========================================================================
+   BADGES D'INFORMATION : ENVELOPPE DE CRITICITÉ vs ÉTAT À L'INSTANT T
+   Objectif : Distinguer clairement la vue synthétique (maximums) de la vue
+   dynamique (état à l'instant T). Purement UI/UX, aucun impact sur les calculs.
+   ========================================================================== */
+
+/* Badge Map - Enveloppe de criticité (maximums observés sur toute l'événement) */
+.map-criticality-badge {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1100;
+    background: rgba(245, 158, 11, 0.15);
+    border: 1px solid #f59e0b;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-family: 'Inter', 'Plus Jakarta Sans', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #b45309;
+    max-width: 320px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: help;
+    user-select: none;
+}
+
+.map-criticality-badge .badge-icon {
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.map-criticality-badge .badge-label {
+    white-space: nowrap;
+}
+
+.map-criticality-badge .badge-subtitle {
+    font-size: 0.68rem;
+    opacity: 0.85;
+    white-space: nowrap;
+}
+
+/* Tooltip pour le badge map */
+.map-criticality-badge:hover::after {
+    content: attr(title);
+    position: absolute;
+    bottom: calc(100% + 8px);
+    right: 0;
+    transform: translateX(-50%);
+    background: rgba(15, 23, 42, 0.95);
+    color: #f8fafc;
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    max-width: 420px;
+    z-index: 9999;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    pointer-events: none;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+/* Badge Player - État hydraulique à l'instant T */
+.player-instant-badge {
+    background: rgba(56, 189, 248, 0.15);
+    border: 1px solid #38bdf8;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-family: 'Inter', 'Plus Jakarta Sans', sans-serif;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #0369a1;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    cursor: help;
+    user-select: none;
+    margin-right: 12px;
+}
+
+.player-instant-badge .badge-icon {
+    font-size: 0.9rem;
+    line-height: 1;
+}
+
+/* Tooltip pour le badge player */
+.player-instant-badge:hover::after {
+    content: attr(title);
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    background: rgba(15, 23, 42, 0.95);
+    color: #f8fafc;
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    max-width: 420px;
+    z-index: 9999;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    pointer-events: none;
+    border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+/* Cache les badges par défaut (affichés uniquement quand une simulation est active) */
+.map-criticality-badge.hidden,
+.player-instant-badge.hidden {
+    display: none !important;
+}
+
+
+
