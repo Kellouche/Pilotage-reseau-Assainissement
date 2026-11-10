@@ -94,6 +94,11 @@ function toggleTimeSlider(forceState) {
         if (panel) panel.style.display = 'flex';
         if (btn) btn.classList.add('active');
 
+        // Forcer le redessin du canvas chart (nouvelle position en haut)
+        if (state.chartInstance) {
+            state.chartInstance.resize();
+        }
+
         // Initialiser le déplacement du panneau (comme hyeto-hydro)
         _initTimeSliderDraggable();
 
@@ -105,7 +110,10 @@ function toggleTimeSlider(forceState) {
 
         // Masquer la légende flottante pendant l'animation
         const leg = document.getElementById('sim-floating-legend');
-        if (leg) leg.style.display = 'none';
+        if (leg) {
+            leg.style.display = 'none';
+            leg.classList.remove('active-legend');
+        }
 
         // Replier la toolbar d'édition
         const toolbar = document.getElementById('main-edit-toolbar');
