@@ -297,6 +297,11 @@
 
         // Arrêter l'animation locale
         _hyetoPause();
+
+        // Restaurer la coloration standard SWMM de la simulation
+        if (window._dernierResultatSimulation && typeof afficherResultatsSimulation === 'function') {
+            afficherResultatsSimulation(window._dernierResultatSimulation);
+        }
     };
 
     /**
