@@ -286,51 +286,6 @@ function _mettreAJourMarqueurRegard(code, role) {
 }
 
 /**
- * Valide que nodeAmont est hydrauliquement en amont de nodeAval
- * en parcourant le graphe des conduits depuis les résultats de simulation
- */
-function _validerOrientationAmontAval(nodeAmont, nodeAval) {
-    if (!nodeAmont || !nodeAval) return { valide: false, message: 'Deux regards requis' };
-    if (nodeAmont === nodeAval) return { valide: false, message: 'Amont et aval doivent être différents' };
-
-    const sim = window._dernierResultatSimulation;
-    if (!sim || !sim.conduit_results) {
-        // Pas de données de simulation : on accepte mais on prévient
-        return { valide: true, message: 'Aucune donnée de simulation pour valider l\'orientation' };
-    }
-
-    const conduits = sim.conduit_results;
-    // Construire un ensemble d'arêtes dirigées : node_amont -> node_aval
-    const edges = new Set();
-    for (const cid of Object.keys(conduits)) {
-        const c = conduits[cid];
-        const nA = c.node_amont || c.node_amont_id || c.amont || c.from_node || c.node1;
-        const nV = c.node_aval || c.node_aval_id || c.aval || c.to_node || c.node2;
-        if (nA && nV) {
-            edges.add(`${String(nA).trim()}->${String(nV).trim()}`);
-        }
-    }
-
-    // Recherche BFS depuis nodeAmont vers nodeAval
-    const visited = new Set();
-    const queue = [nodeAmont];
-    visited.add(nodeAmont);
-    while (queue.length > 0) {
-        const current = queue.shift();
-        if (current === nodeAval) return { valide: true, message: 'Orientation valide' };
-        for (const edge of edges) {
-            const [src, dst] = edge.split('->');
-            if (src === current && !visited.has(dst)) {
-                visited.add(dst);
-                queue.push(dst);
-            }
-        }
-    }
-
-    return { valide: false, message: `Aucun chemin hydraulique de ${nodeAmont} vers ${nodeAval}. Vérifiez l'orientation amont → aval.` };
-}
-
-/**
  * Inverse les regards amont et aval
  */
 function inverserRegardsProfil() {
@@ -347,6 +302,7 @@ function inverserRegardsProfil() {
     if (inpB) inpB.value = a;
 
     // Mettre à jour les marqueurs carte
+    const state = window.profilLongState;
     if (state.markersLayer) state.markersLayer.clearLayers();
     if (a) _mettreAJourMarqueurRegard(b, 'amont');
     if (b) _mettreAJourMarqueurRegard(a, 'aval');
@@ -370,13 +326,6 @@ function rafraichirProfilLong() {
         return;
     }
 
-    // Validation hydraulique : vérifier que a est en amont de b
-    const validation = _validerOrientationAmontAval(a, b);
-    if (!validation.valide) {
-        alert(validation.message);
-        return;
-    }
-
     window.profilLongState.nodeAmont = a;
     window.profilLongState.nodeAval = b;
     chargerProfilLong(a, b);
@@ -387,16 +336,6 @@ function rafraichirProfilLong() {
  */
 function chargerProfilLong(nodeAmont, nodeAval) {
     const panel = document.getElementById('panel-profil-long');
-
-    // Validation de sécurité : vérifier l'orientation avant l'appel API
-    if (nodeAmont && nodeAval) {
-        const validation = _validerOrientationAmontAval(nodeAmont, nodeAval);
-        if (!validation.valide) {
-            alert(validation.message);
-            annulerSelectionProfil();
-            return;
-        }
-    }
 
     const url = `/api/v1/simulations/profil-en-long?node_amont=${encodeURIComponent(nodeAmont)}&node_aval=${encodeURIComponent(nodeAval)}`;
 

@@ -9,6 +9,8 @@ Objet : Tests automatisés du profil en long hydraulique interactif (Phase 6.A)
 """
 
 import os
+import subprocess
+import tempfile
 from pathlib import Path
 import pytest
 from fastapi import HTTPException
@@ -66,6 +68,55 @@ def test_profil_en_long_node_not_found():
         assert excinfo.value.status_code == 404
     finally:
         db.close()
+
+
+def test_profil_long_frontend_delegate_connectivite_a_l_api():
+    """Vérifie que la sélection de deux regards ne dépend pas d'un graphe
+    frontend incomplet : l'API reste l'autorité de routage hydraulique."""
+    js_path = Path("static/js/app/profil_long.js").resolve()
+    harness = r'''
+const fs = require('fs');
+const vm = require('vm');
+const sourcePath = process.argv[2];
+const source = fs.readFileSync(sourcePath, 'utf8');
+const fetchCalls = [];
+const sandbox = {
+    window: {
+        _dernierResultatSimulation: {
+            conduit_results: {
+                C_1: { link_id: 'C_1', u_node: '2288', d_node: '2287' }
+            }
+        }
+    },
+    document: { getElementById: () => null },
+    fetch: (url) => {
+        fetchCalls.push(url);
+        return new Promise(() => {});
+    },
+    alert: (message) => { throw new Error(`Alerte frontend inattendue : ${message}`); },
+    console
+};
+vm.createContext(sandbox);
+vm.runInContext(source, sandbox);
+sandbox.chargerProfilLong('2288', '2287');
+const expected = '/api/v1/simulations/profil-en-long?node_amont=2288&node_aval=2287';
+if (fetchCalls.length !== 1 || fetchCalls[0] !== expected) {
+    console.error(`Appel API inattendu : ${JSON.stringify(fetchCalls)}`);
+    process.exit(1);
+}
+'''
+    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as tf:
+        tf.write(harness)
+        tf_name = tf.name
+    try:
+        result = subprocess.run(
+            ["node", tf_name, str(js_path)],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr or result.stdout
+    finally:
+        os.remove(tf_name)
 
 
 def test_cockpit_includes_profil_long_components():
