@@ -22,7 +22,7 @@ Objet : Cockpit cartographique et SIG modulaire de simulation hydraulique SWMM 5
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <!-- Cockpit Custom CSS Dédié -->
-    <link rel="stylesheet" href="/static/css/cockpit.css?v=5.2.4">
+    <link rel="stylesheet" href="/static/css/cockpit.css?v=5.2.5">
 </head>
 <body>
     <!-- Overlay de verrouillage simulation -->
@@ -34,6 +34,12 @@ Objet : Cockpit cartographique et SIG modulaire de simulation hydraulique SWMM 5
     <div id="app-workspace">
         <!-- Panneau d'Ingénierie Latéral -->
         {% include "partials/sidebar_engineering.html" %}
+
+        <!-- Onglet de réouverture du panneau (visible quand replié) -->
+        <button id="btn-sidebar-reopen" onclick="basculeSidebarIngenierie()" title="Déplier le panneau d'ingénierie">
+            <i class="fas fa-angles-right"></i>
+            <span>Panneau</span>
+        </button>
 
         <!-- Barre d'outils d'édition hydraulique -->
         {% include "partials/toolbar_edit.html" %}
@@ -75,7 +81,7 @@ Objet : Cockpit cartographique et SIG modulaire de simulation hydraulique SWMM 5
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
     <!-- Modules Applicatifs JavaScript Découpés (<600 lignes) avec Cache-Busting -->
-    <script src="/static/js/app/common.js?v=5.2.5"></script>
+    <script src="/static/js/app/common.js?v=5.2.10"></script>
     <script src="/static/js/app/dessin_manuel.js?v=5.2.5"></script>
     <script src="/static/js/app/carte_reseau.js?v=5.2.9"></script>
     <script src="/static/js/app/bassins_detection.js?v=5.2.5"></script>

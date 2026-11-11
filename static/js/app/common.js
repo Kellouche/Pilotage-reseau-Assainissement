@@ -387,3 +387,27 @@
                 activerModeEdition('create');
             }
         };
+
+// ==========================================
+// PANNEAU D'INGÉNIERIE PLIABLE (style tiroir)
+// ==========================================
+window.basculeSidebarIngenierie = function() {
+    const ws = document.getElementById('app-workspace');
+    if (!ws) return;
+    const replie = ws.classList.toggle('sidebar-collapsed');
+    try { localStorage.setItem('drainpilot_sidebar_plie', replie ? '1' : '0'); } catch (e) {}
+    // Laisser la transition CSS se terminer avant de recalculer la carte
+    setTimeout(() => {
+        try { if (window.carte && window.carte.invalidateSize) window.carte.invalidateSize(true); } catch (e) {}
+        try { document.dispatchEvent(new Event('resize')); } catch (e) {}
+    }, 300);
+};
+
+(function initSidebarIngenierie() {
+    try {
+        if (localStorage.getItem('drainpilot_sidebar_plie') === '1') {
+            const ws = document.getElementById('app-workspace');
+            if (ws) ws.classList.add('sidebar-collapsed');
+        }
+    } catch (e) {}
+})();
