@@ -192,6 +192,7 @@ def _generer_carte_reseau_png(simulation_data: Dict[str, Any]) -> Optional[bytes
         import matplotlib.pyplot as plt
         from matplotlib.lines import Line2D
         from shapely.geometry import LineString, MultiLineString
+        from shapely.affinity import rotate as _rotate_geom
     except Exception:
         return None
 
@@ -216,6 +217,24 @@ def _generer_carte_reseau_png(simulation_data: Dict[str, Any]) -> Optional[bytes
             for c in conduit_results if isinstance(c, dict)
         }
 
+    # Rotation 90° (aucune déformation) quand le réseau est nettement plus
+    # haut que large : la carte occupe alors toute la largeur de la page paysage.
+    try:
+        b_reg, b_can = regards.total_bounds, canalisations.total_bounds
+        span_x_data = max(b_can[2] - b_can[0], b_reg[2] - b_reg[0], 1.0)
+        span_y_data = max(b_can[3] - b_can[1], b_reg[3] - b_reg[1], 1.0)
+    except Exception:
+        span_x_data = span_y_data = 1.0
+    rotation_90 = span_y_data > 1.15 * span_x_data
+
+    def _prep_geom(geom):
+        if rotation_90 and geom is not None and not geom.is_empty:
+            try:
+                return _rotate_geom(geom, -90, origin=(0.0, 0.0))
+            except Exception:
+                return geom
+        return geom
+
     fig, ax = plt.subplots(figsize=(11.5, 6.8), dpi=200)
     fig.patch.set_facecolor("white")
     ax.set_facecolor("#f8fafc")
@@ -224,15 +243,18 @@ def _generer_carte_reseau_png(simulation_data: Dict[str, Any]) -> Optional[bytes
     try:
         sous_bassins = gpd.read_file(gpkg_path, layer="sous_bassins")
         if not sous_bassins.empty:
-            sous_bassins.plot(ax=ax, color="#dbeafe", edgecolor="#93c5fd",
-                              linewidth=0.6, zorder=0)
+            sb = sous_bassins.copy()
+            if rotation_90:
+                sb["geometry"] = sb.geometry.apply(_prep_geom)
+            sb.plot(ax=ax, color="#dbeafe", edgecolor="#93c5fd",
+                    linewidth=0.6, zorder=0)
     except Exception:
         pass
 
     # ---- Conduites : coloration par statut de simulation ----
     statuts_conduites = {}
     for _, row in canalisations.iterrows():
-        geom = row.geometry
+        geom = _prep_geom(row.geometry)
         if geom is None or geom.is_empty:
             continue
         cid = _cle_identifiant(row.get("ID", ""))
@@ -258,7 +280,7 @@ def _generer_carte_reseau_png(simulation_data: Dict[str, Any]) -> Optional[bytes
     # ---- Regards : scatter coloré par statut ----
     noeuds_x, noeuds_y, noeuds_c, noeuds_s = [], [], [], []
     for _, row in regards.iterrows():
-        geom = row.geometry
+        geom = _prep_geom(row.geometry)
         if geom is None or geom.is_empty:
             continue
         nid = _cle_identifiant(row.get("ID", row.get("Code", "")))
@@ -297,19 +319,23 @@ def _generer_carte_reseau_png(simulation_data: Dict[str, Any]) -> Optional[bytes
 
     meta = simulation_data.get("meta", {})
     cluster_nom = meta.get("cluster_nom") or meta.get("bassin_nom") or ""
-    titre = "Cartographie du réseau d'assainissement"
-    if cluster_nom:
-        titre += f" — {cluster_nom}"
-    ax.set_title(titre, fontsize=12, fontweight="bold",
-                 color=_COULEUR_NAVY, pad=10)
 
-    # Flèche nord
-    ax.annotate("N", xy=(0.97, 0.93), xycoords="axes fraction",
-                ha="center", fontsize=13, fontweight="bold",
-                color=_COULEUR_NAVY)
-    ax.annotate("", xy=(0.97, 0.885), xycoords="axes fraction",
-                xytext=(0.97, 0.80),
-                arrowprops=dict(arrowstyle="-|>", color=_COULEUR_NAVY, lw=1.8))
+    # Flèche nord (orientée selon la rotation éventuelle de la carte)
+    if rotation_90:
+        # Nord (+y d'origine) pointe désormais vers la droite (+x écran)
+        ax.annotate("N", xy=(0.93, 0.965), xycoords="axes fraction",
+                    ha="center", fontsize=13, fontweight="bold",
+                    color=_COULEUR_NAVY)
+        ax.annotate("", xy=(0.865, 0.965), xycoords="axes fraction",
+                    xytext=(0.76, 0.965),
+                    arrowprops=dict(arrowstyle="-|>", color=_COULEUR_NAVY, lw=1.8))
+    else:
+        ax.annotate("N", xy=(0.97, 0.93), xycoords="axes fraction",
+                    ha="center", fontsize=13, fontweight="bold",
+                    color=_COULEUR_NAVY)
+        ax.annotate("", xy=(0.97, 0.885), xycoords="axes fraction",
+                    xytext=(0.97, 0.80),
+                    arrowprops=dict(arrowstyle="-|>", color=_COULEUR_NAVY, lw=1.8))
 
     # Barre d'échelle (coordonnées projetées en mètres)
     pas_echelle = next(
@@ -372,7 +398,8 @@ def _creer_document_pdf(buffer: io.BytesIO, titre: Optional[str] = None) -> Base
     frame_pays = Frame(1.5 * cm, 1.5 * cm, lw_pays - 3 * cm, lh_pays - 3 * cm, id='paysage')
     doc.addPageTemplates([
         PageTemplate(id='Portrait', frames=frame_port, pagesize=A4),
-        PageTemplate(id='Paysage', frames=frame_pays, pagesize=landscape(A4)),
+        PageTemplate(id='Paysage', frames=frame_pays, pagesize=landscape(A4),
+                     autoNextPageTemplate='Portrait'),
     ])
     return doc
 
@@ -878,9 +905,9 @@ def generer_pdf_rapport_diagnostic(
                 w_px, h_px = ImageReader(io.BytesIO(_construire_story._carte_png)).getSize()
             except Exception:
                 w_px, h_px = 2200, 1400
-            largeur = 24.0 * cm
+            largeur = 25.5 * cm
             hauteur = largeur * (h_px / max(w_px, 1))
-            hauteur_max = 14.5 * cm
+            hauteur_max = 14.6 * cm
             if hauteur > hauteur_max:
                 hauteur = hauteur_max
                 largeur = hauteur * (w_px / max(h_px, 1))
@@ -888,12 +915,16 @@ def generer_pdf_rapport_diagnostic(
             img_carte.hAlign = "CENTER"
             story.append(img_carte)
             story.append(Spacer(1, 0.2 * cm))
-            story.append(Paragraph(
-                "<i>Figure 1 — Réseau d'assainissement coloré selon les résultats de la simulation : "
-                "regards surchargés (orange), regards inondés (rouge), conduites en surcharge ou critique.</i>",
-                style_corps))
+            _meta_carte = simulation_data.get("meta", {}) or {}
+            _cluster_carte = _meta_carte.get("cluster_nom") or _meta_carte.get("bassin_nom") or ""
+            _legende_carte = (
+                f"Figure 1 — {_cluster_carte + ' — ' if _cluster_carte else ''}"
+                "Réseau d'assainissement coloré selon les résultats de la simulation : "
+                "regards surchargés (orange), regards inondés (rouge), conduites en surcharge ou critique."
+            )
+            story.append(Paragraph(f"<i>{_legende_carte}</i>", style_corps))
             story.append(Spacer(1, 0.4 * cm))
-            story.append(NextPageTemplate('Portrait'))
+            # Le gabarit Paysage revient automatiquement au Portrait en fin de page
             story.append(PageBreak())
 
         # 7. Synthèse Exécutive
