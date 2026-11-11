@@ -15,12 +15,19 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable, PageBreak
 from reportlab.pdfgen import canvas as pdf_canvas
+
+# Palette « guide pro » (référence : documents commerciaux soignés)
+_COULEUR_NAVY = '#1a4a7a'
+_COULEUR_BLEU = '#2d7ab3'
+_COULEUR_VERT = '#2e7d32'
+_COULEUR_GRIS = '#6b7280'
+_COULEUR_NOIR = '#1a1a1a'
 
 
 class _CanvasNumerote(pdf_canvas.Canvas):
-    """Canvas ReportLab qui ajoute la pagination « Page X / Y » en pied de page."""
+    """Canvas ReportLab : en-tête courant, pied de page et pagination « Page X / Y »."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -40,8 +47,20 @@ class _CanvasNumerote(pdf_canvas.Canvas):
 
     def _dessiner_pagination(self, total_pages):
         self.saveState()
+        if self._pageNumber > 1:
+            # En-tête courant (absent de la page de garde)
+            self.setFont("Helvetica", 7)
+            self.setFillColor(colors.HexColor(_COULEUR_GRIS))
+            self.drawString(1.5 * cm, A4[1] - 0.9 * cm,
+                            "DrainPilot 5.2 - Rapport d'expertise hydraulique SWMM")
+            self.drawRightString(A4[0] - 1.5 * cm, A4[1] - 0.9 * cm,
+                                 "EPA SWMM 5.2 - Saint-Venant 1D")
+            self.setStrokeColor(colors.HexColor('#e5e7eb'))
+            self.setLineWidth(0.5)
+            self.line(1.5 * cm, A4[1] - 1.05 * cm, A4[0] - 1.5 * cm, A4[1] - 1.05 * cm)
+        # Pagination centrée en pied de page
         self.setFont("Helvetica", 7)
-        self.setFillColor(colors.HexColor("#94a3b8"))
+        self.setFillColor(colors.HexColor(_COULEUR_GRIS))
         self.drawCentredString(A4[0] / 2.0, 0.9 * cm, f"Page {self._pageNumber} / {total_pages}")
         self.restoreState()
 
@@ -113,32 +132,21 @@ def generer_pdf_rapport_diagnostic(
         rightMargin=1.5 * cm,
         topMargin=1.5 * cm,
         bottomMargin=1.5 * cm,
-        title=f"Rapport d'expertise hydraulique - {project_name or 'Réseau Urbain'}",
-        canvasmaker=_CanvasNumerote
+        title=f"Rapport d'expertise hydraulique - {project_name or 'Réseau Urbain'}"
     )
 
     styles = getSampleStyleSheet()
 
     # Styles personnalisés
-    style_titre_haut = ParagraphStyle(
-        'TitreHaut',
-        parent=styles['Normal'],
-        fontName='Helvetica-Bold',
-        fontSize=11,
-        leading=14,
-        alignment=1,
-        textColor=colors.HexColor('#0f172a')
-    )
-
     style_section = ParagraphStyle(
         'SectionTitre',
         parent=styles['Heading2'],
         fontName='Helvetica-Bold',
-        fontSize=12,
-        leading=16,
-        textColor=colors.HexColor('#0369a1'),
-        spaceBefore=8,
-        spaceAfter=4
+        fontSize=13,
+        leading=17,
+        textColor=colors.HexColor('#1a4a7a'),
+        spaceBefore=10,
+        spaceAfter=5
     )
 
     style_sous_section = ParagraphStyle(
@@ -147,7 +155,7 @@ def generer_pdf_rapport_diagnostic(
         fontName='Helvetica-Bold',
         fontSize=10.5,
         leading=14,
-        textColor=colors.HexColor('#0284c7'),
+        textColor=colors.HexColor('#2d7ab3'),
         spaceBefore=6,
         spaceAfter=3
     )
@@ -202,7 +210,7 @@ def generer_pdf_rapport_diagnostic(
         fontName='Helvetica-Bold',
         fontSize=10.5,
         leading=14,
-        textColor=colors.HexColor('#0284c7'),
+        textColor=colors.HexColor('#2d7ab3'),
         spaceBefore=4,
         spaceAfter=2
     )
@@ -233,31 +241,71 @@ def generer_pdf_rapport_diagnostic(
     cluster_nom = meta.get("cluster_nom") or meta.get("bassin_nom") or f"Bassin {meta.get('cluster_id', 'N/A')}"
 
     verdict = synth.get("verdict", "ANALYSE EXPERTE MULTI-AGENTS SWMM 5.2")
-    verdict_color = synth.get("couleur", "#0284c7")
+    verdict_color = synth.get("couleur", "#2d7ab3")
 
-    # 1. Entête République / ONA
+    # ======================================================================
+    # PAGE DE GARDE (style « guide pro »)
+    # ======================================================================
+    kicker = "  ·  ".join([
+        "R A P P O R T   D ' E X P E R T I S E",
+        "S I M U L A T I O N   E P A   S W M M   5 . 2",
+        "D I A G N O S T I C   M U L T I - A G E N T S"
+    ])
+    style_kicker = ParagraphStyle(
+        'Kicker', parent=styles['Normal'], fontName='Helvetica-Bold',
+        fontSize=9, leading=13, alignment=1, textColor=colors.HexColor(_COULEUR_GRIS),
+        spaceAfter=10
+    )
+    style_garde_titre = ParagraphStyle(
+        'GardeTitre', parent=styles['Normal'], fontName='Helvetica-Bold',
+        fontSize=30, leading=36, alignment=1, textColor=colors.HexColor(_COULEUR_NAVY),
+        spaceAfter=6
+    )
+    style_garde_sous_titre = ParagraphStyle(
+        'GardeSousTitre', parent=styles['Normal'], fontName='Helvetica',
+        fontSize=14, leading=19, alignment=1, textColor=colors.HexColor(_COULEUR_NOIR),
+        spaceAfter=4
+    )
+    style_garde_meta = ParagraphStyle(
+        'GardeMeta', parent=styles['Normal'], fontName='Helvetica',
+        fontSize=9.5, leading=13, alignment=1, textColor=colors.HexColor(_COULEUR_GRIS)
+    )
+
+    story.append(Spacer(1, 3.2 * cm))
+
+    # Entête institutionnelle
     entete_text = (
         "<b>RÉPUBLIQUE ALGÉRIENNE DÉMOCRATIQUE ET POPULAIRE</b><br/>"
         "Ministère des Ressources en Eau - Office National de l'Assainissement (ONA)<br/>"
-        "Direction de Zone Chélif - Centre d'Exploitation et d'Assainissement<br/>"
-        "<b>PLATEFORME SAAS DRAINPILOT 5.2 - DIAGNOSTIC HYDRAULIQUE CERTIFIÉ</b>"
+        "Direction de Zone Chélif - Centre d'Exploitation et d'Assainissement"
     )
-    story.append(Paragraph(entete_text, style_titre_haut))
-    story.append(Spacer(1, 0.3 * cm))
-    story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor('#0284c7'), spaceAfter=8))
+    story.append(Paragraph(entete_text, style_garde_meta))
+    story.append(Spacer(1, 0.5 * cm))
+    story.append(HRFlowable(width="60%", thickness=1, color=colors.HexColor(_COULEUR_BLEU), spaceBefore=2, spaceAfter=14))
 
-    # 2. Titre du rapport
-    titre = "RAPPORT D'EXPERTISE HYDRAULIQUE ET PRESCRIPTIONS DE TRAVAUX"
-    story.append(Paragraph(titre, ParagraphStyle(
-        'TitreMission',
-        fontName='Helvetica-Bold',
-        fontSize=12,
-        alignment=1,
-        textColor=colors.HexColor('#0f172a'),
-        spaceAfter=6
-    )))
+    # Kicker + titre + sous-titre
+    story.append(Paragraph(kicker, style_kicker))
+    story.append(Paragraph("EXPERTISE HYDRAULIQUE", style_garde_titre))
+    story.append(Paragraph("et prescriptions de travaux", style_garde_sous_titre))
+    story.append(Spacer(1, 0.5 * cm))
 
-    # 3. Cartouche d'identification
+    # Bandeau verdict
+    style_verdict_garde = ParagraphStyle(
+        'VerdictGarde', parent=styles['Normal'], fontName='Helvetica-Bold',
+        fontSize=11, leading=15, alignment=1, textColor=colors.HexColor(verdict_color)
+    )
+    verdict_box = Table([[Paragraph(f"{verdict}", style_verdict_garde)]], colWidths=[18 * cm])
+    verdict_box.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f8fafc')),
+        ('LINEABOVE', (0, 0), (-1, 0), 2.5, colors.HexColor(verdict_color)),
+        ('LINEBELOW', (0, 0), (-1, -1), 2.5, colors.HexColor(verdict_color)),
+        ('TOPPADDING', (0, 0), (-1, -1), 7),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 7),
+    ]))
+    story.append(verdict_box)
+    story.append(Spacer(1, 0.6 * cm))
+
+    # Cartouche d'identification
     cartouche_data = [
         [
             Paragraph(f"<b>Projet réseau :</b> {project_name}", style_corps),
@@ -280,14 +328,22 @@ def generer_pdf_rapport_diagnostic(
     cartouche_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f8fafc')),
         ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#cbd5e1')),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
+        ('LINEBEFORE', (0, 0), (0, -1), 3, colors.HexColor(_COULEUR_NAVY)),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e5e7eb')),
         ('TOPPADDING', (0, 0), (-1, -1), 4),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
     ]))
     story.append(cartouche_table)
-    story.append(Spacer(1, 0.4 * cm))
+    story.append(Spacer(1, 0.5 * cm))
+
+    story.append(Paragraph(
+        f"Édition {date_str} - DrainPilot SaaS 5.2 - Document confidentiel d'aide à la décision",
+        style_garde_meta
+    ))
+    story.append(Spacer(1, 1.2 * cm))
+    story.append(PageBreak())
 
     # 4. Cadre Hydro-Météorologique
     story.append(Paragraph("(PLUIE) CADRE HYDRO-MÉTÉOROLOGIQUE ET SOLLICITATION PLUVIOMÉTRIQUE RÉGLEMENTAIRE (ANRH / ONA)", style_section))
@@ -315,7 +371,7 @@ def generer_pdf_rapport_diagnostic(
     hydro_table = Table(hydro_data, colWidths=[4.5 * cm, 4.5 * cm, 4.5 * cm, 4.5 * cm])
     hydro_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f0f9ff')),
-        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#0284c7')),
+        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#2d7ab3')),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#bae6fd')),
         ('TOPPADDING', (0, 0), (-1, -1), 4),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
@@ -354,7 +410,7 @@ def generer_pdf_rapport_diagnostic(
     hydro2_table = Table(hydro2_data, colWidths=[4.5 * cm, 4.5 * cm, 4.5 * cm, 4.5 * cm])
     hydro2_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f8fafc')),
-        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#0284c7')),
+        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#2d7ab3')),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
         ('TOPPADDING', (0, 0), (-1, -1), 4),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
@@ -402,15 +458,15 @@ def generer_pdf_rapport_diagnostic(
 
     bilan_text = (
         f"<b>Bassin versant :</b> {cluster_nom}<br/>"
-        f"- <b>Débit total généré :</b> <font color='#0369a1'><b>{formater_nombre_fr(q_genere)} m³/s</b></font><br/>"
+        f"- <b>Débit total généré :</b> <font color='#1a4a7a'><b>{formater_nombre_fr(q_genere)} m³/s</b></font><br/>"
         f"- <b>Soulagement du collecteur :</b> <font color='#16a34a'><b>{taux_derive:.1f}%</b></font><br/>"
         f"- <b>Débit résiduel exutoire :</b> <b>{formater_nombre_fr(q_exutoire)} m³/s</b> ({taux_exutoire:.1f}%)<br/>"
-        f"- <b>Débit capté par {nb_ouvrages} ouvrages :</b> <font color='#0284c7'><b>{formater_nombre_fr(q_derive)} m³/s</b></font> ({taux_derive:.1f}%)"
+        f"- <b>Débit capté par {nb_ouvrages} ouvrages :</b> <font color='#2d7ab3'><b>{formater_nombre_fr(q_derive)} m³/s</b></font> ({taux_derive:.1f}%)"
     )
     bilan_table = Table([[Paragraph(bilan_text, style_corps)]], colWidths=[18 * cm])
     bilan_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f8fafc')),
-        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#0284c7')),
+        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#2d7ab3')),
         ('TOPPADDING', (0, 0), (-1, -1), 8),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
         ('LEFTPADDING', (0, 0), (-1, -1), 10),
@@ -471,7 +527,7 @@ def generer_pdf_rapport_diagnostic(
 
             flood_table = Table(flood_rows, colWidths=[3 * cm, 3 * cm, 3 * cm, 4 * cm, 2.5 * cm])
             flood_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0369a1')),
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a4a7a')),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
                 ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
                 ('TOPPADDING', (0, 0), (-1, -1), 3),
@@ -559,7 +615,7 @@ def generer_pdf_rapport_diagnostic(
     if risk_list:
         for a in risk_list:
             prio = a.get("priorite", "P1")
-            badge_color = colors.HexColor('#ef4444') if prio == 'P1' else (colors.HexColor('#f97316') if prio == 'P2' else colors.HexColor('#0284c7'))
+            badge_color = colors.HexColor('#ef4444') if prio == 'P1' else (colors.HexColor('#f97316') if prio == 'P2' else colors.HexColor('#2d7ab3'))
             risk_rows.append([
                 Paragraph(f"<font color='{badge_color.hexval()}'><b>{prio}</b></font>", style_tableau),
                 Paragraph(f"<b>{a.get('conduite', '--')}</b>", style_tableau),
@@ -578,7 +634,7 @@ def generer_pdf_rapport_diagnostic(
     )
     if isinstance(risk_table, Table):
         risk_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0369a1')),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a4a7a')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
             ('TOPPADDING', (0, 0), (-1, -1), 3),
@@ -628,7 +684,7 @@ def generer_pdf_rapport_diagnostic(
     )
     if isinstance(surch_table, Table):
         surch_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0369a1')),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a4a7a')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
             ('TOPPADDING', (0, 0), (-1, -1), 3),
@@ -669,7 +725,7 @@ def generer_pdf_rapport_diagnostic(
         )
         if isinstance(bottle_table, Table):
             bottle_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0369a1')),
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a4a7a')),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
                 ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
                 ('TOPPADDING', (0, 0), (-1, -1), 3),
@@ -758,13 +814,13 @@ def generer_pdf_rapport_diagnostic(
         Paragraph(f"<b>{(gc.get('metres_lineaires_totaux', 0)):.1f}</b>", style_tableau),
         Paragraph("100%", style_tableau),
         Paragraph("", style_tableau),
-        Paragraph(f"<b><font color='#0284c7'>{formater_cout_dzd(gc.get('cout_global_estime_dzd', 0), inclure_unite=False)}</font></b>", style_tableau),
+        Paragraph(f"<b><font color='#2d7ab3'>{formater_cout_dzd(gc.get('cout_global_estime_dzd', 0), inclure_unite=False)}</font></b>", style_tableau),
         Paragraph("100%", style_tableau)
     ])
 
     recap_table = Table(recap_rows, colWidths=[1.8 * cm, 2.2 * cm, 1.8 * cm, 1.5 * cm, 2 * cm, 1.5 * cm, 2.5 * cm, 2.5 * cm, 1.5 * cm])
     recap_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0369a1')),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a4a7a')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#f1f5f9')),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
@@ -811,7 +867,7 @@ def generer_pdf_rapport_diagnostic(
     )
     if isinstance(gc_table, Table):
         gc_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0369a1')),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a4a7a')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
             ('TOPPADDING', (0, 0), (-1, -1), 3),
@@ -913,7 +969,7 @@ def generer_pdf_rapport_diagnostic(
 
     var_table = Table(var_rows, colWidths=[3 * cm, 1.8 * cm, 1.8 * cm, 2.5 * cm, 2.5 * cm, 2.2 * cm, 2.2 * cm, 1.5 * cm, 2 * cm])
     var_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0369a1')),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a4a7a')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
         ('TOPPADDING', (0, 0), (-1, -1), 3),
@@ -971,7 +1027,7 @@ def generer_pdf_rapport_diagnostic(
     )
     if isinstance(lid_table, Table):
         lid_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0369a1')),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a4a7a')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
             ('TOPPADDING', (0, 0), (-1, -1), 3),
@@ -1021,7 +1077,7 @@ def generer_pdf_rapport_diagnostic(
         )
         if isinstance(buf_table, Table):
             buf_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0369a1')),
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a4a7a')),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
                 ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
                 ('TOPPADDING', (0, 0), (-1, -1), 3),
@@ -1040,7 +1096,7 @@ def generer_pdf_rapport_diagnostic(
     story.append(Paragraph(f"Dossier d'expertise confidentiel - Édité le {date_str}", footer_style))
     story.append(Paragraph("Document Synthétique A4", footer_style))
 
-    doc.build(story)
+    doc.build(story, canvasmaker=_CanvasNumerote)
     pdf_bytes = buffer.getvalue()
     buffer.close()
     return pdf_bytes
