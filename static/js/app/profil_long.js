@@ -564,39 +564,11 @@ function afficherProfilLong(data) {
                             const idx = items[0].dataIndex;
                             const s = data.segments[idx];
                             if (s.hgl_regime === 'debordement' || (s.z_hgl && s.z_hgl >= s.z_terrain)) {
-                                return `🔴 ÉTAT : DÉBORDEMENT AU SOL (HGL ≥ Terrain)`;
+                                return `🔴 État : Débordement au sol (HGL ≥ terrain)`;
                             } else if (s.hgl_regime === 'surcharge' || (s.z_hgl && s.z_hgl > s.z_gen_superieure)) {
-                                return `🟡 ÉTAT : SURCHARGE EN CHARGE (HGL > Voûte)`;
+                                return `🟡 État : Conduite en surcharge`;
                             }
-                            return `🟢 ÉTAT : ÉCOULEMENT LIBRE SAIN (HGL < Voûte)`;
-                        },
-                        afterBody: function(items) {
-                            const idx = items[0].dataIndex;
-                            const s = data.segments[idx];
-                            const zEau = s.z_eau_conduite !== undefined ? s.z_eau_conduite : s.z_radier;
-                            const hEau = Math.max(0, zEau - s.z_radier);
-                            const lines = [
-                                `• Plan d'eau conduite (WSP) : ${zEau.toFixed(2)} m (Hauteur d'eau : ${hEau.toFixed(2)} m)`,
-                                `• Profondeur regard : ${s.profondeur_m} m`
-                            ];
-
-                            if (s.pression_m && s.pression_m > 0) {
-                                lines.push(`• Charge au-dessus voûte : +${s.pression_m} m (Pression)`);
-                            }
-                            if (s.revanche_m && s.revanche_m > 0) {
-                                lines.push(`• Revanche avant tampon : ${s.revanche_m} m`);
-                            } else if (s.hgl_regime === 'debordement' || (s.z_hgl && s.z_hgl >= s.z_terrain)) {
-                                lines.push(`• Tampon atteint : Débordement actif sur voirie`);
-                            }
-
-                            if (s.conduit_sortant) {
-                                const c = s.conduit_sortant;
-                                lines.push(`• Conduite aval : ${c.cid} (Ø${c.diam_mm} mm, L=${c.length}m)`);
-                                if (c.flow_ratio > 0) {
-                                    lines.push(`• Taux de charge Q/Qmax : ${(c.flow_ratio * 100).toFixed(0)}% (${c.status})`);
-                                }
-                            }
-                            return lines;
+                            return `🟢 État : Écoulement libre`;
                         }
                     }
                 }
