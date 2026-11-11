@@ -1234,25 +1234,6 @@ def telecharger_rapport_diagnostic_pdf(
     )
     project_name = sim_data.get("project_name") or "Réseau Urbain"
 
-    # DEBUG: Afficher les clés de sim_data pour diagnostiquer le problème des valeurs à 0
-    print(f"DEBUG endpoint sim_data keys: {list(sim_data.keys())[:20]}")
-    print(f"DEBUG endpoint sim_data has kpis: {'kpis' in sim_data}")
-    print(f"DEBUG endpoint sim_data has agents_expertise: {'agents_expertise' in sim_data}")
-    print(f"DEBUG endpoint sim_data has bilan_hydraulique: {'bilan_hydraulique' in sim_data}")
-    if 'kpis' in sim_data:
-        print(f"DEBUG endpoint kpis keys: {list(sim_data['kpis'].keys())[:20]}")
-        print(f"DEBUG endpoint kpis has bilan_hydraulique: {'bilan_hydraulique' in sim_data['kpis']}")
-    if 'agents_expertise' in sim_data:
-        print(f"DEBUG endpoint agents_expertise keys: {list(sim_data['agents_expertise'].keys())[:20]}")
-    # Vérifier les valeurs du bilan hydraulique
-    bilan = sim_data.get('bilan_hydraulique', {})
-    print(f"DEBUG endpoint bilan_hydraulique: {bilan}")
-    kpis = sim_data.get('kpis', sim_data)
-    print(f"DEBUG endpoint kpis bilan_hydraulique: {kpis.get('bilan_hydraulique', {})}")
-    print(f"DEBUG endpoint kpis q_genere_m3s: {kpis.get('q_genere_m3s')}")
-    print(f"DEBUG endpoint kpis q_exutoire_m3s: {kpis.get('q_exutoire_m3s')}")
-    print(f"DEBUG endpoint kpis peak_outflow_m3s: {kpis.get('peak_outflow_m3s')}")
-
     pdf_bytes = generer_pdf_rapport_diagnostic(
         simulation_data=sim_data,
         project_name=project_name
