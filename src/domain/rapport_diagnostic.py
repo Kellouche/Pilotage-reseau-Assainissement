@@ -23,6 +23,8 @@ _COULEUR_NAVY = '#1a4a7a'
 _COULEUR_BLEU = '#2d7ab3'
 _COULEUR_VERT = '#2e7d32'
 _COULEUR_GRIS = '#6b7280'
+_COULEUR_BLEU_CLAIR = '#edf3fa'
+_COULEUR_VERT_CLAIR = '#eef4ee'
 _COULEUR_NOIR = '#1a1a1a'
 
 
@@ -240,7 +242,11 @@ def generer_pdf_rapport_diagnostic(
         def _section(titre):
             entree = {"titre": titre, "page": None}
             sections_marquees.append(entree)
-            return [_MarqueurSection(entree), Paragraph(titre, style_section)]
+            return [
+                _MarqueurSection(entree),
+                Paragraph(titre, style_section),
+                HRFlowable(width="100%", thickness=1.2, color=colors.HexColor(_COULEUR_BLEU), spaceBefore=1, spaceAfter=6),
+            ]
 
         def _encadre_memo(titre, texte):
             """Encadré « mémo » style guide : filet bleu à gauche sur fond clair."""
@@ -251,8 +257,8 @@ def generer_pdf_rapport_diagnostic(
                 [Paragraph(texte, style_agent_memo)],
             ], colWidths=[17.5 * cm])
             inner.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f8fafc')),
-                ('BOX', (0, 0), (-1, -1), 0.6, colors.HexColor('#cbd5e1')),
+                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor(_COULEUR_BLEU_CLAIR)),
+                ('BOX', (0, 0), (-1, -1), 0.7, colors.HexColor(_COULEUR_BLEU)),
                 ('LINEBEFORE', (0, 0), (0, -1), 3, colors.HexColor(_COULEUR_BLEU)),
                 ('TOPPADDING', (0, 0), (-1, -1), 5),
                 ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
@@ -301,21 +307,21 @@ def generer_pdf_rapport_diagnostic(
         ])
         style_kicker = ParagraphStyle(
             'Kicker', parent=styles['Normal'], fontName='Times-Bold',
-            fontSize=10, leading=14, alignment=1, textColor=colors.HexColor(_COULEUR_GRIS),
+            fontSize=10, leading=14, alignment=1, textColor=colors.HexColor(_COULEUR_NAVY),
             spaceAfter=10
         )
         style_garde_titre = ParagraphStyle(
             'GardeTitre', parent=styles['Normal'], fontName='Times-Bold',
-            fontSize=34, leading=40, alignment=1, textColor=colors.HexColor(_COULEUR_NAVY),
+            fontSize=40, leading=46, alignment=1, textColor=colors.HexColor(_COULEUR_NAVY),
             spaceAfter=6
         )
         style_garde_sous_titre = ParagraphStyle(
-            'GardeSousTitre', parent=styles['Normal'], fontName='Times-Roman',
+            'GardeSousTitre', parent=styles['Normal'], fontName='Times-Italic',
             fontSize=14, leading=19, alignment=1, textColor=colors.HexColor(_COULEUR_NOIR),
             spaceAfter=4
         )
         style_garde_meta = ParagraphStyle(
-            'GardeMeta', parent=styles['Normal'], fontName='Times-Roman',
+            'GardeMeta', parent=styles['Normal'], fontName='Times-Italic',
             fontSize=9.5, leading=13, alignment=1, textColor=colors.HexColor(_COULEUR_GRIS)
         )
 
@@ -344,7 +350,7 @@ def generer_pdf_rapport_diagnostic(
         )
         verdict_box = Table([[Paragraph(f"{verdict}", style_verdict_garde)]], colWidths=[18 * cm])
         verdict_box.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f8fafc')),
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor(_COULEUR_BLEU_CLAIR)),
             ('LINEABOVE', (0, 0), (-1, 0), 2.5, colors.HexColor(verdict_color)),
             ('LINEBELOW', (0, 0), (-1, -1), 2.5, colors.HexColor(verdict_color)),
             ('TOPPADDING', (0, 0), (-1, -1), 7),
@@ -374,7 +380,7 @@ def generer_pdf_rapport_diagnostic(
         ]
         cartouche_table = Table(cartouche_data, colWidths=[9 * cm, 9 * cm])
         cartouche_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f8fafc')),
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor(_COULEUR_BLEU_CLAIR)),
             ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#cbd5e1')),
             ('LINEBEFORE', (0, 0), (0, -1), 3, colors.HexColor(_COULEUR_NAVY)),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e5e7eb')),
@@ -419,7 +425,7 @@ def generer_pdf_rapport_diagnostic(
         ]
         hydro_table = Table(hydro_data, colWidths=[4.5 * cm, 4.5 * cm, 4.5 * cm, 4.5 * cm])
         hydro_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f0f9ff')),
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor(_COULEUR_BLEU_CLAIR)),
             ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#2d7ab3')),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#bae6fd')),
             ('TOPPADDING', (0, 0), (-1, -1), 4),
@@ -458,7 +464,7 @@ def generer_pdf_rapport_diagnostic(
         ]
         hydro2_table = Table(hydro2_data, colWidths=[4.5 * cm, 4.5 * cm, 4.5 * cm, 4.5 * cm])
         hydro2_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f8fafc')),
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor(_COULEUR_BLEU_CLAIR)),
             ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#2d7ab3')),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
             ('TOPPADDING', (0, 0), (-1, -1), 4),
@@ -514,7 +520,7 @@ def generer_pdf_rapport_diagnostic(
         )
         bilan_table = Table([[Paragraph(bilan_text, style_corps)]], colWidths=[18 * cm])
         bilan_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f8fafc')),
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor(_COULEUR_BLEU_CLAIR)),
             ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#2d7ab3')),
             ('TOPPADDING', (0, 0), (-1, -1), 8),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
@@ -583,7 +589,7 @@ def generer_pdf_rapport_diagnostic(
                     ('TOPPADDING', (0, 0), (-1, -1), 3),
                     ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
                     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
+                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor(_COULEUR_BLEU_CLAIR)]),
                 ]))
                 story.append(flood_table)
                 story.append(Spacer(1, 0.3 * cm))
@@ -689,7 +695,7 @@ def generer_pdf_rapport_diagnostic(
                 ('TOPPADDING', (0, 0), (-1, -1), 3),
                 ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
                 ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor(_COULEUR_BLEU_CLAIR)]),
             ]))
         story.append(risk_table)
         story.append(Spacer(1, 0.4 * cm))
@@ -739,7 +745,7 @@ def generer_pdf_rapport_diagnostic(
                 ('TOPPADDING', (0, 0), (-1, -1), 3),
                 ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
                 ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor(_COULEUR_BLEU_CLAIR)]),
             ]))
         story.append(surch_table)
         story.append(Spacer(1, 0.3 * cm))
@@ -781,7 +787,7 @@ def generer_pdf_rapport_diagnostic(
                     ('TOPPADDING', (0, 0), (-1, -1), 3),
                     ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
                     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
+                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor(_COULEUR_BLEU_CLAIR)]),
                 ]))
             story.append(bottle_table)
         else:
@@ -816,7 +822,7 @@ def generer_pdf_rapport_diagnostic(
         ]
         bpu_table = Table(bpu_rows, colWidths=[10 * cm, 8 * cm])
         bpu_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f8fafc')),
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor(_COULEUR_BLEU_CLAIR)),
             ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
             ('TOPPADDING', (0, 0), (-1, -1), 4),
@@ -877,7 +883,7 @@ def generer_pdf_rapport_diagnostic(
             ('TOPPADDING', (0, 0), (-1, -1), 3),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('ROWBACKGROUNDS', (0, 1), (-2, -1), [colors.white, colors.HexColor('#f8fafc')]),
+            ('ROWBACKGROUNDS', (0, 1), (-2, -1), [colors.white, colors.HexColor(_COULEUR_BLEU_CLAIR)]),
         ]))
         story.append(recap_table)
         story.append(Spacer(1, 0.3 * cm))
@@ -924,7 +930,7 @@ def generer_pdf_rapport_diagnostic(
                 ('TOPPADDING', (0, 0), (-1, -1), 3),
                 ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
                 ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor(_COULEUR_BLEU_CLAIR)]),
             ]))
         story.append(gc_table)
         story.append(Spacer(1, 0.4 * cm))
@@ -956,7 +962,7 @@ def generer_pdf_rapport_diagnostic(
         ]
         ratio_table = Table(ratio_rows, colWidths=[4.5 * cm, 4.5 * cm, 4.5 * cm, 4.5 * cm])
         ratio_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f8fafc')),
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor(_COULEUR_BLEU_CLAIR)),
             ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
             ('TOPPADDING', (0, 0), (-1, -1), 4),
@@ -1026,7 +1032,7 @@ def generer_pdf_rapport_diagnostic(
             ('TOPPADDING', (0, 0), (-1, -1), 3),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor(_COULEUR_BLEU_CLAIR)]),
         ]))
         story.append(var_table)
         story.append(Spacer(1, 0.4 * cm))
@@ -1084,7 +1090,7 @@ def generer_pdf_rapport_diagnostic(
                 ('TOPPADDING', (0, 0), (-1, -1), 3),
                 ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
                 ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor(_COULEUR_BLEU_CLAIR)]),
             ]))
         story.append(lid_table)
         story.append(Spacer(1, 0.4 * cm))
@@ -1135,7 +1141,7 @@ def generer_pdf_rapport_diagnostic(
                     ('TOPPADDING', (0, 0), (-1, -1), 3),
                     ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
                     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
+                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor(_COULEUR_BLEU_CLAIR)]),
                 ]))
             story.append(buf_table)
             story.append(Spacer(1, 0.4 * cm))
@@ -1192,9 +1198,9 @@ def generer_pdf_rapport_diagnostic(
             [Paragraph(f"<b>3.</b> {conclusion_3}", style_corps)],
         ], colWidths=[18 * cm])
         conclusion_box.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f8fafc')),
-            ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor(_COULEUR_NAVY)),
-            ('LINEBEFORE', (0, 0), (0, -1), 4, colors.HexColor(_COULEUR_NAVY)),
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor(_COULEUR_VERT_CLAIR)),
+            ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor(_COULEUR_VERT)),
+            ('LINEBEFORE', (0, 0), (0, -1), 4, colors.HexColor(_COULEUR_VERT)),
             ('TOPPADDING', (0, 0), (-1, -1), 8),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
             ('LEFTPADDING', (0, 0), (-1, -1), 10),
@@ -1235,12 +1241,16 @@ def generer_pdf_rapport_diagnostic(
         alignment=1, textColor=colors.HexColor(_COULEUR_NAVY),
         spaceAfter=10
     )
+    style_toc_page = ParagraphStyle(
+        'TocPage', fontName='Times-Roman', fontSize=9.5, leading=13,
+        textColor=colors.HexColor(_COULEUR_GRIS)
+    )
     toc_rows = [[Paragraph("<b>SOMMAIRE</b>", style_toc_titre), ""]]
     for entree in sections_marquees:
         page_reelle = (entree["page"] or 1) + 1
         toc_rows.append([
             Paragraph(entree["titre"].replace(" & ", " et "), style_corps),
-            Paragraph(f"<b>{page_reelle}</b>", style_corps),
+            Paragraph(str(page_reelle), style_toc_page),
         ])
     toc_table = Table(toc_rows, colWidths=[15.5 * cm, 2 * cm])
     toc_table.setStyle(TableStyle([
