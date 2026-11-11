@@ -431,6 +431,7 @@ class Cluster(Base):
     network_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), index=True, nullable=True)
     nom: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     exutoire_noeud: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    bassin_ref: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)  # Référence métier stable : "exutoire:<node_id>"
     nb_conduites: Mapped[Optional[int]] = mapped_column(Integer, default=0, nullable=True)
     nb_noeuds: Mapped[Optional[int]] = mapped_column(Integer, default=0, nullable=True)
     longueur_totale: Mapped[Optional[float]] = mapped_column(Float, default=0.0, nullable=True)
@@ -449,11 +450,16 @@ class Cluster(Base):
     conduites: Mapped[List["Conduite"]] = relationship("Conduite", back_populates="cluster")
     rejets: Mapped[List["Rejet"]] = relationship("Rejet", back_populates="cluster")
 
+    __table_args__ = (
+        Index("uq_cluster_network_bassin_ref", "network_id", "bassin_ref", unique=True),
+    )
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "id": self.id,
             "nom": self.nom,
             "exutoire_noeud": self.exutoire_noeud,
+            "bassin_ref": self.bassin_ref,
             "nb_conduites": self.nb_conduites,
             "nb_noeuds": self.nb_noeuds,
             "longueur_totale": self.longueur_totale,

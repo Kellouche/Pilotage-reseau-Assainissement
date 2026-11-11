@@ -386,6 +386,23 @@ def create_cluster(
     return cluster
 
 
+def update_cluster_stats(
+    db: Session,
+    cluster_id: Any,
+    update_data: Dict[str, Any],
+) -> Optional[Cluster]:
+    """Met à jour les statistiques d'un cluster existant."""
+    cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
+    if not cluster:
+        return None
+    for key, value in update_data.items():
+        if hasattr(cluster, key):
+            setattr(cluster, key, value)
+    db.commit()
+    db.refresh(cluster)
+    return cluster
+
+
 # ============================================================
 # SIMULATIONS HYDRAULIQUES SWMM 5.2
 # ============================================================

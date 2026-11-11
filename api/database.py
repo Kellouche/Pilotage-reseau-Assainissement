@@ -99,5 +99,16 @@ def init_db():
             conn.commit()
         except Exception:
             pass
+        # Migration douce : référence métier stable des bassins (étape 3A)
+        try:
+            conn.execute(text("ALTER TABLE clusters ADD COLUMN bassin_ref VARCHAR(120)"))
+            conn.commit()
+        except Exception:
+            pass
+        try:
+            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_cluster_network_bassin_ref ON clusters (network_id, bassin_ref)"))
+            conn.commit()
+        except Exception:
+            pass
 
     print("[DB] Tables initialisées avec succès")

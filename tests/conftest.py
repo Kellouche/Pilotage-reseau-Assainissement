@@ -24,6 +24,18 @@ from api.models import *  # noqa: F401, F403
 def setup_test_database():
     """Initialise automatiquement les tables dans la base SQLite de test."""
     Base.metadata.create_all(bind=engine)
+    # Migration douce : colonnes ajoutées après la création initiale de la base de test
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        for ddl in (
+            "ALTER TABLE clusters ADD COLUMN bassin_ref VARCHAR(120)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_cluster_network_bassin_ref ON clusters (network_id, bassin_ref)",
+        ):
+            try:
+                conn.execute(text(ddl))
+                conn.commit()
+            except Exception:
+                pass
     yield
 
 

@@ -264,6 +264,9 @@ window.reinitialiserAffichageSimulation = function() {
                             const surf = cl.surface_ha ? ` (${Number(cl.surface_ha).toFixed(1)} ha)` : '';
                             const newOpt = document.createElement('option');
                             newOpt.value = cid;
+                            // Étape 3A : référence métier du bassin si disponible
+                            if (cl.bassin_ref) newOpt.dataset.bassinRef = cl.bassin_ref;
+                            if (cl.exutoire_noeud) newOpt.dataset.exutoireId = cl.exutoire_noeud;
                             newOpt.textContent = `${nom}${surf}`;
                             simBassinSel.appendChild(newOpt);
                         });

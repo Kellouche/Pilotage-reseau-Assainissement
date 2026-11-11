@@ -147,6 +147,7 @@ class SimulationRunRequest(BaseModel):
     duree_heures: Optional[float] = None
     pas_routage_sec: int = 5
     cluster_id: Optional[Union[int, str]] = None
+    bassin_ref: Optional[str] = None
     pente_moyenne_pct: Optional[float] = 1.0
     buffer_m: Optional[float] = 35.0
     valider_raccordement: Optional[bool] = True
@@ -182,6 +183,7 @@ from api.services.simulation_service import (
     executer_moteur_swmm as _executer_moteur_swmm,
     ContexteProjetIntrouvable,
 )
+from api.services.bassin_reference import resoudre_bassin
 
 
 
@@ -364,7 +366,28 @@ def run_native_swmm_simulation(
     project_name = contexte.project_name
 
     # Règle d'ingénierie hydraulique : la sectorisation préalable est obligatoire avant simulation
-    if payload.cluster_id is None:
+    # Étape 3A : `bassin_ref` est la référence métier prioritaire ; `cluster_id`
+    # reste accepté en compatibilité legacy (résolution contextuelle du projet).
+    cluster_id_effectif = payload.cluster_id
+    if payload.bassin_ref:
+        resolution = resoudre_bassin(
+            db=db,
+            network_id=proj.id if proj else None,
+            ref=payload.bassin_ref,
+            gpkg_path=gpkg_path,
+        )
+        if resolution.statut in ("AMBIGU", "NON_TROUVE"):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Bassin non résolu ({resolution.statut}) : {resolution.detail}"
+            )
+        if resolution.cluster_id_moteur is not None:
+            cluster_id_effectif = resolution.cluster_id_moteur
+        logger.info(
+            "Bassin résolu : ref=%s -> statut=%s source=%s cluster_id=%s",
+            payload.bassin_ref, resolution.statut, resolution.source, cluster_id_effectif,
+        )
+    elif payload.cluster_id is None:
         raise HTTPException(
             status_code=400,
             detail="Règle hydraulique d'ingénierie : La sectorisation préalable en bassins versants d'exutoires est obligatoire avant la simulation SWMM. Veuillez sélectionner un bassin versant à simuler."
@@ -375,17 +398,19 @@ def run_native_swmm_simulation(
 
     # 3. Vérification du cache intelligent (Idempotence & Restauration)
     if not payload.force_recalculate:
-        cached_resultat = _charger_cache_simulation(gpkg_path, payload.cluster_id, param_hash)
+        cached_resultat = _charger_cache_simulation(gpkg_path, cluster_id_effectif, param_hash)
         if cached_resultat:
             cached_resultat["source_gpkg"] = str(gpkg_path.resolve())
             cached_resultat["project_name"] = project_name or gpkg_path.stem
             _DERNIERE_SIMULATION = cached_resultat
-            logger.info("Simulation SWMM restaurée depuis la sauvegarde (cluster %s, hash %s)", payload.cluster_id, param_hash)
+            logger.info("Simulation SWMM restaurée depuis la sauvegarde (cluster %s, hash %s)", cluster_id_effectif, param_hash)
             return _construire_reponse_simulation(cached_resultat, cached=True)
 
     # 4. Exécution via le service métier : scénario BMS + MoteurSWMM (PySWMM) + correction pic
     try:
-        resultat = _executer_moteur_swmm(gpkg_path, payload.model_dump(), execution_mode="sync")
+        params_exec = payload.model_dump()
+        params_exec["cluster_id"] = cluster_id_effectif
+        resultat = _executer_moteur_swmm(gpkg_path, params_exec, execution_mode="sync")
         resultat["source_gpkg"] = str(gpkg_path.resolve())
         resultat["project_name"] = project_name or gpkg_path.stem
         resultat["param_hash"] = param_hash
@@ -396,7 +421,7 @@ def run_native_swmm_simulation(
         _sauvegarder_simulation(
             db=db,
             gpkg_path=gpkg_path,
-            cluster_id=payload.cluster_id,
+            cluster_id=cluster_id_effectif,
             param_hash=param_hash,
             params_dict=params_dict,
             resultat=resultat,

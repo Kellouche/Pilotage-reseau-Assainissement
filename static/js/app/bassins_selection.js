@@ -480,6 +480,11 @@
                     const reg = (f.properties.nb_regards && f.properties.nb_regards > 0) ? ` • ${f.properties.nb_regards} reg.` : '';
                     const opt = document.createElement('option');
                     opt.value = cid;
+                    // Étape 3A : identifiants métier transmis à la simulation
+                    if (f.properties.bassin_ref) opt.dataset.bassinRef = f.properties.bassin_ref;
+                    if (f.properties.exutoire_id !== undefined && f.properties.exutoire_id !== null) {
+                        opt.dataset.exutoireId = f.properties.exutoire_id;
+                    }
                     opt.textContent = `${nom}${surf}${reg}`;
                     grpCol.appendChild(opt);
                 });
@@ -496,6 +501,10 @@
                     const surf = f.properties.surface_ha !== undefined ? ` (${f.properties.surface_ha} ha)` : '';
                     const opt = document.createElement('option');
                     opt.value = cid;
+                    if (f.properties.bassin_ref) opt.dataset.bassinRef = f.properties.bassin_ref;
+                    if (f.properties.exutoire_id !== undefined && f.properties.exutoire_id !== null) {
+                        opt.dataset.exutoireId = f.properties.exutoire_id;
+                    }
                     opt.textContent = `${nom}${surf} (isolé)`;
                     grpIso.appendChild(opt);
                 });

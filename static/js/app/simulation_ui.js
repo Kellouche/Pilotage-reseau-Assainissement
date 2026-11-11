@@ -617,8 +617,13 @@ window.dessinerRaccordementsOrphelinsSurCarte = function() {
                 penteVal = parseFloat(String(penteInput.value).replace(',', '.'));
             }
             if (isNaN(penteVal) || penteVal === null) penteVal = 1.0;
-            const simBassinVal = document.getElementById('sim-select-bassin') ? document.getElementById('sim-select-bassin').value : '';
+            const simBassinSel = document.getElementById('sim-select-bassin');
+            const simBassinVal = simBassinSel ? simBassinSel.value : '';
             const clusterId = (simBassinVal && !isNaN(Number(simBassinVal))) ? parseInt(simBassinVal, 10) : (simBassinVal || null);
+            // Étape 3A : la référence métier `bassin_ref` est la valeur principale
+            // transmise ; l'identifiant ordinal reste envoyé pour compatibilité.
+            const simOpt = simBassinSel && simBassinSel.selectedOptions ? simBassinSel.selectedOptions[0] : null;
+            const bassinRef = (simOpt && simOpt.dataset && simOpt.dataset.bassinRef) ? simOpt.dataset.bassinRef : null;
 
             if (!clusterId) {
                 const statusDiv = document.getElementById('sim-status-message');
@@ -735,6 +740,7 @@ window.dessinerRaccordementsOrphelinsSurCarte = function() {
                 pas_routage_sec: pasRoutage,
                 pente_moyenne_pct: penteVal,
                 cluster_id: clusterId,
+                bassin_ref: bassinRef,
                 buffer_m: window._activeBufferM || 35.0,
                 valider_raccordement: validerRaccord,
                 typologie_sol: typoSolVal,

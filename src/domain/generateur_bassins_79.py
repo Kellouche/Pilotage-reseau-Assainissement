@@ -634,6 +634,7 @@ def partitionner_79_bassins_versants(
         feat["properties"]["type"] = "bassin_urbain"
         feat["properties"]["cluster_id"] = b_id
         feat["properties"]["nom"] = b_nom
+        feat["properties"]["bassin_ref"] = f"exutoire:{ex_id_str}" if ex_id_str else None
         feat["properties"]["exutoire_type"] = b_type
         feat["properties"]["exutoire_type_detaille"] = props.get("type_exutoire")
         feat["properties"]["libelle_type"] = props.get("libelle_type")
@@ -665,6 +666,8 @@ def partitionner_79_bassins_versants(
                         "type": "exutoire",
                         "cluster_id": b_id,
                         "nom": b_nom,
+                        "exutoire_id": ex_id_str,
+                        "bassin_ref": f"exutoire:{ex_id_str}" if ex_id_str else None,
                         "exutoire_type": b_type,
                         "exutoire_type_detaille": props.get("type_exutoire"),
                         "libelle_type": props.get("libelle_type"),

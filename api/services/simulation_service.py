@@ -122,6 +122,10 @@ def generer_cle_cache_simulation(gpkg_path: Path, payload: Any) -> Tuple[str, Di
         "bms_heure_fin": str(getattr(payload, "bms_heure_fin", None) or "21:00"),
         "bms_profil": str(getattr(payload, "bms_profil", None) or "cloche"),
     }
+    # Étape 3A : la référence métier du bassin n'entre dans l'empreinte
+    # que lorsqu'elle est fournie — les caches historiques restent valides.
+    if getattr(payload, "bassin_ref", None):
+        params_dict["bassin_ref"] = str(payload.bassin_ref)
 
     serialized = json.dumps(params_dict, sort_keys=True, ensure_ascii=False)
     param_hash = hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]

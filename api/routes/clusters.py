@@ -246,6 +246,36 @@ def _calculate_clusters_background():
         db.close()
 
 
+def _purger_clusters_du_projet(db: Session, network_id_cible: Optional[str]) -> None:
+    """
+    Supprime les clusters rattachés au projet `network_id_cible` et détache
+    les éléments (regards, conduites, rejets) du même périmètre.
+
+    Étape 3A — isolation multi-projets :
+    - les clusters des AUTRES projets (network_id différent) sont préservés ;
+    - les clusters legacy sans network_id sont traités comme non attribués :
+      purgés lors d'un recalcul de projet (comportement historique), mais
+      jamais ceux explicitement rattachés à un autre projet ;
+    - sans projet résolu, seuls les clusters sans network_id sont purgés.
+    """
+    purge_query = db.query(crud.Cluster)
+    if network_id_cible:
+        purge_query = purge_query.filter(
+            (crud.Cluster.network_id == network_id_cible) |
+            (crud.Cluster.network_id.is_(None))
+        )
+    else:
+        purge_query = purge_query.filter(crud.Cluster.network_id.is_(None))
+    purge_query.delete(synchronize_session=False)
+
+    for modele in (crud.Regard, crud.Canalisation, crud.Rejet):
+        q = db.query(modele)
+        if network_id_cible:
+            q = q.filter(modele.network_id == network_id_cible)
+        q.update({modele.cluster_id: None}, synchronize_session=False)
+    db.commit()
+
+
 def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional[str] = None):
     """Core logic extracted from the original endpoint. Returns the same result structure."""
     from src.domain.graphe_reseau import construire_graphe, calculer_ordre_topologique
@@ -356,15 +386,27 @@ def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional
     if cycles_casses:
         _log_cluster(f"[cluster] {len(cycles_casses)} cycle(s) neutralise(s) avant tracage", flush=True)
 
-    if persist:
-        # Nettoyer les anciens clusters pour éviter l'affichage de "bassins fantômes" des précédents calculs
+    # Résolution du projet porteur du GeoPackage (portée d'unicité des clusters)
+    projet_cible = None
+    if chemin_gpkg:
         try:
-            db.query(crud.Regard).update({crud.Regard.cluster_id: None})
-            db.query(crud.Canalisation).update({crud.Canalisation.cluster_id: None})
-            db.query(crud.Rejet).update({crud.Rejet.cluster_id: None})
-            db.query(crud.Cluster).delete()
-            db.commit()
-            _log_cluster("[cluster] Anciens clusters purgés de la base de données.", flush=True)
+            gpkg_resolu = str(Path(chemin_gpkg).resolve())
+            for cand in db.query(Project).filter(Project.is_archived.is_(False)).all():
+                if cand.source_gpkg_key and Path(cand.source_gpkg_key).exists() \
+                        and str(Path(cand.source_gpkg_key).resolve()) == gpkg_resolu:
+                    projet_cible = cand
+                    break
+        except Exception as e_proj:
+            _log_cluster(f"[cluster] Résolution projet impossible: {e_proj}", flush=True)
+    network_id_cible = projet_cible.id if projet_cible else None
+    org_id_cible = projet_cible.org_id if projet_cible else None
+
+    if persist:
+        # Nettoyer les anciens clusters du PROJET UNIQUEMENT (étape 3A :
+        # plus de purge globale — les clusters des autres projets sont préservés)
+        try:
+            _purger_clusters_du_projet(db, network_id_cible)
+            _log_cluster(f"[cluster] Anciens clusters du projet {network_id_cible or 'legacy/NULL'} purgés.", flush=True)
         except Exception as e:
             db.rollback()
             _log_cluster(f"[cluster] Erreur lors de la purge des anciens clusters: {e}", flush=True)
@@ -530,22 +572,38 @@ def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional
             cluster = None
 
             if persist:
-                # Chercher par nom d'exutoire (compatibilité) ou par nom de bassin
-                existing = db.query(crud.Cluster).filter(
-                    (crud.Cluster.nom == nom_exutoire) |
-                    (crud.Cluster.nom == nom_bassin)
-                ).first()
+                # Chercher par référence métier stable (étape 3A), puis par nom
+                # dans le périmètre du projet uniquement — jamais de correspondance globale
+                ref_bassin = f"exutoire:{noeud_exutoire}"
+                existing = None
+                if network_id_cible:
+                    existing = db.query(crud.Cluster).filter(
+                        crud.Cluster.network_id == network_id_cible,
+                        (crud.Cluster.bassin_ref == ref_bassin) |
+                        (crud.Cluster.exutoire_noeud == str(noeud_exutoire))
+                    ).first()
+                if not existing:
+                    existing = db.query(crud.Cluster).filter(
+                        crud.Cluster.network_id == network_id_cible,
+                        (crud.Cluster.nom == nom_exutoire) |
+                        (crud.Cluster.nom == nom_bassin)
+                    ).first() if network_id_cible else None
 
                 if existing:
-                    # Mettre à jour le nom si le bassin a été renommé
+                    # Mettre à jour le nom et renseigner la référence métier si absente
                     update_data = {**db_stats}
                     if existing.nom != nom_bassin:
                         update_data["nom"] = nom_bassin
+                    if not existing.bassin_ref:
+                        update_data["bassin_ref"] = ref_bassin
                     cluster = crud.update_cluster_stats(db, existing.id, update_data)
                 else:
                     cluster = crud.create_cluster(db, {
                         "nom": nom_bassin,
                         "exutoire_noeud": str(noeud_exutoire),
+                        "bassin_ref": ref_bassin,
+                        "network_id": network_id_cible,
+                        "org_id": org_id_cible,
                         **db_stats
                     })
 
@@ -606,6 +664,9 @@ def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional
                         if feat.get("properties", {}).get("type") == "bassin_urbain":
                             feat["properties"]["nom"] = f"{mb.get('nom', 'Bassin Manuel')} [MANUEL]"
                             feat["properties"]["exutoire_type"] = info_ex.get("type", "manuel")
+                            # Identité contextuelle des bassins manuels (jamais persistée :
+                            # les identifiants M_x sont instables — voir étape 3A)
+                            feat["properties"]["bassin_ref"] = f"manuel:M_{mb.get('id', 1)}"
 
                 results.append({
                     "cluster": None,
