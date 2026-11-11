@@ -1451,23 +1451,25 @@ def get_profil_en_long(
 
             z_gen_sup = z_rad + diam_m
 
-            # HGL exacte et régime hydraulique depuis la simulation SWMM
+            # HGL et régime hydraulique : le statut du nœud dans node_results
+            # fait foi ; à défaut (nœud non listé = fonctionnement normal), on
+            # conserve un plan d'eau et une ligne de charge plausibles pour que
+            # le profil affiche le remplissage et les hachures sur tout le tracé.
             hgl = None
             hgl_regime = "libre"
             node_sim = sim_node_results.get(nid, {})
-            if node_sim:
-                status_n = node_sim.get("status", "normal")
-                if status_n == "flooded":
-                    hgl = z_terrain + 0.05  # Débordement franc au-dessus du sol
-                    hgl_regime = "debordement"
-                elif status_n == "surcharged":
-                    # Mise en charge dans la cheminée : nettement visible au-dessus de la génératrice sup
-                    hgl = z_gen_sup + max(0.1, (z_terrain - z_gen_sup) * 0.82)
-                    hgl_regime = "surcharge"
-                else:
-                    # Écoulement à surface libre sain dans la conduite
-                    hgl = z_rad + min(profondeur * 0.5, diam_m * 0.7)
-                    hgl_regime = "libre"
+            status_n = node_sim.get("status", "normal")
+            if status_n == "flooded":
+                hgl = z_terrain + 0.05  # Débordement franc au-dessus du sol
+                hgl_regime = "debordement"
+            elif status_n == "surcharged":
+                # Mise en charge dans la cheminée : nettement visible au-dessus de la génératrice sup
+                hgl = z_gen_sup + max(0.1, (z_terrain - z_gen_sup) * 0.82)
+                hgl_regime = "surcharge"
+            else:
+                # Écoulement à surface libre sain dans la conduite
+                hgl = z_rad + min(profondeur * 0.5, diam_m * 0.7)
+                hgl_regime = "libre"
 
             # Trouver la conduite qui sort de ce nœud vers le suivant
             conduit = None
@@ -1505,6 +1507,15 @@ def get_profil_en_long(
                         conduit["depth_ratio"] = 0.0
                         conduit["status"] = "inconnu"
                         conduit["color"] = "#64748b"
+
+            # Si le nœud n'est pas listé dans node_results mais que le tronçon
+            # sortant est en surcharge, refléter la mise en charge sur la HGL
+            if hgl_regime == "libre" and conduit and conduit.get("status") in ("surcharge", "critique", "debordement"):
+                diam_sortant_m = (conduit.get("diam_mm") or 600.0) / 1000.0
+                z_gs_sortant = z_rad + diam_sortant_m
+                hgl = (z_gs_sortant + max(0.1, (z_terrain - z_gs_sortant) * 0.82)
+                       if z_terrain > z_gs_sortant else z_gs_sortant + 0.15)
+                hgl_regime = "surcharge"
 
             z_gs = z_rad + (conduit["diam_mm"] / 1000.0 if conduit else diam_m)
             pression_m = round(max(0.0, hgl - z_gs), 2) if (hgl and hgl > z_gs) else 0.0
