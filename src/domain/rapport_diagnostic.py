@@ -41,6 +41,27 @@ def formater_nombre_fr(val: Any, decimales: int = 3) -> str:
     return fmt.format(fval).replace(",", " ").replace(".", ",")
 
 
+def creer_tableau_ou_ras(rows: List[List[Any]], col_widths: List[float], style_tableau: Any, style_tableau_bold: Any, message_ras: str = "RAS") -> Any:
+    """
+    Crée un tableau ReportLab ou retourne un message RAS si le tableau est vide.
+    
+    Args:
+        rows: Liste des lignes du tableau (chaque ligne est une liste de Paragraph)
+        col_widths: Largeurs des colonnes en cm
+        style_tableau: Style pour les cellules normales
+        style_tableau_bold: Style pour les cellules en gras
+        message_ras: Message à afficher si le tableau est vide
+        
+    Returns:
+        Table ou Paragraph avec message RAS
+    """
+    # Vérifier si le tableau a des données (plus que l'en-tête)
+    if len(rows) <= 1:
+        return Paragraph(f"<b>{message_ras}</b>", style_tableau)
+    
+    return Table(rows, colWidths=col_widths)
+
+
 def generer_pdf_rapport_diagnostic(
     simulation_data: Dict[str, Any],
     project_name: Optional[str] = None
@@ -108,7 +129,8 @@ def generer_pdf_rapport_diagnostic(
         fontName='Helvetica',
         fontSize=11,
         leading=15,
-        textColor=colors.HexColor('#1e293b')
+        textColor=colors.HexColor('#1e293b'),
+        alignment=4  # Justifié
     )
 
     style_tableau = ParagraphStyle(
@@ -117,7 +139,8 @@ def generer_pdf_rapport_diagnostic(
         fontName='Helvetica',
         fontSize=8.5,
         leading=11,
-        textColor=colors.HexColor('#0f172a')
+        textColor=colors.HexColor('#0f172a'),
+        alignment=4  # Justifié
     )
 
     style_tableau_bold = ParagraphStyle(
@@ -126,7 +149,8 @@ def generer_pdf_rapport_diagnostic(
         fontName='Helvetica-Bold',
         fontSize=8.5,
         leading=11,
-        textColor=colors.HexColor('#0f172a')
+        textColor=colors.HexColor('#0f172a'),
+        alignment=4  # Justifié
     )
 
     style_agent_memo = ParagraphStyle(
@@ -139,7 +163,8 @@ def generer_pdf_rapport_diagnostic(
         leftIndent=4,
         rightIndent=4,
         spaceBefore=4,
-        spaceAfter=4
+        spaceAfter=4,
+        alignment=4  # Justifié
     )
 
     style_agent_title = ParagraphStyle(
@@ -412,7 +437,7 @@ def generer_pdf_rapport_diagnostic(
                     Paragraph(f"{hours_flooded:.2f} h", style_tableau),
                     Paragraph(f"{flood_volume:.2f} m³", style_tableau),
                     Paragraph(f"{peak_flood_flow:.3f} m³/s", style_tableau),
-                    Paragraph(f"<font color='#ef4444'><b>{status.upper()}</b></font>", style_tableau)
+                    Paragraph(f"<font color='#ef4444'><b>{'INONDÉ' if status == 'flooded' else status.upper()}</b></font>", style_tableau)
                 ])
 
             flood_table = Table(flood_rows, colWidths=[3 * cm, 3 * cm, 3 * cm, 4 * cm, 2.5 * cm])
@@ -514,23 +539,24 @@ def generer_pdf_rapport_diagnostic(
                 Paragraph(formater_cout_dzd(a.get('estimation_cout_dzd', 0)), style_tableau),
                 Paragraph(a.get('delai_recommande', '--'), style_tableau)
             ])
-    else:
-        risk_rows.append([
-            Paragraph("<b>RAS</b>", style_tableau), Paragraph("Aucun risque critique immédiat recensé.", style_tableau),
-            Paragraph("", style_tableau), Paragraph("", style_tableau),
-            Paragraph("", style_tableau), Paragraph("", style_tableau)
-        ])
 
-    risk_table = Table(risk_rows, colWidths=[1.8 * cm, 2.5 * cm, 3 * cm, 5.5 * cm, 2.5 * cm, 2 * cm])
-    risk_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0369a1')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
-        ('TOPPADDING', (0, 0), (-1, -1), 3),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
-    ]))
+    risk_table = creer_tableau_ou_ras(
+        risk_rows,
+        [1.8 * cm, 2.5 * cm, 3 * cm, 5.5 * cm, 2.5 * cm, 2 * cm],
+        style_tableau,
+        style_tableau_bold,
+        "Aucun risque critique immédiat recensé"
+    )
+    if isinstance(risk_table, Table):
+        risk_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0369a1')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
+        ]))
     story.append(risk_table)
     story.append(Spacer(1, 0.4 * cm))
 
@@ -563,19 +589,24 @@ def generer_pdf_rapport_diagnostic(
                 Paragraph(f"{l.get('q_max', l.get('max_flow_cms', 0)):.3f} m³/s", style_tableau),
                 Paragraph(l.get('cause', 'Surcharge sous pression'), style_tableau)
             ])
-    else:
-        surch_rows.append([Paragraph("<b>RAS</b> - Aucun tronçon en surcharge sévère (>80%).", style_tableau)] + [Paragraph("", style_tableau)] * 5)
 
-    surch_table = Table(surch_rows, colWidths=[2.5 * cm, 2 * cm, 2 * cm, 2 * cm, 2.5 * cm, 5 * cm])
-    surch_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0369a1')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
-        ('TOPPADDING', (0, 0), (-1, -1), 3),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
-    ]))
+    surch_table = creer_tableau_ou_ras(
+        surch_rows,
+        [2.5 * cm, 2 * cm, 2 * cm, 2 * cm, 2.5 * cm, 5 * cm],
+        style_tableau,
+        style_tableau_bold,
+        "Aucun tronçon en surcharge sévère (>80%)"
+    )
+    if isinstance(surch_table, Table):
+        surch_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0369a1')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
+        ]))
     story.append(surch_table)
     story.append(Spacer(1, 0.3 * cm))
 
@@ -600,16 +631,23 @@ def generer_pdf_rapport_diagnostic(
                 Paragraph(f"{b.get('longueur', b.get('longueur_m', 0)):.1f} m", style_tableau),
                 Paragraph(b.get('description', 'Goulot géométrique - Réduction anormale de section'), style_tableau)
             ])
-        bottle_table = Table(bottle_rows, colWidths=[4 * cm, 2.5 * cm, 2.5 * cm, 2.5 * cm, 5.5 * cm])
-        bottle_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0369a1')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
-            ('TOPPADDING', (0, 0), (-1, -1), 3),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
-        ]))
+        bottle_table = creer_tableau_ou_ras(
+            bottle_rows,
+            [4 * cm, 2.5 * cm, 2.5 * cm, 2.5 * cm, 5.5 * cm],
+            style_tableau,
+            style_tableau_bold,
+            "Aucun goulot géométrique inverse détecté"
+        )
+        if isinstance(bottle_table, Table):
+            bottle_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0369a1')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
+                ('TOPPADDING', (0, 0), (-1, -1), 3),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
+            ]))
         story.append(bottle_table)
     else:
         story.append(Paragraph("<b>RAS</b> - Aucun goulot géométrique inverse détecté.", style_corps))
@@ -735,19 +773,23 @@ def generer_pdf_rapport_diagnostic(
             Paragraph(formater_cout_dzd(p.get('cout_estime_dzd', 0)), style_tableau)
         ])
 
-    if len(gc_rows) == 1:
-        gc_rows.append([Paragraph("<b>RAS</b> - Aucun recalibrage structurel lourd requis.", style_tableau)] + [Paragraph("", style_tableau)] * 6)
-
-    gc_table = Table(gc_rows, colWidths=[2.5 * cm, 2 * cm, 2 * cm, 2 * cm, 3 * cm, 2 * cm, 2.5 * cm])
-    gc_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0369a1')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
-        ('TOPPADDING', (0, 0), (-1, -1), 3),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
-    ]))
+    gc_table = creer_tableau_ou_ras(
+        gc_rows,
+        [2.5 * cm, 2 * cm, 2 * cm, 2 * cm, 3 * cm, 2 * cm, 2.5 * cm],
+        style_tableau,
+        style_tableau_bold,
+        "Aucun recalibrage structurel lourd requis"
+    )
+    if isinstance(gc_table, Table):
+        gc_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0369a1')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
+        ]))
     story.append(gc_table)
     story.append(Spacer(1, 0.4 * cm))
 
@@ -891,16 +933,23 @@ def generer_pdf_rapport_diagnostic(
             Paragraph("Infiltration diffuse & déconnexion pluviale", style_tableau)
         ])
 
-    lid_table = Table(lid_rows, colWidths=[2.5 * cm, 4.5 * cm, 5 * cm, 5 * cm])
-    lid_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0369a1')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
-        ('TOPPADDING', (0, 0), (-1, -1), 3),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
-    ]))
+    lid_table = creer_tableau_ou_ras(
+        lid_rows,
+        [2.5 * cm, 4.5 * cm, 5 * cm, 5 * cm],
+        style_tableau,
+        style_tableau_bold,
+        "Aucune solution GDO disponible"
+    )
+    if isinstance(lid_table, Table):
+        lid_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0369a1')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
+        ]))
     story.append(lid_table)
     story.append(Spacer(1, 0.4 * cm))
 
@@ -934,16 +983,23 @@ def generer_pdf_rapport_diagnostic(
                 )
             ])
 
-        buf_table = Table(buf_rows, colWidths=[3.5 * cm, 2.5 * cm, 2 * cm, 2.5 * cm, 5.5 * cm])
-        buf_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0369a1')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
-            ('TOPPADDING', (0, 0), (-1, -1), 3),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
-        ]))
+        buf_table = creer_tableau_ou_ras(
+            buf_rows,
+            [3.5 * cm, 2.5 * cm, 2 * cm, 2.5 * cm, 5.5 * cm],
+            style_tableau,
+            style_tableau_bold,
+            "Aucune donnée de sensibilité buffer disponible"
+        )
+        if isinstance(buf_table, Table):
+            buf_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0369a1')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
+                ('TOPPADDING', (0, 0), (-1, -1), 3),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
+            ]))
         story.append(buf_table)
         story.append(Spacer(1, 0.4 * cm))
 
