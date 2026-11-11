@@ -334,3 +334,29 @@
             alert("Impossible de générer le rapport d'expertise :\n" + (err && err.message ? err.message : err));
         }
     };
+
+// ==========================================
+        // TÉLÉCHARGEMENT DU RAPPORT D'EXPERTISE OFFICIEL (PDF ReportLab)
+        // ==========================================
+        window.telechargerRapportDiagnosticPDF = function() {
+            const simData = window._dernierResultatSimulation;
+            if (!simData) {
+                alert("Aucun résultat de simulation active. Veuillez d'abord exécuter une simulation SWMM 5.2.");
+                return;
+            }
+
+            // Récupérer le cluster_id si disponible
+            const clusterId = simData.meta && simData.meta.cluster_id ? simData.meta.cluster_id : null;
+            const url = clusterId
+                ? `/api/v1/simulations/rapport-diagnostic-pdf?cluster_id=${encodeURIComponent(clusterId)}`
+                : '/api/v1/simulations/rapport-diagnostic-pdf';
+
+            // Télécharger le PDF
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = '';
+            a.target = '_blank';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        };

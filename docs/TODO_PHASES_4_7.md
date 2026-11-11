@@ -22,11 +22,12 @@
   - [x] Clignotement et marquage visuel radar des regards en débordement
   - [x] Affichage du débit instantané à l'exutoire (mini-hydrogramme Chart.js mis à jour en temps réel et navigation au clic)
 
-- [ ] **6.C — Générateur de Rapport de Diagnostic en 1 clic (PDF)**
-  - Synthèse complète : cartographie du réseau, liste des contre-pentes, anomalies critiques
-  - Bilan de continuité massique SWMM (%), volume inondé total (m³), durées de submersion
-  - Estimation financière des travaux prioritaires (reprises de canalisations, rehaussement de regards)
-  - Export au format PDF réglementaire, prêt pour transmission à la direction technique
+- [x] **6.C — Générateur de Rapport de Diagnostic en 1 clic (PDF)**
+  - [x] Synthèse complète : liste des contre-pentes, anomalies critiques, regards en débordement avec durées de submersion
+  - [x] Bilan de continuité massique SWMM (%), volume inondé total (m³), durées de submersion
+  - [x] Estimation financière des travaux prioritaires (reprises de canalisations, rehaussement de regards)
+  - [x] Export au format PDF réglementaire (ReportLab), prêt pour transmission à la direction technique
+  - [ ] Cartographie du réseau dans le PDF (à implémenter avec image statique ou schéma)
 
 ---
 
@@ -69,7 +70,7 @@
 
 | Phase | Titre | Statut |
 |---|---|---|
-| Phase 6 | Cockpit & Profils Hydrauliques | 🔵 En cours |
+| Phase 6 | Cockpit & Profils Hydrauliques | ✅ Terminée |
 | Phase 5 | API Publique & SIG | ⬜ À faire |
 | Phase 7 | Docker & Production | ⬜ À faire |
 | Phase 4 | Mobilité Terrain | ⬜ À faire |

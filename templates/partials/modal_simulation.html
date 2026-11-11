@@ -553,8 +553,13 @@ Objet : Modale de paramétrage de pluie, stations ANRH et déclenchement SWMM 5.
                     </button>
 
                     <!-- Bouton d'impression directe du rapport complet PDF -->
-                    <button onclick="imprimerDiagnosticTechniqueComplet()" style="width: 100%; margin-bottom: 14px; padding: 10px 16px; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.4); color: #d8b4fe; border-radius: 8px; font-weight: 700; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.15s;" onmouseover="this.style.background='rgba(168, 85, 247, 0.25)'" onmouseout="this.style.background='rgba(168, 85, 247, 0.15)'">
+                    <button onclick="imprimerDiagnosticTechniqueComplet()" style="width: 100%; margin-bottom: 8px; padding: 10px 16px; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.4); color: #d8b4fe; border-radius: 8px; font-weight: 700; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.15s;" onmouseover="this.style.background='rgba(168, 85, 247, 0.25)'" onmouseout="this.style.background='rgba(168, 85, 247, 0.15)'">
                         <i class="fas fa-file-pdf"></i> Imprimer le rapport d'expertise complet (PDF / papier)
+                    </button>
+
+                    <!-- Bouton de téléchargement du PDF ReportLab officiel -->
+                    <button onclick="telechargerRapportDiagnosticPDF()" style="width: 100%; margin-bottom: 14px; padding: 10px 16px; background: rgba(2, 132, 199, 0.15); border: 1px solid rgba(2, 132, 199, 0.4); color: #38bdf8; border-radius: 8px; font-weight: 700; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.15s;" onmouseover="this.style.background='rgba(2, 132, 199, 0.25)'" onmouseout="this.style.background='rgba(2, 132, 199, 0.15)'">
+                        <i class="fas fa-download"></i> Télécharger le rapport d'expertise officiel (PDF ReportLab)
                     </button>
 
                     <!-- Téléchargements d'artefacts certifiés -->

@@ -344,6 +344,76 @@ def generer_pdf_rapport_diagnostic(
     story.append(bilan_table)
     story.append(Spacer(1, 0.4 * cm))
 
+    # 6.B Regards en débordement et durées de submersion
+    story.append(Paragraph("⚠️ REGARDS EN DÉBORDEMENT ET DURÉES DE SUBMERSION", style_section))
+
+    # Récupérer les node_results pour les détails des regards débordants
+    node_results = simulation_data.get("node_results", {})
+    flooded_nodes_list = simulation_data.get("flooded_nodes", [])
+
+    if flooded_nodes_list or node_results:
+        # Tableau des regards en débordement
+        flood_rows = [
+            [
+                Paragraph("<b>Code regard</b>", style_tableau_bold),
+                Paragraph("<b>Durée submersion (h)</b>", style_tableau_bold),
+                Paragraph("<b>Volume inondé (m³)</b>", style_tableau_bold),
+                Paragraph("<b>Débit pic débordement (m³/s)</b>", style_tableau_bold),
+                Paragraph("<b>Statut</b>", style_tableau_bold)
+            ]
+        ]
+
+        # Utiliser flooded_nodes_list si disponible, sinon node_results avec status flooded
+        nodes_to_display = []
+        if flooded_nodes_list:
+            for node in flooded_nodes_list:
+                if isinstance(node, dict):
+                    nodes_to_display.append(node)
+                else:
+                    nid = str(node)
+                    if nid in node_results:
+                        nodes_to_display.append(node_results[nid])
+        else:
+            # Fallback: chercher dans node_results
+            for nid, node_data in node_results.items():
+                if node_data.get("status") == "flooded":
+                    nodes_to_display.append(node_data)
+
+        if nodes_to_display:
+            for node in nodes_to_display:
+                nid = node.get("node", node.get("node_id", "--"))
+                hours_flooded = node.get("hours_flooded", 0.0)
+                flood_volume = node.get("flood_volume_m3", 0.0)
+                peak_flood_flow = node.get("peak_flood_flow_cms", 0.0)
+                status = node.get("status", "flooded")
+
+                flood_rows.append([
+                    Paragraph(f"<b>{nid}</b>", style_tableau),
+                    Paragraph(f"{hours_flooded:.2f} h", style_tableau),
+                    Paragraph(f"{flood_volume:.2f} m³", style_tableau),
+                    Paragraph(f"{peak_flood_flow:.3f} m³/s", style_tableau),
+                    Paragraph(f"<font color='#ef4444'><b>{status.upper()}</b></font>", style_tableau)
+                ])
+
+            flood_table = Table(flood_rows, colWidths=[3 * cm, 3 * cm, 3 * cm, 4 * cm, 2.5 * cm])
+            flood_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0369a1')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
+                ('TOPPADDING', (0, 0), (-1, -1), 3),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
+            ]))
+            story.append(flood_table)
+            story.append(Spacer(1, 0.3 * cm))
+        else:
+            story.append(Paragraph("Aucun regard en débordement détecté dans cette simulation.", style_corps))
+            story.append(Spacer(1, 0.3 * cm))
+    else:
+        story.append(Paragraph("Aucune donnée de débordement disponible pour cette simulation.", style_corps))
+        story.append(Spacer(1, 0.3 * cm))
+
     # 7. Synthèse Exécutive (Agent 6)
     story.append(Paragraph("1. SYNTHÈSE STRATÉGIQUE ET AVIS DES DÉCIDEURS (Agent 6)", style_section))
 
