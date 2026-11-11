@@ -13,11 +13,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.units import cm
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.utils import ImageReader
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable, PageBreak, Flowable, Image
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable,
+    PageBreak, Flowable, Image, BaseDocTemplate, PageTemplate, Frame,
+    NextPageTemplate,
+)
 from reportlab.pdfgen import canvas as pdf_canvas
 
 # Palette « guide pro » (référence : documents commerciaux soignés)
@@ -51,21 +55,22 @@ class _CanvasNumerote(pdf_canvas.Canvas):
 
     def _dessiner_pagination(self, total_pages):
         self.saveState()
+        w_page, h_page = self._pagesize
         if self._pageNumber > 1:
             # En-tête courant (absent de la page de garde)
             self.setFont("Times-Roman", 7)
             self.setFillColor(colors.HexColor(_COULEUR_GRIS))
-            self.drawString(1.5 * cm, A4[1] - 0.9 * cm,
+            self.drawString(1.5 * cm, h_page - 0.9 * cm,
                             "DrainPilot 5.2 - Rapport d'expertise hydraulique SWMM")
-            self.drawRightString(A4[0] - 1.5 * cm, A4[1] - 0.9 * cm,
+            self.drawRightString(w_page - 1.5 * cm, h_page - 0.9 * cm,
                                  "EPA SWMM 5.2 - Saint-Venant 1D")
             self.setStrokeColor(colors.HexColor('#e5e7eb'))
             self.setLineWidth(0.5)
-            self.line(1.5 * cm, A4[1] - 1.05 * cm, A4[0] - 1.5 * cm, A4[1] - 1.05 * cm)
+            self.line(1.5 * cm, h_page - 1.05 * cm, w_page - 1.5 * cm, h_page - 1.05 * cm)
         # Pagination centrée en pied de page
         self.setFont("Times-Roman", 7)
         self.setFillColor(colors.HexColor(_COULEUR_GRIS))
-        self.drawCentredString(A4[0] / 2.0, 0.9 * cm, f"Page {self._pageNumber} / {total_pages}")
+        self.drawCentredString(w_page / 2.0, 0.9 * cm, f"Page {self._pageNumber} / {total_pages}")
         self.restoreState()
 
 
@@ -211,7 +216,7 @@ def _generer_carte_reseau_png(simulation_data: Dict[str, Any]) -> Optional[bytes
             for c in conduit_results if isinstance(c, dict)
         }
 
-    fig, ax = plt.subplots(figsize=(8.0, 5.4), dpi=200)
+    fig, ax = plt.subplots(figsize=(11.5, 6.8), dpi=200)
     fig.patch.set_facecolor("white")
     ax.set_facecolor("#f8fafc")
 
@@ -237,7 +242,7 @@ def _generer_carte_reseau_png(simulation_data: Dict[str, Any]) -> Optional[bytes
             statut, _COULEUR_CONDUITE_NORMALE)
         if statut and statut not in ("normal", ""):
             statuts_conduites[statut] = couleur
-        lw = 2.0 if statut and statut not in ("normal", "") else 1.1
+        lw = 2.6 if statut and statut not in ("normal", "") else 1.5
 
         def _tracer(geo):
             if isinstance(geo, LineString):
@@ -260,11 +265,11 @@ def _generer_carte_reseau_png(simulation_data: Dict[str, Any]) -> Optional[bytes
         res = node_results.get(nid, {})
         statut = str(res.get("status", "")).lower()
         if statut in ("flooded", "inonde"):
-            taille = 46
+            taille = 60
         elif statut in ("surcharged", "surcharge"):
-            taille = 30
+            taille = 40
         else:
-            taille = 16
+            taille = 22
         couleur = res.get("color") or _STATUT_VERS_COULEUR.get(
             statut, _COULEUR_REGARD_NORMAL)
         noeuds_x.append(geom.x)
@@ -351,6 +356,27 @@ def _generer_carte_reseau_png(simulation_data: Dict[str, Any]) -> Optional[bytes
     return buf.getvalue()
 
 
+def _creer_document_pdf(buffer: io.BytesIO, titre: Optional[str] = None) -> BaseDocTemplate:
+    """Document PDF avec gabarits portrait (A4) et paysage (A4) pour la cartographie."""
+    doc = BaseDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=1.5 * cm,
+        rightMargin=1.5 * cm,
+        topMargin=1.5 * cm,
+        bottomMargin=1.5 * cm,
+        title=titre or "Rapport d'expertise hydraulique",
+    )
+    frame_port = Frame(1.5 * cm, 1.5 * cm, A4[0] - 3 * cm, A4[1] - 3 * cm, id='normal')
+    lw_pays, lh_pays = landscape(A4)
+    frame_pays = Frame(1.5 * cm, 1.5 * cm, lw_pays - 3 * cm, lh_pays - 3 * cm, id='paysage')
+    doc.addPageTemplates([
+        PageTemplate(id='Portrait', frames=frame_port, pagesize=A4),
+        PageTemplate(id='Paysage', frames=frame_pays, pagesize=landscape(A4)),
+    ])
+    return doc
+
+
 def _flowable_carte_reseau(simulation_data: Dict[str, Any]) -> Optional[Image]:
     """Retourne un flowable Image ReportLab de la cartographie, ou None."""
     png = _generer_carte_reseau_png(simulation_data)
@@ -387,14 +413,9 @@ def generer_pdf_rapport_diagnostic(
         Octets bruts du fichier PDF généré.
     """
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(
+    doc = _creer_document_pdf(
         buffer,
-        pagesize=A4,
-        leftMargin=1.5 * cm,
-        rightMargin=1.5 * cm,
-        topMargin=1.5 * cm,
-        bottomMargin=1.5 * cm,
-        title=f"Rapport d'expertise hydraulique - {project_name or 'Réseau Urbain'}"
+        titre=f"Rapport d'expertise hydraulique - {project_name or 'Réseau Urbain'}"
     )
 
     styles = getSampleStyleSheet()
@@ -849,14 +870,17 @@ def generer_pdf_rapport_diagnostic(
         if not hasattr(_construire_story, "_carte_png"):
             _construire_story._carte_png = _generer_carte_reseau_png(simulation_data)
         if _construire_story._carte_png:
+            # Page paysage dédiée à la cartographie pour maximiser le fond de carte
+            story.append(NextPageTemplate('Paysage'))
+            story.append(PageBreak())
             story.extend(_section("CARTOGRAPHIE DU RÉSEAU ET LOCALISATION DES DÉSORDRES"))
             try:
                 w_px, h_px = ImageReader(io.BytesIO(_construire_story._carte_png)).getSize()
             except Exception:
-                w_px, h_px = 1600, 1080
-            largeur = 17.5 * cm
+                w_px, h_px = 2200, 1400
+            largeur = 24.0 * cm
             hauteur = largeur * (h_px / max(w_px, 1))
-            hauteur_max = 13.0 * cm
+            hauteur_max = 14.5 * cm
             if hauteur > hauteur_max:
                 hauteur = hauteur_max
                 largeur = hauteur * (w_px / max(h_px, 1))
@@ -869,6 +893,8 @@ def generer_pdf_rapport_diagnostic(
                 "regards surchargés (orange), regards inondés (rouge), conduites en surcharge ou critique.</i>",
                 style_corps))
             story.append(Spacer(1, 0.4 * cm))
+            story.append(NextPageTemplate('Portrait'))
+            story.append(PageBreak())
 
         # 7. Synthèse Exécutive
         story.extend(_section("1. SYNTHÈSE STRATÉGIQUE ET AVIS DES DÉCIDEURS"))
@@ -1495,14 +1521,7 @@ def generer_pdf_rapport_diagnostic(
     # sections, puis insertion du sommaire (1 page) et décalage +1.
     # ======================================================================
     buffer_mesure = io.BytesIO()
-    doc_mesure = SimpleDocTemplate(
-        buffer_mesure,
-        pagesize=A4,
-        leftMargin=1.5 * cm,
-        rightMargin=1.5 * cm,
-        topMargin=1.5 * cm,
-        bottomMargin=1.5 * cm,
-    )
+    doc_mesure = _creer_document_pdf(buffer_mesure)
     doc_mesure.build(story_mesure, canvasmaker=_CanvasNumerote)
     buffer_mesure.close()
 
