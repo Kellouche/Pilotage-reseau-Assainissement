@@ -554,15 +554,21 @@ function afficherProfilLong(data) {
                     borderColor: 'rgba(56, 189, 248, 0.4)',
                     borderWidth: 1.5,
                     padding: 12,
+                    displayColors: false,
+                    // N'afficher l'infobulle que sur les points des regards (dataset HGL)
+                    filter: function(tooltipItem) {
+                        return tooltipItem.datasetIndex === 4;
+                    },
                     callbacks: {
                         title: function(items) {
+                            if (!items.length) return '';
                             const idx = items[0].dataIndex;
                             const s = data.segments[idx];
                             return `Regard : ${s.node_id} (Distance : ${s.distance_m} m)`;
                         },
-                        beforeBody: function(items) {
-                            const idx = items[0].dataIndex;
-                            const s = data.segments[idx];
+                        label: function(item) {
+                            const s = data.segments[item.dataIndex];
+                            if (!s) return '';
                             if (s.hgl_regime === 'debordement' || (s.z_hgl && s.z_hgl >= s.z_terrain)) {
                                 return `🔴 État : Débordement au sol (HGL ≥ terrain)`;
                             } else if (s.hgl_regime === 'surcharge' || (s.z_hgl && s.z_hgl > s.z_gen_superieure)) {
