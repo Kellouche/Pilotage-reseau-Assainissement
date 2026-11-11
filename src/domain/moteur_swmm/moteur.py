@@ -9,7 +9,11 @@ Objet : Classe orchestratrice principale MoteurSWMM pour la modélisation hydrod
 ================================================================================
 """
 
+import hashlib
+import importlib.metadata
 import logging
+import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple, List, Union
 import geopandas as gpd
@@ -21,6 +25,45 @@ from src.domain.moteur_swmm.bilan_hydraulique import calculer_sensibilite_buffer
 from src.domain.moteur_swmm.execution_solver import executer_solver_swmm
 
 logger = logging.getLogger("swmm_platform.moteur_swmm.moteur")
+
+
+def _get_package_version(dist_name: str) -> str:
+    """Retourne la version installée d'un package, ou 'inconnu' si absent."""
+    try:
+        return importlib.metadata.version(dist_name)
+    except importlib.metadata.PackageNotFoundError:
+        return "inconnu"
+
+
+def _extraire_version_moteur_swmm(rpt_text: str) -> str:
+    """Extrait la version EPA SWMM depuis l'en-tête du rapport .rpt."""
+    if not rpt_text:
+        return "inconnu"
+    m = re.search(r"VERSION\s+([0-9]+(?:\.[0-9]+)*)", rpt_text[:2000], re.IGNORECASE)
+    return m.group(1) if m else "inconnu"
+
+
+def construire_provenance_simulation(
+    inp_content: str,
+    rpt_text: str,
+    execution_mode: str = "sync",
+) -> Dict[str, Any]:
+    """
+    Construit le bloc de traçabilité scientifique d'une simulation réelle.
+    Additif : ne modifie aucun calcul hydraulique.
+    """
+    inp_bytes = inp_content.encode("utf-8") if inp_content else b""
+    return {
+        "nature": "REAL",
+        "engine": "EPA SWMM",
+        "engine_version": _extraire_version_moteur_swmm(rpt_text),
+        "pyswmm_version": _get_package_version("pyswmm"),
+        "swmm_toolkit_version": _get_package_version("swmm-toolkit"),
+        "execution_mode": execution_mode,
+        "executed_at_utc": datetime.now(timezone.utc).isoformat(),
+        "inp_sha256": hashlib.sha256(inp_bytes).hexdigest() if inp_bytes else None,
+        "inp_size_bytes": len(inp_bytes),
+    }
 
 
 class MoteurSWMM:
@@ -125,6 +168,7 @@ class MoteurSWMM:
         station_id: Optional[str] = "chlef_anrh_siege",
         raccordements_orphelins: Optional[List[Dict[str, Any]]] = None,
         scenario_personnalise: Optional[Dict[str, Any]] = None,
+        execution_mode: str = "sync",
     ) -> Dict[str, Any]:
         """
         Exécute la simulation complète avec pyswmm et extrait les KPIs hydrauliques.
@@ -187,6 +231,11 @@ class MoteurSWMM:
 
         kpis["inp_content"] = inp_content
         kpis["rpt_content"] = rpt_text
+        kpis["provenance"] = construire_provenance_simulation(
+            inp_content=inp_content,
+            rpt_text=rpt_text,
+            execution_mode=execution_mode,
+        )
         kpis["status"] = "SUCCESS"
         return kpis
 

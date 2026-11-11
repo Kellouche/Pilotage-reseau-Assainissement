@@ -297,6 +297,7 @@ def _sauvegarder_simulation(
             "peak_outflow_m3s": resultat.get("peak_outflow_m3s"),
             "routing_continuity_error_pct": resultat.get("routing_continuity_error_pct"),
             "flooded_nodes_count": resultat.get("flooded_nodes_count", 0),
+            "provenance": resultat.get("provenance"),
             "cached_at": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -373,6 +374,7 @@ def _construire_reponse_simulation(resultat: Dict[str, Any], cached: bool = Fals
         "cached": cached,
         "message": message,
         "meta": resultat.get("meta", {}),
+        "provenance": resultat.get("provenance"),
         "kpis": {
             "routing_continuity_error_pct": resultat.get("routing_continuity_error_pct"),
             "runoff_continuity_error_pct": resultat.get("runoff_continuity_error_pct"),
