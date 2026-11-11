@@ -39,6 +39,10 @@ class AgentSyntheseExecutive:
                 f"de collecteurs structurants assure la résorption théorique intégrale des débordements pour l'événement "
                 f"pluviométrique de dimensionnement analysé."
             )
+            avis_direction_generale = (
+                "Engager sans délai le programme d'interventions P1 (recalibrage des collecteurs structurants et mise en place "
+                "du bassin d'écrêtement amont) et l'inscrire au budget pluriannuel de la collectivité."
+            )
         elif p2_count > 0:
             verdict = "CAPACITÉ LIMITE — MISE EN CHARGE HYDRAULIQUE"
             couleur = "#f59e0b"
@@ -47,12 +51,20 @@ class AgentSyntheseExecutive:
                 "Le réseau est à saturation pour cet événement pluvial : des techniques alternatives d'infiltration "
                 "sont vivement recommandées pour préserver la marge de sécurité."
             )
+            avis_direction_generale = (
+                "Programmer les techniques alternatives d'infiltration et renforcer la surveillance des tronçons "
+                "en charge avant la prochaine crue de dimensionnement."
+            )
         else:
             verdict = "RÉSEAU CONFORME & ÉCOULEMENT FLUIDE"
             couleur = "#10b981"
             recommandation_cle = (
                 "L'ensemble du réseau absorbe l'événement de pluie simulé en régime d'écoulement gravitaire libre "
                 "sans mise en charge critique ni débordement. Prévoir uniquement l'entretien courant."
+            )
+            avis_direction_generale = (
+                "Maintenir le plan d'entretien courant et la surveillance périodique du réseau ; aucun investissement "
+                "correctif n'est requis pour cet événement."
             )
 
         # Bilan Hydraulique Décisionnel (Option 3 - Lecture Décisionnelle)
@@ -79,7 +91,7 @@ class AgentSyntheseExecutive:
 
         note_technique = (
             f"Synthèse stratégique d'aide à la décision destinée à la Direction Générale (ONA, DRE, Wilaya). "
-            f"Le verdict hydraulique conclut à : {verdict}. {recommandation_cle} "
+            f"Le verdict hydraulique conclut à : {verdict}. "
             f"Le couplage du recalibrage des points critiques P1 avec les aménagements d'écrêtement et de gestion durable des ouvrages (GDO) constitue "
             f"la stratégie optimale recommandée pour restaurer la capacité d'évacuation gravitaire et réduire significativement "
             f"les risques de submersion urbaine pour cet événement pluvial."
@@ -124,7 +136,7 @@ class AgentSyntheseExecutive:
             "couleur": couleur,
             "recommandation_cle": recommandation_cle,
             "note_technique": note_technique,
-            "avis_direction_generale": recommandation_cle,
+            "avis_direction_generale": avis_direction_generale,
             "score_resilience_reseau": 92 if p1_count > 0 else 98,
             "indicateurs_marquants": indicateurs,
             "bilan_hydraulique": {
