@@ -47,6 +47,33 @@ def _safe_float(val: Any) -> Optional[float]:
         return None
 
 
+def _col_val(row: Any, *names: str) -> Any:
+    """
+    Retourne la valeur de la première colonne correspondante dans une ligne
+    (Series pandas ou dict), de façon insensible à la casse et aux accents
+    courants des exports SIG (ex. 'LONGUEUR' ↔ 'longueur' ↔ 'Longeur').
+    """
+    if row is None:
+        return None
+    try:
+        index = row.index if hasattr(row, "index") else row.keys()
+    except Exception:
+        return None
+    lower_map = {}
+    for col in index:
+        try:
+            lower_map.setdefault(str(col).strip().lower(), col)
+        except Exception:
+            continue
+    for name in names:
+        if name in row:
+            return row[name]
+        key = str(name).strip().lower()
+        if key in lower_map:
+            return row[lower_map[key]]
+    return None
+
+
 def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -> Dict[str, Any]:
     """
     Exécute un audit de qualité géométrique, attributaire et topologique
@@ -73,12 +100,12 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -
     valid_nodes: Dict[str, Any] = {}
     if not regards.empty:
         for idx, r in regards.iterrows():
-            nid = _clean_id(r.get("Code") or r.get("CODE") or r.get("id") or r.get("swmm_id")) or str(idx)
+            nid = _clean_id(_col_val(r, "Code", "CODE", "id", "ID", "swmm_id", "SWMM_ID", "NOM", "nom")) or str(idx)
             valid_nodes[nid] = r
 
     if not rejets.empty:
         for idx, rj in rejets.iterrows():
-            r_id = _clean_id(rj.get("Code") or rj.get("CODE") or rj.get("id") or rj.get("NOM")) or f"REJ_{idx+1}"
+            r_id = _clean_id(_col_val(rj, "Code", "CODE", "id", "ID", "NOM", "nom")) or f"REJ_{idx+1}"
             valid_nodes[r_id] = rj
 
     # Extraction des coordonnées WGS84 pour affichage cartographique
@@ -98,8 +125,8 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -
     downstream_connections = set()
 
     for idx, c in pipes.iterrows():
-        u = _clean_id(c.get("ID_AMONT") or c.get("id_amont") or c.get("amont"))
-        d = _clean_id(c.get("ID_AVAL") or c.get("id_aval") or c.get("aval"))
+        u = _clean_id(_col_val(c, "ID_AMONT", "id_amont", "amont", "AMONT", "NOEUD_AMONT"))
+        d = _clean_id(_col_val(c, "ID_AVAL", "id_aval", "aval", "AVAL", "NOEUD_AVAL"))
         if u:
             upstream_connections.add(u)
         if d:
@@ -108,8 +135,8 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -
     # 1. Analyse des canalisations
     for idx, c in pipes.iterrows():
         cid = f"C_{idx+1}"
-        u = _clean_id(c.get("ID_AMONT") or c.get("id_amont") or c.get("amont"))
-        d = _clean_id(c.get("ID_AVAL") or c.get("id_aval") or c.get("aval"))
+        u = _clean_id(_col_val(c, "ID_AMONT", "id_amont", "amont", "AMONT", "NOEUD_AMONT"))
+        d = _clean_id(_col_val(c, "ID_AVAL", "id_aval", "aval", "AVAL", "NOEUD_AVAL"))
 
         # Coordonnées pour centrage carte
         lat, lon = None, None
@@ -152,9 +179,9 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -
             })
 
         # C. Champs manquants (Diamètre, Longueur, Matériau)
-        diam = c.get("DIAMETRE", c.get("diametre", c.get("Diamètre", None)))
-        mat = c.get("MATERIAU", c.get("materiau", c.get("Matériau", None)))
-        longueur = c.get("Longeur", c.get("longueur", None))
+        diam = _col_val(c, "DIAMETRE", "diametre", "Diamètre", "DIAMETER", "diameter")
+        mat = _col_val(c, "MATERIAU", "materiau", "Matériau", "MATERIAL", "material")
+        longueur = _col_val(c, "LONGUEUR", "Longeur", "longueur", "Length", "length")
 
         diam_val = _safe_float(diam)
         long_val = _safe_float(longueur)
@@ -192,10 +219,10 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -
         if u in valid_nodes and d in valid_nodes:
             node_u = valid_nodes[u]
             node_d = valid_nodes[d]
-            # Rechercher cote radier ou TN
+            # Rechercher cote radier ou TN (COTRAD/COTETN = schéma SIG français courant)
             z_u = None
             z_d = None
-            for col in ["PROFRADI", "COTTN", "COORDZ", "Z", "cote_radier"]:
+            for col in ["COTRAD", "PROFRADI", "COTTN", "COORDZ", "Z", "cote_radier", "COTETN", "TN", "ALTITUDE"]:
                 if z_u is None and col in node_u and pd.notna(node_u[col]):
                     z_u = _safe_float(node_u[col])
                 if z_d is None and col in node_d and pd.notna(node_d[col]):
