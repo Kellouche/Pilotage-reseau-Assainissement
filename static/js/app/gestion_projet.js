@@ -272,8 +272,9 @@
         window.activerActionsSimulation = function(actif) {
             const itemResults = document.getElementById('action-item-results');
             const itemInterp = document.getElementById('action-item-interpretation');
-            
-            [itemResults, itemInterp].forEach(el => {
+            const itemRapportPdf = document.getElementById('action-item-rapport-pdf');
+
+            [itemResults, itemInterp, itemRapportPdf].forEach(el => {
                 if (!el) return;
                 if (actif) {
                     el.classList.remove('disabled');

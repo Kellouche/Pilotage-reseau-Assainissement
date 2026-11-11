@@ -731,4 +731,9 @@ window.nettoyerEtatReseau = function(reseauId) {
     if (window._coucheRaccordementsOrphelins) {
         try { window._coucheRaccordementsOrphelins.clearLayers(); } catch(e) {}
     }
+
+    // Désactiver les boutons d'actions de simulation
+    if (typeof activerActionsSimulation === 'function') {
+        activerActionsSimulation(false);
+    }
 };
