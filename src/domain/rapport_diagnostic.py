@@ -326,42 +326,58 @@ def _generer_carte_reseau_png(simulation_data: Dict[str, Any]) -> Optional[bytes
     ymin, ymax = ax.get_ylim()
     span_x = xmax - xmin
 
-    # ---- Fond de carte OpenStreetMap (comme la vue Leaflet) ----
+    # ---- Fond de carte (comme la vue Leaflet) ----
+    # CartoDB Positron en priorité (politique d'usage compatible apps),
+    # OpenStreetMap en repli avec User-Agent identifiant DrainPilot.
     _basemap_ok = False
     try:
         import contextily as ctx
-        provider = ctx.providers.OpenStreetMap.Mapnik
-        if not rotation_90:
-            ctx.add_basemap(ax, source=provider, crs="EPSG:32631",
-                            reset_extent=False, attribution=False, zorder=-1)
-            _basemap_ok = True
-        else:
-            # Carte pivotée : raster récupéré en CRS d'origine puis affiché
-            # via le même transform de rotation que les géométries
-            marge = 0.05
-            bx0, by0 = xmin_d - marge * span_x_data, ymin_d - marge * span_y_data
-            bx1, by1 = xmax_d + marge * span_x_data, ymax_d + marge * span_y_data
-            fig_tmp, ax_tmp = plt.subplots(figsize=(8, 8))
+        _providers = [
+            (ctx.providers.CartoDB.Positron, {}),
+            (ctx.providers.OpenStreetMap.Mapnik,
+             {"headers": {"User-Agent": "DrainPilot/5.2 - plateforme assainissement"}}),
+        ]
+        for _provider, _opts in _providers:
+            if _basemap_ok:
+                break
             try:
-                ax_tmp.set_xlim(bx0, bx1)
-                ax_tmp.set_ylim(by0, by1)
-                ctx.add_basemap(ax_tmp, source=provider, crs="EPSG:32631",
-                                reset_extent=False, attribution=False)
-                if ax_tmp.images:
-                    _im = ax_tmp.images[-1]
-                    _arr = np.asarray(_im.get_array())
-                    _ext = _im.get_extent()
-                    _rot = mtransforms.Affine2D().rotate_deg(-90)
-                    ax.imshow(_arr, extent=_ext,
-                              transform=_rot + ax.transData,
-                              interpolation="bilinear", zorder=-1)
-                    _basemap_ok = True
-            finally:
-                plt.close(fig_tmp)
+                if not rotation_90:
+                    ctx.add_basemap(ax, source=_provider, crs="EPSG:32631",
+                                    reset_extent=False, attribution=False,
+                                    zorder=-1, **_opts)
+                    _basemap_ok = bool(ax.images)
+                else:
+                    # Carte pivotée : raster récupéré en CRS d'origine puis affiché
+                    # via le même transform de rotation que les géométries
+                    marge = 0.05
+                    bx0 = xmin_d - marge * span_x_data
+                    by0 = ymin_d - marge * span_y_data
+                    bx1 = xmax_d + marge * span_x_data
+                    by1 = ymax_d + marge * span_y_data
+                    fig_tmp, ax_tmp = plt.subplots(figsize=(8, 8))
+                    try:
+                        ax_tmp.set_xlim(bx0, bx1)
+                        ax_tmp.set_ylim(by0, by1)
+                        ctx.add_basemap(ax_tmp, source=_provider, crs="EPSG:32631",
+                                        reset_extent=False, attribution=False,
+                                        **_opts)
+                        if ax_tmp.images:
+                            _im = ax_tmp.images[-1]
+                            _arr = np.asarray(_im.get_array())
+                            _ext = _im.get_extent()
+                            _rot = mtransforms.Affine2D().rotate_deg(-90)
+                            ax.imshow(_arr, extent=_ext,
+                                      transform=_rot + ax.transData,
+                                      interpolation="bilinear", zorder=-1)
+                            _basemap_ok = True
+                    finally:
+                        plt.close(fig_tmp)
+            except Exception:
+                continue
     except Exception:
         _basemap_ok = False
     if _basemap_ok:
-        ax.text(0.995, 0.008, "© OpenStreetMap contributors",
+        ax.text(0.995, 0.008, "© OpenStreetMap contributors, © CARTO",
                 transform=ax.transAxes, ha="right", va="bottom",
                 fontsize=6, color="#6b7280", zorder=6)
 
