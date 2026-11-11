@@ -38,7 +38,7 @@
                 const dateStr = new Date().toLocaleString('fr-FR', { dateStyle: 'full', timeStyle: 'short' });
 
                 const verdict = synth.verdict || "ANALYSE EXPERTE MULTI-AGENTS SWMM 5.2";
-                const verdictColor = synth.couleur || "#0284c7";
+                const verdictColor = synth.couleur || "#2d7ab3";
 
                 const formatCout = (typeof window.formaterCoutDZD === 'function')
                     ? window.formaterCoutDZD
@@ -84,7 +84,7 @@
                     `;
                 });
             } else {
-                riskRows = '<tr><td colspan="6" style="text-align:center; color:#64748b;">Aucun risque critique immédiat recensé. Réseau stable sous ce scénario.</td></tr>';
+                riskRows = '<tr><td colspan="6" style="text-align:center; color:#6b7280;">Aucun risque critique immédiat recensé. Réseau stable sous ce scénario.</td></tr>';
             }
 
             // Tableau Diagnostic Surcharges (Agent 1)
@@ -106,7 +106,7 @@
                     `;
                 });
             } else {
-                surchRows = '<tr><td colspan="6" style="text-align:center; color:#64748b;">Aucun tronçon en surcharge sévère (>80%).</td></tr>';
+                surchRows = '<tr><td colspan="6" style="text-align:center; color:#6b7280;">Aucun tronçon en surcharge sévère (>80%).</td></tr>';
             }
 
             // Tableau Goulots d'étranglement (Agent 1)
@@ -127,7 +127,7 @@
                     `;
                 });
             } else {
-                bottleRows = '<tr><td colspan="5" style="text-align:center; color:#64748b;">Aucun goulot géométrique inverse (D_aval < D_amont) détecté.</td></tr>';
+                bottleRows = '<tr><td colspan="5" style="text-align:center; color:#6b7280;">Aucun goulot géométrique inverse (D_aval < D_amont) détecté.</td></tr>';
             }
 
             // Tableau Synthèse par DN (Agent 2)
@@ -144,13 +144,13 @@
                             <td style="text-align: right; font-weight: 700;">${Number(r.lineaire_ml).toFixed(1)}</td>
                             <td style="text-align: right;">${r.pct_lineaire}</td>
                             <td style="text-align: right;">${formatMontant(r.cout_unitaire_ml_dzd)}</td>
-                            <td style="text-align: right; font-weight: 700; color: #0284c7;">${formatMontant(r.cout_total_dzd)}</td>
+                            <td style="text-align: right; font-weight: 700; color: #2d7ab3;">${formatMontant(r.cout_total_dzd)}</td>
                             <td style="text-align: right;">${r.pct_budget}%</td>
                         </tr>
                     `;
                 });
             } else {
-                gcRecapRows = '<tr><td colspan="9" style="text-align:center; color:#64748b;">Aucun recalibrage structurel requis.</td></tr>';
+                gcRecapRows = '<tr><td colspan="9" style="text-align:center; color:#6b7280;">Aucun recalibrage structurel requis.</td></tr>';
             }
 
             const bpu = gc.decomposition_bpu || {};
@@ -176,7 +176,7 @@
                             <td><b>${cond}</b></td>
                             <td style="text-align: right;">${dAct}</td>
                             <td style="text-align: right;">${Number(dReq).toFixed(0)}</td>
-                            <td style="text-align: right; font-weight: 700; color: #0284c7;">DN ${dn}</td>
+                            <td style="text-align: right; font-weight: 700; color: #2d7ab3;">DN ${dn}</td>
                             <td>${mat}</td>
                             <td style="text-align: right;">${Number(long).toFixed(1)}</td>
                             <td style="text-align: right; font-weight: 700;">${formatMontant(cout)}</td>
@@ -184,7 +184,7 @@
                     `;
                 });
             } else {
-                gcRows = '<tr><td colspan="7" style="text-align:center; color:#64748b;">Aucun recalibrage structurel lourd requis. Capacité gravitaire actuelle satisfaisante.</td></tr>';
+                gcRows = '<tr><td colspan="7" style="text-align:center; color:#6b7280;">Aucun recalibrage structurel lourd requis. Capacité gravitaire actuelle satisfaisante.</td></tr>';
             }
 
             // Tableau rétention / GDO (Agent 3)
@@ -228,8 +228,8 @@
                     const isAct = Math.round(c.buffer_m) === Math.round(meta.buffer_m || 35);
                     const dispArea = (isAct && meta.total_area_ha) ? meta.total_area_ha : c.surface_ha;
                     bufRows += `
-                        <tr style="${isRec ? 'background: #e0f2fe; font-weight: 700;' : ''}">
-                            <td>Tampon <b>${Math.round(c.buffer_m)} m</b> ${isRec ? '⭐ (Optimal)' : ''}</td>
+                        <tr style="${isRec ? 'background: #e6eff8; font-weight: 700;' : ''}">
+                            <td>Tampon <b>${Math.round(c.buffer_m)} m</b> ${isRec ? '(Optimal)' : ''}</td>
                             <td style="text-align: right;">${dispArea}</td>
                             <td style="text-align: right;">${c.gain_pct > 0 ? '+' + c.gain_pct : 'Référence'}</td>
                             <td style="text-align: right;">${c.peak_flow_m3s}</td>
@@ -248,11 +248,11 @@
                         <tr style="${isRec ? 'background: #f0fdf4; font-weight: 600;' : ''}">
                             <td>
                                 <b>${v.nom}</b><br>
-                                <small style="color: #64748b;">${v.description}</small>
+                                <small style="color: #6b7280;">${v.description}</small>
                             </td>
                             <td style="text-align: right;">${v.recalibrage_ml > 0 ? Number(v.recalibrage_ml).toFixed(1) : '--'}</td>
                             <td style="text-align: right;">${v.volume_retention_m3 > 0 ? Number(v.volume_retention_m3).toFixed(0) : '--'}</td>
-                            <td style="text-align: right; font-weight: 800; color: ${isRec ? '#16a34a' : '#0f172a'};">
+                            <td style="text-align: right; font-weight: 800; color: ${isRec ? '#16a34a' : '#1a1a1a'};">
                                 ${formatMontant(v.cout_total_dzd)}
                             </td>
                             <td>${v.gain_hydraulique}</td>
@@ -270,7 +270,7 @@
             } else {
                 varRows = `
                     <tr>
-                        <td><b>Variante 1 : 100 % tout-réseau</b><br><small style="color:#64748b;">Recalibrage intégral 7.6 km sans bassin</small></td>
+                        <td><b>Variante 1 : 100 % tout-réseau</b><br><small style="color:#6b7280;">Recalibrage intégral 7.6 km sans bassin</small></td>
                         <td style="text-align: right;">7 591,9</td>
                         <td style="text-align: right;">--</td>
                         <td style="text-align: right; font-weight: 700;">${formatMontant(330964500)}</td>
@@ -281,7 +281,7 @@
                         <td style="text-align: center;"><span class="badge badge-p1">NON RETENU</span></td>
                     </tr>
                     <tr>
-                        <td><b>Variante 2 : 100 % GDO pures</b><br><small style="color:#64748b;">Bassin d'orage 18 500 m³ sans recalibrage réseau</small></td>
+                        <td><b>Variante 2 : 100 % GDO pures</b><br><small style="color:#6b7280;">Bassin d'orage 18 500 m³ sans recalibrage réseau</small></td>
                         <td style="text-align: right;">--</td>
                         <td style="text-align: right;">18 500</td>
                         <td style="text-align: right; font-weight: 700;">${formatMontant(112500000)}</td>
@@ -292,7 +292,7 @@
                         <td style="text-align: center;"><span class="badge badge-p2">INSUFFISANT</span></td>
                     </tr>
                     <tr style="background: #f0fdf4; font-weight: 600;">
-                        <td><b>Variante 3 : Mixte optimisée</b><br><small style="color:#64748b;">Recalibrage ciblé 97 goulots + Bassin 6 595 m³</small></td>
+                        <td><b>Variante 3 : Mixte optimisée</b><br><small style="color:#6b7280;">Recalibrage ciblé 97 goulots + Bassin 6 595 m³</small></td>
                         <td style="text-align: right;">4 112,8</td>
                         <td style="text-align: right;">6 595</td>
                         <td style="text-align: right; font-weight: 800; color: #16a34a;">${formatMontant(240384400)}</td>
