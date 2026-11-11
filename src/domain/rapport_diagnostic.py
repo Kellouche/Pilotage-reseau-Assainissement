@@ -196,7 +196,6 @@ def _generer_carte_reseau_png(simulation_data: Dict[str, Any]) -> Optional[bytes
         from matplotlib.lines import Line2D
         from shapely.geometry import LineString, MultiLineString
         from shapely.affinity import rotate as _rotate_geom
-        import contextily as ctx
     except Exception:
         return None
 
@@ -330,6 +329,7 @@ def _generer_carte_reseau_png(simulation_data: Dict[str, Any]) -> Optional[bytes
     # ---- Fond de carte OpenStreetMap (comme la vue Leaflet) ----
     _basemap_ok = False
     try:
+        import contextily as ctx
         provider = ctx.providers.OpenStreetMap.Mapnik
         if not rotation_90:
             ctx.add_basemap(ax, source=provider, crs="EPSG:32631",
