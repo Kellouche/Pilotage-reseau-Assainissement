@@ -10,12 +10,14 @@ Objet : Générateur PDF du Rapport d'Expertise Hydraulique Complet (ReportLab)
 
 import io
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, Any, List, Optional
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable, PageBreak, Flowable
+from reportlab.lib.utils import ImageReader
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable, PageBreak, Flowable, Image
 from reportlab.pdfgen import canvas as pdf_canvas
 
 # Palette « guide pro » (référence : documents commerciaux soignés)
@@ -125,6 +127,248 @@ def creer_tableau_ou_ras(rows: List[List[Any]], col_widths: List[float], style_t
         return Paragraph(f"<b>{message_ras}</b>", style_tableau)
     
     return Table(rows, colWidths=col_widths)
+
+
+# ============================================================
+# CARTOGRAPHIE DU RÉSEAU (image PNG intégrée au PDF)
+# ============================================================
+
+_COULEUR_REGARD_NORMAL = '#64748b'
+_COULEUR_REGARD_SURCHARGE = '#f59e0b'
+_COULEUR_REGARD_INONDE = '#ef4444'
+_COULEUR_CONDUITE_NORMALE = '#94a3b8'
+_COULEUR_CONDUITE_SURCHARGE = '#f59e0b'
+_COULEUR_CONDUITE_CRITIQUE = '#ef4444'
+
+_STATUT_VERS_COULEUR = {
+    'flooded': _COULEUR_REGARD_INONDE,
+    'inonde': _COULEUR_REGARD_INONDE,
+    'surcharged': _COULEUR_REGARD_SURCHARGE,
+    'surcharge': _COULEUR_REGARD_SURCHARGE,
+    'critique': _COULEUR_CONDUITE_CRITIQUE,
+    'critical': _COULEUR_CONDUITE_CRITIQUE,
+    'normal': _COULEUR_REGARD_NORMAL,
+    'libre': _COULEUR_REGARD_NORMAL,
+}
+
+
+def _cle_identifiant(val: Any) -> str:
+    """Normalise un identifiant de nœud/conduite pour la jointure gpkg ↔ résultats."""
+    s = str(val).strip()
+    if s.endswith('.0'):
+        s = s[:-2]
+    return s
+
+
+def _generer_carte_reseau_png(simulation_data: Dict[str, Any]) -> Optional[bytes]:
+    """
+    Génère une cartographie PNG du réseau d'assainissement colorée selon
+    les résultats de la simulation SWMM (regards et conduites).
+
+    Retourne None si le GeoPackage source ou les couches sont indisponibles.
+    """
+    gpkg_path_str = (
+        simulation_data.get("source_gpkg")
+        or simulation_data.get("meta", {}).get("source_gpkg")
+    )
+    if not gpkg_path_str:
+        return None
+    try:
+        gpkg_path = Path(gpkg_path_str)
+        if not gpkg_path.exists():
+            return None
+    except Exception:
+        return None
+
+    try:
+        import geopandas as gpd
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from matplotlib.lines import Line2D
+        from shapely.geometry import LineString, MultiLineString
+    except Exception:
+        return None
+
+    try:
+        regards = gpd.read_file(gpkg_path, layer="regards")
+        canalisations = gpd.read_file(gpkg_path, layer="canalisations")
+    except Exception:
+        return None
+    if regards.empty and canalisations.empty:
+        return None
+
+    node_results = simulation_data.get("node_results", {}) or {}
+    conduit_results = simulation_data.get("conduit_results", {}) or {}
+    if isinstance(node_results, list):
+        node_results = {
+            _cle_identifiant(n.get("node", n.get("node_id", ""))): n
+            for n in node_results if isinstance(n, dict)
+        }
+    if isinstance(conduit_results, list):
+        conduit_results = {
+            _cle_identifiant(c.get("link_id", c.get("conduit", ""))): c
+            for c in conduit_results if isinstance(c, dict)
+        }
+
+    fig, ax = plt.subplots(figsize=(8.0, 5.4), dpi=200)
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor("#f8fafc")
+
+    # Fond : sous-bassins versants (contexte hydrologique)
+    try:
+        sous_bassins = gpd.read_file(gpkg_path, layer="sous_bassins")
+        if not sous_bassins.empty:
+            sous_bassins.plot(ax=ax, color="#dbeafe", edgecolor="#93c5fd",
+                              linewidth=0.6, zorder=0)
+    except Exception:
+        pass
+
+    # ---- Conduites : coloration par statut de simulation ----
+    statuts_conduites = {}
+    for _, row in canalisations.iterrows():
+        geom = row.geometry
+        if geom is None or geom.is_empty:
+            continue
+        cid = _cle_identifiant(row.get("ID", ""))
+        res = conduit_results.get(cid, {})
+        statut = str(res.get("status", "")).lower()
+        couleur = res.get("color") or _STATUT_VERS_COULEUR.get(
+            statut, _COULEUR_CONDUITE_NORMALE)
+        if statut and statut not in ("normal", ""):
+            statuts_conduites[statut] = couleur
+        lw = 2.0 if statut and statut not in ("normal", "") else 1.1
+
+        def _tracer(geo):
+            if isinstance(geo, LineString):
+                xs, ys = geo.xy
+                ax.plot(xs, ys, color=couleur, lw=lw,
+                        solid_capstyle="round", zorder=2)
+            elif isinstance(geo, MultiLineString):
+                for partie in geo.geoms:
+                    _tracer(partie)
+
+        _tracer(geom)
+
+    # ---- Regards : scatter coloré par statut ----
+    noeuds_x, noeuds_y, noeuds_c, noeuds_s = [], [], [], []
+    for _, row in regards.iterrows():
+        geom = row.geometry
+        if geom is None or geom.is_empty:
+            continue
+        nid = _cle_identifiant(row.get("ID", row.get("Code", "")))
+        res = node_results.get(nid, {})
+        statut = str(res.get("status", "")).lower()
+        if statut in ("flooded", "inonde"):
+            taille = 46
+        elif statut in ("surcharged", "surcharge"):
+            taille = 30
+        else:
+            taille = 16
+        couleur = res.get("color") or _STATUT_VERS_COULEUR.get(
+            statut, _COULEUR_REGARD_NORMAL)
+        noeuds_x.append(geom.x)
+        noeuds_y.append(geom.y)
+        noeuds_c.append(couleur)
+        noeuds_s.append(taille)
+    if noeuds_x:
+        ax.scatter(noeuds_x, noeuds_y, c=noeuds_c, s=noeuds_s,
+                   edgecolors="white", linewidths=0.9, zorder=3)
+
+    # ---- Mise en page ----
+    ax.set_aspect("equal")
+    ax.axis("off")
+
+    xmin, xmax = ax.get_xlim()
+    ymin, ymax = ax.get_ylim()
+    span_x = max(xmax - xmin, 1.0)
+    span_y = max(ymax - ymin, 1.0)
+    # Marge de 4 % pour éviter que les points touchent les bords
+    ax.set_xlim(xmin - 0.04 * span_x, xmax + 0.04 * span_x)
+    ax.set_ylim(ymin - 0.04 * span_y, ymax + 0.04 * span_y)
+    xmin, xmax = ax.get_xlim()
+    ymin, ymax = ax.get_ylim()
+    span_x = xmax - xmin
+
+    meta = simulation_data.get("meta", {})
+    cluster_nom = meta.get("cluster_nom") or meta.get("bassin_nom") or ""
+    titre = "Cartographie du réseau d'assainissement"
+    if cluster_nom:
+        titre += f" — {cluster_nom}"
+    ax.set_title(titre, fontsize=12, fontweight="bold",
+                 color=_COULEUR_NAVY, pad=10)
+
+    # Flèche nord
+    ax.annotate("N", xy=(0.97, 0.93), xycoords="axes fraction",
+                ha="center", fontsize=13, fontweight="bold",
+                color=_COULEUR_NAVY)
+    ax.annotate("", xy=(0.97, 0.885), xycoords="axes fraction",
+                xytext=(0.97, 0.80),
+                arrowprops=dict(arrowstyle="-|>", color=_COULEUR_NAVY, lw=1.8))
+
+    # Barre d'échelle (coordonnées projetées en mètres)
+    pas_echelle = next(
+        (p for p in (10, 20, 50, 100, 200, 500, 1000) if span_x / p >= 6),
+        span_x / 6)
+    x0 = xmin + 0.06 * span_x
+    y0 = ymin + 0.07 * (ymax - ymin)
+    ax.plot([x0, x0 + pas_echelle], [y0, y0], color="#1a4a7a", lw=2.5,
+            solid_capstyle="butt", zorder=4)
+    ax.plot([x0, x0], [y0 - 0.008 * (ymax - ymin), y0 + 0.008 * (ymax - ymin)],
+            color="#1a4a7a", lw=1.2, zorder=4)
+    ax.plot([x0 + pas_echelle, x0 + pas_echelle],
+            [y0 - 0.008 * (ymax - ymin), y0 + 0.008 * (ymax - ymin)],
+            color="#1a4a7a", lw=1.2, zorder=4)
+    ax.text(x0 + pas_echelle / 2, y0 - 0.025 * (ymax - ymin),
+            f"{int(pas_echelle)} m", ha="center", fontsize=8,
+            color="#1a4a7a", fontweight="bold", zorder=4)
+
+    # Légende
+    legende = [
+        Line2D([0], [0], marker="o", color="w",
+               markerfacecolor=_COULEUR_REGARD_NORMAL, markersize=7,
+               label="Regard : fonctionnement normal"),
+        Line2D([0], [0], marker="o", color="w",
+               markerfacecolor=_COULEUR_REGARD_SURCHARGE, markersize=7,
+               label="Regard : surchargé"),
+        Line2D([0], [0], marker="o", color="w",
+               markerfacecolor=_COULEUR_REGARD_INONDE, markersize=9,
+               label="Regard : inondé"),
+        Line2D([0], [0], color=_COULEUR_CONDUITE_NORMALE, lw=2,
+               label="Conduite : nominale"),
+        Line2D([0], [0], color=_COULEUR_CONDUITE_SURCHARGE, lw=2,
+               label="Conduite : en surcharge"),
+        Line2D([0], [0], color=_COULEUR_CONDUITE_CRITIQUE, lw=2,
+               label="Conduite : critique"),
+    ]
+    ax.legend(handles=legende, loc="upper center", bbox_to_anchor=(0.5, -0.02),
+              ncol=3, fontsize=8, frameon=True, framealpha=0.9,
+              edgecolor="#e5e7eb", fancybox=False)
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    return buf.getvalue()
+
+
+def _flowable_carte_reseau(simulation_data: Dict[str, Any]) -> Optional[Image]:
+    """Retourne un flowable Image ReportLab de la cartographie, ou None."""
+    png = _generer_carte_reseau_png(simulation_data)
+    if not png:
+        return None
+    try:
+        w_px, h_px = ImageReader(io.BytesIO(png)).getSize()
+    except Exception:
+        return None
+    largeur = 17.5 * cm
+    hauteur = largeur * (h_px / max(w_px, 1))
+    hauteur_max = 13.0 * cm
+    if hauteur > hauteur_max:
+        hauteur = hauteur_max
+        largeur = hauteur * (w_px / max(h_px, 1))
+    img = Image(io.BytesIO(png), width=largeur, height=hauteur)
+    img.hAlign = "CENTER"
+    return img
 
 
 def generer_pdf_rapport_diagnostic(
@@ -599,6 +843,32 @@ def generer_pdf_rapport_diagnostic(
         else:
             story.append(Paragraph("Aucune donnée de débordement disponible pour cette simulation.", style_corps))
             story.append(Spacer(1, 0.3 * cm))
+
+        # 6.C Cartographie du réseau (image PNG générée depuis le GeoPackage source)
+        # Le PNG est mis en cache entre les deux passes de build (mesure + finale)
+        if not hasattr(_construire_story, "_carte_png"):
+            _construire_story._carte_png = _generer_carte_reseau_png(simulation_data)
+        if _construire_story._carte_png:
+            story.extend(_section("CARTOGRAPHIE DU RÉSEAU ET LOCALISATION DES DÉSORDRES"))
+            try:
+                w_px, h_px = ImageReader(io.BytesIO(_construire_story._carte_png)).getSize()
+            except Exception:
+                w_px, h_px = 1600, 1080
+            largeur = 17.5 * cm
+            hauteur = largeur * (h_px / max(w_px, 1))
+            hauteur_max = 13.0 * cm
+            if hauteur > hauteur_max:
+                hauteur = hauteur_max
+                largeur = hauteur * (w_px / max(h_px, 1))
+            img_carte = Image(io.BytesIO(_construire_story._carte_png), width=largeur, height=hauteur)
+            img_carte.hAlign = "CENTER"
+            story.append(img_carte)
+            story.append(Spacer(1, 0.2 * cm))
+            story.append(Paragraph(
+                "<i>Figure 1 — Réseau d'assainissement coloré selon les résultats de la simulation : "
+                "regards surchargés (orange), regards inondés (rouge), conduites en surcharge ou critique.</i>",
+                style_corps))
+            story.append(Spacer(1, 0.4 * cm))
 
         # 7. Synthèse Exécutive
         story.extend(_section("1. SYNTHÈSE STRATÉGIQUE ET AVIS DES DÉCIDEURS"))

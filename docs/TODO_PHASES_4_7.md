@@ -27,7 +27,7 @@
   - [x] Bilan de continuité massique SWMM (%), volume inondé total (m³), durées de submersion
   - [x] Estimation financière des travaux prioritaires (reprises de canalisations, rehaussement de regards)
   - [x] Export au format PDF réglementaire (ReportLab), prêt pour transmission à la direction technique
-  - [ ] Cartographie du réseau dans le PDF (à implémenter avec image statique ou schéma)
+  - [x] Cartographie du réseau dans le PDF (image PNG générée depuis le GeoPackage source, colorée selon les résultats SWMM)
 
 ---
 
