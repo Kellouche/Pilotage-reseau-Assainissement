@@ -246,10 +246,14 @@ def generer_pdf_rapport_diagnostic(
     # ======================================================================
     # PAGE DE GARDE (style « guide pro »)
     # ======================================================================
+    def _kicker(texte):
+        # Espacement des lettres à l'intérieur de chaque mot, espace normal entre les mots
+        return " ".join(" ".join(mot) for mot in texte.split(" "))
+
     kicker = "  ·  ".join([
-        "R A P P O R T   D ' E X P E R T I S E",
-        "S I M U L A T I O N   E P A   S W M M   5 . 2",
-        "D I A G N O S T I C   M U L T I - A G E N T S"
+        _kicker("RAPPORT D'EXPERTISE"),
+        _kicker("SIMULATION EPA SWMM 5.2"),
+        _kicker("ANALYSE HYDRAULIQUE CERTIFIEE")
     ])
     style_kicker = ParagraphStyle(
         'Kicker', parent=styles['Normal'], fontName='Helvetica-Bold',
@@ -346,7 +350,7 @@ def generer_pdf_rapport_diagnostic(
     story.append(PageBreak())
 
     # 4. Cadre Hydro-Météorologique
-    story.append(Paragraph("(PLUIE) CADRE HYDRO-MÉTÉOROLOGIQUE ET SOLLICITATION PLUVIOMÉTRIQUE RÉGLEMENTAIRE (ANRH / ONA)", style_section))
+    story.append(Paragraph("CADRE HYDRO-MÉTÉOROLOGIQUE ET SOLLICITATION PLUVIOMÉTRIQUE RÉGLEMENTAIRE (ANRH / ONA)", style_section))
 
     hydro_data = [
         [
@@ -391,7 +395,7 @@ def generer_pdf_rapport_diagnostic(
     story.append(Spacer(1, 0.3 * cm))
 
     # 5. Cadre de Validation Hydrologique
-    story.append(Paragraph("(EAU) CADRE DE VALIDATION HYDROLOGIQUE ET MODÈLE D'INFILTRATION (SWMM / HORTON / VORONOÏ)", style_section))
+    story.append(Paragraph("CADRE DE VALIDATION HYDROLOGIQUE ET MODÈLE D'INFILTRATION (SWMM / HORTON / VORONOÏ)", style_section))
 
     hydro2_data = [
         [
@@ -430,7 +434,7 @@ def generer_pdf_rapport_diagnostic(
     story.append(Spacer(1, 0.4 * cm))
 
     # 6. Bilan Hydraulique Décisionnel
-    story.append(Paragraph("(BALANCE) BILAN HYDRAULIQUE DÉCISIONNEL ET RÉPARTITION DES FLUX", style_section))
+    story.append(Paragraph("BILAN HYDRAULIQUE DÉCISIONNEL ET RÉPARTITION DES FLUX", style_section))
 
     # Récupérer le bilan hydraulique depuis différentes sources possibles
     bilan_hydraulique = {}
@@ -475,7 +479,7 @@ def generer_pdf_rapport_diagnostic(
     story.append(Spacer(1, 0.4 * cm))
 
     # 6.B Regards en débordement et durées de submersion
-    story.append(Paragraph("(ATTENTION) REGARDS EN DÉBORDEMENT ET DURÉES DE SUBMERSION", style_section))
+    story.append(Paragraph("REGARDS EN DÉBORDEMENT ET DURÉES DE SUBMERSION", style_section))
 
     # Récupérer les node_results pour les détails des regards débordants
     node_results = simulation_data.get("node_results", {})
@@ -527,8 +531,9 @@ def generer_pdf_rapport_diagnostic(
 
             flood_table = Table(flood_rows, colWidths=[3 * cm, 3 * cm, 3 * cm, 4 * cm, 2.5 * cm])
             flood_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a4a7a')),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('BACKGROUND', (0, 0), (-1, 0), colors.white),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#1a4a7a')),
+            ('LINEBELOW', (0, 0), (-1, 0), 1.4, colors.HexColor('#1a4a7a')),
                 ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
                 ('TOPPADDING', (0, 0), (-1, -1), 3),
                 ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
@@ -571,7 +576,7 @@ def generer_pdf_rapport_diagnostic(
                           ParagraphStyle('AvisDir', fontSize=8, textColor=colors.HexColor('#64748b'))))
     story.append(Spacer(1, 0.3 * cm))
 
-    story.append(Paragraph(f"<b>(DOCUMENT) Mémoire de Synthèse Stratégique - Directeur Technique</b>", style_agent_title))
+    story.append(Paragraph(f"<b>Mémoire de Synthèse Stratégique - Directeur Technique</b>", style_agent_title))
     story.append(Paragraph(synth.get("note_technique", ""), style_agent_memo))
     story.append(Spacer(1, 0.3 * cm))
 
@@ -580,7 +585,7 @@ def generer_pdf_rapport_diagnostic(
     story.append(Paragraph(f"<b>Budget total estimé :</b> {formater_cout_dzd(gc.get('cout_global_estime_dzd', 0))}", style_corps))
     story.append(Spacer(1, 0.2 * cm))
 
-    story.append(Paragraph(f"<b>(CIBLE) Note de hiérarchisation multicritère - Expert risques</b>", style_agent_title))
+    story.append(Paragraph(f"<b>Note de hiérarchisation multicritère - Expert risques</b>", style_agent_title))
     story.append(Paragraph(risk.get("note_technique", ""), style_agent_memo))
 
     # Tableau des risques
@@ -634,8 +639,9 @@ def generer_pdf_rapport_diagnostic(
     )
     if isinstance(risk_table, Table):
         risk_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a4a7a')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.white),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#1a4a7a')),
+            ('LINEBELOW', (0, 0), (-1, 0), 1.4, colors.HexColor('#1a4a7a')),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
             ('TOPPADDING', (0, 0), (-1, -1), 3),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
@@ -649,7 +655,7 @@ def generer_pdf_rapport_diagnostic(
     story.append(Paragraph("3. DIAGNOSTIC CAUSAL ET DYSFONCTIONNEMENTS HYDRAULIQUES", style_section))
     story.append(Paragraph(f"<b>{diag.get('nb_surcharges', 0)} tronçons surchargés - {diag.get('nb_goulots', 0)} goulots détectés</b>", style_corps))
 
-    story.append(Paragraph(f"<b>(LABO) Diagnostic hydrodynamique - Spécialiste Saint-Venant 1D</b>", style_agent_title))
+    story.append(Paragraph(f"<b>Diagnostic hydrodynamique - Spécialiste Saint-Venant 1D</b>", style_agent_title))
     story.append(Paragraph(diag.get("note_technique", ""), style_agent_memo))
 
     # Tableau surcharges
@@ -684,8 +690,9 @@ def generer_pdf_rapport_diagnostic(
     )
     if isinstance(surch_table, Table):
         surch_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a4a7a')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.white),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#1a4a7a')),
+            ('LINEBELOW', (0, 0), (-1, 0), 1.4, colors.HexColor('#1a4a7a')),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
             ('TOPPADDING', (0, 0), (-1, -1), 3),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
@@ -725,8 +732,9 @@ def generer_pdf_rapport_diagnostic(
         )
         if isinstance(bottle_table, Table):
             bottle_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a4a7a')),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('BACKGROUND', (0, 0), (-1, 0), colors.white),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#1a4a7a')),
+            ('LINEBELOW', (0, 0), (-1, 0), 1.4, colors.HexColor('#1a4a7a')),
                 ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
                 ('TOPPADDING', (0, 0), (-1, -1), 3),
                 ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
@@ -747,7 +755,7 @@ def generer_pdf_rapport_diagnostic(
         style_corps
     ))
 
-    story.append(Paragraph(f"<b>(REGLE) Justification de calcul gravitaire - Ingénieur GC</b>", style_agent_title))
+    story.append(Paragraph(f"<b>Justification de calcul gravitaire - Ingénieur GC</b>", style_agent_title))
     story.append(Paragraph(gc.get("note_technique", ""), style_agent_memo))
 
     # BPU
@@ -820,8 +828,9 @@ def generer_pdf_rapport_diagnostic(
 
     recap_table = Table(recap_rows, colWidths=[1.8 * cm, 2.2 * cm, 1.8 * cm, 1.5 * cm, 2 * cm, 1.5 * cm, 2.5 * cm, 2.5 * cm, 1.5 * cm])
     recap_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a4a7a')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.white),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#1a4a7a')),
+            ('LINEBELOW', (0, 0), (-1, 0), 1.4, colors.HexColor('#1a4a7a')),
         ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#f1f5f9')),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
         ('TOPPADDING', (0, 0), (-1, -1), 3),
@@ -867,8 +876,9 @@ def generer_pdf_rapport_diagnostic(
     )
     if isinstance(gc_table, Table):
         gc_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a4a7a')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.white),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#1a4a7a')),
+            ('LINEBELOW', (0, 0), (-1, 0), 1.4, colors.HexColor('#1a4a7a')),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
             ('TOPPADDING', (0, 0), (-1, -1), 3),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
@@ -885,7 +895,7 @@ def generer_pdf_rapport_diagnostic(
     econ_pct = finance.get("economie_pourcentage", 0)
     story.append(Paragraph(f"<b>Économie scénario mixte :</b> {formater_cout_dzd(economie)} (-{econ_pct:.1f}%)", style_corps))
 
-    story.append(Paragraph(f"<b>(MALLETTE) Analyse technico-économique - Expert financier</b>", style_agent_title))
+    story.append(Paragraph(f"<b>Analyse technico-économique - Expert financier</b>", style_agent_title))
     story.append(Paragraph(finance.get("note_technique", ""), style_agent_memo))
 
     # Ratios
@@ -969,8 +979,9 @@ def generer_pdf_rapport_diagnostic(
 
     var_table = Table(var_rows, colWidths=[3 * cm, 1.8 * cm, 1.8 * cm, 2.5 * cm, 2.5 * cm, 2.2 * cm, 2.2 * cm, 1.5 * cm, 2 * cm])
     var_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a4a7a')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.white),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#1a4a7a')),
+            ('LINEBELOW', (0, 0), (-1, 0), 1.4, colors.HexColor('#1a4a7a')),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
         ('TOPPADDING', (0, 0), (-1, -1), 3),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
@@ -984,7 +995,7 @@ def generer_pdf_rapport_diagnostic(
     story.append(Paragraph("6. GESTION DURABLE DES OUVRAGES (GDO) ET ÉCRÊTEMENT DES POINTES", style_section))
     story.append(Paragraph(f"<b>Volume tampon total :</b> {(lid.get('volume_tampon_requis_m3', 0)):.0f} m³", style_corps))
 
-    story.append(Paragraph(f"<b>(FEUILLE) Stratégie d'écrêtement à la source - Expert GDO</b>", style_agent_title))
+    story.append(Paragraph(f"<b>Stratégie d'écrêtement à la source - Expert GDO</b>", style_agent_title))
     story.append(Paragraph(lid.get("note_technique", ""), style_agent_memo))
 
     lid_rows = [
@@ -1027,8 +1038,9 @@ def generer_pdf_rapport_diagnostic(
     )
     if isinstance(lid_table, Table):
         lid_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a4a7a')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.white),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#1a4a7a')),
+            ('LINEBELOW', (0, 0), (-1, 0), 1.4, colors.HexColor('#1a4a7a')),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
             ('TOPPADDING', (0, 0), (-1, -1), 3),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
@@ -1077,8 +1089,9 @@ def generer_pdf_rapport_diagnostic(
         )
         if isinstance(buf_table, Table):
             buf_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a4a7a')),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('BACKGROUND', (0, 0), (-1, 0), colors.white),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#1a4a7a')),
+            ('LINEBELOW', (0, 0), (-1, 0), 1.4, colors.HexColor('#1a4a7a')),
                 ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
                 ('TOPPADDING', (0, 0), (-1, -1), 3),
                 ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
@@ -1087,6 +1100,68 @@ def generer_pdf_rapport_diagnostic(
             ]))
         story.append(buf_table)
         story.append(Spacer(1, 0.4 * cm))
+
+    # ======================================================================
+    # CONCLUSION ET RECOMMANDATIONS
+    # ======================================================================
+    story.append(Paragraph("CONCLUSION ET RECOMMANDATIONS", style_section))
+
+    nb_floodes = int(kpis.get('flooded_nodes_count', 0) or 0)
+    nb_surcharges = int(kpis.get('surcharged_nodes_count', 0) or 0)
+    cout_global = float(gc.get('cout_global_estime_dzd', 0) or 0)
+    ml_reseaux = float(gc.get('metres_lineaires_totaux', 0) or 0)
+
+    if nb_floodes > 0:
+        conclusion_1 = (
+            f"Le réseau présente {nb_floodes} point(s) de débordement et {nb_surcharges} tronçon(s) en surcharge "
+            f"pour l'événement pluvieux de dimensionnement. Le débit de pointe à l'exutoire atteint "
+            f"{kpis.get('peak_outflow_m3s', 0):.3f} m³/s, avec un soulagement de {taux_derive:.1f}% assuré par les ouvrages de déviation."
+        )
+    elif nb_surcharges > 0:
+        conclusion_1 = (
+            f"Aucun débordement en surface n'est observé, mais {nb_surcharges} tronçon(s) travaillent en charge. "
+            f"Le réseau est à saturation pour cet événement : des mesures d'infiltration alternative sont recommandées."
+        )
+    else:
+        conclusion_1 = (
+            f"Le réseau absorbe l'événement pluvieux simulé en régime gravitaire libre, sans mise en charge "
+            f"critique ni débordement (débit de pointe : {kpis.get('peak_outflow_m3s', 0):.3f} m³/s)."
+        )
+
+    if cout_global > 0:
+        conclusion_2 = (
+            f"Le programme de travaux proposé ({ml_reseaux:.1f} ml de collecteurs recalibrés) représente un "
+            f"investissement estimé de {formater_cout_dzd(cout_global)}. "
+            f"La stratégie mixte recalibrage ciblé + écrêtement amont permet la résorption des points critiques "
+            f"tout en limitant l'impact sur la voirie et les délais d'exécution."
+        )
+    else:
+        conclusion_2 = (
+            "Aucun recalibrage structurel lourd n'est requis : le programme se limite à l'entretien courant "
+            "et à la surveillance périodique des tronçons les plus sollicités."
+        )
+
+    conclusion_3 = (
+        "Il est recommandé de soumettre ce dossier à la Direction Technique pour validation, puis d'engager "
+        "la phase APS/APD des interventions P1 dans les meilleurs délais. Une nouvelle simulation de vérification "
+        "sera exécutée après travaux pour confirmer la résorption des débordements."
+    )
+
+    conclusion_box = Table([
+        [Paragraph(f"<b>1.</b> {conclusion_1}", style_corps)],
+        [Paragraph(f"<b>2.</b> {conclusion_2}", style_corps)],
+        [Paragraph(f"<b>3.</b> {conclusion_3}", style_corps)],
+    ], colWidths=[18 * cm])
+    conclusion_box.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f8fafc')),
+        ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor(_COULEUR_NAVY)),
+        ('LINEBEFORE', (0, 0), (0, -1), 4, colors.HexColor(_COULEUR_NAVY)),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ('LEFTPADDING', (0, 0), (-1, -1), 10),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+    ]))
+    story.append(conclusion_box)
 
     # Footer
     story.append(Spacer(1, 1 * cm))
