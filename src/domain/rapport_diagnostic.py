@@ -16,6 +16,34 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+from reportlab.pdfgen import canvas as pdf_canvas
+
+
+class _CanvasNumerote(pdf_canvas.Canvas):
+    """Canvas ReportLab qui ajoute la pagination « Page X / Y » en pied de page."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._etats_sauvegardes = []
+
+    def showPage(self):
+        self._etats_sauvegardes.append(dict(self.__dict__))
+        self._startPage()
+
+    def save(self):
+        total_pages = len(self._etats_sauvegardes)
+        for etat in self._etats_sauvegardes:
+            self.__dict__.update(etat)
+            self._dessiner_pagination(total_pages)
+            pdf_canvas.Canvas.showPage(self)
+        pdf_canvas.Canvas.save(self)
+
+    def _dessiner_pagination(self, total_pages):
+        self.saveState()
+        self.setFont("Helvetica", 7)
+        self.setFillColor(colors.HexColor("#94a3b8"))
+        self.drawCentredString(A4[0] / 2.0, 0.9 * cm, f"Page {self._pageNumber} / {total_pages}")
+        self.restoreState()
 
 
 def formater_cout_dzd(montant: Any, avec_decimales: bool = True, inclure_unite: bool = True) -> str:
@@ -85,7 +113,8 @@ def generer_pdf_rapport_diagnostic(
         rightMargin=1.5 * cm,
         topMargin=1.5 * cm,
         bottomMargin=1.5 * cm,
-        title=f"Rapport d'expertise hydraulique - {project_name or 'Réseau Urbain'}"
+        title=f"Rapport d'expertise hydraulique - {project_name or 'Réseau Urbain'}",
+        canvasmaker=_CanvasNumerote
     )
 
     styles = getSampleStyleSheet()
@@ -434,9 +463,9 @@ def generer_pdf_rapport_diagnostic(
 
                 flood_rows.append([
                     Paragraph(f"<b>{nid}</b>", style_tableau),
-                    Paragraph(f"{hours_flooded:.2f} h", style_tableau),
-                    Paragraph(f"{flood_volume:.2f} m³", style_tableau),
-                    Paragraph(f"{peak_flood_flow:.3f} m³/s", style_tableau),
+                    Paragraph(f"{hours_flooded:.2f}", style_tableau),
+                    Paragraph(f"{flood_volume:.2f}", style_tableau),
+                    Paragraph(f"{peak_flood_flow:.3f}", style_tableau),
                     Paragraph(f"<font color='#ef4444'><b>{'INONDÉ' if status == 'flooded' else status.upper()}</b></font>", style_tableau)
                 ])
 
@@ -536,7 +565,7 @@ def generer_pdf_rapport_diagnostic(
                 Paragraph(f"<b>{a.get('conduite', '--')}</b>", style_tableau),
                 Paragraph(a.get('type_risque', '--'), style_tableau),
                 Paragraph(a.get('action_requise', '--'), style_tableau),
-                Paragraph(formater_cout_dzd(a.get('estimation_cout_dzd', 0)), style_tableau),
+                Paragraph(formater_cout_dzd(a.get('estimation_cout_dzd', 0), inclure_unite=False), style_tableau),
                 Paragraph(a.get('delai_recommande', '--'), style_tableau)
             ])
 
@@ -571,10 +600,10 @@ def generer_pdf_rapport_diagnostic(
     surch_rows = [
         [
             Paragraph("<b>Conduite</b>", style_tableau_bold),
-            Paragraph("<b>Taux Q/Qmax</b>", style_tableau_bold),
-            Paragraph("<b>Remplissage H/D</b>", style_tableau_bold),
-            Paragraph("<b>Vitesse</b>", style_tableau_bold),
-            Paragraph("<b>Débit de crête</b>", style_tableau_bold),
+            Paragraph("<b>Taux Q/Qmax (%)</b>", style_tableau_bold),
+            Paragraph("<b>Remplissage H/D (%)</b>", style_tableau_bold),
+            Paragraph("<b>Vitesse (m/s)</b>", style_tableau_bold),
+            Paragraph("<b>Débit de crête (m³/s)</b>", style_tableau_bold),
             Paragraph("<b>Observation</b>", style_tableau_bold)
         ]
     ]
@@ -583,10 +612,10 @@ def generer_pdf_rapport_diagnostic(
         for l in diag["surcharged_links"]:
             surch_rows.append([
                 Paragraph(f"<b>{l.get('conduit', '--')}</b>", style_tableau),
-                Paragraph(f"<font color='#ef4444'><b>{(l.get('flow_ratio', 0)*100):.0f}%</b></font>", style_tableau),
-                Paragraph(f"{(l.get('depth_ratio', 0)*100):.0f}%", style_tableau),
-                Paragraph(f"{l.get('vitesse', l.get('max_velocity_ms', 0)):.2f} m/s", style_tableau),
-                Paragraph(f"{l.get('q_max', l.get('max_flow_cms', 0)):.3f} m³/s", style_tableau),
+                Paragraph(f"<font color='#ef4444'><b>{(l.get('flow_ratio', 0)*100):.0f}</b></font>", style_tableau),
+                Paragraph(f"{(l.get('depth_ratio', 0)*100):.0f}", style_tableau),
+                Paragraph(f"{l.get('vitesse', l.get('max_velocity_ms', 0)):.2f}", style_tableau),
+                Paragraph(f"{l.get('q_max', l.get('max_flow_cms', 0)):.3f}", style_tableau),
                 Paragraph(l.get('cause', 'Surcharge sous pression'), style_tableau)
             ])
 
@@ -617,18 +646,18 @@ def generer_pdf_rapport_diagnostic(
         bottle_rows = [
             [
                 Paragraph("<b>Tronçon (amont -> aval)</b>", style_tableau_bold),
-                Paragraph("<b>Diam. amont</b>", style_tableau_bold),
-                Paragraph("<b>Diam. aval</b>", style_tableau_bold),
-                Paragraph("<b>Longueur</b>", style_tableau_bold),
+                Paragraph("<b>Diam. amont (mm)</b>", style_tableau_bold),
+                Paragraph("<b>Diam. aval (mm)</b>", style_tableau_bold),
+                Paragraph("<b>Longueur (m)</b>", style_tableau_bold),
                 Paragraph("<b>Conséquence hydraulique</b>", style_tableau_bold)
             ]
         ]
         for b in diag["bottlenecks"]:
             bottle_rows.append([
                 Paragraph(f"<b>{b.get('amont', '--')}</b> -> <b>{b.get('aval', '--')}</b>", style_tableau),
-                Paragraph(f"{b.get('diam_amont', '--')} mm", style_tableau),
-                Paragraph(f"<font color='#ef4444'><b>{b.get('diam_aval', '--')} mm</b></font>", style_tableau),
-                Paragraph(f"{b.get('longueur', b.get('longueur_m', 0)):.1f} m", style_tableau),
+                Paragraph(f"{b.get('diam_amont', '--')}", style_tableau),
+                Paragraph(f"<font color='#ef4444'><b>{b.get('diam_aval', '--')}</b></font>", style_tableau),
+                Paragraph(f"{b.get('longueur', b.get('longueur_m', 0)):.1f}", style_tableau),
                 Paragraph(b.get('description', 'Goulot géométrique - Réduction anormale de section'), style_tableau)
             ])
         bottle_table = creer_tableau_ou_ras(
@@ -700,8 +729,8 @@ def generer_pdf_rapport_diagnostic(
             Paragraph("<b>Matériau</b>", style_tableau_bold),
             Paragraph("<b>Classe</b>", style_tableau_bold),
             Paragraph("<b>Nb tronçons</b>", style_tableau_bold),
-            Paragraph("<b>Linéaire (ml)</b>", style_tableau_bold),
-            Paragraph("<b>Part (ml)</b>", style_tableau_bold),
+            Paragraph("<b>Linéaire (m)</b>", style_tableau_bold),
+            Paragraph("<b>Part (%)</b>", style_tableau_bold),
             Paragraph("<b>Prix unitaire (DA/ml)</b>", style_tableau_bold),
             Paragraph("<b>Montant total (DA)</b>", style_tableau_bold),
             Paragraph("<b>Part (%)</b>", style_tableau_bold)
@@ -715,10 +744,10 @@ def generer_pdf_rapport_diagnostic(
             Paragraph(r.get('classe', '--'), style_tableau),
             Paragraph(str(r.get('nb_troncons', 0)), style_tableau),
             Paragraph(f"{(r.get('lineaire_ml', 0)):.1f}", style_tableau),
-            Paragraph(f"{r.get('pct_lineaire', 0)}%", style_tableau),
+            Paragraph(f"{r.get('pct_lineaire', 0)}", style_tableau),
             Paragraph(formater_cout_dzd(r.get('cout_unitaire_ml_dzd', 0), inclure_unite=False), style_tableau),
             Paragraph(formater_cout_dzd(r.get('cout_total_dzd', 0), inclure_unite=False), style_tableau),
-            Paragraph(f"{r.get('pct_budget', 0)}%", style_tableau)
+            Paragraph(f"{r.get('pct_budget', 0)}", style_tableau)
         ])
 
     # Total row
@@ -726,7 +755,7 @@ def generer_pdf_rapport_diagnostic(
         Paragraph("<b>TOTAL PROGRAMME</b>", style_tableau_bold),
         Paragraph("", style_tableau), Paragraph("", style_tableau),
         Paragraph(f"<b>{gc.get('nb_troncons_a_recalibrer', 0)}</b>", style_tableau),
-        Paragraph(f"<b>{(gc.get('metres_lineaires_totaux', 0)):.1f} ml</b>", style_tableau),
+        Paragraph(f"<b>{(gc.get('metres_lineaires_totaux', 0)):.1f}</b>", style_tableau),
         Paragraph("100%", style_tableau),
         Paragraph("", style_tableau),
         Paragraph(f"<b><font color='#0284c7'>{formater_cout_dzd(gc.get('cout_global_estime_dzd', 0), inclure_unite=False)}</font></b>", style_tableau),
@@ -753,11 +782,11 @@ def generer_pdf_rapport_diagnostic(
     gc_rows = [
         [
             Paragraph("<b>Conduite</b>", style_tableau_bold),
-            Paragraph("<b>Ø actuel</b>", style_tableau_bold),
-            Paragraph("<b>Ø requis</b>", style_tableau_bold),
+            Paragraph("<b>Ø actuel (mm)</b>", style_tableau_bold),
+            Paragraph("<b>Ø requis (mm)</b>", style_tableau_bold),
             Paragraph("<b>DN retenu</b>", style_tableau_bold),
             Paragraph("<b>Matériau</b>", style_tableau_bold),
-            Paragraph("<b>Longueur</b>", style_tableau_bold),
+            Paragraph("<b>Longueur (m)</b>", style_tableau_bold),
             Paragraph("<b>Coût estimé (DA)</b>", style_tableau_bold)
         ]
     ]
@@ -765,12 +794,12 @@ def generer_pdf_rapport_diagnostic(
     for p in gc.get("prescriptions", []):
         gc_rows.append([
             Paragraph(f"<b>{p.get('conduit', '--')}</b>", style_tableau),
-            Paragraph(f"{p.get('diametre_actuel_mm', '--')} mm", style_tableau),
-            Paragraph(f"{p.get('diametre_requis_mm', p.get('diam_theorique_mm', 0)):.0f} mm", style_tableau),
+            Paragraph(f"{p.get('diametre_actuel_mm', '--')}", style_tableau),
+            Paragraph(f"{p.get('diametre_requis_mm', p.get('diam_theorique_mm', 0)):.0f}", style_tableau),
             Paragraph(f"DN {p.get('dn_normalise_mm', p.get('diam_prescrit_mm', '--'))}", style_tableau),
             Paragraph(p.get('materiau_recommande', 'Béton Armé 135A'), style_tableau),
-            Paragraph(f"{p.get('longueur_m', p.get('longueur', 0)):.1f} m", style_tableau),
-            Paragraph(formater_cout_dzd(p.get('cout_estime_dzd', 0)), style_tableau)
+            Paragraph(f"{p.get('longueur_m', p.get('longueur', 0)):.1f}", style_tableau),
+            Paragraph(formater_cout_dzd(p.get('cout_estime_dzd', 0), inclure_unite=False), style_tableau)
         ])
 
     gc_table = creer_tableau_ou_ras(
@@ -852,8 +881,8 @@ def generer_pdf_rapport_diagnostic(
         badge_color = colors.HexColor('#16a34a') if is_rec else (colors.HexColor('#ef4444') if v.get("statut") == "NON RETENU" else colors.HexColor('#f97316'))
         var_rows.append([
             Paragraph(f"<b>{v.get('nom', '--')}</b><br/><font size=7 color='#64748b'>{v.get('description', '')}</font>", style_tableau),
-            Paragraph(f"{v.get('recalibrage_ml', 0):.1f} ml" if v.get('recalibrage_ml', 0) > 0 else "--", style_tableau),
-            Paragraph(f"{v.get('volume_retention_m3', 0):.0f} m³" if v.get('volume_retention_m3', 0) > 0 else "--", style_tableau),
+            Paragraph(f"{v.get('recalibrage_ml', 0):.1f}" if v.get('recalibrage_ml', 0) > 0 else "--", style_tableau),
+            Paragraph(f"{v.get('volume_retention_m3', 0):.0f}" if v.get('volume_retention_m3', 0) > 0 else "--", style_tableau),
             Paragraph(f"<font color='{badge_color.hexval()}'><b>{formater_cout_dzd(v.get('cout_total_dzd', 0), inclure_unite=False)}</b></font>", style_tableau),
             Paragraph(v.get('gain_hydraulique', '--'), style_tableau),
             Paragraph(v.get('impact_voirie', '--'), style_tableau),
@@ -864,19 +893,19 @@ def generer_pdf_rapport_diagnostic(
 
     if not variantes:
         var_rows.append([
-            Paragraph("<b>Variante 1 : 100% tout-réseau</b>", style_tableau), Paragraph("7 591,9 ml", style_tableau), Paragraph("--", style_tableau),
+            Paragraph("<b>Variante 1 : 100% tout-réseau</b>", style_tableau), Paragraph("7 591,9", style_tableau), Paragraph("--", style_tableau),
             Paragraph(formater_cout_dzd(330964500, inclure_unite=False), style_tableau), Paragraph("100% théorique", style_tableau),
             Paragraph("TRÈS ÉLEVÉ", style_tableau), Paragraph("TRÈS ÉLEVÉ", style_tableau), Paragraph("5.5 / 10", style_tableau),
             Paragraph("<font color='#ef4444'><b>NON RETENU</b></font>", style_tableau)
         ])
         var_rows.append([
-            Paragraph("<b>Variante 2 : 100% GDO</b>", style_tableau), Paragraph("--", style_tableau), Paragraph("18 500 m³", style_tableau),
+            Paragraph("<b>Variante 2 : 100% GDO</b>", style_tableau), Paragraph("--", style_tableau), Paragraph("18 500", style_tableau),
             Paragraph(formater_cout_dzd(112500000, inclure_unite=False), style_tableau), Paragraph("Partiel (~62%)", style_tableau),
             Paragraph("Faible", style_tableau), Paragraph("Faible", style_tableau), Paragraph("6.0 / 10", style_tableau),
             Paragraph("<font color='#f97316'><b>INSUFFISANT</b></font>", style_tableau)
         ])
         var_rows.append([
-            Paragraph("<b>Variante 3 : Mixte optimisée</b>", style_tableau), Paragraph("4 112,8 ml", style_tableau), Paragraph("6 595 m³", style_tableau),
+            Paragraph("<b>Variante 3 : Mixte optimisée</b>", style_tableau), Paragraph("4 112,8", style_tableau), Paragraph("6 595", style_tableau),
             Paragraph(f"<font color='#16a34a'><b>{formater_cout_dzd(240384400, inclure_unite=False)}</b></font>", style_tableau), Paragraph("100% résorption", style_tableau),
             Paragraph("Modéré", style_tableau), Paragraph("MINIMAL", style_tableau), Paragraph("<b>9.2 / 10</b>", style_tableau),
             Paragraph("<font color='#16a34a'><b>RECOMMANDÉ</b></font>", style_tableau)
@@ -961,9 +990,9 @@ def generer_pdf_rapport_diagnostic(
         buf_rows = [
             [
                 Paragraph("<b>Scénario de tampon</b>", style_tableau_bold),
-                Paragraph("<b>Surface drainée</b>", style_tableau_bold),
-                Paragraph("<b>Écart relatif</b>", style_tableau_bold),
-                Paragraph("<b>Débit de pointe</b>", style_tableau_bold),
+                Paragraph("<b>Surface drainée (ha)</b>", style_tableau_bold),
+                Paragraph("<b>Écart relatif (%)</b>", style_tableau_bold),
+                Paragraph("<b>Débit de pointe (m³/s)</b>", style_tableau_bold),
                 Paragraph("<b>Interprétation</b>", style_tableau_bold)
             ]
         ]
@@ -973,9 +1002,9 @@ def generer_pdf_rapport_diagnostic(
             bg_color = colors.HexColor('#e0f2fe') if is_rec else colors.white
             buf_rows.append([
                 Paragraph(f"Tampon <b>{round(c.get('buffer_m', 0))} m</b> {'(Optimal)' if is_rec else ''}", style_tableau),
-                Paragraph(f"{c.get('surface_ha', 0)} ha", style_tableau),
-                Paragraph(f"{'+' if c.get('gain_pct', 0) > 0 else ''}{c.get('gain_pct', 0)}%", style_tableau),
-                Paragraph(f"{c.get('peak_flow_m3s', 0)} m³/s", style_tableau),
+                Paragraph(f"{c.get('surface_ha', 0)}", style_tableau),
+                Paragraph(f"{'+' if c.get('gain_pct', 0) > 0 else ''}{c.get('gain_pct', 0)}", style_tableau),
+                Paragraph(f"{c.get('peak_flow_m3s', 0)}", style_tableau),
                 Paragraph(
                     "Emprise voirie stricte" if c.get('buffer_m') == 35 else
                     ("Comblement îlots bâtis (recommandé)" if c.get('buffer_m') == 45 else "Extension zone périurbaine"),

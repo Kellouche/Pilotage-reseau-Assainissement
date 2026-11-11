@@ -72,7 +72,7 @@ window._construireHtmlRapportDiagnostic = function(simDataOrParams, metaArg, kAr
 
     const formatCout = (typeof window.formaterCoutDZD === 'function')
         ? window.formaterCoutDZD
-        : (val) => Number(val || 0).toLocaleString('fr-FR', { maximumFractionDigits: 0 }) + ' DZD';
+        : (val) => Number(val || 0).toLocaleString('fr-FR', { maximumFractionDigits: 0 }) + ' DA';
 
     const docHtml = `
 <!DOCTYPE html>
@@ -271,7 +271,7 @@ window._construireHtmlRapportDiagnostic = function(simDataOrParams, metaArg, kAr
                 <th style="width: 120px;">Ouvrage / conduite</th>
                 <th style="width: 140px;">Risque identifié</th>
                 <th>Action prescrite</th>
-                <th style="width: 95px; text-align: right;">Coût estimé</th>
+                <th style="width: 95px; text-align: right;">Coût estimé (DA)</th>
                 <th style="width: 80px; text-align: center;">Délai</th>
             </tr>
         </thead>
@@ -293,10 +293,10 @@ window._construireHtmlRapportDiagnostic = function(simDataOrParams, metaArg, kAr
         <thead>
             <tr>
                 <th style="width: 90px;">Conduite</th>
-                <th style="width: 80px; text-align: right;">Taux Q/Qmax</th>
-                <th style="width: 80px; text-align: right;">Remplissage H/D</th>
-                <th style="width: 80px; text-align: right;">Vitesse</th>
-                <th style="width: 90px; text-align: right;">Débit de crête</th>
+                <th style="width: 80px; text-align: right;">Taux Q/Qmax (%)</th>
+                <th style="width: 80px; text-align: right;">Remplissage H/D (%)</th>
+                <th style="width: 80px; text-align: right;">Vitesse (m/s)</th>
+                <th style="width: 90px; text-align: right;">Débit de crête (m³/s)</th>
                 <th>Observation / diagnostic</th>
             </tr>
         </thead>
@@ -311,9 +311,9 @@ window._construireHtmlRapportDiagnostic = function(simDataOrParams, metaArg, kAr
         <thead>
             <tr>
                 <th style="width: 140px;">Tronçon (amont &rarr; aval)</th>
-                <th style="width: 100px; text-align: right;">Diamètre amont</th>
-                <th style="width: 100px; text-align: right;">Diamètre aval</th>
-                <th style="width: 80px; text-align: right;">Longueur</th>
+                <th style="width: 100px; text-align: right;">Diamètre amont (mm)</th>
+                <th style="width: 100px; text-align: right;">Diamètre aval (mm)</th>
+                <th style="width: 80px; text-align: right;">Longueur (m)</th>
                 <th>Conséquence hydraulique</th>
             </tr>
         </thead>
@@ -366,10 +366,10 @@ window._construireHtmlRapportDiagnostic = function(simDataOrParams, metaArg, kAr
                 <th style="width: 150px;">Matériau prescrit</th>
                 <th style="width: 100px; text-align: center;">Classe / norme</th>
                 <th style="width: 65px; text-align: right;">Nb tronçons</th>
-                <th style="width: 80px; text-align: right;">Linéaire (ml)</th>
-                <th style="width: 55px; text-align: right;">Part (ml)</th>
-                <th style="width: 90px; text-align: right;">Prix unitaire</th>
-                <th style="width: 105px; text-align: right;">Montant total</th>
+                <th style="width: 80px; text-align: right;">Linéaire (m)</th>
+                <th style="width: 55px; text-align: right;">Part (%)</th>
+                <th style="width: 90px; text-align: right;">Prix unitaire (DA/ml)</th>
+                <th style="width: 105px; text-align: right;">Montant total (DA)</th>
                 <th style="width: 55px; text-align: right;">Part (%)</th>
             </tr>
         </thead>
@@ -380,7 +380,7 @@ window._construireHtmlRapportDiagnostic = function(simDataOrParams, metaArg, kAr
             <tr style="background: #f1f5f9; font-weight: 800;">
                 <td colspan="3"><b>TOTAL DU PROGRAMME DE RÉHABILITATION</b></td>
                 <td style="text-align: right;"><b>${gc.nb_troncons_a_recalibrer || 0}</b></td>
-                <td style="text-align: right;"><b>${Number(gc.metres_lineaires_totaux || 0).toFixed(1)} ml</b></td>
+                <td style="text-align: right;"><b>${Number(gc.metres_lineaires_totaux || 0).toFixed(1)}</b></td>
                 <td style="text-align: right;">100%</td>
                 <td style="text-align: right;">--</td>
                 <td style="text-align: right; color: #0284c7;"><b>${formatCout(gc.cout_global_estime_dzd)}</b></td>
@@ -421,12 +421,12 @@ window._construireHtmlRapportDiagnostic = function(simDataOrParams, metaArg, kAr
         <thead>
             <tr>
                 <th style="width: 80px;">Conduite</th>
-                <th style="width: 75px; text-align: right;">Ø actuel</th>
-                <th style="width: 75px; text-align: right;">Ø requis</th>
+                <th style="width: 75px; text-align: right;">Ø actuel (mm)</th>
+                <th style="width: 75px; text-align: right;">Ø requis (mm)</th>
                 <th style="width: 85px; text-align: right;">DN retenu</th>
                 <th style="width: 130px;">Matériau prescrit</th>
-                <th style="width: 75px; text-align: right;">Longueur</th>
-                <th style="width: 95px; text-align: right;">Coût estimé</th>
+                <th style="width: 75px; text-align: right;">Longueur (m)</th>
+                <th style="width: 95px; text-align: right;">Coût estimé (DA)</th>
             </tr>
         </thead>
         <tbody>
@@ -441,7 +441,7 @@ window._construireHtmlRapportDiagnostic = function(simDataOrParams, metaArg, kAr
     </div>
     <div class="agent-memo-box">
         <div class="agent-memo-title">💼 Analyse technico-économique et rentabilité socio-économique &bull; Expert financier et marchés publics (Agent 5)</div>
-        ${finance.note_technique || "L'analyse comparative des trois grandes variantes d'aménagement démontre la supériorité technico-économique de la Variante 3 (Mixte Optimisée). En couplant le recalibrage ciblé des 97 goulots structurants avec un bassin d'écrêtement amont régulé, ce scénario résorbe l'intégralité des débordements tout en réduisant l'enveloppe budgétaire de 90.6 M DZD par rapport au schéma classique de tout-réseau."}
+        ${finance.note_technique || "L'analyse comparative des trois grandes variantes d'aménagement démontre la supériorité technico-économique de la Variante 3 (Mixte Optimisée). En couplant le recalibrage ciblé des 97 goulots structurants avec un bassin d'écrêtement amont régulé, ce scénario résorbe l'intégralité des débordements tout en réduisant l'enveloppe budgétaire de 90.6 M DA par rapport au schéma classique de tout-réseau."}
     </div>
 
     <!-- Ratios Directeurs Décisionnels & Rentabilité -->
@@ -464,7 +464,7 @@ window._construireHtmlRapportDiagnostic = function(simDataOrParams, metaArg, kAr
         <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 4px; padding: 5px 8px; font-size: 7.5pt;">
             <span style="color: #16a34a; display: block; font-size: 6.8pt; text-transform: uppercase; font-weight: 700;">Rentabilité socio-économique</span>
             <b style="color: #15803d; font-size: 8.5pt;">Payback ${ratios.payback_annees || 5.3} ans &bull; TRI ${ratios.tri_pourcentage || 14.8}%</b>
-            <small style="color: #16a34a; display: block; font-size: 6.8pt;">VAN 20 ans @ 6% : +${((ratios.van_actualisee_20ans_dzd || 275761100) / 1000000).toFixed(1)} M DZD</small>
+            <small style="color: #16a34a; display: block; font-size: 6.8pt;">VAN 20 ans @ 6% : +${((ratios.van_actualisee_20ans_dzd || 275761100) / 1000000).toFixed(1)} M DA</small>
         </div>
     </div>
 
@@ -476,7 +476,7 @@ window._construireHtmlRapportDiagnostic = function(simDataOrParams, metaArg, kAr
                 <th style="width: 170px;">Variante technique</th>
                 <th style="width: 70px; text-align: right;">Réseau (ml)</th>
                 <th style="width: 65px; text-align: right;">GDO (m³)</th>
-                <th style="width: 100px; text-align: right;">Investissement (CapEx)</th>
+                <th style="width: 100px; text-align: right;">Investissement (DA)</th>
                 <th style="width: 110px;">Efficacité hydraulique</th>
                 <th style="width: 110px;">Impact voirie et RN4</th>
                 <th style="width: 90px;">Risque aval oued</th>
@@ -525,9 +525,9 @@ window._construireHtmlRapportDiagnostic = function(simDataOrParams, metaArg, kAr
         <thead>
             <tr>
                 <th style="width: 140px;">Scénario de tampon</th>
-                <th style="width: 100px; text-align: right;">Surface drainée</th>
-                <th style="width: 90px; text-align: right;">Écart relatif</th>
-                <th style="width: 110px; text-align: right;">Débit de pointe</th>
+                <th style="width: 100px; text-align: right;">Surface drainée (ha)</th>
+                <th style="width: 90px; text-align: right;">Écart relatif (%)</th>
+                <th style="width: 110px; text-align: right;">Débit de pointe (m³/s)</th>
                 <th>Interprétation morphologique urbaine</th>
             </tr>
         </thead>
@@ -539,7 +539,6 @@ window._construireHtmlRapportDiagnostic = function(simDataOrParams, metaArg, kAr
     <div class="footer">
         <span>DrainPilot SaaS 5.2 &bull; Certification Hydraulique Conforme EPA DYNWAVE</span>
         <span>Dossier d'expertise confidentiel &bull; Édité le ${dateStr}</span>
-        <span>Page 1 / 1 (Document Synthétique A4)</span>
     </div>
 </body>
 </html>

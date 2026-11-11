@@ -24,14 +24,23 @@
 
         window.formaterCoutDZD = function(val, avecDecimales = true) {
             if (val === null || val === undefined || isNaN(Number(val))) {
-                return avecDecimales ? '0,00 DZD' : '0 DZD';
+                return avecDecimales ? '0,00 DA' : '0 DA';
             }
             const num = Number(val);
             const s = num.toLocaleString('fr-FR', {
                 minimumFractionDigits: avecDecimales ? 2 : 0,
                 maximumFractionDigits: avecDecimales ? 2 : 0
             });
-            return `${s} DZD`;
+            return `${s} DA`;
+        };
+
+        // Montant numérique sans unité : l'unité doit figurer dans l'en-tête de colonne
+        window.formaterMontant = function(val, decimales = 2) {
+            const num = Number(val || 0);
+            return num.toLocaleString('fr-FR', {
+                minimumFractionDigits: decimales,
+                maximumFractionDigits: decimales
+            });
         };
 
         let carte = L.map('map', {

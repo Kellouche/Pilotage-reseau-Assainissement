@@ -42,7 +42,10 @@
 
                 const formatCout = (typeof window.formaterCoutDZD === 'function')
                     ? window.formaterCoutDZD
-                    : (val) => Number(val || 0).toLocaleString('fr-FR', { maximumFractionDigits: 0 }) + ' DZD';
+                    : (val) => Number(val || 0).toLocaleString('fr-FR', { maximumFractionDigits: 0 }) + ' DA';
+                const formatMontant = (typeof window.formaterMontant === 'function')
+                    ? window.formaterMontant
+                    : (val, d = 2) => Number(val || 0).toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d });
 
             // Tableau Risques (Agent 4)
             let riskRows = '';
@@ -75,7 +78,7 @@
                             <td><b>${a.conduite || a.cible || '--'}</b></td>
                             <td>${a.type_risque || a.probleme || '--'}</td>
                             <td>${a.action_requise || a.action || '--'}</td>
-                            <td style="text-align: right; font-weight: 700;">${formatCout(a.estimation_cout_dzd)}</td>
+                            <td style="text-align: right; font-weight: 700;">${formatMontant(a.estimation_cout_dzd)}</td>
                             <td style="text-align: center;">${a.delai_recommande || '--'}</td>
                         </tr>
                     `;
@@ -94,10 +97,10 @@
                     surchRows += `
                         <tr>
                             <td><b>${cName}</b></td>
-                            <td style="text-align: right; color: #ef4444; font-weight: 700;">${((l.flow_ratio || 0) * 100).toFixed(0)} %</td>
-                            <td style="text-align: right;">${((l.depth_ratio || 0) * 100).toFixed(0)} %</td>
-                            <td style="text-align: right;">${Number(vel).toFixed(2)} m/s</td>
-                            <td style="text-align: right;">${Number(qm).toFixed(3)} m³/s</td>
+                            <td style="text-align: right; color: #ef4444; font-weight: 700;">${((l.flow_ratio || 0) * 100).toFixed(0)}</td>
+                            <td style="text-align: right;">${((l.depth_ratio || 0) * 100).toFixed(0)}</td>
+                            <td style="text-align: right;">${Number(vel).toFixed(2)}</td>
+                            <td style="text-align: right;">${Number(qm).toFixed(3)}</td>
                             <td>${l.q_full ? `Capacité max : ${l.q_full.toFixed(3)} m³/s` : (l.cause || 'Surcharge sous pression')}</td>
                         </tr>
                     `;
@@ -116,9 +119,9 @@
                     bottleRows += `
                         <tr>
                             <td><b>${am}</b> &rarr; <b>${av}</b></td>
-                            <td style="text-align: right;">${b.diam_amont || '--'} mm</td>
-                            <td style="text-align: right; color: #ef4444; font-weight: 700;">${b.diam_aval || '--'} mm</td>
-                            <td style="text-align: right;">${Number(lg).toFixed(1)} m</td>
+                            <td style="text-align: right;">${b.diam_amont || '--'}</td>
+                            <td style="text-align: right; color: #ef4444; font-weight: 700;">${b.diam_aval || '--'}</td>
+                            <td style="text-align: right;">${Number(lg).toFixed(1)}</td>
                             <td>${b.description || 'Goulot géométrique • Réduction anormale de section vers l\'aval'}</td>
                         </tr>
                     `;
@@ -138,10 +141,10 @@
                             <td>${r.materiau}</td>
                             <td style="text-align: center;">${r.classe || '--'}</td>
                             <td style="text-align: right; font-weight: 700;">${r.nb_troncons}</td>
-                            <td style="text-align: right; font-weight: 700;">${Number(r.lineaire_ml).toFixed(1)} ml</td>
-                            <td style="text-align: right;">${r.pct_lineaire}%</td>
-                            <td style="text-align: right;">${formatCout(r.cout_unitaire_ml_dzd)} / ml</td>
-                            <td style="text-align: right; font-weight: 700; color: #0284c7;">${formatCout(r.cout_total_dzd)}</td>
+                            <td style="text-align: right; font-weight: 700;">${Number(r.lineaire_ml).toFixed(1)}</td>
+                            <td style="text-align: right;">${r.pct_lineaire}</td>
+                            <td style="text-align: right;">${formatMontant(r.cout_unitaire_ml_dzd)}</td>
+                            <td style="text-align: right; font-weight: 700; color: #0284c7;">${formatMontant(r.cout_total_dzd)}</td>
                             <td style="text-align: right;">${r.pct_budget}%</td>
                         </tr>
                     `;
@@ -171,12 +174,12 @@
                     gcRows += `
                         <tr>
                             <td><b>${cond}</b></td>
-                            <td style="text-align: right;">${dAct} mm</td>
-                            <td style="text-align: right;">${Number(dReq).toFixed(0)} mm</td>
+                            <td style="text-align: right;">${dAct}</td>
+                            <td style="text-align: right;">${Number(dReq).toFixed(0)}</td>
                             <td style="text-align: right; font-weight: 700; color: #0284c7;">DN ${dn}</td>
                             <td>${mat}</td>
-                            <td style="text-align: right;">${Number(long).toFixed(1)} m</td>
-                            <td style="text-align: right; font-weight: 700;">${formatCout(cout)}</td>
+                            <td style="text-align: right;">${Number(long).toFixed(1)}</td>
+                            <td style="text-align: right; font-weight: 700;">${formatMontant(cout)}</td>
                         </tr>
                     `;
                 });
@@ -227,9 +230,9 @@
                     bufRows += `
                         <tr style="${isRec ? 'background: #e0f2fe; font-weight: 700;' : ''}">
                             <td>Tampon <b>${Math.round(c.buffer_m)} m</b> ${isRec ? '⭐ (Optimal)' : ''}</td>
-                            <td style="text-align: right;">${dispArea} ha</td>
-                            <td style="text-align: right;">${c.gain_pct > 0 ? '+' + c.gain_pct + '%' : 'Référence'}</td>
-                            <td style="text-align: right;">${c.peak_flow_m3s} m³/s</td>
+                            <td style="text-align: right;">${dispArea}</td>
+                            <td style="text-align: right;">${c.gain_pct > 0 ? '+' + c.gain_pct : 'Référence'}</td>
+                            <td style="text-align: right;">${c.peak_flow_m3s}</td>
                             <td>${c.buffer_m === 35 ? 'Emprise voirie stricte (scénario de référence simulé)' : (c.buffer_m === 45 ? 'Comblement des îlots bâtis (recommandé)' : 'Extension zone périurbaine')}</td>
                         </tr>
                     `;
@@ -247,10 +250,10 @@
                                 <b>${v.nom}</b><br>
                                 <small style="color: #64748b;">${v.description}</small>
                             </td>
-                            <td style="text-align: right;">${v.recalibrage_ml > 0 ? Number(v.recalibrage_ml).toFixed(1) + ' ml' : '--'}</td>
-                            <td style="text-align: right;">${v.volume_retention_m3 > 0 ? Number(v.volume_retention_m3).toFixed(0) + ' m³' : '--'}</td>
+                            <td style="text-align: right;">${v.recalibrage_ml > 0 ? Number(v.recalibrage_ml).toFixed(1) : '--'}</td>
+                            <td style="text-align: right;">${v.volume_retention_m3 > 0 ? Number(v.volume_retention_m3).toFixed(0) : '--'}</td>
                             <td style="text-align: right; font-weight: 800; color: ${isRec ? '#16a34a' : '#0f172a'};">
-                                ${formatCout(v.cout_total_dzd)}
+                                ${formatMontant(v.cout_total_dzd)}
                             </td>
                             <td>${v.gain_hydraulique}</td>
                             <td>${v.impact_voirie}</td>
@@ -268,9 +271,9 @@
                 varRows = `
                     <tr>
                         <td><b>Variante 1 : 100 % tout-réseau</b><br><small style="color:#64748b;">Recalibrage intégral 7.6 km sans bassin</small></td>
-                        <td style="text-align: right;">7 591,9 ml</td>
+                        <td style="text-align: right;">7 591,9</td>
                         <td style="text-align: right;">--</td>
-                        <td style="text-align: right; font-weight: 700;">${formatCout(330964500)}</td>
+                        <td style="text-align: right; font-weight: 700;">${formatMontant(330964500)}</td>
                         <td>100 % théorique (sans abattement de pointe)</td>
                         <td>TRÈS ÉLEVÉ (coupure RN4, paralysie urbaine)</td>
                         <td>TRÈS ÉLEVÉ (crue brute à l'exutoire)</td>
@@ -280,8 +283,8 @@
                     <tr>
                         <td><b>Variante 2 : 100 % GDO pures</b><br><small style="color:#64748b;">Bassin d'orage 18 500 m³ sans recalibrage réseau</small></td>
                         <td style="text-align: right;">--</td>
-                        <td style="text-align: right;">18 500 m³</td>
-                        <td style="text-align: right; font-weight: 700;">${formatCout(112500000)}</td>
+                        <td style="text-align: right;">18 500</td>
+                        <td style="text-align: right; font-weight: 700;">${formatMontant(112500000)}</td>
                         <td>Partiel (~62 % réduction débordements)</td>
                         <td>Faible (hors voies circulées)</td>
                         <td>Faible (bon écrêtement)</td>
@@ -290,9 +293,9 @@
                     </tr>
                     <tr style="background: #f0fdf4; font-weight: 600;">
                         <td><b>Variante 3 : Mixte optimisée</b><br><small style="color:#64748b;">Recalibrage ciblé 97 goulots + Bassin 6 595 m³</small></td>
-                        <td style="text-align: right;">4 112,8 ml</td>
-                        <td style="text-align: right;">6 595 m³</td>
-                        <td style="text-align: right; font-weight: 800; color: #16a34a;">${formatCout(240384400)}</td>
+                        <td style="text-align: right;">4 112,8</td>
+                        <td style="text-align: right;">6 595</td>
+                        <td style="text-align: right; font-weight: 800; color: #16a34a;">${formatMontant(240384400)}</td>
                         <td>100 % résorption intégrale (Saint-Venant vérifié)</td>
                         <td>Modéré et phasable (P1 / P2)</td>
                         <td>MINIMAL (pointe écrêtée de 1,73 à 0,65 m³/s)</td>
