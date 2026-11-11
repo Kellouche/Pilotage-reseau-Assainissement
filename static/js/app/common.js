@@ -403,11 +403,22 @@ window.basculeSidebarIngenierie = function() {
     }, 300);
 };
 
-(function initSidebarIngenierie() {
+function _initialiserSidebarIngenierie() {
     try {
         if (localStorage.getItem('drainpilot_sidebar_plie') === '1') {
             const ws = document.getElementById('app-workspace');
-            if (ws) ws.classList.add('sidebar-collapsed');
+            if (ws) {
+                ws.classList.add('sidebar-collapsed');
+                // La carte doit se recalculer sur la largeur libérée
+                setTimeout(() => {
+                    try { if (window.carte && window.carte.invalidateSize) window.carte.invalidateSize(true); } catch (e) {}
+                }, 350);
+            }
         }
     } catch (e) {}
-})();
+}
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _initialiserSidebarIngenierie);
+} else {
+    _initialiserSidebarIngenierie();
+}
