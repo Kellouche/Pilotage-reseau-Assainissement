@@ -511,6 +511,21 @@ function afficherProfilLong(data) {
                     pointBorderWidth: 1.5,
                     fill: '-1', // Hachure la zone de mise en charge vers le Plan d'eau réel (Dataset 3)
                     tension: 0.15
+                },
+                {
+                    label: 'Alerte : HGL ≥ Terrain',
+                    data: data.segments.map(s =>
+                        (s.z_hgl != null && s.z_hgl >= s.z_terrain)
+                            ? { x: s.distance_m, y: s.z_hgl }
+                            : null
+                    ),
+                    showLine: false,
+                    pointStyle: 'triangle',
+                    pointRadius: 9,
+                    pointHoverRadius: 12,
+                    pointBackgroundColor: '#ef4444',
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 2
                 }
             ]
         },
