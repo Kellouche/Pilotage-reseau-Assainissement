@@ -319,12 +319,21 @@ def generer_pdf_rapport_diagnostic(
     # 6. Bilan Hydraulique Décisionnel
     story.append(Paragraph("⚖️ BILAN HYDRAULIQUE DÉCISIONNEL ET RÉPARTITION DES FLUX", style_section))
 
-    q_genere = synth.get("bilan_hydraulique", {}).get("q_genere_m3s", 0.0)
-    q_exutoire = synth.get("bilan_hydraulique", {}).get("q_exutoire_m3s", 0.0)
-    q_derive = synth.get("bilan_hydraulique", {}).get("q_derive_m3s", 0.0)
-    taux_derive = synth.get("bilan_hydraulique", {}).get("taux_derive_pct", 0.0)
-    taux_exutoire = synth.get("bilan_hydraulique", {}).get("taux_exutoire_pct", 100.0)
-    nb_ouvrages = synth.get("bilan_hydraulique", {}).get("nb_ouvrages_actifs", 0)
+    # Récupérer le bilan hydraulique depuis différentes sources possibles
+    bilan_hydraulique = {}
+    if kpis.get("bilan_hydraulique"):
+        bilan_hydraulique = kpis["bilan_hydraulique"]
+    elif synth.get("bilan_hydraulique"):
+        bilan_hydraulique = synth["bilan_hydraulique"]
+
+    # Récupérer les valeurs avec fallback sur les KPIs directs
+    # Priorité : bilan_hydraulique -> kpis direct -> calcul depuis peak_outflow
+    q_genere = bilan_hydraulique.get("q_genere_m3s") or kpis.get("q_genere_m3s") or kpis.get("debit_total_genere_m3s")
+    q_exutoire = bilan_hydraulique.get("q_exutoire_m3s") or kpis.get("q_exutoire_m3s") or kpis.get("debit_maintenu_reseau_principal_m3s") or kpis.get("peak_outflow_m3s", 0.0)
+    q_derive = bilan_hydraulique.get("q_derive_m3s") or kpis.get("q_derive_m3s") or kpis.get("q_deleste_m3s") or kpis.get("debit_devie_ouvrages_speciaux_m3s", 0.0)
+    taux_derive = bilan_hydraulique.get("taux_derive_pct") or kpis.get("taux_derive_pct") or kpis.get("taux_soulagement_reseau_pct") or kpis.get("taux_reduction_charge_pct", 0.0)
+    taux_exutoire = bilan_hydraulique.get("taux_exutoire_pct") or kpis.get("taux_exutoire_pct") or kpis.get("taux_exutoire_pct", 100.0)
+    nb_ouvrages = bilan_hydraulique.get("nb_ouvrages_actifs") or kpis.get("nb_ouvrages_raccordes") or kpis.get("nb_ouvrages_actifs", 0)
 
     bilan_text = (
         f"<b>Bassin versant :</b> {cluster_nom}<br/>"
