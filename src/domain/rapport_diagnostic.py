@@ -9,6 +9,7 @@ Objet : Générateur PDF du Rapport d'Expertise Hydraulique Complet (ReportLab)
 """
 
 import io
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -190,9 +191,12 @@ def _generer_carte_reseau_png(simulation_data: Dict[str, Any]) -> Optional[bytes
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
+        import numpy as np
+        import matplotlib.transforms as mtransforms
         from matplotlib.lines import Line2D
         from shapely.geometry import LineString, MultiLineString
         from shapely.affinity import rotate as _rotate_geom
+        import contextily as ctx
     except Exception:
         return None
 
@@ -221,9 +225,15 @@ def _generer_carte_reseau_png(simulation_data: Dict[str, Any]) -> Optional[bytes
     # haut que large : la carte occupe alors toute la largeur de la page paysage.
     try:
         b_reg, b_can = regards.total_bounds, canalisations.total_bounds
-        span_x_data = max(b_can[2] - b_can[0], b_reg[2] - b_reg[0], 1.0)
-        span_y_data = max(b_can[3] - b_can[1], b_reg[3] - b_reg[1], 1.0)
+        xmin_d = min(b_can[0], b_reg[0])
+        ymin_d = min(b_can[1], b_reg[1])
+        xmax_d = max(b_can[2], b_reg[2])
+        ymax_d = max(b_can[3], b_reg[3])
+        span_x_data = max(xmax_d - xmin_d, 1.0)
+        span_y_data = max(ymax_d - ymin_d, 1.0)
     except Exception:
+        xmin_d = ymin_d = 0.0
+        xmax_d = ymax_d = 1.0
         span_x_data = span_y_data = 1.0
     rotation_90 = span_y_data > 1.15 * span_x_data
 
@@ -317,6 +327,44 @@ def _generer_carte_reseau_png(simulation_data: Dict[str, Any]) -> Optional[bytes
     ymin, ymax = ax.get_ylim()
     span_x = xmax - xmin
 
+    # ---- Fond de carte OpenStreetMap (comme la vue Leaflet) ----
+    _basemap_ok = False
+    try:
+        provider = ctx.providers.OpenStreetMap.Mapnik
+        if not rotation_90:
+            ctx.add_basemap(ax, source=provider, crs="EPSG:32631",
+                            reset_extent=False, attribution=False, zorder=-1)
+            _basemap_ok = True
+        else:
+            # Carte pivotée : raster récupéré en CRS d'origine puis affiché
+            # via le même transform de rotation que les géométries
+            marge = 0.05
+            bx0, by0 = xmin_d - marge * span_x_data, ymin_d - marge * span_y_data
+            bx1, by1 = xmax_d + marge * span_x_data, ymax_d + marge * span_y_data
+            fig_tmp, ax_tmp = plt.subplots(figsize=(8, 8))
+            try:
+                ax_tmp.set_xlim(bx0, bx1)
+                ax_tmp.set_ylim(by0, by1)
+                ctx.add_basemap(ax_tmp, source=provider, crs="EPSG:32631",
+                                reset_extent=False, attribution=False)
+                if ax_tmp.images:
+                    _im = ax_tmp.images[-1]
+                    _arr = np.asarray(_im.get_array())
+                    _ext = _im.get_extent()
+                    _rot = mtransforms.Affine2D().rotate_deg(-90)
+                    ax.imshow(_arr, extent=_ext,
+                              transform=_rot + ax.transData,
+                              interpolation="bilinear", zorder=-1)
+                    _basemap_ok = True
+            finally:
+                plt.close(fig_tmp)
+    except Exception:
+        _basemap_ok = False
+    if _basemap_ok:
+        ax.text(0.995, 0.008, "© OpenStreetMap contributors",
+                transform=ax.transAxes, ha="right", va="bottom",
+                fontsize=6, color="#6b7280", zorder=6)
+
     meta = simulation_data.get("meta", {})
     cluster_nom = meta.get("cluster_nom") or meta.get("bassin_nom") or ""
 
@@ -353,6 +401,42 @@ def _generer_carte_reseau_png(simulation_data: Dict[str, Any]) -> Optional[bytes
     ax.text(x0 + pas_echelle / 2, y0 - 0.025 * (ymax - ymin),
             f"{int(pas_echelle)} m", ha="center", fontsize=8,
             color="#1a4a7a", fontweight="bold", zorder=4)
+
+    # ---- Cadre des paramètres de simulation (encadré blanc, police 8) ----
+    try:
+        _lignes_params = []
+        _bassin = meta.get("cluster_nom") or meta.get("bassin_nom") or ""
+        if _bassin:
+            _lignes_params.append(f"Bassin : {_bassin}")
+        _scenario = str(meta.get("scenario") or "")
+        _scenario = re.sub(r"[^\x00-\xFFFF]", "", _scenario).strip()
+        if _scenario:
+            _lignes_params.append("Scénario : " + (_scenario if len(_scenario) <= 52 else _scenario[:49] + "…"))
+        _pluie = simulation_data.get("total_precipitation_mm")
+        _duree = meta.get("duree_heures")
+        if _pluie is not None:
+            _lignes_params.append(f"Pluie : {float(_pluie):.1f} mm" + (f" — Durée : {float(_duree):.1f} h" if _duree is not None else ""))
+        _surf = meta.get("surface_totale_ha") or meta.get("total_area_ha")
+        if _surf is not None:
+            _lignes_params.append(f"Surface : {float(_surf):.1f} ha")
+        if meta.get("junctions_count") is not None or meta.get("conduits_count") is not None:
+            _lignes_params.append(f"Ouvrages : {meta.get('junctions_count', '—')} regards / {meta.get('conduits_count', '—')} conduites")
+        _qp = simulation_data.get("peak_outflow_m3s")
+        _vol = simulation_data.get("total_runoff_volume_m3")
+        if _qp is not None or _vol is not None:
+            _lignes_params.append(f"Pointe : {float(_qp or 0):.2f} m³/s — Ruisselé : {float(_vol or 0):,.0f} m³".replace(",", " "))
+        _nf = simulation_data.get("flooded_nodes_count")
+        _ns = simulation_data.get("surcharged_nodes_count")
+        if _nf is not None or _ns is not None:
+            _lignes_params.append(f"Inondés : {_nf if _nf is not None else '—'} — Surchargés : {_ns if _ns is not None else '—'}")
+        if _lignes_params:
+            ax.text(0.02, 0.98, "\n".join(_lignes_params),
+                    transform=ax.transAxes, fontsize=8, va="top", ha="left",
+                    linespacing=1.4, color="#1a1a1a", zorder=6,
+                    bbox=dict(boxstyle="round,pad=0.35", facecolor="white",
+                              edgecolor=_COULEUR_NAVY, alpha=0.9, linewidth=1.0))
+    except Exception:
+        pass
 
     # Légende
     legende = [
@@ -900,7 +984,7 @@ def generer_pdf_rapport_diagnostic(
             # Page paysage dédiée à la cartographie pour maximiser le fond de carte
             story.append(NextPageTemplate('Paysage'))
             story.append(PageBreak())
-            story.extend(_section("CARTOGRAPHIE DU RÉSEAU ET LOCALISATION DES DÉSORDRES"))
+            story.extend(_section("CARTOGRAPHIE DU RÉSEAU"))
             try:
                 w_px, h_px = ImageReader(io.BytesIO(_construire_story._carte_png)).getSize()
             except Exception:
@@ -915,14 +999,11 @@ def generer_pdf_rapport_diagnostic(
             img_carte.hAlign = "CENTER"
             story.append(img_carte)
             story.append(Spacer(1, 0.2 * cm))
-            _meta_carte = simulation_data.get("meta", {}) or {}
-            _cluster_carte = _meta_carte.get("cluster_nom") or _meta_carte.get("bassin_nom") or ""
-            _legende_carte = (
-                f"Figure 1 — {_cluster_carte + ' — ' if _cluster_carte else ''}"
-                "Réseau d'assainissement coloré selon les résultats de la simulation : "
-                "regards surchargés (orange), regards inondés (rouge), conduites en surcharge ou critique."
-            )
-            story.append(Paragraph(f"<i>{_legende_carte}</i>", style_corps))
+            style_legende_fig = ParagraphStyle(
+                'LegendeFigure', parent=style_corps, alignment=1, fontSize=9.5)
+            story.append(Paragraph(
+                "<i>Réseau d'assainissement après simulation</i>",
+                style_legende_fig))
             story.append(Spacer(1, 0.4 * cm))
             # Le gabarit Paysage revient automatiquement au Portrait en fin de page
             story.append(PageBreak())
