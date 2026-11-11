@@ -341,7 +341,7 @@
 // ==========================================
         // TÉLÉCHARGEMENT DU RAPPORT D'EXPERTISE OFFICIEL (PDF ReportLab)
         // ==========================================
-        window.telechargerRapportDiagnosticPDF = function() {
+        window.telechargerRapportDiagnosticPDF = async function() {
             const simData = window._dernierResultatSimulation;
             if (!simData) {
                 alert("Aucun résultat de simulation active. Veuillez d'abord exécuter une simulation SWMM 5.2.");
@@ -354,12 +354,67 @@
                 ? `/api/v1/simulations/rapport-diagnostic-pdf?cluster_id=${encodeURIComponent(clusterId)}`
                 : '/api/v1/simulations/rapport-diagnostic-pdf';
 
-            // Télécharger le PDF
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = '';
-            a.target = '_blank';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
+            // Overlay de verrouillage (même composant que la simulation)
+            const overlay = document.getElementById('sim-blocking-overlay');
+            const chronoEl = document.getElementById('sim-chrono-display');
+            const phaseEl = document.getElementById('sim-blocking-phase');
+            const titreEl = document.getElementById('sim-blocking-title');
+            const sousTitreEl = document.getElementById('sim-blocking-subtitle');
+
+            const textesOriginaux = {
+                titre: titreEl ? titreEl.innerHTML : null,
+                sousTitre: sousTitreEl ? sousTitreEl.innerHTML : null,
+                phase: phaseEl ? phaseEl.innerHTML : null
+            };
+
+            if (titreEl) titreEl.innerHTML = "Rapport d'expertise hydraulique officiel";
+            if (sousTitreEl) sousTitreEl.innerHTML = "Rédaction du PDF professionnel (ReportLab) &amp; cartographie du réseau";
+            if (phaseEl) phaseEl.innerHTML = '<i class="fas fa-circle-notch fa-spin" style="color: #38bdf8;"></i><span>Compilation des résultats &amp; génération du document...</span>';
+            if (chronoEl) chronoEl.textContent = '00:00.0';
+
+            const t0 = Date.now();
+            const chronoInterval = setInterval(() => {
+                const elapsedMs = Date.now() - t0;
+                const totalSec = Math.floor(elapsedMs / 1000);
+                const mins = String(Math.floor(totalSec / 60)).padStart(2, '0');
+                const secs = String(totalSec % 60).padStart(2, '0');
+                const tenths = Math.floor((elapsedMs % 1000) / 100);
+                if (chronoEl) chronoEl.textContent = `${mins}:${secs}.${tenths}`;
+                if (phaseEl && totalSec >= 8) {
+                    phaseEl.innerHTML = '<i class="fas fa-map-marked-alt" style="color: #38bdf8;"></i><span>Génération de la cartographie &amp; mise en page...</span>';
+                }
+            }, 100);
+            if (overlay) overlay.style.display = 'flex';
+
+            try {
+                const token = localStorage.getItem('swmm_access_token');
+                const headers = {};
+                if (token) headers['Authorization'] = `Bearer ${token}`;
+
+                const resp = await fetch(url, { headers });
+                if (!resp.ok) {
+                    throw new Error(`Erreur serveur HTTP ${resp.status}`);
+                }
+                const blob = await resp.blob();
+                const objUrl = URL.createObjectURL(blob);
+
+                const a = document.createElement('a');
+                a.href = objUrl;
+                const cd = resp.headers.get('Content-Disposition') || '';
+                const m = cd.match(/filename="?([^";]+)"?/);
+                a.download = m ? m[1] : 'Rapport_Expertise_Hydraulique.pdf';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(() => URL.revokeObjectURL(objUrl), 10000);
+            } catch (err) {
+                console.error("Erreur génération rapport PDF:", err);
+                alert("Impossible de générer le rapport d'expertise :\n" + (err && err.message ? err.message : err));
+            } finally {
+                clearInterval(chronoInterval);
+                if (overlay) overlay.style.display = 'none';
+                if (titreEl && textesOriginaux.titre !== null) titreEl.innerHTML = textesOriginaux.titre;
+                if (sousTitreEl && textesOriginaux.sousTitre !== null) sousTitreEl.innerHTML = textesOriginaux.sousTitre;
+                if (phaseEl && textesOriginaux.phase !== null) phaseEl.innerHTML = textesOriginaux.phase;
+            }
         };
