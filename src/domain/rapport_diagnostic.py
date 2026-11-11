@@ -156,10 +156,13 @@ def generer_pdf_rapport_diagnostic(
     story = []
 
     # Extraction des données principales
+    # simulation_data peut être soit kpis directement, soit une structure avec meta/kpis/agents_expertise
     meta = simulation_data.get("meta", {})
-    kpis = simulation_data.get("kpis", {})
-    agents = simulation_data.get("agents_expertise", {})
-    buffer_sens = simulation_data.get("buffer_sensitivity", {})
+    # Si simulation_data a une clé "kpis", l'utiliser, sinon utiliser simulation_data directement
+    kpis = simulation_data.get("kpis", simulation_data)
+    # agents_expertise peut être dans kpis ou dans simulation_data
+    agents = kpis.get("agents_expertise", simulation_data.get("agents_expertise", {}))
+    buffer_sens = kpis.get("buffer_sensitivity", simulation_data.get("buffer_sensitivity", {}))
 
     diag = agents.get("diagnostic_causal", {})
     gc = agents.get("prescriptions_genie_civil", {})
@@ -334,6 +337,14 @@ def generer_pdf_rapport_diagnostic(
     taux_derive = bilan_hydraulique.get("taux_derive_pct") or kpis.get("taux_derive_pct") or kpis.get("taux_soulagement_reseau_pct") or kpis.get("taux_reduction_charge_pct", 0.0)
     taux_exutoire = bilan_hydraulique.get("taux_exutoire_pct") or kpis.get("taux_exutoire_pct") or kpis.get("taux_exutoire_pct", 100.0)
     nb_ouvrages = bilan_hydraulique.get("nb_ouvrages_actifs") or kpis.get("nb_ouvrages_raccordes") or kpis.get("nb_ouvrages_actifs", 0)
+
+    # Valeurs par défaut si toujours None
+    q_genere = q_genere if q_genere is not None else 0.0
+    q_exutoire = q_exutoire if q_exutoire is not None else 0.0
+    q_derive = q_derive if q_derive is not None else 0.0
+    taux_derive = taux_derive if taux_derive is not None else 0.0
+    taux_exutoire = taux_exutoire if taux_exutoire is not None else 100.0
+    nb_ouvrages = nb_ouvrages if nb_ouvrages is not None else 0
 
     bilan_text = (
         f"<b>Bassin versant :</b> {cluster_nom}<br/>"

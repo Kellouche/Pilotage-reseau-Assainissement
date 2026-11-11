@@ -181,3 +181,56 @@ def test_generer_pdf_rapport_diagnostic_donnees_minimales():
     assert isinstance(pdf_bytes, bytes)
     assert len(pdf_bytes) > 1000
     assert pdf_bytes.startswith(b"%PDF-")
+
+
+def test_generer_pdf_rapport_diagnostic_donnees_reelles_simulation():
+    """Test avec des données réelles d'une simulation SWMM pour vérifier le bilan hydraulique."""
+    # Simuler des données réelles d'une simulation SWMM où les valeurs sont calculées
+    simulation_data = {
+        "meta": {
+            "project_name": "Réseau Chlef",
+            "bassin_nom": "Exutoire OUT_3607",
+            "cluster_nom": "Bassin versant",
+            "scenario": "Pluie décennale",
+            "total_area_ha": 125.5,
+        },
+        "kpis": {
+            "peak_outflow_m3s": 2.15,
+            "total_outflow_m3": 8500.0,
+            "flooded_nodes_count": 3,
+            "surcharged_nodes_count": 7,
+            # Données du bilan hydraulique calculées par analyse_rapport.py
+            "q_genere_m3s": 2.15,
+            "q_exutoire_m3s": 1.45,
+            "q_derive_m3s": 0.70,
+            "taux_derive_pct": 32.6,
+            "taux_exutoire_pct": 67.4,
+            "nb_ouvrages_raccordes": 4,
+        },
+        "agents_expertise": {
+            "synthese_executive": {
+                "bilan_hydraulique": {
+                    "bassin_nom": "Exutoire OUT_3607",
+                    "q_genere_m3s": 2.15,
+                    "q_exutoire_m3s": 1.45,
+                    "taux_exutoire_pct": 67.4,
+                    "q_derive_m3s": 0.70,
+                    "taux_derive_pct": 32.6,
+                    "nb_ouvrages_actifs": 4,
+                },
+            },
+        },
+    }
+
+    pdf_bytes = generer_pdf_rapport_diagnostic(
+        simulation_data=simulation_data,
+        project_name="Réseau Chlef"
+    )
+
+    assert isinstance(pdf_bytes, bytes)
+    assert len(pdf_bytes) > 5000
+    assert pdf_bytes.startswith(b"%PDF-")
+
+    # Vérifier que le PDF ne contient pas de valeurs à 0 pour le bilan hydraulique
+    # (On ne peut pas lire le contenu du PDF directement, mais on peut vérifier que la fonction ne crash pas)
+    # Le test principal est que la fonction génère un PDF valide avec ces données
