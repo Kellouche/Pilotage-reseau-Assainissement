@@ -74,8 +74,8 @@ def generer_pdf_rapport_diagnostic(
         'TitreHaut',
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
-        fontSize=10,
-        leading=13,
+        fontSize=11,
+        leading=14,
         alignment=1,
         textColor=colors.HexColor('#0f172a')
     )
@@ -84,8 +84,8 @@ def generer_pdf_rapport_diagnostic(
         'SectionTitre',
         parent=styles['Heading2'],
         fontName='Helvetica-Bold',
-        fontSize=11,
-        leading=15,
+        fontSize=12,
+        leading=16,
         textColor=colors.HexColor('#0369a1'),
         spaceBefore=8,
         spaceAfter=4
@@ -95,8 +95,8 @@ def generer_pdf_rapport_diagnostic(
         'SousSection',
         parent=styles['Heading3'],
         fontName='Helvetica-Bold',
-        fontSize=9.5,
-        leading=13,
+        fontSize=10.5,
+        leading=14,
         textColor=colors.HexColor('#0284c7'),
         spaceBefore=6,
         spaceAfter=3
@@ -106,8 +106,8 @@ def generer_pdf_rapport_diagnostic(
         'CorpsTexte',
         parent=styles['Normal'],
         fontName='Helvetica',
-        fontSize=9,
-        leading=13,
+        fontSize=11,
+        leading=15,
         textColor=colors.HexColor('#1e293b')
     )
 
@@ -115,8 +115,8 @@ def generer_pdf_rapport_diagnostic(
         'TableauTexte',
         parent=styles['Normal'],
         fontName='Helvetica',
-        fontSize=7.5,
-        leading=10,
+        fontSize=8.5,
+        leading=11,
         textColor=colors.HexColor('#0f172a')
     )
 
@@ -124,8 +124,8 @@ def generer_pdf_rapport_diagnostic(
         'TableauTexteBold',
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
-        fontSize=7.5,
-        leading=10,
+        fontSize=8.5,
+        leading=11,
         textColor=colors.HexColor('#0f172a')
     )
 
@@ -133,8 +133,8 @@ def generer_pdf_rapport_diagnostic(
         'AgentMemo',
         parent=styles['Normal'],
         fontName='Helvetica',
-        fontSize=8.5,
-        leading=12,
+        fontSize=10.5,
+        leading=14,
         textColor=colors.HexColor('#1e293b'),
         leftIndent=4,
         rightIndent=4,
@@ -146,8 +146,8 @@ def generer_pdf_rapport_diagnostic(
         'AgentTitle',
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
-        fontSize=8.5,
-        leading=12,
+        fontSize=10.5,
+        leading=14,
         textColor=colors.HexColor('#0284c7'),
         spaceBefore=4,
         spaceAfter=2
@@ -434,8 +434,8 @@ def generer_pdf_rapport_diagnostic(
         story.append(Paragraph("Aucune donnée de débordement disponible pour cette simulation.", style_corps))
         story.append(Spacer(1, 0.3 * cm))
 
-    # 7. Synthèse Exécutive (Agent 6)
-    story.append(Paragraph("1. SYNTHÈSE STRATÉGIQUE ET AVIS DES DÉCIDEURS (Agent 6)", style_section))
+    # 7. Synthèse Exécutive
+    story.append(Paragraph("1. SYNTHÈSE STRATÉGIQUE ET AVIS DES DÉCIDEURS", style_section))
 
     verdict_box_style = ParagraphStyle(
         'VerdictBox',
@@ -461,16 +461,16 @@ def generer_pdf_rapport_diagnostic(
                           ParagraphStyle('AvisDir', fontSize=8, textColor=colors.HexColor('#64748b'))))
     story.append(Spacer(1, 0.3 * cm))
 
-    story.append(Paragraph(f"<b>📋 Mémoire de Synthèse Stratégique • Directeur Technique (Agent 6)</b>", style_agent_title))
+    story.append(Paragraph(f"<b>📋 Mémoire de Synthèse Stratégique • Directeur Technique</b>", style_agent_title))
     story.append(Paragraph(synth.get("note_technique", ""), style_agent_memo))
     story.append(Spacer(1, 0.3 * cm))
 
-    # 8. Matrice des Risques & Plan d'Action (Agent 4)
-    story.append(Paragraph("2. PLAN D'ACTION PRIORISÉ ET MATRICE DES RISQUES (Agent 4)", style_section))
+    # 8. Matrice des Risques & Plan d'Action
+    story.append(Paragraph("2. PLAN D'ACTION PRIORISÉ ET MATRICE DES RISQUES", style_section))
     story.append(Paragraph(f"<b>Budget total estimé :</b> {formater_cout_dzd(gc.get('cout_global_estime_dzd', 0))}", style_corps))
     story.append(Spacer(1, 0.2 * cm))
 
-    story.append(Paragraph(f"<b>🎯 Note de hiérarchisation multicritère • Expert risques (Agent 4)</b>", style_agent_title))
+    story.append(Paragraph(f"<b>🎯 Note de hiérarchisation multicritère • Expert risques</b>", style_agent_title))
     story.append(Paragraph(risk.get("note_technique", ""), style_agent_memo))
 
     # Tableau des risques
@@ -534,11 +534,11 @@ def generer_pdf_rapport_diagnostic(
     story.append(risk_table)
     story.append(Spacer(1, 0.4 * cm))
 
-    # 9. Diagnostic Causal (Agent 1)
-    story.append(Paragraph("3. DIAGNOSTIC CAUSAL ET DYSFONCTIONNEMENTS HYDRAULIQUES (Agent 1)", style_section))
+    # 9. Diagnostic Causal
+    story.append(Paragraph("3. DIAGNOSTIC CAUSAL ET DYSFONCTIONNEMENTS HYDRAULIQUES", style_section))
     story.append(Paragraph(f"<b>{diag.get('nb_surcharges', 0)} tronçons surchargés • {diag.get('nb_goulots', 0)} goulots détectés</b>", style_corps))
 
-    story.append(Paragraph(f"<b>🔬 Diagnostic hydrodynamique • Spécialiste Saint-Venant 1D (Agent 1)</b>", style_agent_title))
+    story.append(Paragraph(f"<b>🔬 Diagnostic hydrodynamique • Spécialiste Saint-Venant 1D</b>", style_agent_title))
     story.append(Paragraph(diag.get("note_technique", ""), style_agent_memo))
 
     # Tableau surcharges
@@ -582,17 +582,16 @@ def generer_pdf_rapport_diagnostic(
     # Goulots
     story.append(Paragraph("<b>Anomalies géométriques et goulots d'étranglement amont → aval :</b>", style_corps))
 
-    bottle_rows = [
-        [
-            Paragraph("<b>Tronçon (amont → aval)</b>", style_tableau_bold),
-            Paragraph("<b>Diam. amont</b>", style_tableau_bold),
-            Paragraph("<b>Diam. aval</b>", style_tableau_bold),
-            Paragraph("<b>Longueur</b>", style_tableau_bold),
-            Paragraph("<b>Conséquence hydraulique</b>", style_tableau_bold)
-        ]
-    ]
-
     if diag.get("bottlenecks"):
+        bottle_rows = [
+            [
+                Paragraph("<b>Tronçon (amont → aval)</b>", style_tableau_bold),
+                Paragraph("<b>Diam. amont</b>", style_tableau_bold),
+                Paragraph("<b>Diam. aval</b>", style_tableau_bold),
+                Paragraph("<b>Longueur</b>", style_tableau_bold),
+                Paragraph("<b>Conséquence hydraulique</b>", style_tableau_bold)
+            ]
+        ]
         for b in diag["bottlenecks"]:
             bottle_rows.append([
                 Paragraph(f"<b>{b.get('amont', '--')}</b> → <b>{b.get('aval', '--')}</b>", style_tableau),
@@ -601,24 +600,23 @@ def generer_pdf_rapport_diagnostic(
                 Paragraph(f"{b.get('longueur', b.get('longueur_m', 0)):.1f} m", style_tableau),
                 Paragraph(b.get('description', 'Goulot géométrique • Réduction anormale de section'), style_tableau)
             ])
+        bottle_table = Table(bottle_rows, colWidths=[4 * cm, 2.5 * cm, 2.5 * cm, 2.5 * cm, 5.5 * cm])
+        bottle_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0369a1')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
+        ]))
+        story.append(bottle_table)
     else:
-        bottle_rows.append([Paragraph("Aucun goulot géométrique inverse détecté.", style_tableau)] + [Paragraph("", style_tableau)] * 4)
-
-    bottle_table = Table(bottle_rows, colWidths=[4 * cm, 2.5 * cm, 2.5 * cm, 2.5 * cm, 5.5 * cm])
-    bottle_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0369a1')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
-        ('TOPPADDING', (0, 0), (-1, -1), 3),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
-    ]))
-    story.append(bottle_table)
+        story.append(Paragraph("<b>RAS</b> — Aucun goulot géométrique inverse détecté.", style_corps))
     story.append(Spacer(1, 0.4 * cm))
 
-    # 10. Prescriptions Génie Civil (Agent 2)
-    story.append(Paragraph("4. PRESCRIPTIONS DE GÉNIE CIVIL ET DIMENSIONNEMENT NORMALISÉ (Agent 2)", style_section))
+    # 10. Prescriptions Génie Civil
+    story.append(Paragraph("4. PRESCRIPTIONS DE GÉNIE CIVIL ET DIMENSIONNEMENT NORMALISÉ", style_section))
     story.append(Paragraph(
         f"<b>Métré total :</b> {(gc.get('metres_lineaires_totaux', 0)):.1f} ml  •  "
         f"<b>Marge Manning :</b> +25%  •  "
@@ -626,7 +624,7 @@ def generer_pdf_rapport_diagnostic(
         style_corps
     ))
 
-    story.append(Paragraph(f"<b>📐 Justification de calcul gravitaire • Ingénieur GC (Agent 2)</b>", style_agent_title))
+    story.append(Paragraph(f"<b>📐 Justification de calcul gravitaire • Ingénieur GC</b>", style_agent_title))
     story.append(Paragraph(gc.get("note_technique", ""), style_agent_memo))
 
     # BPU
@@ -752,14 +750,14 @@ def generer_pdf_rapport_diagnostic(
     story.append(gc_table)
     story.append(Spacer(1, 0.4 * cm))
 
-    # 11. Analyse Multi-Critères des Variantes (Agent 5)
-    story.append(Paragraph("5. ANALYSE MULTICRITÈRE DES VARIANTES D'AMÉNAGEMENT (Agent 5)", style_section))
+    # 11. Analyse Multi-Critères des Variantes
+    story.append(Paragraph("5. ANALYSE MULTICRITÈRE DES VARIANTES D'AMÉNAGEMENT", style_section))
 
     economie = finance.get("economie_realisee_dzd", 0)
     econ_pct = finance.get("economie_pourcentage", 0)
     story.append(Paragraph(f"<b>Économie scénario mixte :</b> {formater_cout_dzd(economie)} (-{econ_pct:.1f}%)", style_corps))
 
-    story.append(Paragraph(f"<b>💼 Analyse technico-économique • Expert financier (Agent 5)</b>", style_agent_title))
+    story.append(Paragraph(f"<b>💼 Analyse technico-économique • Expert financier</b>", style_agent_title))
     story.append(Paragraph(finance.get("note_technique", ""), style_agent_memo))
 
     # Ratios
@@ -854,11 +852,11 @@ def generer_pdf_rapport_diagnostic(
     story.append(var_table)
     story.append(Spacer(1, 0.4 * cm))
 
-    # 12. GDO & Écrêtement (Agent 3)
-    story.append(Paragraph("6. GESTION DURABLE DES OUVRAGES (GDO) ET ÉCRÊTEMENT DES POINTES (Agent 3)", style_section))
+    # 12. GDO & Écrêtement
+    story.append(Paragraph("6. GESTION DURABLE DES OUVRAGES (GDO) ET ÉCRÊTEMENT DES POINTES", style_section))
     story.append(Paragraph(f"<b>Volume tampon total :</b> {(lid.get('volume_tampon_requis_m3', 0)):.0f} m³", style_corps))
 
-    story.append(Paragraph(f"<b>🌿 Stratégie d'écrêtement à la source • Expert GDO (Agent 3)</b>", style_agent_title))
+    story.append(Paragraph(f"<b>🌿 Stratégie d'écrêtement à la source • Expert GDO</b>", style_agent_title))
     story.append(Paragraph(lid.get("note_technique", ""), style_agent_memo))
 
     lid_rows = [
