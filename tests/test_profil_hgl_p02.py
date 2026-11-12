@@ -110,8 +110,11 @@ def test_extraction_hydraulique_noeuds_reelle():
     for nid, entry in nh.items():
         heads = entry["heads"]
         assert heads, f"série de cotes vide pour {nid}"
-        # max_head cohérent avec la série échantillonnée
-        assert entry["max_head_m"] == pytest.approx(max(h for _, h in heads), abs=1e-3)
+        # CONTRÔLE P0.2 — max_head_m = maximum EXHAUSTIF (tous pas SWMM) ;
+        # max_head_sampled_m = maximum de la seule série échantillonnée.
+        assert entry["max_head_m"] >= max(h for _, h in heads) - 1e-6
+        assert entry["max_head_sampled_m"] == pytest.approx(
+            max(h for _, h in heads), abs=1e-3)
         # en surface libre : head ≈ invert + depth ; head ≥ invert toujours
         if entry.get("invert_m") is not None:
             assert entry["max_head_m"] >= entry["invert_m"] - 1e-6
@@ -270,6 +273,9 @@ def test_profil_hgl_reelle_max(ctx_profil_hgl):
         assert res["status"] == "success"
         assert res["hgl_source"] == "swmm_out_max_head"
         assert res["hgl_base"] == "max"
+        # Enveloppe des maxima individuels : identifiée explicitement,
+        # les instants des maxima peuvent différer d'un nœud à l'autre.
+        assert "enveloppe" in res["hgl_base_label"]
         segs = {s["node_id"]: s for s in res["segments"]}
         # Les nœuds couverts par le .out ont leur cote réelle
         assert segs["2674"]["z_hgl"] == pytest.approx(105.20, abs=0.01)
@@ -348,14 +354,30 @@ def test_profil_regime_surcharge_et_debordement(ctx_profil_hgl):
         db.delete(sim)
         db.commit()
 
-    # Débordement : head ≥ terrain OU flooding_max > 0
+    # Niveau ≥ terrain SANS débit de débordement (ex. stockage surface) :
+    # inondation, PAS débordement — distinction CONTRÔLE P0.2.
     nh = {"2674": _nh(z_terrain + 0.2)}
     sim = _creer_simulation(db, ctx, _sim_data_hgl(nh), suffix="_flood")
     try:
         res = get_profil_en_long(node_amont="2674", node_aval="2672",
                                  db=db, tenant=ctx["tenant"])
         seg = {s["node_id"]: s for s in res["segments"]}["2674"]
+        assert seg["hgl_regime"] == "inondation"
+        assert seg["atteint_terrain"] is True
+        assert seg["flooding_max_m3s"] == 0.0
+    finally:
+        db.delete(sim)
+        db.commit()
+
+    # Débordement réel : FLOODING_LOSSES > 0 calculé par SWMM.
+    nh = {"2674": _nh(z_terrain + 0.2, flooding=0.12)}
+    sim = _creer_simulation(db, ctx, _sim_data_hgl(nh), suffix="_flood3")
+    try:
+        res = get_profil_en_long(node_amont="2674", node_aval="2672",
+                                 db=db, tenant=ctx["tenant"])
+        seg = {s["node_id"]: s for s in res["segments"]}["2674"]
         assert seg["hgl_regime"] == "debordement"
+        assert seg["flooding_max_m3s"] == pytest.approx(0.12)
     finally:
         db.delete(sim)
         db.commit()

@@ -1514,8 +1514,17 @@ def get_profil_en_long(
             node_sim = sim_node_results.get(nid, {})
             status_n = node_sim.get("status", "normal")
             if hgl is not None:
-                if flooding_max > 0.0 or hgl >= z_terrain:
+                # CONTRÔLE P0.2 — distinction stricte :
+                #   debordement = débit de débordement RÉELLEMENT calculé par
+                #     SWMM (FLOODING_LOSSES > 0) ;
+                #   inondation = cote ≥ terrain naturel sans perte de surface
+                #     (eau stockée à la parcelle, ex. ALLOW_PONDING) ;
+                #   surcharge = mise en charge (cote > génératrice supérieure) ;
+                #   libre = écoulement non mis en charge.
+                if flooding_max > 0.0:
                     hgl_regime = "debordement"
+                elif hgl >= z_terrain:
+                    hgl_regime = "inondation"
                 elif hgl > z_gen_sup:
                     hgl_regime = "surcharge"
                 else:
@@ -1593,6 +1602,8 @@ def get_profil_en_long(
                 "z_hgl": round(hgl, 3) if hgl is not None else None,
                 "hgl_reel": hgl_reel,
                 "hgl_regime": hgl_regime,
+                "atteint_terrain": bool(hgl is not None and hgl >= z_terrain),
+                "flooding_max_m3s": round(flooding_max, 6) if hgl_reel else None,
                 "pression_m": pression_m,
                 "revanche_m": revanche_m,
                 "profondeur_m": round(profondeur, 2),
@@ -1623,7 +1634,7 @@ def get_profil_en_long(
             pression = s.get("pression_m", 0.0)
             regime = s.get("hgl_regime", "libre")
 
-            if regime == "debordement" or s["node_status"] == "flooded":
+            if regime in ("debordement", "inondation") or s["node_status"] == "flooded":
                 reco = "Rehaussement du tampon, création d'un bassin de rétention amont ou surcalibrage de la conduite aval."
                 if cond and cond.get("diam_mm"):
                     next_diam = int(cond["diam_mm"] * 1.35 // 100 * 100) or int(cond["diam_mm"] + 200)
@@ -1665,6 +1676,10 @@ def get_profil_en_long(
             "simulation_active": bool(sim_valide),
             "hgl_source": hgl_source,
             "hgl_base": base,
+            "hgl_base_label": (
+                "enveloppe des cotes maximales individuelles — instants "
+                "potentiellement differents par noeud" if base == "max"
+                else "profil instantane a l'instant demande"),
             "instant_minute": instant_minute,
             "segments": segments,
             "alertes": alerts,

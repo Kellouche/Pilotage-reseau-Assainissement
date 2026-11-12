@@ -141,30 +141,32 @@ def _compiler_hydraulique_noeuds(out, sampled_indices, times,
         except Exception:
             continue
 
+        # CONTRÔLE P0.2 — maxima EXHAUSTIFS sur TOUS les pas de calcul SWMM
+        # (séria complète déjà chargée) : jamais présentés comme échantillonnés.
+        # Les séries `heads` restent échantillonnées pour la restitution.
+        def _minute_de(t) -> int:
+            return int((t - start_dt).total_seconds() / 60.0)
+
+        if heads:
+            t_max = max(heads, key=lambda t: heads[t])
+            entry["max_head_m"] = round(float(heads[t_max]), 4)
+            entry["max_head_minute"] = _minute_de(t_max)
+        else:
+            entry["max_head_m"] = None
+            entry["max_head_minute"] = 0
+        entry["max_head_sampled_m"] = None
+        entry["max_depth_m"] = round(max((float(v) for v in depths.values()), default=0.0), 4)
+        entry["flooding_max_m3s"] = round(max((float(v) for v in floods.values()), default=0.0), 6)
+
         head_pairs: List[List[float]] = []
-        max_head = -1.0
-        max_head_min = 0
-        max_depth = 0.0
-        max_flood = 0.0
         for idx in sampled_indices:
             t = times[idx]
-            minute = int((t - start_dt).total_seconds() / 60.0)
+            minute = _minute_de(t)
             h = float(heads.get(t, 0.0) or 0.0)
             head_pairs.append([minute, round(h, 4)])
-            if h > max_head:
-                max_head = h
-                max_head_min = minute
-            d = float(depths.get(t, 0.0) or 0.0)
-            if d > max_depth:
-                max_depth = d
-            fl = float(floods.get(t, 0.0) or 0.0)
-            if fl > max_flood:
-                max_flood = fl
+            if entry["max_head_sampled_m"] is None or h > entry["max_head_sampled_m"]:
+                entry["max_head_sampled_m"] = round(h, 4)
 
-        entry["max_head_m"] = round(max_head, 4) if max_head >= 0 else None
-        entry["max_head_minute"] = max_head_min
-        entry["max_depth_m"] = round(max_depth, 4)
-        entry["flooding_max_m3s"] = round(max_flood, 6)
         entry["heads"] = head_pairs
         result[nid] = entry
     return result
