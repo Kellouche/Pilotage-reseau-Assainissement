@@ -8,7 +8,7 @@ Objet : Schémas Pydantic de validation des requêtes et réponses SWMM
 ================================================================================
 """
 
-from pydantic import BaseModel, Field, ConfigDict, field_validator
+from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 from typing import Optional, List, Any, Dict, Union
 from datetime import datetime
 
@@ -303,3 +303,137 @@ class AuditLogResponse(BaseModel):
     timestamp: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ============================================================
+# SCHÉMAS APPORTS DE TEMPS SEC (DWF) — LOT P1.2
+# ============================================================
+
+class ApportDwfCreate(BaseModel):
+    """Création d'un apport de temps sec rattaché à un nœud du projet."""
+    project_id: Optional[str] = Field(None, description="Projet cible (requis si plusieurs projets actifs)")
+    node_id: str = Field(..., min_length=1, max_length=100,
+                         description="Identifiant du regard/nœud dans le GPKG du projet")
+    nature: str = Field("domestique", description="domestique | industriel | infiltration | autre")
+    mode_determination: str = Field("debit", description="debit (m³/s direct) | eh (équivalents-habitants)")
+    debit_moyen_m3s: Optional[float] = Field(None, gt=0, le=100.0,
+                                              description="Débit moyen en m³/s (mode 'debit' ; dérivé en mode 'eh')")
+    eh: Optional[float] = Field(None, gt=0, le=10_000_000,
+                                description="Nombre d'équivalents-habitants (mode 'eh')")
+    debit_specifique_l_hab_j: Optional[float] = Field(None, gt=0, le=5000,
+                                                      description="Débit spécifique L/hab/j (mode 'eh', défaut 200)")
+    profile_key: str = Field("constant", description="constant | journalier_type | hebdomadaire")
+    actif: bool = True
+    source: Optional[str] = Field(None, max_length=255)
+    observations: Optional[str] = None
+
+    @field_validator("nature")
+    @classmethod
+    def _nature_valide(cls, v):
+        from src.domain.apports_dwf import NATURES_APPORT
+        if v not in NATURES_APPORT:
+            raise ValueError(f"nature invalide : {v} (attendu : {', '.join(NATURES_APPORT)})")
+        return v
+
+    @field_validator("mode_determination")
+    @classmethod
+    def _mode_valide(cls, v):
+        from src.domain.apports_dwf import MODES_DETERMINATION
+        if v not in MODES_DETERMINATION:
+            raise ValueError(f"mode_determination invalide : {v}")
+        return v
+
+    @field_validator("profile_key")
+    @classmethod
+    def _profil_valide(cls, v):
+        from src.domain.apports_dwf import PROFILS_DWF
+        if v not in PROFILS_DWF:
+            raise ValueError(f"profile_key inconnu : {v}")
+        return v
+
+    @model_validator(mode="after")
+    def _coherence_mode(self):
+        if self.mode_determination == "debit":
+            if self.debit_moyen_m3s is None:
+                raise ValueError("debit_moyen_m3s est requis en mode 'debit'.")
+        else:  # eh
+            if self.eh is None:
+                raise ValueError("eh est requis en mode 'eh'.")
+        return self
+
+
+class ApportDwfUpdate(BaseModel):
+    """Mise à jour partielle d'un apport (PATCH-like via PUT)."""
+    node_id: Optional[str] = Field(None, min_length=1, max_length=100)
+    nature: Optional[str] = None
+    mode_determination: Optional[str] = None
+    debit_moyen_m3s: Optional[float] = Field(None, gt=0, le=100.0)
+    eh: Optional[float] = Field(None, gt=0, le=10_000_000)
+    debit_specifique_l_hab_j: Optional[float] = Field(None, gt=0, le=5000)
+    profile_key: Optional[str] = None
+    actif: Optional[bool] = None
+    source: Optional[str] = Field(None, max_length=255)
+    observations: Optional[str] = None
+
+    model_config = ConfigDict(extra='ignore')
+
+    @field_validator("nature")
+    @classmethod
+    def _nature_valide(cls, v):
+        if v is None:
+            return v
+        from src.domain.apports_dwf import NATURES_APPORT
+        if v not in NATURES_APPORT:
+            raise ValueError(f"nature invalide : {v}")
+        return v
+
+    @field_validator("mode_determination")
+    @classmethod
+    def _mode_valide(cls, v):
+        if v is None:
+            return v
+        from src.domain.apports_dwf import MODES_DETERMINATION
+        if v not in MODES_DETERMINATION:
+            raise ValueError(f"mode_determination invalide : {v}")
+        return v
+
+    @field_validator("profile_key")
+    @classmethod
+    def _profil_valide(cls, v):
+        if v is None:
+            return v
+        from src.domain.apports_dwf import PROFILS_DWF
+        if v not in PROFILS_DWF:
+            raise ValueError(f"profile_key inconnu : {v}")
+        return v
+
+
+class ApportDwfResponse(BaseModel):
+    """Représentation complète d'un apport de temps sec."""
+    id: str
+    org_id: str
+    project_id: str
+    node_id: str
+    nature: str
+    mode_determination: str
+    debit_moyen_m3s: float
+    debit_moyen_ls: Optional[float] = None
+    eh: Optional[float] = None
+    debit_specifique_l_hab_j: Optional[float] = None
+    profile_key: str
+    actif: bool
+    source: Optional[str] = None
+    observations: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class ProfilDwfInfo(BaseModel):
+    """Description publique d'un profil temporel prédéfini."""
+    key: str
+    nom: str
+    description: str
+    type_swmm: str
+    nb_facteurs: int
+    moyenne_facteurs: float
+    facteurs_168: List[float]

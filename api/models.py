@@ -656,3 +656,66 @@ class Incident(Base):
             "version": self.version,
             "last_modified": self.last_modified.isoformat() if self.last_modified else None
         }
+
+
+# ============================================================
+# 3. APPORTS DE TEMPS SEC (DWF) — LOT P1.2
+# ============================================================
+
+class ApportDwf(Base):
+    """
+    Apport de temps sec (Dry Weather Flow) rattaché à un nœud du réseau.
+
+    Le débit moyen canonique `debit_moyen_m3s` est TOUJOURS stocké en m³/s
+    (CMS, cohérent avec FLOW_UNITS du .inp). Deux modes de détermination :
+      - "debit" : l'utilisateur saisit directement debit_moyen_m3s ;
+      - "eh"    : debit_moyen_m3s est DÉRIVÉ de eh × debit_specifique_l_hab_j
+                  et n'est jamais saisi directement (anti-incohérence).
+    `profile_key` référence un profil prédéfini de src.domain.apports_dwf
+    (grille 168 facteurs compatible SWMM [PATTERNS]).
+    """
+    __tablename__ = "apports_dwf"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_gen_uuid)
+    org_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), index=True, nullable=False)
+    project_id: Mapped[str] = mapped_column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), index=True, nullable=False)
+    # Identifiant canonique du nœud = _clean_node_id(Code) du GPKG versionné
+    # du projet. Pas de FK ORM : la topologie vit dans le GeoPackage.
+    node_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    nature: Mapped[str] = mapped_column(String(30), nullable=False)  # domestique, industriel, infiltration, autre
+    mode_determination: Mapped[str] = mapped_column(String(10), nullable=False)  # debit, eh
+    debit_moyen_m3s: Mapped[float] = mapped_column(Float, nullable=False)
+    eh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    debit_specifique_l_hab_j: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    profile_key: Mapped[str] = mapped_column(String(50), default="constant", nullable=False)
+    actif: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    source: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    observations: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_by_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, onupdate=_utc_now, nullable=False)
+
+    __table_args__ = (
+        Index("ix_apports_dwf_org_project", "org_id", "project_id"),
+        Index("ix_apports_dwf_project_node", "project_id", "node_id"),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "org_id": self.org_id,
+            "project_id": self.project_id,
+            "node_id": self.node_id,
+            "nature": self.nature,
+            "mode_determination": self.mode_determination,
+            "debit_moyen_m3s": self.debit_moyen_m3s,
+            "debit_moyen_ls": round(self.debit_moyen_m3s * 1000.0, 3) if self.debit_moyen_m3s is not None else None,
+            "eh": self.eh,
+            "debit_specifique_l_hab_j": self.debit_specifique_l_hab_j,
+            "profile_key": self.profile_key,
+            "actif": self.actif,
+            "source": self.source,
+            "observations": self.observations,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }

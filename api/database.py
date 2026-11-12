@@ -82,7 +82,7 @@ def init_db():
     from api.models import (
         Organization, User, Membership, ApiKey, PurchaseOrder,
         Project, Regard, Canalisation, Rejet, Cluster, Simulation,
-        Inspection, Incident, Job, AuditLog, UsageCounter
+        Inspection, Incident, Job, AuditLog, UsageCounter, ApportDwf
     )
 
     Base.metadata.create_all(bind=engine)

@@ -32,7 +32,7 @@ from sqlalchemy.orm import Session
 from api.models import Project
 from api import schemas, crud
 
-from api.routes import network, simulations, sync, clusters, qualite, corrections, terrain, mnt, audit, auth, jobs, artifacts, licensing, admin, organization
+from api.routes import network, simulations, sync, clusters, qualite, corrections, terrain, mnt, audit, auth, jobs, artifacts, licensing, admin, organization, apports
 
 # ============================================================
 # LIFESPAN (démarrage/arrêt)
@@ -634,6 +634,7 @@ app.include_router(artifacts.router, prefix="/api/v1", tags=["Artefacts & Stocka
 app.include_router(licensing.router, prefix="/api/v1", tags=["Licences & Facturation B2B/B2G"])
 app.include_router(admin.router, prefix="/api/v1", tags=["Console Opérateur SuperAdmin"])
 app.include_router(organization.router, prefix="/api/v1", tags=["Gestion d'Organisation & Équipe"])
+app.include_router(apports.router, prefix="/api/v1", tags=["Apports de temps sec (DWF)"])
 
 
 # ============================================================
