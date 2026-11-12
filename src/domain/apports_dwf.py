@@ -25,7 +25,12 @@ UNITÉS CANONIQUES :
 - Débit spécifique domestique : L/hab/jour.
 - EH : nombre d'équivalents-habitants (1 EH ≈ 1 habitant).
 
-Ce module ne génère AUCUNE section INP (lot P1.3).
+Ce module ne génère AUCUNE section INP : l'injection est assurée par
+src/domain/moteur_swmm/dwf_injection.py (lot P1.3 — [DWF]+[PATTERNS]
+pour constant/journalier, [INFLOWS]+[TIMESERIES] pour hebdomadaire).
+NOTE SWMM 5.2.4 : les types [PATTERNS] natifs sont HOURLY (24 h), DAILY
+(7 jours), WEEKEND (sam+dim), MONTHLY — aucun pattern « 7 jours × 24 h »
+arbitraire n'existe ; la grille 168 n'est exacte que via [TIMESERIES].
 ================================================================================
 """
 

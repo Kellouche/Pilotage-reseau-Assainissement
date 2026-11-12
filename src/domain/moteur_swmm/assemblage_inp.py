@@ -47,6 +47,7 @@ def assembler_modele_inp_impl(
     station_id: Optional[str] = "chlef_anrh_siege",
     raccordements_orphelins: Optional[List[Dict[str, Any]]] = None,
     scenario_personnalise: Optional[Dict[str, Any]] = None,
+    apports_dwf: Optional[List[Dict[str, Any]]] = None,
 ) -> Tuple[str, Dict[str, Any], gpd.GeoDataFrame, gpd.GeoDataFrame]:
     """
     Génère l'intégralité du contenu textuel conforme au standard EPA SWMM 5.2 .inp.
@@ -178,7 +179,8 @@ def assembler_modele_inp_impl(
         scenario_key=scenario_key,
         cluster_id=cluster_id,
         bassin_nom=bassin_nom,
-        buf_actuel=buf_actuel
+        buf_actuel=buf_actuel,
+        apports_dwf=apports_dwf
     )
 
     contenu_inp = "\n".join(lines)

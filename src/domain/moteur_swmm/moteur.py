@@ -99,6 +99,7 @@ class MoteurSWMM:
         station_id: Optional[str] = "chlef_anrh_siege",
         raccordements_orphelins: Optional[List[Dict[str, Any]]] = None,
         scenario_personnalise: Optional[Dict[str, Any]] = None,
+        apports_dwf: Optional[List[Dict[str, Any]]] = None,
     ) -> Tuple[str, Dict[str, Any]]:
         """
         Génère l'intégralité du contenu textuel conforme au standard EPA SWMM 5.2 .inp.
@@ -123,6 +124,7 @@ class MoteurSWMM:
             station_id=station_id,
             raccordements_orphelins=raccordements_orphelins,
             scenario_personnalise=scenario_personnalise,
+            apports_dwf=apports_dwf,
         )
         self._last_regards = regards_used.copy()
         self._last_canalisations = canalisations_used.copy()
@@ -168,6 +170,7 @@ class MoteurSWMM:
         station_id: Optional[str] = "chlef_anrh_siege",
         raccordements_orphelins: Optional[List[Dict[str, Any]]] = None,
         scenario_personnalise: Optional[Dict[str, Any]] = None,
+        apports_dwf: Optional[List[Dict[str, Any]]] = None,
         execution_mode: str = "sync",
     ) -> Dict[str, Any]:
         """
@@ -199,6 +202,7 @@ class MoteurSWMM:
             station_id=station_id,
             raccordements_orphelins=raccordements_orphelins,
             scenario_personnalise=scenario_personnalise,
+            apports_dwf=apports_dwf,
         )
 
         rpt_text, _, timeseries = executer_solver_swmm(inp_content, return_timeseries=True)
@@ -236,6 +240,13 @@ class MoteurSWMM:
             rpt_text=rpt_text,
             execution_mode=execution_mode,
         )
+        # LOT P1.3 — traçabilité des apports DWF effectivement injectés
+        # (identité, nœud, nature, profil, méthode, paramètres temporels).
+        if meta.get("apports_dwf") or meta.get("apports_dwf_ignores"):
+            kpis["provenance"]["apports_dwf"] = {
+                "injectes": meta.get("apports_dwf", []),
+                "ignores": meta.get("apports_dwf_ignores", []),
+            }
         kpis["status"] = "SUCCESS"
         return kpis
 

@@ -43,7 +43,8 @@ def generer_lignes_sections_inp(
     scenario_key: str,
     cluster_id: Optional[Union[int, str]],
     bassin_nom: Optional[str],
-    buf_actuel: float
+    buf_actuel: float,
+    apports_dwf: Optional[List[Dict[str, Any]]] = None
 ) -> Tuple[List[str], Dict[str, Any]]:
     """
     Génère la liste de lignes de toutes les sections .inp et le dictionnaire meta.
@@ -153,6 +154,9 @@ def generer_lignes_sections_inp(
 
     for t_str, val in effective_timeseries:
         lines.append(f"TS_SCENARIO                 {t_str:<10} {val:<10.2f}")
+    # Position d'insertion des séries [TIMESERIES] DWF (LOT P1.3) : juste
+    # avant la ligne vide qui clôt la section, après TS_SCENARIO.
+    pos_fin_timeseries = len(lines)
     lines.append("")
 
     for sec_name in ["SUBCATCHMENTS", "SUBAREAS", "INFILTRATION"]:
@@ -329,6 +333,49 @@ def generer_lignes_sections_inp(
     lines.extend(xsec_lines)
     lines.append("")
 
+    # ------------------------------------------------------------------
+    # LOT P1.3 — Apports de temps sec (DWF)
+    # [PATTERNS] / [DWF] / [INFLOWS] + lignes [TIMESERIES] dédiées.
+    # Sans apports actifs, aucune section n'est émise : le .inp produit
+    # est strictement identique à l'historique.
+    # ------------------------------------------------------------------
+    apports_meta: List[Dict[str, Any]] = []
+    apports_ignores: List[Dict[str, Any]] = []
+    if apports_dwf:
+        from src.domain.moteur_swmm.dwf_injection import construire_injection_dwf
+        from datetime import datetime as _dt, timedelta as _td
+        # Nœuds injectables = JUNCTIONS réellement émises (regards +
+        # nœuds topologiques + exutoire), jamais l'OUTFALL dédié.
+        noeuds_injectables = set(noeuds_traites) | set(conduit_nodes) | {outfall_code}
+        noeuds_injectables.discard(actual_outfall_name)
+        noeuds_injectables.discard("")
+        # Fenêtre absolue = START_DATE/START_TIME → END_DATE/END_TIME du .inp
+        _debut = _dt(2026, 1, 1, 0, 0, 0)
+        _fin = _debut + _td(hours=int(duree_sim), minutes=int((duree_sim - int(duree_sim)) * 60))
+        _inj = construire_injection_dwf(apports_dwf, noeuds_injectables, _debut, _fin)
+        apports_meta = _inj["apports_meta"]
+        apports_ignores = _inj["ignores"]
+        if _inj["timeseries_lines"]:
+            lines[pos_fin_timeseries:pos_fin_timeseries] = _inj["timeseries_lines"]
+            pos_fin_timeseries += len(_inj["timeseries_lines"])
+        if _inj["pattern_lines"]:
+            lines.append("[PATTERNS]")
+            lines.append(";;Name           Type       Multipliers")
+            lines.extend(_inj["pattern_lines"])
+            lines.append("")
+        if _inj["dwf_lines"]:
+            lines.append("[DWF]")
+            lines.append(";;Node           Parameter   Value        Pattern1   Pattern2   Pattern3   Pattern4")
+            lines.extend(_inj["dwf_lines"])
+            lines.append("")
+        if _inj["inflow_lines"]:
+            lines.append("[INFLOWS]")
+            lines.append(";;Node           Constituent  Time Series  Type     Mfactor  Sfactor  Baseline Pattern")
+            lines.extend(_inj["inflow_lines"])
+            lines.append("")
+        if apports_ignores:
+            logger.info("Apports DWF ignorés à l'injection : %s", apports_ignores)
+
     lines.append("[COORDINATES]")
     coords_traitees: Set[str] = set()
     for idx, r in regards.iterrows():
@@ -478,6 +525,8 @@ def generer_lignes_sections_inp(
         "pluvio_source": scen.get("source", ""),
         "pluvio_description": scen.get("description", ""),
         "bms_info": scen.get("bms_metadata"),
+        "apports_dwf": apports_meta,
+        "apports_dwf_ignores": apports_ignores,
         "raccordements_orphelins": [item[0] for item in racc_orph_valides],
     }
 

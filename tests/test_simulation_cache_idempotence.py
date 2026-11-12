@@ -206,7 +206,12 @@ def test_route_run_simulation_cache_hit_et_force_recalculate():
             station_id="chlef_anrh_siege",
             force_recalculate=False
         )
-        param_hash, params_dict = _generer_cle_cache_simulation(gpkg_path, payload_cache)
+        # LOT P1.3 : l'empreinte DWF entre dans la clé de cache — reproduire
+        # exactement le calcul de la route (extra_params = info_cache_dwf).
+        from api.services.apports_dwf_service import preparer_apports_pour_simulation
+        _, info_cache_dwf = preparer_apports_pour_simulation(db, proj)
+        param_hash, params_dict = _generer_cle_cache_simulation(
+            gpkg_path, payload_cache, extra_params=info_cache_dwf)
 
         # Pré-enregistrer le cache
         mock_sim_result = {

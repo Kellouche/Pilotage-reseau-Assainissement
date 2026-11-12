@@ -192,7 +192,8 @@ def resoudre_gpkg_effectif_pour_projet(db: Session, proj: Any) -> Optional[Path]
     return None
 
 
-def generer_cle_cache_simulation(gpkg_path: Path, payload: Any) -> Tuple[str, Dict[str, Any]]:
+def generer_cle_cache_simulation(gpkg_path: Path, payload: Any,
+                                 extra_params: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
     """
     Génère un dictionnaire canonique normalisé et une empreinte SHA-256
     garantissant l'idempotence exacte de la simulation hydrodynamique.
@@ -239,6 +240,10 @@ def generer_cle_cache_simulation(gpkg_path: Path, payload: Any) -> Tuple[str, Di
     # que lorsqu'elle est fournie — les caches historiques restent valides.
     if getattr(payload, "bassin_ref", None):
         params_dict["bassin_ref"] = str(payload.bassin_ref)
+    # LOT P1.3 : l'état des apports DWF entre dans l'empreinte — modifier
+    # un apport invalide le cache (sinon collision silencieuse).
+    if extra_params:
+        params_dict.update(extra_params)
 
     serialized = json.dumps(params_dict, sort_keys=True, ensure_ascii=False)
     param_hash = hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
@@ -637,6 +642,7 @@ def executer_moteur_swmm(
         station_id=params.get("station_id"),
         raccordements_orphelins=params.get("raccordements_orphelins"),
         scenario_personnalise=scenario_bms_dict,
+        apports_dwf=params.get("apports_dwf"),
         execution_mode=execution_mode,
     )
 
@@ -1367,13 +1373,22 @@ def executer_en_async(
     )
     params_exec["cluster_id"] = cluster_id_effectif
 
+    # 6bis. LOT P1.3 — apports DWF actifs du projet (org/projet vérifiés
+    #    ci-dessus). `dwf_actif=False` dans les paramètres = désactivation
+    #    explicite du scénario. L'empreinte entre dans la clé de cache.
+    from api.services.apports_dwf_service import preparer_apports_pour_simulation
+    apports_dwf, info_cache_dwf = preparer_apports_pour_simulation(
+        db, proj, dwf_actif=params_exec.get("dwf_actif"))
+    params_exec["apports_dwf"] = apports_dwf
+
     # 7. Empreinte canonique + exécution via le MOTEUR UNIQUE (PySWMM)
     from types import SimpleNamespace
     _ns = SimpleNamespace(**{
         k: v for k, v in params_exec.items()
         if not isinstance(v, (dict, list)) or k == "raccordements_orphelins"
     })
-    param_hash, params_dict = generer_cle_cache_simulation(gpkg_path, _ns)
+    param_hash, params_dict = generer_cle_cache_simulation(
+        gpkg_path, _ns, extra_params=info_cache_dwf)
 
     debut = datetime.now(timezone.utc)
     try:

@@ -229,6 +229,9 @@ class SimulationRunRequest(BaseModel):
     bms_heure_fin: Optional[str] = "21:00"
     bms_duree_heures: Optional[float] = None
     bms_profil: Optional[str] = "cloche"
+    # LOT P1.3 — apports de temps sec (DWF) : injectés par défaut quand le
+    # projet en possède d'actifs ; False = désactivation explicite.
+    dwf_actif: Optional[bool] = None
 
 SimulationRunRequest.model_rebuild()
 
@@ -578,8 +581,16 @@ def run_native_swmm_simulation(
             detail="Règle hydraulique d'ingénierie : La sectorisation préalable en bassins versants d'exutoires est obligatoire avant la simulation SWMM. Veuillez sélectionner un bassin versant à simuler."
         )
 
+    # 1bis. LOT P1.3 — résolution des apports DWF actifs du projet dans le
+    #    périmètre org/projet (proj=None en mode démo → aucun apport).
+    #    Leur empreinte entre dans la clé de cache.
+    from api.services.apports_dwf_service import preparer_apports_pour_simulation
+    apports_dwf, info_cache_dwf = preparer_apports_pour_simulation(
+        db, proj, dwf_actif=payload.dwf_actif)
+
     # 2. Empreinte canonique (hash) des paramètres de simulation
-    param_hash, params_dict = _generer_cle_cache_simulation(gpkg_path, payload)
+    param_hash, params_dict = _generer_cle_cache_simulation(
+        gpkg_path, payload, extra_params=info_cache_dwf)
 
     # 3. Vérification du cache intelligent (Idempotence & Restauration)
     if not payload.force_recalculate:
@@ -603,6 +614,7 @@ def run_native_swmm_simulation(
     try:
         params_exec = payload.model_dump()
         params_exec["cluster_id"] = cluster_id_effectif
+        params_exec["apports_dwf"] = apports_dwf
         resultat = _executer_moteur_swmm(gpkg_path, params_exec, execution_mode="sync")
         resultat["source_gpkg"] = str(gpkg_path.resolve())
         resultat["project_name"] = project_name or gpkg_path.stem
