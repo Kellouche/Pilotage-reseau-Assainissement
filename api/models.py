@@ -487,6 +487,13 @@ class Simulation(Base):
     status: Mapped[str] = mapped_column(String(50), default="completed", nullable=False)  # running, completed, failed
     scenario_pluie: Mapped[str] = mapped_column(String(100), default="pluie_decennale", nullable=False)
     duree_heures: Mapped[float] = mapped_column(Float, default=24.0, nullable=False)
+    # CONTRAT (3C.7.4) : champ historique à double sémantique —
+    #   - nouvelles sims (sync ET celery) : chemin local du cache de
+    #     calcul `.simulation_cache` (voie de travail, PAS une clé S3) ;
+    #   - sims Celery historiques : clé ArtifactStore `.../summary.json` ;
+    #   - l'autorité permanente est ResultStore `simulations/{id}/result.json`.
+    # Ne jamais traiter cette valeur comme une clé S3 sans vérifier qu'il
+    # s'agit d'une clé ArtifactStore (préfixe `{org_id}/`).
     results_s3_key: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     gpkg_version_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("gpkg_versions.id"), nullable=True)
     gpkg_sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)

@@ -1684,6 +1684,34 @@ def list_cluster_simulations(
     return [s.to_dict() for s in sims if (s.summary_kpis or {}).get("cluster_id") == cluster_id]
 
 
+def _result_url_simulation(sim) -> Optional[str]:
+    """
+    URL de téléchargement du résultat d'une simulation.
+
+    Priorité absolue : l'artefact permanent ResultStore `result.json`
+    (clé ArtifactStore `{org}/{projet}/simulations/{id}/result.json`,
+    compatible `/api/v1/artifacts/download`). Repli : `results_s3_key`
+    legacy — qui peut être une clé ArtifactStore (anciennes sims Celery)
+    ou un chemin local historique (auquel cas l'URL reste impropre au
+    téléchargement, comportement inchangé).
+    """
+    try:
+        from api.services.result_store import (
+            ArtifactKind, ResultRef, ResultStore,
+        )
+        ref = ResultRef.depuis_simulation(sim)
+        store = ResultStore()
+        key = store.cle(ref, ArtifactKind.RESULT_JSON)
+        if store.store.exists(key):
+            return f"/api/v1/artifacts/download?key={key}"
+    except Exception:
+        pass
+    cle = getattr(sim, "results_s3_key", None)
+    if cle:
+        return f"/api/v1/artifacts/download?key={cle}"
+    return None
+
+
 @router.get("/status/{job_id}", response_model=schemas.SimulationStatusResponse)
 def get_simulation_status(
     job_id: str,
@@ -1702,7 +1730,7 @@ def get_simulation_status(
     }
 
     if sim.status.lower() == "completed":
-        response["result_url"] = f"/api/v1/artifacts/download?key={sim.results_s3_key}"
+        response["result_url"] = _result_url_simulation(sim)
     elif sim.status.lower() == "failed":
         response["error"] = (sim.summary_kpis or {}).get("error", "Simulation failed")
 

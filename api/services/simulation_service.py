@@ -1085,7 +1085,9 @@ def resoudre_simulation_courante(
                     sim, cluster_id=cluster_id, bassin_ref=bassin_ref,
                     exutoire_noeud=exutoire_noeud):
                 continue
-        if not sim.results_s3_key:
+        # results_s3_key peut être vide pour une sim dont seul ResultStore
+        # porte le résultat (identité complète) — ne pas exclure a priori.
+        if not sim.results_s3_key and _ref_pour_simulation(sim) is None:
             continue
         data = charger_resultat_simulation(sim)
         if not data or not est_simulation_valide(data):

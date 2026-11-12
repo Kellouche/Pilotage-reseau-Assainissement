@@ -383,6 +383,96 @@ def test_service_async_bms_applique(test_setup, monkeypatch):
     db.close()
 
 
+# ============================================================
+# LOT 3C.7.4 — Unification persistance / results_s3_key / result_url
+# ============================================================
+
+
+def test_result_url_priorise_resultstore(test_setup, monkeypatch):
+    """Une sim Celery complétée expose result_url pointant vers ResultStore result.json."""
+    _spy_moteur(monkeypatch)
+    _interdire_subprocess_worker(monkeypatch)
+    db = SessionLocal()
+    org_id = test_setup["org_a_id"]
+    proj_id = test_setup["proj_a_id"]
+
+    job = create_job(db, org_id=org_id, job_type="simulation_swmm", network_id=proj_id)
+    run_swmm_simulation_task(
+        job_id=job.id, org_id=org_id, network_id=proj_id,
+        parameters={"cluster_id": test_setup["cluster_a_id"], "project_id": proj_id,
+                    "simulation_id": job.id},
+    )
+
+    from api.routes.simulations import get_simulation_status
+    tenant = _construire_tenant(db, org_id, "ingenieur@regie-alpha.dz")
+    status = get_simulation_status(job_id=job.id, db=db, tenant=tenant)
+
+    assert status["status"] == "completed"
+    assert f"simulations/{job.id}/result.json" in status["result_url"]
+    assert status["result_url"].startswith("/api/v1/artifacts/download?key=")
+    # La clé est une clé ArtifactStore (préfixe org), jamais un chemin local
+    cle = status["result_url"].split("key=", 1)[1]
+    assert cle.startswith(f"{org_id}/")
+    db.close()
+
+
+def test_result_url_repli_results_s3_key_legacy(test_setup):
+    """Sans artefact ResultStore, result_url retombe sur results_s3_key (clé ArtifactStore legacy)."""
+    db = SessionLocal()
+    org_id = test_setup["org_a_id"]
+    proj_id = test_setup["proj_a_id"]
+
+    cle_legacy = f"{org_id}/{proj_id}/simulations/legacy_job/summary.json"
+    sim = Simulation(
+        id="legacy_job", org_id=org_id, project_id=proj_id,
+        name="Legacy", status="completed", results_s3_key=cle_legacy,
+        summary_kpis={},
+    )
+    db.add(sim)
+    db.commit()
+
+    from api.routes.simulations import get_simulation_status
+    tenant = _construire_tenant(db, org_id, "ingenieur@regie-alpha.dz")
+    status = get_simulation_status(job_id="legacy_job", db=db, tenant=tenant)
+
+    assert status["result_url"].endswith(f"key={cle_legacy}")
+    db.close()
+
+
+def test_resoudre_simulation_resultstore_sans_results_s3_key(test_setup):
+    """Une sim avec identité complète et result.json ResultStore est résolue
+    même si results_s3_key est vide (contrat ResultStore prioritaire)."""
+    from api.services.result_store import ArtifactKind, ResultRef, ResultStore
+    from api.services.simulation_service import resoudre_simulation_courante
+
+    db = SessionLocal()
+    org_id = test_setup["org_a_id"]
+    proj_id = test_setup["proj_a_id"]
+
+    sim = Simulation(
+        id="sim_sans_cle", org_id=org_id, project_id=proj_id,
+        name="Sans cle", status="completed", results_s3_key=None,
+        summary_kpis={},
+    )
+    db.add(sim)
+    db.commit()
+
+    resultat = {
+        "meta": {"bbox": [3.0, 36.7, 3.01, 36.71], "conduits_count": 1, "junctions_count": 2},
+        "node_results": {"R1": {}}, "conduit_results": {"C1": {}},
+        "peak_outflow_m3s": 0.1,
+    }
+    store = ResultStore()
+    store.save_idempotent(ResultRef(org_id, proj_id, "sim_sans_cle"),
+                          resultat, kind=ArtifactKind.RESULT_JSON)
+
+    ctx = resoudre_simulation_courante(db, org_id=org_id, project_id=proj_id,
+                                       resoudre_gpkg=False)
+    assert ctx.simulation.id == "sim_sans_cle"
+    assert ctx.data["node_results"]
+    db.close()
+
+
 # --- Tests unitaires du helper _execute_swmm_solver (conservé jusqu'au lot 3C.7.5) ---
 # Le worker ne l'appelle plus ; ces tests verrouillent son contrat
 # « jamais de résultat synthétique » en attendant son retrait.
