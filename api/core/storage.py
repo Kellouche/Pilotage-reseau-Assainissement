@@ -56,6 +56,24 @@ class ArtifactStore(abc.ABC):
         pass
 
     @abc.abstractmethod
+    def put_bytes_if_absent(self, key: str, data: bytes, content_type: Optional[str] = None) -> bool:
+        """
+        Création conditionnelle : écrit `data` sous `key` UNIQUEMENT si la clé
+        est absente. Retourne True si l'objet a été créé, False s'il existait
+        déjà (jamais écrasé). Garantit l'absence d'écrasement pour les stores
+        qui le supportent (filesystem, S3 conditionnel).
+        """
+        pass
+
+    @abc.abstractmethod
+    def put_file_if_absent(self, key: str, local_path: Union[str, Path], content_type: Optional[str] = None) -> bool:
+        """
+        Création conditionnelle depuis un fichier local : même contrat que
+        put_bytes_if_absent — jamais d'écrasement d'un objet existant.
+        """
+        pass
+
+    @abc.abstractmethod
     def get_bytes(self, key: str) -> bytes:
         """Récupère le contenu binaire d'un artefact."""
         pass
@@ -98,21 +116,57 @@ class LocalStore(ArtifactStore):
         self.root_dir = Path(root_dir).resolve()
         self.root_dir.mkdir(parents=True, exist_ok=True)
 
+    @staticmethod
+    def _normaliser_prefixe_etendu(chemin: str) -> str:
+        """
+        Sous Windows, Path.resolve() peut retourner la forme étendue
+        '\\\\?\\<lecteur>:\\…' de façon non déterministe (notamment quand le
+        fichier cible existe déjà au moment de la résolution). On retire ce
+        préfixe avant toute comparaison de préfixe de chemin.
+        """
+        if chemin.startswith("\\\\?\\"):
+            return chemin[4:]
+        return chemin
+
     def _resolve(self, key: str) -> Path:
         clean_key = str(key).replace("\\", "/").lstrip("/")
         parts = clean_key.split("/")
         if ".." in parts:
             raise ValueError(f"Clé de stockage invalide : {key}")
         target = (self.root_dir / clean_key).resolve()
-        # Vérification anti-traversée
-        if not str(target).startswith(str(self.root_dir)):
+        # Vérification anti-traversée : comparaison sur formes normalisées,
+        # avec borne de séparateur (évite 'artifacts_evil' pour 'artifacts').
+        tgt_str = self._normaliser_prefixe_etendu(str(target))
+        root_str = self._normaliser_prefixe_etendu(str(self.root_dir))
+        if not (tgt_str == root_str or tgt_str.startswith(root_str + os.sep)):
             raise ValueError(f"Accès hors du répertoire racine interdit : {key}")
         return target
 
+    @staticmethod
+    def _ecrire_atomique(target: Path, data: bytes) -> None:
+        """
+        Écriture atomique : fichier temporaire dans le même répertoire puis
+        os.replace() — un lecteur concurrent ne voit jamais un contenu partiel.
+        """
+        import tempfile
+        target.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp_name = tempfile.mkstemp(prefix=f".{target.name}.", suffix=".tmp",
+                                       dir=str(target.parent))
+        tmp_path = Path(tmp_name)
+        try:
+            with os.fdopen(fd, "wb") as f:
+                f.write(data)
+            os.replace(tmp_path, target)
+        except Exception:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+            raise
+
     def put_bytes(self, key: str, data: bytes, content_type: Optional[str] = None) -> str:
         target = self._resolve(key)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(data)
+        self._ecrire_atomique(target, data)
         return key
 
     def put_file(self, key: str, local_path: Union[str, Path], content_type: Optional[str] = None) -> str:
@@ -120,9 +174,73 @@ class LocalStore(ArtifactStore):
         if not src.exists():
             raise FileNotFoundError(f"Fichier local introuvable : {local_path}")
         target = self._resolve(key)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(src.read_bytes())
+        # Lecture intégrale puis écriture atomique : cible jamais partielle.
+        self._ecrire_atomique(target, src.read_bytes())
         return key
+
+    def _lien_atomique_si_absent(self, tmp_path: Path, target: Path) -> bool:
+        """
+        Publication conditionnelle : hard-link atomique du fichier temporaire
+        vers la cible. os.link() échoue avec FileExistsError si la cible existe
+        → création strictement conditionnelle, sans fenêtre exists/put.
+        Repli documenté si le système de fichiers ne supporte pas les liens
+        durs : re-vérification immédiate puis os.replace() (course résiduelle
+        possible sur FS sans hardlink, ex. certains montages réseau).
+        """
+        try:
+            os.link(tmp_path, target)
+        except FileExistsError:
+            return False
+        except OSError:
+            if target.exists():
+                return False
+            os.replace(tmp_path, target)
+            return True
+        tmp_path.unlink(missing_ok=True)
+        return True
+
+    def _put_bytes_si_absent(self, target: Path, data: bytes) -> bool:
+        import tempfile
+        target.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp_name = tempfile.mkstemp(prefix=f".{target.name}.", suffix=".tmp",
+                                       dir=str(target.parent))
+        tmp_path = Path(tmp_name)
+        try:
+            with os.fdopen(fd, "wb") as f:
+                f.write(data)
+            return self._lien_atomique_si_absent(tmp_path, target)
+        except Exception:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+            raise
+
+    def put_bytes_if_absent(self, key: str, data: bytes, content_type: Optional[str] = None) -> bool:
+        return self._put_bytes_si_absent(self._resolve(key), data)
+
+    def put_file_if_absent(self, key: str, local_path: Union[str, Path], content_type: Optional[str] = None) -> bool:
+        src = Path(local_path)
+        if not src.exists():
+            raise FileNotFoundError(f"Fichier local introuvable : {local_path}")
+        target = self._resolve(key)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        import tempfile
+        fd, tmp_name = tempfile.mkstemp(prefix=f".{target.name}.", suffix=".tmp",
+                                       dir=str(target.parent))
+        tmp_path = Path(tmp_name)
+        try:
+            os.close(fd)
+            # Copie dans le même volume que la cible (prérequis os.link)
+            import shutil
+            shutil.copyfile(src, tmp_path)
+            return self._lien_atomique_si_absent(tmp_path, target)
+        except Exception:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+            raise
 
     def get_bytes(self, key: str) -> bytes:
         target = self._resolve(key)
@@ -258,6 +376,61 @@ class S3Store(ArtifactStore):
             return clean_key
         except Exception as e:
             raise StorageError(f"Échec téléversement S3 ({clean_key}) : {e}") from e
+
+    def _put_object_si_absent(self, clean_key: str, body, mime: str) -> bool:
+        """
+        Création conditionnelle S3 : tentative PutObject avec
+        If-None-Match='*' (écriture conditionnelle native, rejet 412 si la
+        clé existe). Si le SDK/backend ne supporte pas la condition, repli
+        sur exists()+put — une course résiduelle subsiste alors, à assumer
+        par l'appelant (pour les clés content-addressed, l'écrasement par un
+        contenu identique reste inoffensif).
+        Retourne True si l'objet a été créé, False s'il existait déjà.
+        """
+        try:
+            self.client.put_object(
+                Bucket=self.bucket_name,
+                Key=clean_key,
+                Body=body,
+                ContentType=mime,
+                IfNoneMatch="*",
+            )
+            return True
+        except Exception as e:
+            from botocore.exceptions import ClientError, ParamValidationError
+            if isinstance(e, ParamValidationError):
+                pass  # SDK trop ancien pour If-None-Match → repli ci-dessous
+            elif isinstance(e, ClientError):
+                code = str(e.response.get("Error", {}).get("Code", ""))
+                if code in ("PreconditionFailed", "412", "ConditionalRequestConflict"):
+                    return False
+                raise StorageError(f"Échec écriture conditionnelle S3 ({clean_key}) : {e}") from e
+            else:
+                raise StorageError(f"Échec écriture conditionnelle S3 ({clean_key}) : {e}") from e
+        # Repli : pas de condition native disponible
+        if self.exists(clean_key):
+            return False
+        self.client.put_object(
+            Bucket=self.bucket_name,
+            Key=clean_key,
+            Body=body,
+            ContentType=mime,
+        )
+        return True
+
+    def put_bytes_if_absent(self, key: str, data: bytes, content_type: Optional[str] = None) -> bool:
+        clean_key = str(key).replace("\\", "/").lstrip("/")
+        mime = content_type or mimetypes.guess_type(clean_key)[0] or "application/octet-stream"
+        return self._put_object_si_absent(clean_key, data, mime)
+
+    def put_file_if_absent(self, key: str, local_path: Union[str, Path], content_type: Optional[str] = None) -> bool:
+        clean_key = str(key).replace("\\", "/").lstrip("/")
+        src = Path(local_path)
+        if not src.exists():
+            raise FileNotFoundError(f"Fichier local introuvable : {local_path}")
+        mime = content_type or mimetypes.guess_type(str(src))[0] or "application/octet-stream"
+        with open(src, "rb") as f:
+            return self._put_object_si_absent(clean_key, f, mime)
 
     def get_bytes(self, key: str) -> bytes:
         clean_key = str(key).replace("\\", "/").lstrip("/")

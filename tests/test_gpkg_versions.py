@@ -233,6 +233,29 @@ def test_version_indisponible_objet_supprime(db, projet_avec_gpkg, env_versions)
     assert ok is False
 
 
+def test_objet_store_existant_verifie_jamais_ecrase(db, projet_avec_gpkg, env_versions):
+    """
+    Audit 3B : un objet existant à la clé content-addressed n'est JAMAIS
+    réécrit. S'il est corrompu, l'enregistrement échoue explicitement au
+    lieu de le remplacer silencieusement.
+    """
+    p = projet_avec_gpkg["proj"]
+    gpkg = projet_avec_gpkg["gpkg"]
+    sha = gv.sha256_fichier(gpkg)
+    store = gv._store()
+    key = gv.cle_version_gpkg(p.org_id, p.id, sha)
+
+    # Objet corrompu pré-existant à la clé content-addressed
+    store.put_bytes(key, b"OBJET CORROMPU - pas un gpkg")
+    with pytest.raises(gv.StorageError, match="corrompu"):
+        gv.enregistrer_version_gpkg(db, p, gpkg, valider=False)
+    # L'objet corrompu est conservé tel quel — aucune réécriture silencieuse
+    assert store.get_bytes(key) == b"OBJET CORROMPU - pas un gpkg"
+
+    # Nettoyage pour le fixture
+    store.delete(key)
+
+
 def test_resoudre_version_interdite_cross_tenant(db, projet_avec_gpkg, tmp_path, env_versions):
     """Un projet ne peut pas utiliser la version d'un autre projet (garde applicative)."""
     p = projet_avec_gpkg["proj"]
@@ -396,6 +419,23 @@ def test_exutoire_present_dans_gpkg(db, projet_avec_gpkg, env_versions):
     assert gv.exutoire_present_dans_gpkg(chemin, None) is None
 
 
+def test_exutoire_present_dans_gpkg_code_numerique(env_versions, tmp_path):
+    """
+    Régression audit : les codes GPKG sont souvent stockés en REAL
+    (ex. regards.Code = 3479.0) alors que la référence métier est '3479'.
+    La comparaison doit être tolérante au numérique.
+    """
+    import geopandas as gpd
+    from shapely.geometry import Point
+    gpkg = tmp_path / "numeric.gpkg"
+    gdf = gpd.GeoDataFrame(
+        {"id": ["R1"], "Code": [3479.0]},
+        geometry=[Point(3.0, 36.0)], crs="EPSG:4326")
+    gdf.to_file(gpkg, layer="regards", driver="GPKG")
+    assert gv.exutoire_present_dans_gpkg(gpkg, "3479") is True
+    assert gv.exutoire_present_dans_gpkg(gpkg, "9999") is False
+
+
 # ---------------------------------------------------------------------------
 # Import concurrent (multi-thread, file SQLite)
 # ---------------------------------------------------------------------------
@@ -404,13 +444,18 @@ def test_import_concurrent_meme_fichier(db, projet_avec_gpkg, env_versions):
     """Deux imports simultanés du même contenu → une seule version."""
     p = projet_avec_gpkg["proj"]
     gpkg = projet_avec_gpkg["gpkg"]
+    # IMPORTANT : ne jamais partager un objet ORM entre threads — `p` est lié
+    # à la session `db` (thread principal) ; y accéder depuis un worker
+    # déclencherait un lazy-load concurrent sur la même connexion sqlite3
+    # (ObjectDeletedError / segfault observés). On capture l'id ici.
+    pid = p.id
     resultats = []
     erreurs = []
 
     def _import():
         s = SessionLocal()
         try:
-            proj = s.get(Project, p.id)
+            proj = s.get(Project, pid)
             v = gv.enregistrer_version_gpkg(s, proj, gpkg, valider=False)
             s.commit()
             resultats.append(v.id)

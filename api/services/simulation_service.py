@@ -169,6 +169,25 @@ def iter_fichiers_cache_simulation(gpkg_path: Path):
     return sorted(uniq.values(), key=lambda x: x.stat().st_mtime, reverse=True)
 
 
+def resoudre_gpkg_effectif_pour_projet(db: Session, proj: Any) -> Optional[Path]:
+    """
+    Chemin GPKG effectif pour les endpoints de lecture (téléchargements, PDF) :
+    snapshot matérialisé de la version courante si le projet est versionné,
+    sinon source_gpkg_key. Si une version est référencée mais indisponible,
+    retourne None — jamais de repli silencieux sur un fichier différent.
+    """
+    if proj is None:
+        return None
+    chemin, _meta = _resoudre_gpkg_versionne(db, proj)
+    if chemin is not None:
+        return Path(chemin)
+    if getattr(proj, "gpkg_version_id", None):
+        return None
+    if proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
+        return Path(proj.source_gpkg_key)
+    return None
+
+
 def generer_cle_cache_simulation(gpkg_path: Path, payload: Any) -> Tuple[str, Dict[str, Any]]:
     """
     Génère un dictionnaire canonique normalisé et une empreinte SHA-256

@@ -179,6 +179,7 @@ from api.services.simulation_service import (
     sauvegarder_simulation as _sauvegarder_simulation,
     charger_derniere_simulation_disque_ou_db as _charger_derniere_simulation_disque_ou_db,
     iter_fichiers_cache_simulation as _iter_fichiers_cache_simulation,
+    resoudre_gpkg_effectif_pour_projet as _resoudre_gpkg_effectif_pour_projet,
     construire_reponse_simulation as _construire_reponse_simulation,
     resoudre_contexte_projet as _resoudre_contexte_projet,
     executer_moteur_swmm as _executer_moteur_swmm,
@@ -703,13 +704,15 @@ def download_latest_inp(
     active_gpkg = None
     if db and tenant and hasattr(tenant, "org_id") and tenant.org_id:
         proj = db.query(Project).filter(Project.org_id == tenant.org_id, Project.is_archived.is_(False)).first()
-        if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
-            active_gpkg = Path(proj.source_gpkg_key)
+        _gpkg_eff = _resoudre_gpkg_effectif_pour_projet(db, proj)
+        if _gpkg_eff is not None:
+            active_gpkg = _gpkg_eff
             nom_reseau = proj.name
     if not active_gpkg and db:
         proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
-        if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
-            active_gpkg = Path(proj.source_gpkg_key)
+        _gpkg_eff = _resoudre_gpkg_effectif_pour_projet(db, proj)
+        if _gpkg_eff is not None:
+            active_gpkg = _gpkg_eff
             nom_reseau = proj.name
     if not active_gpkg and Path("data/demo_reseau.gpkg").exists():
         active_gpkg = Path("data/demo_reseau.gpkg")
@@ -788,13 +791,15 @@ def download_latest_rpt(
     active_gpkg = None
     if db and tenant and hasattr(tenant, "org_id") and tenant.org_id:
         proj = db.query(Project).filter(Project.org_id == tenant.org_id, Project.is_archived.is_(False)).first()
-        if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
-            active_gpkg = Path(proj.source_gpkg_key)
+        _gpkg_eff = _resoudre_gpkg_effectif_pour_projet(db, proj)
+        if _gpkg_eff is not None:
+            active_gpkg = _gpkg_eff
             nom_reseau = proj.name
     if not active_gpkg and db:
         proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
-        if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
-            active_gpkg = Path(proj.source_gpkg_key)
+        _gpkg_eff = _resoudre_gpkg_effectif_pour_projet(db, proj)
+        if _gpkg_eff is not None:
+            active_gpkg = _gpkg_eff
             nom_reseau = proj.name
     if not active_gpkg and Path("data/demo_reseau.gpkg").exists():
         active_gpkg = Path("data/demo_reseau.gpkg")
@@ -922,13 +927,11 @@ def telecharger_rapport_diagnostic_pdf(
                     Project.org_id == tenant.org_id,
                     Project.is_archived.is_(False)
                 ).first()
-                if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
-                    active_gpkg = Path(proj.source_gpkg_key)
+                active_gpkg = _resoudre_gpkg_effectif_pour_projet(db, proj)
             if not active_gpkg:
                 proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
-                if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
-                    active_gpkg = Path(proj.source_gpkg_key)
-                elif Path("data/demo_reseau.gpkg").exists():
+                active_gpkg = _resoudre_gpkg_effectif_pour_projet(db, proj)
+                if active_gpkg is None and Path("data/demo_reseau.gpkg").exists():
                     active_gpkg = Path("data/demo_reseau.gpkg")
 
             if active_gpkg and active_gpkg.exists():

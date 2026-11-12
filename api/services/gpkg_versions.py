@@ -202,6 +202,56 @@ def _chemin_materialise(sha256: str) -> Path:
     return GPKG_CACHE_DIR / f"{sha256}.gpkg"
 
 
+def _put_file_si_absent(store: ArtifactStore, key: str, source_path: Path) -> bool:
+    """
+    Création conditionnelle via l'API dédiée du store. Repli pour les stores
+    tiers sans put_file_if_absent : exists()+put (course résiduelle
+    documentée — acceptable car la clé est content-addressed).
+    """
+    put_cond = getattr(store, "put_file_if_absent", None)
+    if put_cond is not None:
+        return bool(put_cond(key, source_path))
+    if store.exists(key):
+        return False
+    store.put_file(key, source_path)
+    return True
+
+
+def _verifier_objet_store(store: ArtifactStore, key: str, sha_attendu: str) -> None:
+    """
+    Vérifie que l'objet `key` du store contient EXACTEMENT sha_attendu.
+    Un objet existant n'est jamais réécrit : s'il est corrompu, on lève une
+    erreur — la réécriture silencieuse est proscrite (integrity > disponibilité).
+    """
+    tmp = Path(tempfile.mkstemp(prefix="gpkg_verify_", suffix=".gpkg")[1])
+    try:
+        store.get_file(key, tmp)
+        sha_reel = sha256_fichier(tmp)
+    finally:
+        try:
+            tmp.unlink(missing_ok=True)
+        except Exception:
+            pass
+    if sha_reel != sha_attendu:
+        raise StorageError(
+            f"Objet store corrompu pour la clé {key} : sha attendu {sha_attendu[:12]}…, "
+            f"obtenu {sha_reel[:12]}…. Réécriture interdite (version immuable)."
+        )
+
+
+def _assurer_objet_version(store: ArtifactStore, key: str, source_path: Path, sha: str) -> None:
+    """
+    Garantit que l'objet content-addressed `key` contient `sha` :
+    - absent  → création conditionnelle (put_file_if_absent) ;
+    - existant ou course perdue → vérification SHA-256 du contenu stocké.
+    Jamais d'écrasement, jamais d'objet accepté sans preuve de contenu.
+    """
+    if not store.exists(key):
+        if _put_file_si_absent(store, key, source_path):
+            return
+    _verifier_objet_store(store, key, sha)
+
+
 # ---------------------------------------------------------------------------
 # Enregistrement d'une version (import)
 # ---------------------------------------------------------------------------
@@ -237,12 +287,11 @@ def _stocker_version(db: Session, org_id: str, project_id: str, sha256: str,
     store = _store()
     key = cle_version_gpkg(org_id, project_id, sha256)
 
-    # Jamais d'écrasement : la clé est déterminée par le contenu. Si l'objet
-    # existe déjà, on le vérifie (taille) au lieu de le réécrire.
+    # Jamais d'écrasement : la clé est déterminée par le contenu. Un objet
+    # existant est vérifié par empreinte (taille + SHA-256), jamais réécrit.
     taille = Path(source_path).stat().st_size
-    if not store.exists(key):
-        store.put_file(key, source_path)
-        logger.info("[gpkg_version] Objet stocké : %s (%d octets)", key, taille)
+    _assurer_objet_version(store, key, Path(source_path), sha256)
+    logger.info("[gpkg_version] Objet version garanti : %s (%d octets)", key, taille)
 
     # Transaction : ligne version + pointeur projet ensemble.
     # Dédup multi-processus : INSERT protégé par UNIQUE(project_id, sha256) ;
@@ -312,11 +361,10 @@ def enregistrer_version_gpkg(
 
     existante = _version_existe(db, project.id, sha)
     if existante is not None:
-        # Objet référencé mais peut-être absent du store → restauration si possible
-        if existante.storage_kind == STORAGE_KIND_ARTIFACT and not _store().exists(existante.storage_ref):
-            store = _store()
-            store.put_file(existante.storage_ref, source)
-            logger.warning("[gpkg_version] Objet store manquant restauré : %s", existante.storage_ref)
+        # Objet référencé mais peut-être absent du store → restauration
+        # conditionnelle si possible, vérification si existant.
+        if existante.storage_kind == STORAGE_KIND_ARTIFACT:
+            _assurer_objet_version(_store(), existante.storage_ref, source, sha)
         projet = db.get(type(project), project.id)
         if projet is not None:
             projet.gpkg_version_id = existante.id
@@ -446,16 +494,29 @@ def exutoire_present_dans_gpkg(gpkg_path: Path, exutoire_noeud: Optional[str]) -
             # Colonnes candidates porteuses d'identifiants de nœuds
             candidates = [c for c in cols if c.lower() in (
                 "id", "code", "nom", "origdonne", "noeud", "cle", "identifiant", "numero")]
+            # Tolérance numérique : les codes GPKG sont souvent stockés en REAL
+            # (ex. Code=3479.0) alors que la référence métier est '3479'.
+            try:
+                cible_num = float(cible)
+                numeric = True
+            except (TypeError, ValueError):
+                numeric = False
             for col in candidates:
-                try:
-                    row = conn.execute(
-                        f'SELECT 1 FROM "{table}" WHERE CAST("{col}" AS TEXT) = ? LIMIT 1',
-                        (cible,),
-                    ).fetchone()
-                    if row:
-                        return True
-                except sqlite3.Error:
-                    continue
+                clauses = ['CAST("{col}" AS TEXT) = ?'.format(col=col)]
+                params_list = [[cible]]
+                if numeric:
+                    clauses.append('CAST("{col}" AS REAL) = ?'.format(col=col))
+                    params_list.append([cible_num])
+                for clause, params in zip(clauses, params_list):
+                    try:
+                        row = conn.execute(
+                            f'SELECT 1 FROM "{table}" WHERE {clause} LIMIT 1',
+                            params,
+                        ).fetchone()
+                        if row:
+                            return True
+                    except sqlite3.Error:
+                        continue
         return False
     except Exception:
         return None

@@ -186,14 +186,14 @@ def test_export_modele_inp_nom_bassin_et_contenu():
                     id=str(uuid.uuid4()),
                     name="Assainissement_Ville",
                     org_id="org_test",
-                    source_gpkg_key=str(gpkg_cand),
                     is_archived=False
                 )
                 db.add(proj)
-                db.commit()
-            elif not proj.source_gpkg_key or not Path(proj.source_gpkg_key).exists():
-                proj.source_gpkg_key = str(gpkg_cand)
-                db.commit()
+            proj.source_gpkg_key = str(gpkg_cand)
+            # Le test cible la résolution legacy : invalider le pointeur de
+            # version (3B) pour que source_gpkg_key soit bien utilisé.
+            proj.gpkg_version_id = None
+            db.commit()
 
         resp = download_latest_inp(cluster_id="98", db=db, tenant=None)
         assert resp.status_code == 200
