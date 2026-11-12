@@ -560,3 +560,222 @@ def construire_reponse_simulation(resultat: Dict[str, Any], cached: bool = False
         "download_inp_url": "/api/v1/simulations/download/inp",
         "download_rpt_url": "/api/v1/simulations/download/rpt",
     }
+
+
+# ============================================================
+# Étape 3D.1 — Résolution contextuelle des simulations
+# ============================================================
+# Remplace la lecture de la globale `_DERNIERE_SIMULATION` : la simulation
+# est toujours retrouvée via sa ligne `Simulation` persistée, filtrée par
+# org_id/project_id, jamais par un état process-wide.
+
+
+class ContexteSimulationIntrouvable(Exception):
+    """Aucune simulation autorisée pour ce contexte organisation/projet."""
+
+
+class ProjetAmbigu(Exception):
+    """Plusieurs projets actifs possibles sans project_id explicite."""
+
+
+@dataclass
+class ContexteSimulation:
+    """Simulation résolue pour un contexte organisation/projet donné."""
+    simulation: Any = None                    # ligne ORM Simulation
+    project: Any = None                       # projet ORM propriétaire
+    data: Optional[Dict[str, Any]] = None     # JSON résultat complet
+    gpkg_path: Optional[Path] = None          # snapshot GPKG résolu (3C.0)
+    meta_version: Dict[str, Any] = None       # métadonnées de version GPKG
+    resolution: str = ""                      # "simulation_id" | "derniere" | "bassin"
+
+
+def charger_resultat_simulation(simulation: Any) -> Optional[Dict[str, Any]]:
+    """
+    Charge le JSON de résultat d'une ligne Simulation via un adaptateur de
+    lecture unique :
+      1. `results_s3_key` comme chemin local existant (sims synchrones) ;
+      2. sinon `results_s3_key` comme clé ArtifactStore (sims Celery :
+         `org_id/projet/jobs/<id>/summary.json`).
+    Aucune écriture, aucun repli implicite sur un autre résultat.
+    """
+    cle = getattr(simulation, "results_s3_key", None)
+    if not cle:
+        return None
+    cle = str(cle)
+
+    # 1. Chemin local (absolu ou relatif au CWD)
+    try:
+        p = Path(cle)
+        if p.exists() and p.is_file():
+            with open(p, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                return data
+    except Exception as e:
+        logger.warning("Lecture résultat simulation (chemin local) impossible: %s", e)
+
+    # 2. Clé de stockage (ArtifactStore) — sims Celery / S3
+    try:
+        from api.core.storage import get_storage
+        brut = get_storage().get_bytes(cle)
+        data = json.loads(brut.decode("utf-8"))
+        if isinstance(data, dict):
+            return data
+    except Exception as e:
+        logger.warning("Lecture résultat simulation (store %s) impossible: %s", cle, e)
+
+    return None
+
+
+def _resoudre_projet_pour_simulation(db: Session, org_id: Optional[str],
+                                    project_id: Optional[str]) -> Any:
+    """
+    Résout le projet cible SANS sélection arbitraire :
+      - project_id explicite → doit exister et appartenir à org_id ;
+      - sinon, les projets actifs de l'org (ou de toute la base si org_id
+        est None, compatibilité dev mono-tenant) : exactement UN seul est
+        toléré ; plusieurs → ProjetAmbigu ; zéro → ContexteSimulationIntrouvable.
+    """
+    from api.models import Project
+
+    if project_id:
+        proj = db.get(Project, project_id)
+        if proj is None or proj.is_archived:
+            raise ContexteSimulationIntrouvable("Projet introuvable ou archivé.")
+        if org_id and proj.org_id != org_id:
+            raise ContexteSimulationIntrouvable(
+                "Le projet demandé n'appartient pas à l'organisation.")
+        return proj
+
+    q = db.query(Project).filter(Project.is_archived.is_(False))
+    if org_id:
+        q = q.filter(Project.org_id == org_id)
+    projets = q.order_by(Project.id).all()
+    if not projets:
+        raise ContexteSimulationIntrouvable("Aucun projet actif pour ce contexte.")
+    if len(projets) > 1:
+        raise ProjetAmbigu(
+            "Plusieurs projets actifs : un project_id explicite est requis.")
+    return projets[0]
+
+
+def _simulation_correspond_a_bassin(sim: Any, cluster_id: Any = None,
+                                    bassin_ref: Optional[str] = None,
+                                    exutoire_noeud: Optional[str] = None) -> bool:
+    """
+    Identité de bassin d'une simulation : bassin_ref > exutoire_noeud >
+    cluster_id persisté (summary_kpis) > nom (dernier recours).
+    """
+    if bassin_ref is not None:
+        cible_bassin = str(bassin_ref).strip().lower()
+        if sim.bassin_ref and str(sim.bassin_ref).strip().lower() == cible_bassin:
+            return True
+    if exutoire_noeud is not None:
+        cible_ex = str(exutoire_noeud).strip().lower()
+        if sim.exutoire_noeud and str(sim.exutoire_noeud).strip().lower() == cible_ex:
+            return True
+    if cluster_id is None:
+        return False
+    cible = str(cluster_id).strip().lower()
+    if sim.bassin_ref and str(sim.bassin_ref).strip().lower() == cible:
+        return True
+    if sim.exutoire_noeud and str(sim.exutoire_noeud).strip().lower() == cible:
+        return True
+    kpis = sim.summary_kpis or {}
+    if str(kpis.get("cluster_id", "")).strip().lower() == cible:
+        return True
+    params = kpis.get("parameters") or {}
+    if isinstance(params, dict) and str(params.get("cluster_id", "")).strip().lower() == cible:
+        return True
+    nom = str(sim.name or "").lower()
+    return bool(nom and cible in nom)
+
+
+def resoudre_simulation_courante(
+    db: Session,
+    org_id: Optional[str] = None,
+    project_id: Optional[str] = None,
+    simulation_id: Optional[str] = None,
+    cluster_id: Any = None,
+    bassin_ref: Optional[str] = None,
+    exutoire_noeud: Optional[str] = None,
+    resoudre_gpkg: bool = True,
+) -> ContexteSimulation:
+    """
+    Étape 3D.1 — point d'entrée unique de résolution d'une simulation
+    AUTORISÉE pour un contexte organisation/projet.
+
+    - `simulation_id` explicite : lookup direct, garde org/projet stricte.
+    - sinon : simulation `completed` la plus récente du projet résolu
+      (ORDER BY created_at DESC, id DESC — déterministe).
+    - filtres de bassin : cluster_id / bassin_ref / exutoire_noeud.
+    - le JSON est chargé via `charger_resultat_simulation` (chemin local
+      puis clé ArtifactStore — compatible Celery/S3).
+    - `resoudre_gpkg=True` résout le snapshot exact via
+      `resoudre_gpkg_pour_simulation` (3C.0) ; les erreurs de provenance
+      explicite remontent telles quelles (GpkgSimulationError).
+
+    Lève ContexteSimulationIntrouvable / ProjetAmbigu — jamais de
+    substitution silencieuse par une simulation d'un autre périmètre.
+    """
+    from api.models import Simulation
+
+    proj = _resoudre_projet_pour_simulation(db, org_id, project_id)
+    org_effectif = org_id or proj.org_id
+
+    if simulation_id:
+        sim = db.get(Simulation, simulation_id)
+        if (sim is None or sim.project_id != proj.id
+                or (org_effectif and sim.org_id != org_effectif)):
+            raise ContexteSimulationIntrouvable(
+                "Simulation introuvable pour ce contexte.")
+        data = charger_resultat_simulation(sim)
+        if not data or not est_simulation_valide(data):
+            raise ContexteSimulationIntrouvable(
+                "Résultat de simulation indisponible ou invalide.")
+        ctx = ContexteSimulation(simulation=sim, project=proj, data=data,
+                                 resolution="simulation_id")
+        if resoudre_gpkg:
+            _joindre_gpkg(db, proj, ctx)
+        return ctx
+
+    q = db.query(Simulation).filter(
+        Simulation.project_id == proj.id,
+        Simulation.status == "completed",
+    )
+    if org_effectif:
+        q = q.filter(Simulation.org_id == org_effectif)
+    candidats = q.order_by(
+        Simulation.created_at.desc(), Simulation.id.desc()).limit(80).all()
+
+    for sim in candidats:
+        if (cluster_id is not None or bassin_ref is not None
+                or exutoire_noeud is not None):
+            if not _simulation_correspond_a_bassin(
+                    sim, cluster_id=cluster_id, bassin_ref=bassin_ref,
+                    exutoire_noeud=exutoire_noeud):
+                continue
+        if not sim.results_s3_key:
+            continue
+        data = charger_resultat_simulation(sim)
+        if not data or not est_simulation_valide(data):
+            continue
+        ctx = ContexteSimulation(
+            simulation=sim, project=proj, data=data,
+            resolution="bassin" if (
+                cluster_id is not None or bassin_ref is not None
+                or exutoire_noeud is not None) else "derniere")
+        if resoudre_gpkg:
+            _joindre_gpkg(db, proj, ctx)
+        return ctx
+
+    raise ContexteSimulationIntrouvable(
+        "Aucune simulation autorisée pour ce contexte.")
+
+
+def _joindre_gpkg(db: Session, proj: Any, ctx: ContexteSimulation) -> None:
+    """Résout le snapshot GPKG exact de la simulation (étape 3C.0)."""
+    from api.services.gpkg_versions import resoudre_gpkg_pour_simulation
+    gpkg, meta = resoudre_gpkg_pour_simulation(db, proj, ctx.data)
+    ctx.gpkg_path = gpkg
+    ctx.meta_version = meta or {}
