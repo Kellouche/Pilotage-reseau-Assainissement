@@ -65,6 +65,15 @@ def setup_test_db():
         db.close()
 
 
+def _gpkg_effectif_simulation(db, proj):
+    """Chemin GPKG réellement utilisé par /run : snapshot versionné si le projet
+    a une gpkg_version_id (3B), sinon source_gpkg_key. Le cache est
+    content-adressé : semer via ce chemin garantit le même SHA-256 que la route."""
+    from api.services.simulation_service import resoudre_contexte_projet
+    ctx = resoudre_contexte_projet(db, proj.org_id)
+    return ctx.gpkg_path
+
+
 def test_generer_cle_cache_simulation_determinisme():
     """Vérifie que la clé de cache SHA-256 est strictement identique pour les mêmes paramètres."""
     gpkgs = glob.glob("uploads/**/network_Assainissement_Ville.gpkg", recursive=True) or ["data/demo_reseau.gpkg"]
@@ -114,7 +123,7 @@ def test_persistance_disque_et_base_de_donnees():
     db = SessionLocal()
     try:
         proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
-        gpkg_path = Path(proj.source_gpkg_key)
+        gpkg_path = _gpkg_effectif_simulation(db, proj)
 
         payload = SimulationRunRequest(
             cluster_id=15,
@@ -174,7 +183,7 @@ def test_route_run_simulation_cache_hit_et_force_recalculate():
     db = SessionLocal()
     try:
         proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
-        gpkg_path = Path(proj.source_gpkg_key)
+        gpkg_path = _gpkg_effectif_simulation(db, proj)
 
         payload_cache = SimulationRunRequest(
             cluster_id=15,

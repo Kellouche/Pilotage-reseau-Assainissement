@@ -33,10 +33,23 @@ class ContexteProjetIntrouvable(Exception):
 
 @dataclass
 class ContexteProjet:
-    """Contexte résolu : projet ORM + chemin local du GeoPackage source."""
+    """Contexte résolu : projet ORM + chemin du GeoPackage (versionné si possible)."""
     project: Any = None
     gpkg_path: Optional[Path] = None
     project_name: Optional[str] = None
+    # Étape 3B : métadonnées de la version GPKG capturée pour cette exécution
+    version_meta: Optional[Dict[str, Any]] = None
+
+
+def _resoudre_gpkg_versionne(db: Session, proj: Any):
+    """
+    Résout le GPKG de simulation pour un projet via le versionnement (3B).
+    Retourne (gpkg_path, version_meta) ou (None, meta_erreur).
+    Une version existante mais indisponible n'est JAMAIS remplacée
+    silencieusement par un autre fichier.
+    """
+    from api.services.gpkg_versions import resoudre_version_pour_simulation
+    return resoudre_version_pour_simulation(db, proj)
 
 
 def resoudre_contexte_projet(db: Session, org_id: Optional[str]) -> ContexteProjet:
@@ -45,11 +58,14 @@ def resoudre_contexte_projet(db: Session, org_id: Optional[str]) -> ContexteProj
     Reproduit fidèlement la logique historique de POST /simulations/run :
     projet du tenant en priorité, puis premier projet non archivé, puis la
     démo data/demo_reseau.gpkg en dernier recours.
+    Étape 3B : si le projet a une version GPKG, le chemin retourné est le
+    snapshot matérialisé et version_meta décrit la version capturée.
     """
     from api.models import Project
 
     gpkg_path = None
     project_name = None
+    version_meta = None
     proj = None
     if org_id:
         proj = db.query(Project).filter(
@@ -58,7 +74,15 @@ def resoudre_contexte_projet(db: Session, org_id: Optional[str]) -> ContexteProj
         ).first()
         if proj:
             project_name = proj.name
-            if proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
+            chemin, vmeta = _resoudre_gpkg_versionne(db, proj)
+            if chemin is not None:
+                gpkg_path = Path(chemin)
+                version_meta = vmeta
+            elif getattr(proj, "gpkg_version_id", None):
+                raise ContexteProjetIntrouvable(
+                    vmeta.get("erreur", "Version GPKG indisponible pour ce projet.")
+                )
+            elif proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
                 gpkg_path = Path(proj.source_gpkg_key)
 
     if not gpkg_path:
@@ -66,7 +90,15 @@ def resoudre_contexte_projet(db: Session, org_id: Optional[str]) -> ContexteProj
         if proj:
             if not project_name:
                 project_name = proj.name
-            if proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
+            chemin, vmeta = _resoudre_gpkg_versionne(db, proj)
+            if chemin is not None:
+                gpkg_path = Path(chemin)
+                version_meta = vmeta
+            elif getattr(proj, "gpkg_version_id", None):
+                raise ContexteProjetIntrouvable(
+                    vmeta.get("erreur", "Version GPKG indisponible pour ce projet.")
+                )
+            elif proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
                 gpkg_path = Path(proj.source_gpkg_key)
         else:
             cand = Path("data/demo_reseau.gpkg")
@@ -77,18 +109,77 @@ def resoudre_contexte_projet(db: Session, org_id: Optional[str]) -> ContexteProj
     if not gpkg_path or not gpkg_path.exists():
         raise ContexteProjetIntrouvable("Réseau hydraulique introuvable pour ce projet.")
 
-    return ContexteProjet(project=proj, gpkg_path=gpkg_path, project_name=project_name)
+    return ContexteProjet(project=proj, gpkg_path=gpkg_path,
+                          project_name=project_name, version_meta=version_meta)
+
+
+def _sha256_gpkg(gpkg_path: Path) -> Optional[str]:
+    """Empreinte SHA-256 complète du contenu GPKG (cache mémoire par mtime/taille)."""
+    try:
+        if gpkg_path and Path(gpkg_path).exists():
+            from api.services.gpkg_versions import sha256_fichier
+            return sha256_fichier(Path(gpkg_path), use_cache=True)
+    except Exception as e:
+        logger.warning("Empreinte SHA-256 GPKG impossible pour %s : %s", gpkg_path, e)
+    return None
+
+
+def _cle_cache_gpkg(gpkg_path: Path) -> str:
+    """
+    Identité de cache basée sur le CONTENU du GPKG (SHA-256 tronqué),
+    jamais sur le chemin : le snapshot matérialisé d'une version et le
+    fichier source du projet partagent ainsi le même cache.
+    """
+    sha = _sha256_gpkg(gpkg_path)
+    if sha:
+        return sha[:16]
+    stem = Path(gpkg_path).stem if gpkg_path else "inconnu"
+    return re.sub(r'[^\w\-]+', '_', stem)
+
+
+def _repertoire_cache_simulation() -> Path:
+    """Répertoire unique de cache : data/.simulation_cache (partagé, content-adressé)."""
+    from api.services.gpkg_versions import GPKG_CACHE_DIR
+    return Path(GPKG_CACHE_DIR).parent / ".simulation_cache"
+
+
+def iter_fichiers_cache_simulation(gpkg_path: Path):
+    """
+    Itère les fichiers de cache candidats pour ce GPKG, du plus récent au plus ancien :
+    d'abord les entrées content-adressées (SHA-256), puis le legacy
+    <gpkg_path.parent>/.simulation_cache (stem historique) pour compatibilité.
+    """
+    candidats = []
+    cle = _cle_cache_gpkg(gpkg_path)
+    sha = _sha256_gpkg(gpkg_path)
+    dossier = _repertoire_cache_simulation()
+    if dossier.exists():
+        candidats.extend(dossier.glob(f"sim_{cle}_cluster_*.json"))
+        # Fichiers legacy éventuels dans le même dossier (stem d'origine)
+        if gpkg_path:
+            stem_legacy = re.sub(r'[^\w\-]+', '_', Path(gpkg_path).stem)
+            if stem_legacy != cle:
+                candidats.extend(dossier.glob(f"sim_{stem_legacy}_cluster_*.json"))
+    legacy_dir = Path(gpkg_path).parent / ".simulation_cache" if gpkg_path else None
+    if legacy_dir and legacy_dir != dossier and legacy_dir.exists():
+        stem_legacy = re.sub(r'[^\w\-]+', '_', Path(gpkg_path).stem)
+        candidats.extend(legacy_dir.glob(f"sim_{stem_legacy}_cluster_*.json"))
+    # Dédupliquer puis trier par date de modification décroissante
+    uniq = {p.resolve(): p for p in candidats}
+    return sorted(uniq.values(), key=lambda x: x.stat().st_mtime, reverse=True)
 
 
 def generer_cle_cache_simulation(gpkg_path: Path, payload: Any) -> Tuple[str, Dict[str, Any]]:
     """
     Génère un dictionnaire canonique normalisé et une empreinte SHA-256
     garantissant l'idempotence exacte de la simulation hydrodynamique.
-    Prend en compte l'état physique du GPKG (mtime) et l'intégralité des paramètres d'ingénierie.
+    L'identité du GPKG est son empreinte de CONTENU (SHA-256) : deux chemins
+    vers le même contenu (source projet / snapshot versionné) partagent
+    la même empreinte de cache.
     """
     gpkg_stat = gpkg_path.stat() if gpkg_path.exists() else None
-    gpkg_mtime = int(gpkg_stat.st_mtime) if gpkg_stat else 0
     gpkg_size = int(gpkg_stat.st_size) if gpkg_stat else 0
+    gpkg_sha256 = _sha256_gpkg(gpkg_path) if gpkg_stat else None
 
     orph_ids = []
     if getattr(payload, "raccordements_orphelins", None):
@@ -100,8 +191,7 @@ def generer_cle_cache_simulation(gpkg_path: Path, payload: Any) -> Tuple[str, Di
     orph_ids.sort()
 
     params_dict = {
-        "gpkg_name": gpkg_path.name,
-        "gpkg_mtime": gpkg_mtime,
+        "gpkg_sha256": gpkg_sha256,
         "gpkg_size": gpkg_size,
         "cluster_id": str(getattr(payload, "cluster_id", None)),
         "scenario_key": str(getattr(payload, "scenario_key", "pluie_decennale")),
@@ -133,11 +223,12 @@ def generer_cle_cache_simulation(gpkg_path: Path, payload: Any) -> Tuple[str, Di
 
 
 def get_cache_simulation_file(gpkg_path: Path, cluster_id: Any, param_hash: str) -> Path:
-    """Retourne le chemin vers le fichier de persistance de simulation."""
-    cache_dir = gpkg_path.parent / ".simulation_cache"
+    """Retourne le chemin vers le fichier de persistance de simulation (content-adressé)."""
+    cache_dir = _repertoire_cache_simulation()
     cache_dir.mkdir(parents=True, exist_ok=True)
-    clean_stem = re.sub(r'[^\w\-]+', '_', gpkg_path.stem)
-    return cache_dir / f"sim_{clean_stem}_cluster_{cluster_id}_{param_hash}.json"
+    clean_stem = _cle_cache_gpkg(gpkg_path)
+    clean_cid = re.sub(r'[^\w\-]+', '_', str(cluster_id))
+    return cache_dir / f"sim_{clean_stem}_cluster_{clean_cid}_{param_hash}.json"
 
 
 def est_simulation_valide(data: Any) -> bool:
@@ -183,6 +274,9 @@ def sauvegarder_simulation(
     resultat: Dict[str, Any],
     proj: Any = None,
     tenant: Any = None,
+    version_meta: Optional[Dict[str, Any]] = None,
+    bassin_ref: Optional[str] = None,
+    exutoire_noeud: Optional[str] = None,
 ) -> Path:
     """Sauvegarde les résultats complets sur disque et référence la simulation dans la base SQLite."""
     from api.models import Simulation
@@ -214,6 +308,14 @@ def sauvegarder_simulation(
             "cached_at": datetime.now(timezone.utc).isoformat(),
         }
 
+        # Étape 3B : version GPKG capturée — jamais de valeur sans project_id
+        gpkg_version_id = None
+        gpkg_sha256 = None
+        if version_meta:
+            gpkg_sha256 = version_meta.get("sha256")
+            if project_id:
+                gpkg_version_id = version_meta.get("version_id")
+
         sim_record = Simulation(
             id=str(uuid.uuid4()),
             org_id=org_id,
@@ -223,6 +325,10 @@ def sauvegarder_simulation(
             scenario_pluie=str(params_dict.get("scenario_key", "pluie_decennale")),
             duree_heures=float(params_dict.get("duree_heures") or 4.0),
             results_s3_key=str(cache_file.resolve()),
+            gpkg_version_id=gpkg_version_id,
+            gpkg_sha256=gpkg_sha256,
+            bassin_ref=bassin_ref,
+            exutoire_noeud=exutoire_noeud,
             summary_kpis=kpis_summary,
             execution_time_seconds=float(resultat.get("meta", {}).get("execution_duration_sec", 0.0)),
         )
@@ -257,21 +363,15 @@ def charger_derniere_simulation_disque_ou_db(gpkg_path: Path, db: Session, proj:
     except Exception as e:
         logger.warning("Erreur interrogation table simulations: %s", e)
 
-    # 2. Fallback dossier .simulation_cache/
-    cache_dir = gpkg_path.parent / ".simulation_cache"
-    clean_stem = re.sub(r'[^\w\-]+', '_', gpkg_path.stem)
-    if cache_dir.exists():
-        files = list(cache_dir.glob(f"sim_{clean_stem}_cluster_*.json"))
-        if files:
-            files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-            for fpath in files:
-                try:
-                    with open(fpath, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                    if data and est_simulation_valide(data):
-                        return data
-                except Exception:
-                    continue
+    # 2. Fallback dossier .simulation_cache/ (content-adressé + legacy)
+    for fpath in iter_fichiers_cache_simulation(gpkg_path):
+        try:
+            with open(fpath, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if data and est_simulation_valide(data):
+                return data
+        except Exception:
+            continue
     return None
 
 

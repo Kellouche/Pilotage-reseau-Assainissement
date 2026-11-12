@@ -178,6 +178,7 @@ from api.services.simulation_service import (
     charger_cache_simulation as _charger_cache_simulation,
     sauvegarder_simulation as _sauvegarder_simulation,
     charger_derniere_simulation_disque_ou_db as _charger_derniere_simulation_disque_ou_db,
+    iter_fichiers_cache_simulation as _iter_fichiers_cache_simulation,
     construire_reponse_simulation as _construire_reponse_simulation,
     resoudre_contexte_projet as _resoudre_contexte_projet,
     executer_moteur_swmm as _executer_moteur_swmm,
@@ -369,6 +370,8 @@ def run_native_swmm_simulation(
     # Étape 3A : `bassin_ref` est la référence métier prioritaire ; `cluster_id`
     # reste accepté en compatibilité legacy (résolution contextuelle du projet).
     cluster_id_effectif = payload.cluster_id
+    bassin_ref_persiste = None
+    exutoire_persiste = None
     if payload.bassin_ref:
         resolution = resoudre_bassin(
             db=db,
@@ -383,6 +386,8 @@ def run_native_swmm_simulation(
             )
         if resolution.cluster_id_moteur is not None:
             cluster_id_effectif = resolution.cluster_id_moteur
+        bassin_ref_persiste = resolution.bassin_ref or payload.bassin_ref
+        exutoire_persiste = resolution.exutoire_noeud
         logger.info(
             "Bassin résolu : ref=%s -> statut=%s source=%s cluster_id=%s",
             payload.bassin_ref, resolution.statut, resolution.source, cluster_id_effectif,
@@ -415,6 +420,22 @@ def run_native_swmm_simulation(
         resultat["project_name"] = project_name or gpkg_path.stem
         resultat["param_hash"] = param_hash
 
+        # Étape 3B : traçabilité de la version GPKG capturée + cohérence bassin
+        vmeta = contexte.version_meta or {}
+        if vmeta:
+            prov = resultat.setdefault("provenance", {})
+            prov["gpkg_version_id"] = vmeta.get("version_id")
+            prov["gpkg_sha256"] = vmeta.get("sha256")
+            prov["gpkg_storage_kind"] = vmeta.get("storage_kind")
+            if exutoire_persiste:
+                from api.services.gpkg_versions import exutoire_present_dans_gpkg
+                prov["coherence"] = {
+                    "exutoire_noeud": exutoire_persiste,
+                    "exutoire_present_dans_version": exutoire_present_dans_gpkg(
+                        gpkg_path, exutoire_persiste),
+                    "bassin_ref": bassin_ref_persiste,
+                }
+
         _DERNIERE_SIMULATION = resultat
 
         # 5. Persistance sur disque et en base de données SQLite
@@ -426,7 +447,10 @@ def run_native_swmm_simulation(
             params_dict=params_dict,
             resultat=resultat,
             proj=proj,
-            tenant=tenant
+            tenant=tenant,
+            version_meta=contexte.version_meta,
+            bassin_ref=bassin_ref_persiste,
+            exutoire_noeud=exutoire_persiste,
         )
 
         return _construire_reponse_simulation(resultat, cached=False)
@@ -543,13 +567,12 @@ def get_bassin_simulation(
         return {"status": "none", "message": "Aucun réseau actif."}
 
     gpkg_path = Path(active_gpkg)
-    cache_dir = gpkg_path.parent / ".simulation_cache"
-    clean_stem = re.sub(r'[^\w\-]+', '_', gpkg_path.stem)
 
-    if cache_dir.exists():
+    # Fichiers de cache candidats : content-adressés (SHA-256) + legacy stem
+    all_files = list(_iter_fichiers_cache_simulation(gpkg_path))
+    if all_files:
         clean_cid = str(cluster_id).strip().lower()
-        all_files = list(cache_dir.glob(f"sim_{clean_stem}_cluster_*.json"))
-        
+
         # Filtrage ultra-rapide par nom de fichier (évite la lecture inutile de gros fichiers JSON sur disque)
         matching_files = [
             f for f in all_files
@@ -565,7 +588,7 @@ def get_bassin_simulation(
 
         # Recherche de secours par inspection des métadonnées JSON internes (nom ou ID du bassin)
         if not matching_files:
-            recent_files = sorted(all_files, key=lambda x: x.stat().st_mtime, reverse=True)[:35]
+            recent_files = all_files[:35]
             for candidate in recent_files:
                 try:
                     with open(candidate, "r", encoding="utf-8") as cf:
@@ -707,21 +730,18 @@ def download_latest_inp(
 
     # 2. Si cluster_id demandé mais non dans _DERNIERE_SIMULATION, chercher dans le cache
     if not content and cluster_id and active_gpkg:
-        c_dir = active_gpkg.parent / ".simulation_cache"
-        clean_stem = re.sub(r'[^\w\-]+', '_', active_gpkg.stem)
         clean_cid = str(cluster_id).strip().lower()
-        if c_dir.exists():
-            for cand in sorted(c_dir.glob(f"sim_{clean_stem}_cluster_*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
-                if f"_{clean_cid}_" in cand.name.lower() or f"_cluster_{clean_cid}_" in cand.name.lower():
-                    try:
-                        with open(cand, "r", encoding="utf-8") as cf:
-                            cd = json.load(cf)
-                        if _est_simulation_valide(cd) and cd.get("inp_content"):
-                            content = cd["inp_content"]
-                            bassin_nom = cd.get("meta", {}).get("bassin_nom") or cd.get("meta", {}).get("cluster_nom") or cluster_id
-                            break
-                    except Exception:
-                        continue
+        for cand in _iter_fichiers_cache_simulation(active_gpkg):
+            if f"_{clean_cid}_" in cand.name.lower() or f"_cluster_{clean_cid}_" in cand.name.lower():
+                try:
+                    with open(cand, "r", encoding="utf-8") as cf:
+                        cd = json.load(cf)
+                    if _est_simulation_valide(cd) and cd.get("inp_content"):
+                        content = cd["inp_content"]
+                        bassin_nom = cd.get("meta", {}).get("bassin_nom") or cd.get("meta", {}).get("cluster_nom") or cluster_id
+                        break
+                except Exception:
+                    continue
 
     # 3. Si toujours pas de contenu et cluster_id demandé : assembler le modèle INP à la volée !
     if not content and cluster_id and active_gpkg and active_gpkg.exists():
@@ -795,21 +815,18 @@ def download_latest_rpt(
 
     # 2. Si cluster_id demandé mais non dans _DERNIERE_SIMULATION, chercher dans le cache
     if not content and cluster_id and active_gpkg:
-        c_dir = active_gpkg.parent / ".simulation_cache"
-        clean_stem = re.sub(r'[^\w\-]+', '_', active_gpkg.stem)
         clean_cid = str(cluster_id).strip().lower()
-        if c_dir.exists():
-            for cand in sorted(c_dir.glob(f"sim_{clean_stem}_cluster_*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
-                if f"_{clean_cid}_" in cand.name.lower() or f"_cluster_{clean_cid}_" in cand.name.lower():
-                    try:
-                        with open(cand, "r", encoding="utf-8") as cf:
-                            cd = json.load(cf)
-                        if _est_simulation_valide(cd) and cd.get("rpt_content"):
-                            content = cd["rpt_content"]
-                            bassin_nom = cd.get("meta", {}).get("bassin_nom") or cd.get("meta", {}).get("cluster_nom") or cluster_id
-                            break
-                    except Exception:
-                        continue
+        for cand in _iter_fichiers_cache_simulation(active_gpkg):
+            if f"_{clean_cid}_" in cand.name.lower() or f"_cluster_{clean_cid}_" in cand.name.lower():
+                try:
+                    with open(cand, "r", encoding="utf-8") as cf:
+                        cd = json.load(cf)
+                    if _est_simulation_valide(cd) and cd.get("rpt_content"):
+                        content = cd["rpt_content"]
+                        bassin_nom = cd.get("meta", {}).get("bassin_nom") or cd.get("meta", {}).get("cluster_nom") or cluster_id
+                        break
+                except Exception:
+                    continue
 
     if not content:
         raise HTTPException(

@@ -30,6 +30,14 @@ def setup_test_database():
         for ddl in (
             "ALTER TABLE clusters ADD COLUMN bassin_ref VARCHAR(120)",
             "CREATE UNIQUE INDEX IF NOT EXISTS uq_cluster_network_bassin_ref ON clusters (network_id, bassin_ref)",
+            "CREATE TABLE IF NOT EXISTS gpkg_versions (id VARCHAR(36) PRIMARY KEY, org_id VARCHAR(36) NOT NULL, project_id VARCHAR(36) NOT NULL, sha256 VARCHAR(64) NOT NULL, size_bytes BIGINT NOT NULL, storage_kind VARCHAR(16) NOT NULL, storage_ref VARCHAR(512) NOT NULL, filename_original VARCHAR(255), nb_regards INTEGER, nb_conduites INTEGER, created_at DATETIME NOT NULL, created_by_id VARCHAR(36), CONSTRAINT uq_gpkgver_project_sha UNIQUE (project_id, sha256), CONSTRAINT uq_gpkgver_id_project UNIQUE (id, project_id))",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_gpkgver_project_sha ON gpkg_versions (project_id, sha256)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_gpkgver_id_project ON gpkg_versions (id, project_id)",
+            "ALTER TABLE projects ADD COLUMN gpkg_version_id VARCHAR(36)",
+            "ALTER TABLE simulations ADD COLUMN gpkg_version_id VARCHAR(36)",
+            "ALTER TABLE simulations ADD COLUMN gpkg_sha256 VARCHAR(64)",
+            "ALTER TABLE simulations ADD COLUMN bassin_ref VARCHAR(120)",
+            "ALTER TABLE simulations ADD COLUMN exutoire_noeud VARCHAR(100)",
         ):
             try:
                 conn.execute(text(ddl))

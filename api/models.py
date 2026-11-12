@@ -14,10 +14,13 @@ import uuid
 from typing import List, Optional, Dict, Any
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     JSON,
@@ -260,6 +263,7 @@ class Project(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     source_gpkg_key: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)  # Clé S3 du GeoPackage
     source_dem_key: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)   # Clé S3 du MNT raster
+    gpkg_version_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("gpkg_versions.id"), nullable=True)  # Version GPKG courante (étape 3B)
     nodes_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     pipes_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     outfalls_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -484,6 +488,10 @@ class Simulation(Base):
     scenario_pluie: Mapped[str] = mapped_column(String(100), default="pluie_decennale", nullable=False)
     duree_heures: Mapped[float] = mapped_column(Float, default=24.0, nullable=False)
     results_s3_key: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    gpkg_version_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("gpkg_versions.id"), nullable=True)
+    gpkg_sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    bassin_ref: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    exutoire_noeud: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     summary_kpis: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     execution_time_seconds: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, nullable=False)
@@ -511,6 +519,45 @@ class Simulation(Base):
 
     __table_args__ = (
         Index("ix_simulations_org_created", "org_id", "created_at"),
+        # Étape 3B : une version GPKG ne peut être référencée sans projet
+        CheckConstraint(
+            "gpkg_version_id IS NULL OR project_id IS NOT NULL",
+            name="ck_sim_gpkg_version_requires_project",
+        ),
+    )
+
+
+class GpkgVersion(Base):
+    """
+    Version immuable d'un GeoPackage projet (étape 3B).
+
+    Une ligne = un contenu exact (sha256) pour un projet donné.
+    storage_kind : 'ARTIFACT_STORE' (clé ArtifactStore) ou 'LEGACY_LOCAL'
+    (chemin local enregistré sur place lors de la migration).
+    Le statut UNAVAILABLE est dérivé à la lecture, jamais persisté.
+    """
+    __tablename__ = "gpkg_versions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_gen_uuid)
+    org_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), index=True, nullable=False)
+    project_id: Mapped[str] = mapped_column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), index=True, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    storage_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    storage_ref: Mapped[str] = mapped_column(String(512), nullable=False)
+    filename_original: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    nb_regards: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    nb_conduites: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, nullable=False)
+    created_by_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+
+    __table_args__ = (
+        # Idempotence : même contenu pour un même projet = même version
+        UniqueConstraint("project_id", "sha256", name="uq_gpkgver_project_sha"),
+        # Support des FK composites (version_id, project_id) côté PostgreSQL
+        UniqueConstraint("id", "project_id", name="uq_gpkgver_id_project"),
+        Index("ix_gpkg_versions_sha256", "sha256"),
+        Index("ix_gpkg_versions_org_project", "org_id", "project_id"),
     )
 
 

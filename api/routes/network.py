@@ -8,6 +8,7 @@ Objet : Endpoints de gestion du réseau physique (nœuds, conduites, regards, ex
 ================================================================================
 """
 
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Response
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -18,7 +19,34 @@ from api import schemas, crud
 from api.models import Project, Organization
 from api.core.security import get_tenant_context, get_tenant_context_optional, TenantContext
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/network", tags=["Réseau"])
+
+
+def _enregistrer_version_gpkg(db: Session, project, gpkg_path, filename_original=None,
+                              created_by_id=None, strict: bool = False):
+    """
+    Enregistre le GeoPackage comme version immuable (étape 3B).
+    strict=True : un GPKG invalide fait échouer la requête (HTTP 400).
+    Les erreurs de stockage sont journalisées sans bloquer le flux legacy.
+    """
+    from api.services.gpkg_versions import enregistrer_version_gpkg, GpkgInvalide
+    try:
+        return enregistrer_version_gpkg(
+            db, project, gpkg_path,
+            filename_original=filename_original, created_by_id=created_by_id,
+        )
+    except GpkgInvalide as e:
+        if strict:
+            raise HTTPException(status_code=400, detail=f"GeoPackage invalide : {e}")
+        logger.warning("[gpkg_version] GPKG invalide pour %s : %s",
+                       getattr(project, "id", "?"), e)
+        return None
+    except Exception as e:
+        logger.warning("[gpkg_version] Enregistrement de version impossible pour %s : %s",
+                       getattr(project, "id", "?"), e)
+        return None
 
 
 # ============================================================
@@ -397,6 +425,7 @@ def load_benchmark_dataset(
 
     project.name = ds["title"]
     project.source_gpkg_key = str(target_path)
+    _enregistrer_version_gpkg(db, project, target_path, filename_original=target_path.name)
     project.nodes_count = ds["nodes_count"]
     project.pipes_count = ds["pipes_count"]
     db.commit()
@@ -467,6 +496,7 @@ def load_demo_network(
 
     project.name = "Projet Démo — Quartier Témoin"
     project.source_gpkg_key = str(demo_path)
+    _enregistrer_version_gpkg(db, project, demo_path, filename_original=demo_path.name)
     project.nodes_count = 59
     project.pipes_count = 58
     project.outfalls_count = 1
@@ -538,6 +568,7 @@ def load_master_network(
 
     project.name = "Réseau Ville (Projet Réel)"
     project.source_gpkg_key = str(master_path)
+    _enregistrer_version_gpkg(db, project, master_path, filename_original=master_path.name)
     project.nodes_count = 11000
     project.pipes_count = 11000
     db.commit()
@@ -586,6 +617,7 @@ def reset_project_network(
 
     if project:
         project.source_gpkg_key = None
+        project.gpkg_version_id = None
         project.nodes_count = 0
         project.pipes_count = 0
         project.outfalls_count = 0
@@ -679,6 +711,13 @@ async def upload_network_gpkg(
 
     project.name = file.filename.rsplit(".", 1)[0]
     project.source_gpkg_key = str(target_path)
+    # Étape 3B : versionnement immuable — un GPKG invalide est rejeté (400)
+    _enregistrer_version_gpkg(
+        db, project, target_path,
+        filename_original=file.filename,
+        created_by_id=getattr(tenant_ctx.user, "id", None) if tenant_ctx else None,
+        strict=True,
+    )
     db.commit()
 
     try:

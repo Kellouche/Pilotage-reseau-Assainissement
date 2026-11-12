@@ -110,5 +110,50 @@ def init_db():
             conn.commit()
         except Exception:
             pass
+        # Migration douce : versionnement immuable des GPKG (étape 3B)
+        # SQLite : FK composites non enforceables sur tables existantes →
+        # garantie tenant applicative (service) + index/contraintes simples.
+        for ddl in (
+            """CREATE TABLE IF NOT EXISTS gpkg_versions (
+                id VARCHAR(36) PRIMARY KEY,
+                org_id VARCHAR(36) NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                project_id VARCHAR(36) NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                sha256 VARCHAR(64) NOT NULL,
+                size_bytes BIGINT NOT NULL,
+                storage_kind VARCHAR(16) NOT NULL,
+                storage_ref VARCHAR(512) NOT NULL,
+                filename_original VARCHAR(255),
+                nb_regards INTEGER,
+                nb_conduites INTEGER,
+                created_at DATETIME NOT NULL,
+                created_by_id VARCHAR(36),
+                CONSTRAINT uq_gpkgver_project_sha UNIQUE (project_id, sha256),
+                CONSTRAINT uq_gpkgver_id_project UNIQUE (id, project_id)
+            )""",
+            "CREATE INDEX IF NOT EXISTS ix_gpkg_versions_org_id ON gpkg_versions (org_id)",
+            "CREATE INDEX IF NOT EXISTS ix_gpkg_versions_project_id ON gpkg_versions (project_id)",
+            "CREATE INDEX IF NOT EXISTS ix_gpkg_versions_sha256 ON gpkg_versions (sha256)",
+            "CREATE INDEX IF NOT EXISTS ix_gpkg_versions_org_project ON gpkg_versions (org_id, project_id)",
+            "ALTER TABLE projects ADD COLUMN gpkg_version_id VARCHAR(36)",
+            "ALTER TABLE simulations ADD COLUMN gpkg_version_id VARCHAR(36)",
+            "ALTER TABLE simulations ADD COLUMN gpkg_sha256 VARCHAR(64)",
+            "ALTER TABLE simulations ADD COLUMN bassin_ref VARCHAR(120)",
+            "ALTER TABLE simulations ADD COLUMN exutoire_noeud VARCHAR(100)",
+        ):
+            try:
+                conn.execute(text(ddl))
+                conn.commit()
+            except Exception:
+                pass
+        try:
+            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_gpkgver_project_sha ON gpkg_versions (project_id, sha256)"))
+            conn.commit()
+        except Exception:
+            pass
+        try:
+            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_gpkgver_id_project ON gpkg_versions (id, project_id)"))
+            conn.commit()
+        except Exception:
+            pass
 
     print("[DB] Tables initialisées avec succès")
