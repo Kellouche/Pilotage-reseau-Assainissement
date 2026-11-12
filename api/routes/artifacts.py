@@ -35,9 +35,11 @@ def download_artifact(
     """
     Télécharge un artefact en garantissant l'isolation stricte.
     - Le préfixe `{org_id}/` est obligatoire (stealth 404 sinon).
-    - Si le second segment de la clé est un projet de l'organisation,
-      `project_id` doit être fourni et identique à ce segment : une clé
-      d'un AUTRE projet de la même organisation est refusée (3C.7.5).
+    - Si le second segment de la clé est un identifiant de projet
+      (quelle que soit l'organisation), `project_id` doit être fourni,
+      identique au segment, et le projet doit appartenir à l'organisation
+      du jeton : un Project.id d'une autre organisation n'est JAMAIS
+      assimilé à un chemin legacy non-projet.
     - Les segments non-projet (ex. `licences/`) restent sous le seul
       contrôle d'organisation (comportement legacy conservé).
     """
@@ -57,9 +59,12 @@ def download_artifact(
     key_project_id = segments[1] if len(segments) > 2 else None
     if key_project_id:
         projet_cle = db.get(Project, key_project_id)
-        if projet_cle is not None and projet_cle.org_id == tenant.org.id:
-            # Clé rattachée à un projet : le contexte projet doit correspondre
-            if not project_id or str(project_id) != str(key_project_id):
+        if projet_cle is not None:
+            # Le segment EST un identifiant de projet existant : la clé est
+            # forcément project-scopée. Isolation organisation + projet.
+            if (projet_cle.org_id != tenant.org.id
+                    or not project_id
+                    or str(project_id) != str(key_project_id)):
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Artefact introuvable",

@@ -814,3 +814,76 @@ def test_artifact_download_isolation_projet(test_setup):
         db.delete(proj_b)
         db.commit()
         db.close()
+
+
+def test_artifact_download_isolation_inter_org(test_setup):
+    """Contrôle final — isolation inter-organisation des clés ResultStore.
+
+    Sept cas : le second segment de la clé est classifié en base ;
+    un Project.id d'une autre organisation n'est JAMAIS assimilé à un
+    chemin legacy non-projet."""
+    db = SessionLocal()
+    org_a = db.query(Organization).filter_by(id=test_setup["org_a_id"]).first()
+    org_b = db.query(Organization).filter_by(id=test_setup["org_b_id"]).first()
+    user_a = db.query(User).filter_by(email="ingenieur@regie-alpha.dz").first()
+    tenant_a = TenantContext(actor=user_a, org=org_a, role="admin")
+
+    proj_a = test_setup["proj_a_id"]
+    # Projet appartenant à l'organisation B (absent du fixture)
+    proj_b = Project(id="proj_beta_id", org_id=org_b.id, name="Réseau Beta", slug="net-beta")
+    db.add(proj_b)
+    db.commit()
+
+    try:
+        storage = get_storage()
+        payload = b'{"result": "ok"}'
+
+        # Artefact projet A (stocké sous le préfixe org A)
+        key_a = f"{org_a.id}/{proj_a}/simulations/sim_1/result.json"
+        storage.put_bytes(key_a, payload, content_type="application/json")
+
+        # Cas 1 : clé projet A + project_id=proj_A -> autorisé
+        resp = download_artifact(key=key_a, project_id=proj_a, tenant=tenant_a, db=db)
+        assert resp.body == payload
+
+        # Cas 2 : clé projet A sans project_id -> 404
+        with pytest.raises(HTTPException) as e2:
+            download_artifact(key=key_a, project_id=None, tenant=tenant_a, db=db)
+        assert e2.value.status_code == 404
+
+        # Clé craftée : préfixe org A mais segment = Project.id de l'org B
+        key_cross = f"{org_a.id}/{proj_b.id}/simulations/sim_x/result.json"
+        storage.put_bytes(key_cross, payload, content_type="application/json")
+
+        # Cas 3 : clé cross-org + project_id=proj_B -> 404
+        with pytest.raises(HTTPException) as e3:
+            download_artifact(key=key_cross, project_id=proj_b.id, tenant=tenant_a, db=db)
+        assert e3.value.status_code == 404
+
+        # Cas 4 : clé cross-org SANS project_id -> 404
+        # (avant correction : assimilée à un chemin legacy -> fuite)
+        with pytest.raises(HTTPException) as e4:
+            download_artifact(key=key_cross, project_id=None, tenant=tenant_a, db=db)
+        assert e4.value.status_code == 404
+
+        # Cas 5 : clé sous le préfixe org B, tenant A -> 404 (stealth)
+        key_b = f"{org_b.id}/{proj_b.id}/simulations/sim_1/result.json"
+        storage.put_bytes(key_b, payload, content_type="application/json")
+        with pytest.raises(HTTPException) as e5:
+            download_artifact(key=key_b, project_id=proj_b.id, tenant=tenant_a, db=db)
+        assert e5.value.status_code == 404
+
+        # Cas 6 : véritable clé non-projet legacy -> comportement conservé
+        key_lic = f"{org_a.id}/licences/bc_001_justificatif.pdf"
+        storage.put_bytes(key_lic, b"pdf-licence", content_type="application/pdf")
+        resp_lic = download_artifact(key=key_lic, project_id=None, tenant=tenant_a, db=db)
+        assert resp_lic.body == b"pdf-licence"
+
+        # Cas 7 : clé non-projet + project_id fourni -> 404 par prudence
+        with pytest.raises(HTTPException) as e7:
+            download_artifact(key=key_lic, project_id=proj_a, tenant=tenant_a, db=db)
+        assert e7.value.status_code == 404
+    finally:
+        db.delete(proj_b)
+        db.commit()
+        db.close()
