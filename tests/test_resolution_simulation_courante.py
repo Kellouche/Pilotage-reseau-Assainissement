@@ -455,3 +455,69 @@ def test_sauvegarde_estampille_projet_et_org(db, env):
         assert svc._resultatdeclare_projet(relu, p)
     finally:
         _nettoyer(db, [org], [p], [])
+
+
+# ---------------------------------------------------------------------------
+# Scénarios d'isolation A–G (validation Mission 3D)
+# ---------------------------------------------------------------------------
+
+def test_C_contexte_A_B_alternes_sans_melange(db, env):
+    """Scénario C — deux projets (orgs distinctes) résolus en alternance :
+    chaque contexte retrouve TOUJOURS sa propre simulation, sans état
+    global intermédiaire (3D.5)."""
+    orgA, orgB = _org(db), _org(db)
+    pA = _projet(db, orgA, tmp=env)
+    pB = _projet(db, orgB, tmp=env)
+    dataA = _data_sim(cluster_id=1)
+    dataA["meta"]["bassin_nom"] = "BASSIN_A"
+    dataB = _data_sim(cluster_id=2)
+    dataB["meta"]["bassin_nom"] = "BASSIN_B"
+    sA = _sim(db, orgA, pA, dataA, env, nom_suffix="A")
+    sB = _sim(db, orgB, pB, dataB, env, nom_suffix="B")
+    try:
+        for _ in range(3):  # alternance A/B/A/B/A/B — aucune contamination
+            ctxA = svc.resoudre_simulation_courante(db, org_id=orgA.id, resoudre_gpkg=False)
+            ctxB = svc.resoudre_simulation_courante(db, org_id=orgB.id, resoudre_gpkg=False)
+            assert ctxA.simulation.id == sA.id
+            assert ctxB.simulation.id == sB.id
+            assert ctxA.data["meta"]["bassin_nom"] == "BASSIN_A"
+            assert ctxB.data["meta"]["bassin_nom"] == "BASSIN_B"
+    finally:
+        _nettoyer(db, [orgA, orgB], [pA, pB], [sA, sB])
+
+
+def test_E_projet_sans_simulation_erreur_explicite(db, env):
+    """Scénario E — project_id explicite SANS simulation : erreur métier
+    explicite, jamais le résultat d'un autre projet de la même org."""
+    org = _org(db)
+    p1 = _projet(db, org, tmp=env)
+    p2 = _projet(db, org, tmp=env)
+    s1 = _sim(db, org, p1, _data_sim(), env, nom_suffix="P1")
+    try:
+        with pytest.raises(svc.ContexteSimulationIntrouvable):
+            svc.resoudre_simulation_courante(
+                db, org_id=org.id, project_id=p2.id, resoudre_gpkg=False)
+    finally:
+        _nettoyer(db, [org], [p1, p2], [s1])
+
+
+def test_G_resultat_persiste_independant_de_la_memoire(db, env):
+    """Scénario G — le résultat survit à un « redémarrage » : deux sessions
+    DB distinctes résolvent la même simulation depuis la persistance,
+    sans aucun état process-wide (la globale a été supprimée en 3D.5)."""
+    org = _org(db)
+    p = _projet(db, org, tmp=env)
+    s = _sim(db, org, p, _data_sim(), env)
+    try:
+        ctx1 = svc.resoudre_simulation_courante(db, org_id=org.id, resoudre_gpkg=False)
+        assert ctx1.simulation.id == s.id
+        # « redémarrage » : nouvelle session, aucune mémoire à réutiliser
+        db2 = SessionLocal()
+        try:
+            ctx2 = svc.resoudre_simulation_courante(db2, org_id=org.id, resoudre_gpkg=False)
+            assert ctx2.simulation.id == s.id
+            assert ctx2.data == ctx1.data
+        finally:
+            db2.close()
+    finally:
+        _nettoyer(db, [org], [p], [s])
