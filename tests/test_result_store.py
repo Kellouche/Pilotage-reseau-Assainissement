@@ -293,6 +293,38 @@ def test_save_erreur_backend_propagee(ref):
         store.save(ref, {"a": 1})
 
 
+# ---------------------------------------------------------------------------
+# 3C.3 — save_idempotent et replace
+# ---------------------------------------------------------------------------
+
+def test_save_idempotent_cree_puis_identique(store_local, ref):
+    art, cree = store_local.save_idempotent(ref, {"v": 1})
+    assert cree is True
+    art2, cree2 = store_local.save_idempotent(ref, {"v": 1})
+    assert cree2 is False
+    assert art2.sha256 == art.sha256
+    assert store_local.load_json(ref) == {"v": 1}
+
+
+def test_save_idempotent_divergence_refusee(store_local, ref):
+    store_local.save_idempotent(ref, {"v": 1})
+    with pytest.raises(ResultAlreadyExists):
+        store_local.save_idempotent(ref, {"v": 2})
+    assert store_local.load_json(ref) == {"v": 1}
+
+
+def test_replace_revise_explicitement(store_local, ref):
+    store_local.save(ref, {"v": 1})
+    art = store_local.replace(ref, {"v": 2, "ts": {"x": 1}})
+    assert art.sha256
+    assert store_local.load_json(ref)["v"] == 2
+
+
+def test_replace_exige_existence(store_local, ref):
+    with pytest.raises(ResultNotFound):
+        store_local.replace(ref, {"v": 1})
+
+
 def test_get_result_store_defaut():
     rs = get_result_store()
     assert isinstance(rs, ResultStore)

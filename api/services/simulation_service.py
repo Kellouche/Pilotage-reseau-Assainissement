@@ -363,11 +363,108 @@ def sauvegarder_simulation(
         )
         db.add(sim_record)
         db.commit()
+        sim_persistee = True
     except Exception as e:
         db.rollback()
         logger.warning("Avertissement: enregistrement de la simulation en DB impossible: %s", e)
+        sim_persistee = False
+
+    # 3. Étape 3C.3 — persistance permanente des artefacts via ResultStore.
+    #    Le cache de calcul (.simulation_cache) reste la voie de travail
+    #    historique ; ResultStore dépose result.json / model.inp / report.rpt
+    #    sous la partition {org}/{projet}/simulations/{id}/ de façon
+    #    conditionnelle et immuable. Un échec ici ne remet JAMAIS en cause
+    #    la simulation : le statut est enregistré dans summary_kpis.
+    if sim_persistee:
+        statut_store = _persister_resultats_store(sim_record, resultat)
+        try:
+            kpis = dict(sim_record.summary_kpis or {})
+            kpis["result_store"] = statut_store
+            sim_record.summary_kpis = kpis
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            logger.warning("Statut ResultStore non persisté en DB : %s", e)
 
     return cache_file
+
+
+def _persister_resultats_store(simulation: Any, resultat: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Étape 3C.3 — dépose les artefacts permanents d'une simulation via
+    ResultStore (au-dessus d'ArtifactStore). Appelée UNIQUEMENT après
+    commit de la ligne Simulation : la référence utilise les identifiants
+    RÉELS persistés (org_id / project_id / id), jamais d'identité inventée.
+
+    Artefacts déposés :
+      - result.json  : le JSON complet du résultat (autorité permanente) ;
+      - model.inp    : le INP réellement exécuté (si présent) ;
+      - report.rpt   : le rapport RPT produit (si présent).
+    Les séries temporelles et le résumé restent embarqués dans result.json
+    (pas de doublon summary.json).
+
+    Chaque artefact est déposé via `save_idempotent` : contenu identique →
+    succès idempotent ; contenu divergent → erreur explicite consignée.
+    Retourne un dictionnaire de statut diagnostic (jamais d'exception
+    propagée : la simulation et son cache restent valides).
+    """
+    from api.services.result_store import (
+        ArtifactKind,
+        ResultAlreadyExists,
+        ResultRef,
+        ResultStore,
+        ResultStoreError,
+    )
+
+    statut: Dict[str, Any] = {"artefacts": {}, "complet": False}
+    try:
+        ref = ResultRef.depuis_simulation(simulation)
+    except ResultStoreError as e:
+        statut["erreur"] = f"identite_incomplete: {e}"
+        logger.error(
+            "ResultStore : persistance ignorée pour la simulation %s — "
+            "identité incomplète (org_id/project_id requis) : %s",
+            getattr(simulation, "id", "?"), e)
+        return statut
+
+    statut["ref"] = {
+        "org_id": ref.org_id,
+        "project_id": ref.project_id,
+        "simulation_id": ref.simulation_id,
+    }
+    store = ResultStore()
+    statut["result_key"] = store.cle(ref)
+
+    taches: List[tuple] = [(ArtifactKind.RESULT_JSON, resultat, "application/json")]
+    if isinstance(resultat, dict):
+        for cle_src, kind in (("inp_content", ArtifactKind.INP),
+                              ("rpt_content", ArtifactKind.RPT)):
+            contenu = resultat.get(cle_src)
+            if contenu:
+                taches.append((kind, contenu, "text/plain; charset=utf-8"))
+
+    for kind, contenu, content_type in taches:
+        try:
+            _, cree = store.save_idempotent(
+                ref, contenu, kind=kind, content_type=content_type)
+            statut["artefacts"][kind.value] = "created" if cree else "identical"
+        except ResultAlreadyExists as e:
+            statut["artefacts"][kind.value] = f"error:divergence"
+            logger.error("ResultStore : divergence d'artefact %s : %s", kind.value, e)
+        except ResultStoreError as e:
+            statut["artefacts"][kind.value] = f"error:{e}"
+            logger.error("ResultStore : dépôt %s impossible : %s", kind.value, e)
+        except Exception as e:
+            statut["artefacts"][kind.value] = f"error:{e}"
+            logger.exception("ResultStore : erreur inattendue sur %s", kind.value)
+
+    statut["complet"] = bool(statut["artefacts"]) and all(
+        v in ("created", "identical") for v in statut["artefacts"].values())
+    if not statut["complet"]:
+        logger.error(
+            "ResultStore : persistance PARTIELLE pour la simulation %s : %s",
+            ref.simulation_id, statut["artefacts"])
+    return statut
 
 
 def _resultatdeclare_projet(data: Dict[str, Any], proj: Any) -> bool:
@@ -630,13 +727,49 @@ class ContexteSimulation:
 
 def charger_resultat_simulation(simulation: Any) -> Optional[Dict[str, Any]]:
     """
-    Charge le JSON de résultat d'une ligne Simulation via un adaptateur de
-    lecture unique :
-      1. `results_s3_key` comme chemin local existant (sims synchrones) ;
-      2. sinon `results_s3_key` comme clé ArtifactStore (sims Celery :
+    Charge le JSON de résultat d'une ligne Simulation.
+
+    Ordre de lecture (étape 3C.3) :
+      0. ResultStore — artefact permanent `result.json` lorsque la ligne
+         porte une identité complète (org_id/project_id/id). Ce store est
+         maintenu à jour par `persister_resultat_simulation` (révision
+         explicite) : les enrichissements dérivés restent visibles ;
+      1. `results_s3_key` comme chemin local existant (sims synchrones
+         historiques et actuelles — le cache de calcul reste la voie de
+         travail) ;
+      2. `results_s3_key` comme clé ArtifactStore (sims Celery :
          `org_id/projet/jobs/<id>/summary.json`).
-    Aucune écriture, aucun repli implicite sur un autre résultat.
+    Aucune écriture, aucun repli implicite sur un autre résultat : chaque
+    voie ne lit que les artefacts de CETTE simulation.
     """
+    # 0. ResultStore — uniquement si la ligne porte l'identité complète
+    try:
+        from api.services.result_store import (
+            ArtifactKind,
+            ResultNotFound,
+            ResultRef,
+            ResultStore,
+            ResultStoreError,
+        )
+        ref = ResultRef.depuis_simulation(simulation)
+    except ResultStoreError:
+        ref = None
+    if ref is not None:
+        try:
+            data = ResultStore().load_json(ref, ArtifactKind.RESULT_JSON)
+            if isinstance(data, dict) and data:
+                return data
+        except ResultNotFound:
+            pass  # artefact absent → voies legacy ci-dessous
+        except ResultStoreError as e:
+            logger.warning(
+                "Lecture ResultStore impossible (%s), repli legacy : %s",
+                ref.simulation_id, e)
+        except Exception as e:
+            logger.warning(
+                "Lecture ResultStore inattendue (%s), repli legacy : %s",
+                ref.simulation_id, e)
+
     cle = getattr(simulation, "results_s3_key", None)
     if not cle:
         return None
@@ -671,27 +804,57 @@ def persister_resultat_simulation(simulation: Any, data: Dict[str, Any]) -> bool
     Réécrit le JSON de résultat d'une simulation via le même adaptateur que
     `charger_resultat_simulation` : chemin local si `results_s3_key` est un
     fichier, sinon clé ArtifactStore (put_bytes). Retourne True si écrit.
+
+    Étape 3C.3 — write-through ResultStore : si la ligne porte une identité
+    complète et qu'un artefact `result.json` existe, il est RÉVISÉ
+    explicitement (`ResultStore.replace`, journalisé) pour que la lecture
+    préférentielle par ResultStore ne serve jamais un état périmé. Un échec
+    du store ne fait pas échouer la persistance legacy (journalisé).
     """
     cle = getattr(simulation, "results_s3_key", None)
     if not cle or not isinstance(data, dict):
         return False
     cle = str(cle)
+    ecrit = False
     try:
         p = Path(cle)
         if p.exists() and p.is_file():
             with open(p, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False)
-            return True
+            ecrit = True
     except Exception as e:
         logger.warning("Persistance résultat simulation (chemin local) impossible: %s", e)
+    if not ecrit:
+        try:
+            from api.core.storage import get_storage
+            get_storage().put_bytes(cle, json.dumps(data, ensure_ascii=False).encode("utf-8"),
+                                    content_type="application/json")
+            ecrit = True
+        except Exception as e:
+            logger.warning("Persistance résultat simulation (store %s) impossible: %s", cle, e)
+
+    # Write-through ResultStore (best effort, jamais bloquant)
     try:
-        from api.core.storage import get_storage
-        get_storage().put_bytes(cle, json.dumps(data, ensure_ascii=False).encode("utf-8"),
-                                content_type="application/json")
-        return True
+        from api.services.result_store import (
+            ArtifactKind,
+            ResultNotFound,
+            ResultRef,
+            ResultStore,
+            ResultStoreError,
+        )
+        try:
+            ref = ResultRef.depuis_simulation(simulation)
+        except ResultStoreError:
+            ref = None
+        if ref is not None:
+            ResultStore().replace(ref, data, kind=ArtifactKind.RESULT_JSON)
+    except ResultNotFound:
+        pass  # artefact jamais déposé (ex. store indisponible à la création)
     except Exception as e:
-        logger.warning("Persistance résultat simulation (store %s) impossible: %s", cle, e)
-        return False
+        logger.warning("Write-through ResultStore impossible (%s): %s",
+                       getattr(simulation, "id", "?"), e)
+
+    return ecrit
 
 
 def _resoudre_projet_pour_simulation(db: Session, org_id: Optional[str],

@@ -193,16 +193,12 @@ class ResultStore:
         except (ValueError, StorageError) as e:
             raise ResultStorageError(f"Vérification d'existence impossible : {e}") from e
 
-    def save(self, ref: ResultRef, payload: Union[bytes, str, Mapping[str, Any]],
-             kind: ArtifactKind = ArtifactKind.RESULT_JSON,
-             content_type: Optional[str] = None) -> StoredArtifact:
-        """
-        Enregistre un artefact de façon CONDITIONNELLE (jamais d'écrasement).
-
-        `payload` : bytes, str (encodé UTF-8) ou Mapping (sérialisé JSON).
-        Retourne un StoredArtifact incluant le SHA-256 du contenu déposé.
-        Lève ResultAlreadyExists si l'artefact existe déjà.
-        """
+    @staticmethod
+    def _normaliser_payload(payload: Union[bytes, str, Mapping[str, Any]],
+                            kind: ArtifactKind,
+                            content_type: Optional[str]
+                            ) -> tuple:
+        """Normalise un payload en (octets, content_type)."""
         if isinstance(payload, Mapping):
             data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             if content_type is None:
@@ -214,10 +210,34 @@ class ResultStore:
         else:
             raise ResultStoreError(
                 f"Payload non supporté pour {kind} : {type(payload).__name__}")
-
         if not data:
             raise ResultStoreError("Payload vide refusé pour un artefact de résultat.")
+        return data, content_type
 
+    def _existant_identique(self, key: str, sha: str) -> bool:
+        """True si l'objet existant à `key` a le même SHA-256 que `sha`."""
+        try:
+            existant = self._store.get_bytes(key)
+        except StorageNotFoundError:
+            # Collision suivie d'une disparition : état instable, on refuse.
+            raise ResultStorageError(
+                f"Artefact {key} signalé existant puis introuvable (état instable).")
+        except StorageError as e:
+            raise ResultStorageError(
+                f"Vérification de collision impossible ({key}) : {e}") from e
+        return hashlib.sha256(existant).hexdigest() == sha
+
+    def save(self, ref: ResultRef, payload: Union[bytes, str, Mapping[str, Any]],
+             kind: ArtifactKind = ArtifactKind.RESULT_JSON,
+             content_type: Optional[str] = None) -> StoredArtifact:
+        """
+        Enregistre un artefact de façon CONDITIONNELLE (jamais d'écrasement).
+
+        `payload` : bytes, str (encodé UTF-8) ou Mapping (sérialisé JSON).
+        Retourne un StoredArtifact incluant le SHA-256 du contenu déposé.
+        Lève ResultAlreadyExists si l'artefact existe déjà.
+        """
+        data, content_type = self._normaliser_payload(payload, kind, content_type)
         key = self.cle(ref, kind)
         sha = hashlib.sha256(data).hexdigest()
         try:
@@ -229,6 +249,66 @@ class ResultStore:
                 f"L'artefact {kind.value} existe déjà pour cette simulation "
                 f"(clé {key}) : écrasement interdit.")
         logger.info("Artefact résultat enregistré : %s (sha256=%s…)", key, sha[:12])
+        return StoredArtifact(ref=ref, kind=kind, key=key,
+                              size=len(data), sha256=sha)
+
+    def save_idempotent(self, ref: ResultRef,
+                        payload: Union[bytes, str, Mapping[str, Any]],
+                        kind: ArtifactKind = ArtifactKind.RESULT_JSON,
+                        content_type: Optional[str] = None
+                        ) -> tuple:
+        """
+        Écriture conditionnelle idempotente : retourne (StoredArtifact, cree).
+
+        - artefact absent → déposé, cree=True ;
+        - artefact présent au contenu IDENTIQUE (SHA-256) → retourne
+          l'existant, cree=False (réussite idempotente, pas de collision) ;
+        - artefact présent au contenu DIFFÉRENT → ResultAlreadyExists
+          (divergence explicite, jamais de succès silencieux).
+        """
+        data, content_type = self._normaliser_payload(payload, kind, content_type)
+        key = self.cle(ref, kind)
+        sha = hashlib.sha256(data).hexdigest()
+        try:
+            cree = self._store.put_bytes_if_absent(key, data, content_type=content_type)
+        except StorageError as e:
+            raise ResultStorageError(f"Écriture artefact impossible ({key}) : {e}") from e
+        if cree:
+            logger.info("Artefact résultat enregistré : %s (sha256=%s…)", key, sha[:12])
+            return StoredArtifact(ref=ref, kind=kind, key=key,
+                                  size=len(data), sha256=sha), True
+        if self._existant_identique(key, sha):
+            logger.info("Artefact résultat déjà présent et identique : %s", key)
+            return StoredArtifact(ref=ref, kind=kind, key=key,
+                                  size=len(data), sha256=sha), False
+        raise ResultAlreadyExists(
+            f"L'artefact {kind.value} existe avec un contenu DIFFÉRENT pour "
+            f"cette simulation (clé {key}) : divergence refusée.")
+
+    def replace(self, ref: ResultRef,
+                payload: Union[bytes, str, Mapping[str, Any]],
+                kind: ArtifactKind = ArtifactKind.RESULT_JSON,
+                content_type: Optional[str] = None) -> StoredArtifact:
+        """
+        Révision EXPLICITE d'un artefact déjà déposé (ex. enrichissement
+        dérivé du résultat : séries temporelles, buffer validé).
+
+        Distinct de `save`/`save_idempotent` qui restent immuables :
+        `replace` écrase volontairement, journalise l'opération et exige
+        que l'artefact existe déjà (ResultNotFound sinon). Réservé aux
+        flux métier connus — jamais utilisé pour l'enregistrement initial.
+        """
+        data, content_type = self._normaliser_payload(payload, kind, content_type)
+        key = self.cle(ref, kind)
+        if not self.exists(ref, kind):
+            raise ResultNotFound(
+                f"Révision impossible : artefact absent ({key}).")
+        sha = hashlib.sha256(data).hexdigest()
+        try:
+            self._store.put_bytes(key, data, content_type=content_type)
+        except StorageError as e:
+            raise ResultStorageError(f"Révision artefact impossible ({key}) : {e}") from e
+        logger.warning("Artefact résultat RÉVISÉ : %s (sha256=%s…)", key, sha[:12])
         return StoredArtifact(ref=ref, kind=kind, key=key,
                               size=len(data), sha256=sha)
 
