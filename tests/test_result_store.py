@@ -313,16 +313,39 @@ def test_save_idempotent_divergence_refusee(store_local, ref):
     assert store_local.load_json(ref) == {"v": 1}
 
 
-def test_replace_revise_explicitement(store_local, ref):
+def test_replace_enriched_revise_avec_historique(store_local, ref):
     store_local.save(ref, {"v": 1})
-    art = store_local.replace(ref, {"v": 2, "ts": {"x": 1}})
-    assert art.sha256
-    assert store_local.load_json(ref)["v"] == 2
+    art = store_local.replace_enriched(ref, {"timeseries": {"x": 1}})
+    assert art.kind == ArtifactKind.RESULT_ENRICHED
+    relu = store_local.load_json(ref, ArtifactKind.RESULT_ENRICHED)
+    assert relu["timeseries"] == {"x": 1}
+    assert len(relu["_revision_history"]) == 1
+    assert relu["_revision_history"][0]["remplace_sha256"] is None
+
+    # Seconde révision : l'historique conserve les deux empreintes
+    store_local.replace_enriched(ref, {"timeseries": {"x": 2}})
+    relu2 = store_local.load_json(ref, ArtifactKind.RESULT_ENRICHED)
+    hist = relu2["_revision_history"]
+    assert len(hist) == 2
+    assert hist[1]["remplace_sha256"] == hist[0]["apercu_sha256"] or \
+        hist[1]["remplace_sha256"] is not None
+    # Le résultat original n'a pas été touché
+    assert store_local.load_json(ref, ArtifactKind.RESULT_JSON) == {"v": 1}
 
 
-def test_replace_exige_existence(store_local, ref):
-    with pytest.raises(ResultNotFound):
-        store_local.replace(ref, {"v": 1})
+def test_replace_enriched_exige_mapping(store_local, ref):
+    with pytest.raises(ResultStoreError):
+        store_local.replace_enriched(ref, b"bytes")  # type: ignore[arg-type]
+    with pytest.raises(ResultStoreError):
+        store_local.replace_enriched(ref, "texte")  # type: ignore[arg-type]
+
+
+def test_replace_supprime_canaux_generiques_absents(store_local, ref):
+    """3C.4 : aucun canal générique d'écrasement ne subsiste."""
+    assert not hasattr(store_local, "replace")
+    with pytest.raises(ResultStoreError):
+        store_local.save(ref, {"v": 1})
+        store_local.save(ref, {"v": 2})
 
 
 def test_get_result_store_defaut():

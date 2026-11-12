@@ -464,6 +464,20 @@ def _persister_resultats_store(simulation: Any, resultat: Dict[str, Any]) -> Dic
         logger.error(
             "ResultStore : persistance PARTIELLE pour la simulation %s : %s",
             ref.simulation_id, statut["artefacts"])
+
+    # 3C.4 — manifeste d'état : reflète les artefacts RÉELLEMENT présents
+    # (relecture + SHA-256), jamais une simple déclaration. Best effort :
+    # son échec est diagnostiqué sans invalider les artefacts déposés.
+    try:
+        manifeste = store.ecrire_manifeste(
+            ref, etat_execution="EXECUTED",
+            artefacts_attendus=[kind for kind, _, _ in taches])
+        statut["manifeste"] = {"etat": manifeste.get("etat"),
+                               "key": manifeste.get("key"),
+                               "manquants": manifeste.get("manquants")}
+    except Exception as e:
+        statut["manifeste"] = {"erreur": str(e)}
+        logger.error("ResultStore : écriture manifeste impossible : %s", e)
     return statut
 
 
@@ -725,15 +739,90 @@ class ContexteSimulation:
     resolution: str = ""                      # "simulation_id" | "derniere" | "bassin"
 
 
+# ---------------------------------------------------------------------------
+# Étape 3C.4 — séparation résultat original / enrichissements dérivés
+# ---------------------------------------------------------------------------
+# `result.json` = sortie hydraulique originale du moteur (IMMUTABLE).
+# `result_enriched.json` = données dérivées uniquement. La fusion ne peut
+# JAMAIS écraser une donnée hydraulique originale : seuls les champs
+# dérivés whitelistés sont appliqués.
+
+CHAMPS_RESULTAT_ENRICHISSABLES = ("timeseries", "buffer_sensitivity")
+CHAMPS_META_ENRICHISSABLES = ("buffer_m",)
+_CLE_HISTORIQUE_ENRICHI = "_revision_history"
+
+
+def _extraire_enrichissement(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    Extrait du résultat complet les SEULS champs dérivés enrichissables.
+    Retourne None si aucun champ dérivé n'est présent.
+    """
+    if not isinstance(data, dict):
+        return None
+    enrichi: Dict[str, Any] = {}
+    for cle in CHAMPS_RESULTAT_ENRICHISSABLES:
+        if cle in data:
+            enrichi[cle] = data[cle]
+    meta = data.get("meta")
+    if isinstance(meta, dict):
+        sous = {k: meta[k] for k in CHAMPS_META_ENRICHISSABLES if k in meta}
+        if sous:
+            enrichi["meta"] = sous
+    return enrichi or None
+
+
+def _fusionner_enrichissement(store: Any, ref: Any,
+                              base: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Fusionne result.json (original immuable) + result_enriched.json
+    (dérivé). Règle stricte : les enrichissements ne peuvent compléter ou
+    actualiser QUE les champs dérivés whitelistés — toute autre clé est
+    ignorée avec avertissement, jamais appliquée au résultat hydraulique.
+    """
+    try:
+        enrichi = store.load_json(ref, _kind_enrichi())
+    except Exception:
+        return base  # absent ou illisible : le résultat original fait foi
+    if not isinstance(enrichi, dict):
+        return base
+    enrichi = {k: v for k, v in enrichi.items() if k != _CLE_HISTORIQUE_ENRICHI}
+
+    fusionne = dict(base)
+    ignores = []
+    for cle, valeur in enrichi.items():
+        if cle in CHAMPS_RESULTAT_ENRICHISSABLES:
+            fusionne[cle] = valeur
+        elif cle == "meta" and isinstance(valeur, dict):
+            meta = dict(base.get("meta") or {})
+            for sk, sv in valeur.items():
+                if sk in CHAMPS_META_ENRICHISSABLES:
+                    meta[sk] = sv
+                else:
+                    ignores.append(f"meta.{sk}")
+            fusionne["meta"] = meta
+        else:
+            ignores.append(cle)
+    if ignores:
+        logger.warning(
+            "Enrichissement ignoré (champs non dérivés) pour %s : %s",
+            getattr(ref, "simulation_id", "?"), ignores)
+    return fusionne
+
+
+def _kind_enrichi():
+    from api.services.result_store import ArtifactKind
+    return ArtifactKind.RESULT_ENRICHED
+
+
 def charger_resultat_simulation(simulation: Any) -> Optional[Dict[str, Any]]:
     """
     Charge le JSON de résultat d'une ligne Simulation.
 
-    Ordre de lecture (étape 3C.3) :
-      0. ResultStore — artefact permanent `result.json` lorsque la ligne
-         porte une identité complète (org_id/project_id/id). Ce store est
-         maintenu à jour par `persister_resultat_simulation` (révision
-         explicite) : les enrichissements dérivés restent visibles ;
+    Ordre de lecture (étape 3C.3/3C.4) :
+      0. ResultStore — artefact permanent `result.json` (immuable) lorsque
+         la ligne porte une identité complète (org_id/project_id/id),
+         puis fusion avec `result_enriched.json` (dérivés whitelistés
+         uniquement — jamais d'écrasement des données hydrauliques) ;
       1. `results_s3_key` comme chemin local existant (sims synchrones
          historiques et actuelles — le cache de calcul reste la voie de
          travail) ;
@@ -756,9 +845,10 @@ def charger_resultat_simulation(simulation: Any) -> Optional[Dict[str, Any]]:
         ref = None
     if ref is not None:
         try:
-            data = ResultStore().load_json(ref, ArtifactKind.RESULT_JSON)
+            store = ResultStore()
+            data = store.load_json(ref, ArtifactKind.RESULT_JSON)
             if isinstance(data, dict) and data:
-                return data
+                return _fusionner_enrichissement(store, ref, data)
         except ResultNotFound:
             pass  # artefact absent → voies legacy ci-dessous
         except ResultStoreError as e:
@@ -805,11 +895,13 @@ def persister_resultat_simulation(simulation: Any, data: Dict[str, Any]) -> bool
     `charger_resultat_simulation` : chemin local si `results_s3_key` est un
     fichier, sinon clé ArtifactStore (put_bytes). Retourne True si écrit.
 
-    Étape 3C.3 — write-through ResultStore : si la ligne porte une identité
-    complète et qu'un artefact `result.json` existe, il est RÉVISÉ
-    explicitement (`ResultStore.replace`, journalisé) pour que la lecture
-    préférentielle par ResultStore ne serve jamais un état périmé. Un échec
-    du store ne fait pas échouer la persistance legacy (journalisé).
+    Étape 3C.3/3C.4 — write-through ResultStore : si la ligne porte une
+    identité complète, les champs DÉRIVÉS du résultat sont extraits et
+    déposés dans `result_enriched.json` via `replace_enriched` (canal
+    strictement cantonné, historique d'empreintes conservé). Le résultat
+    hydraulique original `result.json` n'est JAMAIS réécrit. Le manifeste
+    est ensuite actualisé. Un échec du store ne fait pas échouer la
+    persistance legacy (journalisé).
     """
     cle = getattr(simulation, "results_s3_key", None)
     if not cle or not isinstance(data, dict):
@@ -833,11 +925,11 @@ def persister_resultat_simulation(simulation: Any, data: Dict[str, Any]) -> bool
         except Exception as e:
             logger.warning("Persistance résultat simulation (store %s) impossible: %s", cle, e)
 
-    # Write-through ResultStore (best effort, jamais bloquant)
+    # Write-through ResultStore (best effort, jamais bloquant) — 3C.4 :
+    # uniquement les champs dérivés vers result_enriched.json.
     try:
         from api.services.result_store import (
             ArtifactKind,
-            ResultNotFound,
             ResultRef,
             ResultStore,
             ResultStoreError,
@@ -847,11 +939,19 @@ def persister_resultat_simulation(simulation: Any, data: Dict[str, Any]) -> bool
         except ResultStoreError:
             ref = None
         if ref is not None:
-            ResultStore().replace(ref, data, kind=ArtifactKind.RESULT_JSON)
-    except ResultNotFound:
-        pass  # artefact jamais déposé (ex. store indisponible à la création)
-    except Exception as e:
+            enrichi = _extraire_enrichissement(data)
+            store = ResultStore()
+            attendus = [ArtifactKind.RESULT_JSON]
+            if enrichi is not None:
+                store.replace_enriched(ref, enrichi)
+                attendus.append(ArtifactKind.RESULT_ENRICHED)
+            store.ecrire_manifeste(ref, etat_execution="EXECUTED",
+                                   artefacts_attendus=attendus)
+    except ResultStoreError as e:
         logger.warning("Write-through ResultStore impossible (%s): %s",
+                       getattr(simulation, "id", "?"), e)
+    except Exception as e:
+        logger.warning("Write-through ResultStore inattendu (%s): %s",
                        getattr(simulation, "id", "?"), e)
 
     return ecrit
@@ -1009,3 +1109,126 @@ def _joindre_gpkg(db: Session, proj: Any, ctx: ContexteSimulation) -> None:
     gpkg, meta = resoudre_gpkg_pour_simulation(db, proj, ctx.data)
     ctx.gpkg_path = gpkg
     ctx.meta_version = meta or {}
+
+
+# ============================================================
+# Étape 3C.4 — Intégrité, manifeste, diagnostic et reprise
+# ============================================================
+
+def _ref_pour_simulation(simulation: Any):
+    """ResultRef depuis la ligne Simulation, ou None si identité incomplète."""
+    from api.services.result_store import ResultRef, ResultStoreError
+    try:
+        return ResultRef.depuis_simulation(simulation)
+    except ResultStoreError:
+        return None
+
+
+def diagnostiquer_resultats_store(simulation: Any) -> Dict[str, Any]:
+    """
+    Diagnostic d'intégrité complet d'une simulation côté ResultStore :
+      - `execution` : EXECUTED si la ligne ORM existe (toujours vrai ici) ;
+      - `manifeste` : ABSENT / PARTIAL / DEGRADED / VERIFIED (manifeste
+        confronté aux artefacts réellement relus, SHA-256 inclus) ;
+      - `persistance_complete` : True uniquement si le manifeste est
+        VERIFIED — un manifeste présent ne suffit JAMAIS.
+    Lève ResultStoreError si l'identité est incomplète.
+    """
+    from api.services.result_store import (
+        ResultRef, ResultStore, ResultStoreError,
+    )
+    ref = _ref_pour_simulation(simulation)
+    if ref is None:
+        raise ResultStoreError(
+            "Identité incomplète : diagnostic ResultStore impossible.")
+    store = ResultStore()
+    verification = store.verifier_manifeste(ref)
+    return {
+        "simulation_id": ref.simulation_id,
+        "org_id": ref.org_id,
+        "project_id": ref.project_id,
+        "execution": "EXECUTED",
+        "manifeste": verification.get("etat", "ABSENT"),
+        "persistance_complete": verification.get("etat") == "VERIFIED",
+        "details": verification.get("details") or {},
+        "attendus_manquants": verification.get("attendus_manquants") or [],
+    }
+
+
+def reprise_resultat_simulation(simulation: Any,
+                                resultat: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Reprise IDEMPOTANTE d'une persistance interrompue, SANS relancer SWMM.
+
+    `resultat` = données disponibles (typiquement relues depuis le cache
+    de calcul ou un artefact existant). Pour chaque artefact :
+      - absent            → dépôt conditionnel (save_idempotent) ;
+      - présent identique → succès idempotent ;
+      - présent divergent → anomalie explicite, JAMAIS écrasé ;
+      - altéré (SHA-256 ≠ manifeste) → signalé dans le diagnostic, non
+        écrasé automatiquement.
+    Le manifeste est réécrit en fin d'opération. Retourne le statut
+    détaillé ; ne lève pas d'exception métier (erreurs backend → statut).
+    """
+    from api.services.result_store import (
+        ArtifactKind, ResultAlreadyExists, ResultStore, ResultStoreError,
+    )
+
+    statut: Dict[str, Any] = {"simulation_id": getattr(simulation, "id", None),
+                              "artefacts": {}, "anomalies": [],
+                              "persistance_complete": False}
+    ref = _ref_pour_simulation(simulation)
+    if ref is None:
+        statut["erreur"] = "identite_incomplete"
+        return statut
+
+    store = ResultStore()
+    # Diagnostic préalable : altérations par rapport au manifeste
+    try:
+        diag = store.verifier_manifeste(ref)
+        if diag.get("etat") in ("DEGRADED",):
+            for nom, det in (diag.get("details") or {}).items():
+                if det.get("present") and not det.get("intègre"):
+                    statut["anomalies"].append(
+                        f"artefact_altéré:{nom}")
+    except Exception as e:
+        logger.warning("Diagnostic manifeste impossible avant reprise : %s", e)
+
+    taches = [(ArtifactKind.RESULT_JSON, resultat, "application/json")]
+    if isinstance(resultat, dict):
+        for cle_src, kind in (("inp_content", ArtifactKind.INP),
+                              ("rpt_content", ArtifactKind.RPT)):
+            contenu = resultat.get(cle_src)
+            if contenu:
+                taches.append((kind, contenu, "text/plain; charset=utf-8"))
+
+    for kind, contenu, content_type in taches:
+        try:
+            _, cree = store.save_idempotent(
+                ref, contenu, kind=kind, content_type=content_type)
+            statut["artefacts"][kind.value] = "created" if cree else "identical"
+        except ResultAlreadyExists as e:
+            statut["artefacts"][kind.value] = "error:divergence"
+            statut["anomalies"].append(f"divergence:{kind.value}")
+            logger.error("Reprise : divergence refusée sur %s : %s", kind.value, e)
+        except ResultStoreError as e:
+            statut["artefacts"][kind.value] = f"error:{e}"
+            statut["anomalies"].append(f"stockage:{kind.value}")
+            logger.error("Reprise : dépôt %s impossible : %s", kind.value, e)
+        except Exception as e:
+            statut["artefacts"][kind.value] = f"error:{e}"
+            statut["anomalies"].append(f"stockage:{kind.value}")
+            logger.exception("Reprise : erreur inattendue sur %s", kind.value)
+
+    try:
+        manifeste = store.ecrire_manifeste(
+            ref, etat_execution="EXECUTED",
+            artefacts_attendus=[kind for kind, _, _ in taches])
+        statut["manifeste"] = manifeste.get("etat")
+    except Exception as e:
+        statut["manifeste"] = f"erreur:{e}"
+        logger.error("Reprise : écriture manifeste impossible : %s", e)
+
+    statut["persistance_complete"] = (
+        statut["manifeste"] == "PERSISTED" and not statut["anomalies"])
+    return statut

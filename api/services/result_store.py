@@ -25,6 +25,7 @@ import hashlib
 import json
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Mapping, Optional, Union
 
@@ -52,6 +53,10 @@ class ResultNotFound(ResultStoreError):
 
 class ResultAlreadyExists(ResultStoreError):
     """L'artefact existe déjà : écriture conditionnelle refusée (immutabilité)."""
+
+
+class ResultIntegrityError(ResultStoreError):
+    """L'artefact est présent mais son empreinte ne correspond pas au référentiel."""
 
 
 class ResultStorageError(ResultStoreError):
@@ -117,6 +122,8 @@ class ResultRef:
 class ArtifactKind(str, Enum):
     """Nomenclature contrôlée des artefacts d'une simulation."""
     RESULT_JSON = "result.json"
+    RESULT_ENRICHED = "result_enriched.json"
+    MANIFEST = "simulation_manifest.json"
     INP = "model.inp"
     RPT = "report.rpt"
     TIMESERIES = "timeseries.json"
@@ -285,32 +292,251 @@ class ResultStore:
             f"L'artefact {kind.value} existe avec un contenu DIFFÉRENT pour "
             f"cette simulation (clé {key}) : divergence refusée.")
 
-    def replace(self, ref: ResultRef,
-                payload: Union[bytes, str, Mapping[str, Any]],
-                kind: ArtifactKind = ArtifactKind.RESULT_JSON,
-                content_type: Optional[str] = None) -> StoredArtifact:
-        """
-        Révision EXPLICITE d'un artefact déjà déposé (ex. enrichissement
-        dérivé du résultat : séries temporelles, buffer validé).
+    # -- Intégrité (3C.4) -----------------------------------------------------
 
-        Distinct de `save`/`save_idempotent` qui restent immuables :
-        `replace` écrase volontairement, journalise l'opération et exige
-        que l'artefact existe déjà (ResultNotFound sinon). Réservé aux
-        flux métier connus — jamais utilisé pour l'enregistrement initial.
+    ARTIFACTS_OBLIGATOIRES = frozenset({ArtifactKind.RESULT_JSON})
+    # Le manifeste est un artefact d'ÉTAT : il est réécrit à chaque
+    # actualisation et n'est jamais listé dans ses propres entrées
+    # (pas d'empreinte auto-référencée).
+
+    def verify(self, ref: ResultRef, kind: ArtifactKind,
+               sha256_referentiel: Optional[str] = None) -> Dict[str, Any]:
         """
-        data, content_type = self._normaliser_payload(payload, kind, content_type)
+        Vérifie l'intégrité PHYSIQUE d'un artefact : présence, taille et
+        SHA-256 du contenu réellement relu. `exists()` n'est jamais utilisé
+        comme preuve d'intégrité.
+
+        `sha256_referentiel` : empreinte attendue (manifeste ou appelant).
+        Retourne un rapport dict ; `intègre` n'est True que si l'artefact
+        est présent ET (aucun référentiel fourni OU empreinte identique).
+        """
+        if not isinstance(kind, ArtifactKind):
+            try:
+                kind = ArtifactKind(str(kind))
+            except ValueError as e:
+                raise ResultStoreError(f"ArtifactKind inconnu : {kind!r}") from e
         key = self.cle(ref, kind)
-        if not self.exists(ref, kind):
-            raise ResultNotFound(
-                f"Révision impossible : artefact absent ({key}).")
-        sha = hashlib.sha256(data).hexdigest()
+        rapport = {"ref": {"org_id": ref.org_id, "project_id": ref.project_id,
+                           "simulation_id": ref.simulation_id},
+                   "kind": kind.value, "key": key,
+                   "present": False, "size": None, "sha256": None,
+                   "sha256_referentiel": sha256_referentiel,
+                   "intègre": False}
         try:
-            self._store.put_bytes(key, data, content_type=content_type)
+            brut = self._store.get_bytes(key)
+        except StorageNotFoundError:
+            return rapport
         except StorageError as e:
-            raise ResultStorageError(f"Révision artefact impossible ({key}) : {e}") from e
-        logger.warning("Artefact résultat RÉVISÉ : %s (sha256=%s…)", key, sha[:12])
-        return StoredArtifact(ref=ref, kind=kind, key=key,
-                              size=len(data), sha256=sha)
+            raise ResultStorageError(
+                f"Vérification impossible ({key}) : {e}") from e
+        sha = hashlib.sha256(brut).hexdigest()
+        rapport.update(present=True, size=len(brut), sha256=sha,
+                       intègre=(sha256_referentiel is None
+                                or sha == sha256_referentiel))
+        return rapport
+
+    def load_verified(self, ref: ResultRef, kind: ArtifactKind,
+                      sha256_referentiel: str) -> bytes:
+        """
+        Lecture intègre : lève ResultNotFound si absent, ResultIntegrityError
+        si l'empreinte diffère du référentiel, ResultStorageError sinon.
+        """
+        rapport = self.verify(ref, kind, sha256_referentiel)
+        if not rapport["present"]:
+            raise ResultNotFound(f"Artefact introuvable : {rapport['key']}")
+        if not rapport["intègre"]:
+            raise ResultIntegrityError(
+                f"Empreinte divergente pour {kind.value} "
+                f"({rapport['key']}) : attendu {sha256_referentiel[:12]}…, "
+                f"relu {rapport['sha256'][:12]}…")
+        return self.load(ref, kind)
+
+    # -- Manifeste (3C.4) -----------------------------------------------------
+
+    def generer_manifeste(self, ref: ResultRef,
+                          etat_execution: str = "EXECUTED",
+                          artefacts_attendus: Optional[List[ArtifactKind]] = None,
+                          ) -> Dict[str, Any]:
+        """
+        Construit le manifeste d'état des artefacts de la simulation.
+        Chaque entrée décrit un artefact RÉELLEMENT présent (relecture +
+        SHA-256). `artefacts_attendus` = kinds que l'appelant a tenté de
+        déposer : un attendu absent rend l'état PARTIAL (même facultatif,
+        ex. RPT en échec). À défaut, seuls les obligatoires sont attendus.
+        Le manifeste ne contient jamais sa propre empreinte.
+        """
+        attendus = sorted({k.value for k in
+                           (artefacts_attendus or
+                            list(self.ARTIFACTS_OBLIGATOIRES))})
+        artefacts: Dict[str, Any] = {}
+        manquants: List[str] = []
+        for kind in ArtifactKind:
+            if kind == ArtifactKind.MANIFEST:
+                continue
+            try:
+                v = self.verify(ref, kind)
+            except ResultStorageError as e:
+                artefacts[kind.value] = {"erreur": str(e)}
+                manquants.append(kind.value)
+                continue
+            if v["present"]:
+                artefacts[kind.value] = {
+                    "key": v["key"], "size": v["size"], "sha256": v["sha256"]}
+            else:
+                manquants.append(kind.value)
+        attendus_manquants = [k for k in attendus if k not in artefacts]
+        obligatoires_manquants = [
+            k for k in attendus_manquants
+            if k in {kind.value for kind in self.ARTIFACTS_OBLIGATOIRES}]
+        return {
+            "org_id": ref.org_id,
+            "project_id": ref.project_id,
+            "simulation_id": ref.simulation_id,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "execution": etat_execution,
+            "etat": "PARTIAL" if attendus_manquants else "PERSISTED",
+            "attendus": attendus,
+            "attendus_manquants": attendus_manquants,
+            "artefacts": artefacts,
+            "manquants": manquants,
+            "obligatoires_manquants": obligatoires_manquants,
+        }
+
+    def ecrire_manifeste(self, ref: ResultRef,
+                         etat_execution: str = "EXECUTED",
+                         artefacts_attendus: Optional[List[ArtifactKind]] = None
+                         ) -> Dict[str, Any]:
+        """
+        Génère puis dépose `simulation_manifest.json`. Le manifeste est un
+        artefact d'ÉTAT réinscriptible (put_bytes) — exception documentée à
+        l'immutabilité, qui ne concerne que les artefacts de résultats.
+        """
+        manifeste = self.generer_manifeste(
+            ref, etat_execution=etat_execution,
+            artefacts_attendus=artefacts_attendus)
+        key = self.cle(ref, ArtifactKind.MANIFEST)
+        data = json.dumps(manifeste, ensure_ascii=False).encode("utf-8")
+        try:
+            self._store.put_bytes(key, data, content_type="application/json")
+        except StorageError as e:
+            raise ResultStorageError(
+                f"Écriture manifeste impossible ({key}) : {e}") from e
+        manifeste["key"] = key
+        return manifeste
+
+    def verifier_manifeste(self, ref: ResultRef) -> Dict[str, Any]:
+        """
+        Confronte le manifeste aux artefacts RÉELLEMENT présents :
+        présence, taille et SHA-256 relus pour chaque entrée.
+        États retournés : ABSENT / DEGRADED / PARTIAL / VERIFIED.
+        """
+        try:
+            manifeste = self.load_json(ref, ArtifactKind.MANIFEST)
+        except ResultNotFound:
+            return {"etat": "ABSENT", "simulation_id": ref.simulation_id,
+                    "details": {}}
+        details: Dict[str, Any] = {}
+        tous_ok = True
+        for nom, entree in (manifeste.get("artefacts") or {}).items():
+            try:
+                kind = ArtifactKind(nom)
+            except ValueError:
+                details[nom] = {"intègre": False, "erreur": "kind inconnu"}
+                tous_ok = False
+                continue
+            v = self.verify(ref, kind, entree.get("sha256"))
+            details[nom] = {
+                "present": v["present"],
+                "intègre": v["intègre"],
+                "sha256": v["sha256"],
+            }
+            if not v["present"] or not v["intègre"]:
+                tous_ok = False
+        attendus = set(manifeste.get("attendus") or
+                       [k.value for k in self.ARTIFACTS_OBLIGATOIRES])
+        presents = set((manifeste.get("artefacts") or {}).keys())
+        attendus_manquants = sorted(attendus - presents)
+        if not tous_ok:
+            etat = "DEGRADED"
+        elif attendus_manquants:
+            etat = "PARTIAL"
+        else:
+            etat = "VERIFIED"
+        return {"etat": etat, "simulation_id": ref.simulation_id,
+                "execution": manifeste.get("execution"),
+                "details": details,
+                "attendus_manquants": attendus_manquants,
+                "manifeste_etat": manifeste.get("etat")}
+
+    # -- Enrichissements dérivés (3C.4) ---------------------------------------
+
+    def replace_enriched(self, ref: ResultRef,
+                         payload: Mapping[str, Any],
+                         content_type: Optional[str] = None
+                         ) -> StoredArtifact:
+        """
+        Révision EXPLICITE et STRICTEMENT CANTONNÉE de `result_enriched.json`.
+
+        - Seul ArtifactKind.RESULT_ENRICHED est accepté : aucun autre
+          artefact ne peut être révisé par ce canal.
+        - Le payload DOIT être un Mapping (données dérivées structurées).
+        - Chaque révision conserve la trace des empreintes successives dans
+          `_revision_history` (sha256, horodatage, séquence) à l'intérieur
+          de l'artefact enrichi.
+        - Journalise ancien/nouveau SHA-256 + référence de simulation.
+        - Ne touche JAMAIS result.json, model.inp ou report.rpt.
+        - Création implicite si l'artefact est absent (premier enrichissement).
+        """
+        if not isinstance(payload, Mapping):
+            raise ResultStoreError(
+                "result_enriched.json exige un Mapping de données dérivées.")
+        data = dict(payload)
+        key = self.cle(ref, ArtifactKind.RESULT_ENRICHED)
+
+        historique: List[Dict[str, Any]] = []
+        ancien_sha = None
+        try:
+            existant = self._store.get_bytes(key)
+            ancien_sha = hashlib.sha256(existant).hexdigest()
+            try:
+                precedent = json.loads(existant.decode("utf-8"))
+                if isinstance(precedent, dict):
+                    historique = list(precedent.get("_revision_history") or [])
+                    # Le contenu métier précédent est remplacé, mais sa
+                    # trace d'empreinte est conservée ci-dessous.
+            except Exception:
+                historique = []
+        except StorageNotFoundError:
+            pass
+        except StorageError as e:
+            raise ResultStorageError(
+                f"Lecture enrichissement impossible ({key}) : {e}") from e
+
+        nouveau_sha_apercu = hashlib.sha256(
+            json.dumps(data, ensure_ascii=False, sort_keys=True)
+            .encode("utf-8")).hexdigest()
+        historique.append({
+            "seq": len(historique) + 1,
+            "remplace_sha256": ancien_sha,
+            "apercu_sha256": nouveau_sha_apercu,
+            "at": datetime.now(timezone.utc).isoformat(),
+        })
+        data["_revision_history"] = historique
+
+        brut = json.dumps(data, ensure_ascii=False).encode("utf-8")
+        sha = hashlib.sha256(brut).hexdigest()
+        try:
+            self._store.put_bytes(key, brut,
+                                  content_type=content_type or "application/json")
+        except StorageError as e:
+            raise ResultStorageError(
+                f"Révision enrichissement impossible ({key}) : {e}") from e
+        logger.warning(
+            "result_enriched RÉVISÉ : sim=%s ancien=%s nouveau=%s seq=%d",
+            ref.simulation_id,
+            (ancien_sha or "aucun")[:12], sha[:12], len(historique))
+        return StoredArtifact(ref=ref, kind=ArtifactKind.RESULT_ENRICHED,
+                              key=key, size=len(brut), sha256=sha)
 
     def load(self, ref: ResultRef,
              kind: ArtifactKind = ArtifactKind.RESULT_JSON) -> bytes:
