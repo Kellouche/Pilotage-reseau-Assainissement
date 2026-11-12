@@ -8,13 +8,16 @@ Objet : Tâches asynchrones de simulation hydraulique SWMM
 ================================================================================
 """
 
+import hashlib
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import tempfile
 import time
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 
 from sqlalchemy import select
@@ -26,6 +29,21 @@ from api.core.storage import get_storage, build_swmm_inp_key, build_simulation_r
 from workers.celery_app import celery_app
 
 logger = logging.getLogger("swmm_platform.workers.swmm")
+
+
+class SolveurSWMMIndisponible(RuntimeError):
+    """
+    Levée quand le solveur EPA SWMM ne peut pas produire un résultat réel.
+
+    Distingue explicitement :
+    - binaire SWMM absent ou non exécutable ;
+    - binaire inaccessible (erreur OS à l'exécution) ;
+    - échec d'exécution du solveur (code retour non nul) ;
+    - absence ou erreur de lecture du rapport .rpt produit.
+
+    AUCUN repli synthétique : cette exception ne doit jamais être
+    transformée en résultat COMPLETED.
+    """
 
 
 @celery_app.task(bind=True, name="workers.tasks.swmm_tasks.run_swmm_simulation_task")
@@ -306,82 +324,87 @@ def _execute_swmm_solver(
     parameters: dict,
 ) -> tuple[Dict[str, Any], str]:
     """
-    Exécute le moteur SWMM 5.2 si disponible sur la machine, ou applique
-    un solveur hydraulique haute-fidélité déterministe pour tests et environnements légers.
+    Exécute le solveur externe EPA SWMM via le binaire swmm5.
+
+    AUCUN repli synthétique : toute indisponibilité ou erreur du solveur
+    lève SolveurSWMMIndisponible — jamais de KPIs ni de RPT fabriqués.
     """
-    swmm_bin = parameters.get("swmm_bin", os.environ.get("SWMM_BINARY_PATH", "swmm5"))
-    swmm_available = shutil.which(swmm_bin) is not None
+    swmm_bin = parameters.get("swmm_bin") or os.environ.get("SWMM_BINARY_PATH") or "swmm5"
+    resolved_bin = shutil.which(swmm_bin)
+    if resolved_bin is None:
+        raise SolveurSWMMIndisponible(
+            f"Binaire SWMM introuvable ou non exécutable : '{swmm_bin}'. "
+            "Définissez la variable d'environnement SWMM_BINARY_PATH "
+            "ou placez le solveur EPA SWMM dans le PATH."
+        )
 
-    if swmm_available:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            inp_path = os.path.join(tmp_dir, "model.inp")
-            rpt_path = os.path.join(tmp_dir, "model.rpt")
-            out_path = os.path.join(tmp_dir, "model.out")
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        inp_path = os.path.join(tmp_dir, "model.inp")
+        rpt_path = os.path.join(tmp_dir, "model.rpt")
+        out_path = os.path.join(tmp_dir, "model.out")
 
-            with open(inp_path, "w", encoding="utf-8") as f:
-                f.write(inp_content)
+        with open(inp_path, "w", encoding="utf-8") as f:
+            f.write(inp_content)
 
-            cmd = [swmm_bin, inp_path, rpt_path, out_path]
+        cmd = [resolved_bin, inp_path, rpt_path, out_path]
+        try:
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1200)
-            if proc.returncode != 0:
-                logger.warning("SWMM 5.2 binary failed with code %d : %s", proc.returncode, proc.stderr)
-            else:
-                if os.path.exists(rpt_path):
-                    with open(rpt_path, "r", encoding="utf-8", errors="replace") as f:
-                        rpt_content = f.read()
-                    kpis = _parse_swmm_report(rpt_content)
-                    return kpis, rpt_content
+        except subprocess.TimeoutExpired as exc:
+            raise SolveurSWMMIndisponible(
+                f"Le solveur SWMM a dépassé le délai d'exécution (1200 s) : {resolved_bin}"
+            ) from exc
+        except OSError as exc:
+            raise SolveurSWMMIndisponible(
+                f"Binaire SWMM inaccessible à l'exécution : {resolved_bin} ({exc})"
+            ) from exc
 
-    # Moteur hydraulique déterministe certifié
-    nb_regards = max(1, len(regards))
-    nb_conduites = max(1, len(conduites))
-    rain_factor = 2.5 if "decennale" in scenario_pluie.lower() else (4.0 if "cinquantennale" in scenario_pluie.lower() else 1.2)
+        if proc.returncode != 0:
+            raise SolveurSWMMIndisponible(
+                f"Échec d'exécution du solveur SWMM (code retour {proc.returncode}) : "
+                f"{(proc.stderr or proc.stdout or '').strip()[:500]}"
+            )
 
-    total_inflow = round(nb_regards * rain_factor * 120.0 * (duree_heures / 24.0), 2)
-    peak_flow = round(total_inflow / (duree_heures * 3600.0) * 4.8, 3)
-    flooded_count = int(round(nb_regards * 0.05 * (rain_factor / 2.0)))
-    surcharged_count = int(round(nb_conduites * 0.12 * (rain_factor / 2.0)))
+        if not os.path.exists(rpt_path):
+            raise SolveurSWMMIndisponible(
+                "Le solveur SWMM s'est terminé sans produire le rapport .rpt attendu."
+            )
 
-    kpis = {
-        "engine": "SWMM 5.2 Dynamic Wave",
-        "scenario": scenario_pluie,
-        "duree_heures": duree_heures,
-        "total_inflow_m3": total_inflow,
-        "total_outflow_m3": round(total_inflow * 0.985, 2),
-        "peak_flow_m3s": peak_flow,
-        "continuity_error_pct": 0.32,
-        "flooding_nodes_count": flooded_count,
-        "surcharged_pipes_count": surcharged_count,
-        "max_velocity_ms": 2.45,
-        "status": "COMPLETED",
-    }
+        try:
+            with open(rpt_path, "r", encoding="utf-8", errors="replace") as f:
+                rpt_content = f.read()
+        except OSError as exc:
+            raise SolveurSWMMIndisponible(
+                f"Erreur de lecture du rapport SWMM produit ({rpt_path}) : {exc}"
+            ) from exc
 
-    rpt_mock = f"""EPA STORM WATER MANAGEMENT MODEL - VERSION 5.2
-Analysis Options
-  Flow Units ............... CMS
-  Process Models:
-    Rainfall/Runoff ........ YES
-    Snowmelt ............... NO
-    Groundwater ............ NO
-    Flow Routing ........... DYNWAVE
-    Ponding Allowed ........ YES
-    Water Quality .......... NO
-  Flow Continuity (m3)
-    Total Inflow ........... {total_inflow:.3f}
-    Total Outflow .......... {kpis['total_outflow_m3']:.3f}
-    Continuity Error (%) ... {kpis['continuity_error_pct']:.2f}
-  Routing Summary:
-    Flooding Nodes ......... {flooded_count}
-    Surcharged Pipes ....... {surcharged_count}
-    Highest Peak Flow ...... {peak_flow:.3f} m3/s
-"""
-    return kpis, rpt_mock
+        kpis = _parse_swmm_report(rpt_content)
+        kpis["provenance"] = {
+            "nature": "REAL",
+            "engine": "EPA SWMM",
+            "engine_version": kpis.get("engine_version"),
+            "execution_mode": "celery",
+            "executed_at_utc": datetime.now(timezone.utc).isoformat(),
+            "swmm_binary": resolved_bin,
+            "inp_sha256": hashlib.sha256(inp_content.encode("utf-8")).hexdigest(),
+            "inp_size_bytes": len(inp_content.encode("utf-8")),
+        }
+        return kpis, rpt_content
+
+
+def _extraire_version_rpt_swmm(report_text: str) -> Optional[str]:
+    """Extrait la version EPA SWMM depuis l'en-tête du rapport .rpt."""
+    if not report_text:
+        return None
+    m = re.search(r"VERSION\s+([0-9]+(?:\.[0-9]+)*)", report_text[:2000], re.IGNORECASE)
+    return m.group(1) if m else None
 
 
 def _parse_swmm_report(report_text: str) -> Dict[str, Any]:
-    """Parse le rapport .rpt officiel d'EPA SWMM 5.2."""
+    """Parse le rapport .rpt produit par le solveur EPA SWMM."""
+    engine_version = _extraire_version_rpt_swmm(report_text)
     kpis = {
-        "engine": "EPA SWMM 5.2 (Native)",
+        "engine": "EPA SWMM",
+        "engine_version": engine_version or "inconnue",
         "total_inflow_m3": 0.0,
         "total_outflow_m3": 0.0,
         "continuity_error_pct": 0.0,

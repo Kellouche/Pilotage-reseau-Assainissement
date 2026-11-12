@@ -9,6 +9,7 @@ Objet : Tests unitaires du système de gestion des jobs asynchrones
 """
 
 import json
+import subprocess
 import pytest
 from starlette.testclient import TestClient
 
@@ -18,7 +19,8 @@ from api.models import Organization, User, Membership, Project, Cluster, Regard,
 from api.core.auth import hash_password, create_access_token
 from api.core.jobs import create_job, update_job, get_job, list_jobs
 from api.core.storage import get_storage, LocalStore
-from workers.tasks.swmm_tasks import run_swmm_simulation_task
+from workers.tasks.swmm_tasks import run_swmm_simulation_task, SolveurSWMMIndisponible
+import workers.tasks.swmm_tasks as swmm_tasks_module
 from workers.tasks.mnt_tasks import run_mnt_extraction_task
 
 
@@ -154,8 +156,39 @@ def test_job_multi_tenant_isolation(test_setup):
     db.close()
 
 
-def test_swmm_simulation_worker_task(test_setup):
-    """Exécute la tâche de simulation SWMM et vérifie les artefacts sauvegardés."""
+RPT_EPA_SWMM_FAKE = """EPA STORM WATER MANAGEMENT MODEL - VERSION 5.2
+Analysis Options
+  Flow Units ............... CMS
+  Flow Continuity (m3)
+    Total Inflow ........... 1234.500
+    Total Outflow .......... 1200.000
+    Continuity Error (%) ... 2.79
+"""
+
+
+def _simuler_execution_swmm_reelle(monkeypatch, ecrire_rpt=True):
+    """
+    Mock contrôlé du solveur : le binaire est 'trouvé' et subprocess.run
+    écrit réellement le fichier .rpt attendu dans le répertoire temporaire.
+    Retourne la liste des appels subprocess pour vérification.
+    """
+    appels = []
+    monkeypatch.setattr(swmm_tasks_module.shutil, "which", lambda name: f"/fake/bin/{name}")
+
+    def fake_run(cmd, **kwargs):
+        appels.append(cmd)
+        if ecrire_rpt:
+            with open(cmd[2], "w", encoding="utf-8") as f:
+                f.write(RPT_EPA_SWMM_FAKE)
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(swmm_tasks_module.subprocess, "run", fake_run)
+    return appels
+
+
+def test_swmm_simulation_worker_task(test_setup, monkeypatch):
+    """Exécute la tâche de simulation SWMM (solveur réel mocké) et vérifie les artefacts."""
+    appels = _simuler_execution_swmm_reelle(monkeypatch)
     db = SessionLocal()
     org_id = test_setup["org_a_id"]
     proj_id = test_setup["proj_a_id"]
@@ -171,10 +204,18 @@ def test_swmm_simulation_worker_task(test_setup):
         duree_heures=12.0,
     )
 
+    # Le chemin réel du solveur a effectivement été appelé
+    assert len(appels) == 1
+    assert appels[0][0].endswith("swmm5")
+    assert appels[0][1].endswith(".inp")
+
     assert result["simulation_id"] == job.id
     assert "kpis" in result
-    assert result["kpis"]["status"] == "COMPLETED"
-    assert result["kpis"]["total_inflow_m3"] > 0
+    assert result["kpis"]["total_inflow_m3"] == 1234.5
+    assert result["kpis"]["engine_version"] == "5.2"
+    assert result["kpis"]["provenance"]["nature"] == "REAL"
+    assert result["kpis"]["provenance"]["execution_mode"] == "celery"
+    assert len(result["kpis"]["provenance"]["inp_sha256"]) == 64
 
     # Vérification dans ArtifactStore
     storage = get_storage()
@@ -187,6 +228,122 @@ def test_swmm_simulation_worker_task(test_setup):
     assert job.status == "completed"
     assert job.progress == 100
     assert "summary_key" in job.result_refs
+
+    db.close()
+
+
+def test_swmm_worker_solveur_absent(test_setup, monkeypatch):
+    """Binaire SWMM absent : exception explicite, job FAILED, aucun artefact ni résultat synthétique."""
+    monkeypatch.delenv("SWMM_BINARY_PATH", raising=False)
+    db = SessionLocal()
+    org_id = test_setup["org_a_id"]
+    proj_id = test_setup["proj_a_id"]
+
+    job = create_job(db, org_id=org_id, job_type="simulation_swmm", network_id=proj_id)
+
+    with pytest.raises(SolveurSWMMIndisponible, match="introuvable"):
+        run_swmm_simulation_task(
+            job_id=job.id,
+            org_id=org_id,
+            network_id=proj_id,
+            parameters={"swmm_bin": "binaire_swmm_inexistant_3c71"},
+        )
+
+    db.refresh(job)
+    assert job.status == "failed"
+    assert "Binaire SWMM introuvable" in (job.error_message or "")
+
+    # Aucune Simulation créée, aucun artefact de résultat déposé
+    assert db.query(Simulation).filter_by(id=job.id).first() is None
+    storage = get_storage()
+    assert not storage.exists(f"{org_id}/{proj_id}/simulations/{job.id}/summary.json")
+    assert not storage.exists(f"{org_id}/{proj_id}/simulations/{job.id}/report.rpt")
+
+    db.close()
+
+
+def test_swmm_worker_solveur_non_executable(test_setup, monkeypatch):
+    """Binaire présent mais non exécutable : erreur OS propagée en SolveurSWMMIndisponible."""
+    monkeypatch.setattr(swmm_tasks_module.shutil, "which", lambda name: f"/fake/bin/{name}")
+
+    def refuse_run(cmd, **kwargs):
+        raise PermissionError(13, "Permission denied", cmd[0])
+
+    monkeypatch.setattr(swmm_tasks_module.subprocess, "run", refuse_run)
+
+    db = SessionLocal()
+    org_id = test_setup["org_a_id"]
+    proj_id = test_setup["proj_a_id"]
+
+    job = create_job(db, org_id=org_id, job_type="simulation_swmm", network_id=proj_id)
+
+    with pytest.raises(SolveurSWMMIndisponible, match="inaccessible"):
+        run_swmm_simulation_task(
+            job_id=job.id,
+            org_id=org_id,
+            network_id=proj_id,
+            parameters={"swmm_bin": "swmm5"},
+        )
+
+    db.refresh(job)
+    assert job.status == "failed"
+    assert db.query(Simulation).filter_by(id=job.id).first() is None
+
+    db.close()
+
+
+def test_swmm_worker_echec_execution_solveur(test_setup, monkeypatch):
+    """Code retour non nul du solveur : erreur propagée, aucun résultat de remplacement."""
+    monkeypatch.setattr(swmm_tasks_module.shutil, "which", lambda name: f"/fake/bin/{name}")
+
+    def echec_run(cmd, **kwargs):
+        return subprocess.CompletedProcess(cmd, 3, stdout="", stderr="ERREUR: invalid junction")
+
+    monkeypatch.setattr(swmm_tasks_module.subprocess, "run", echec_run)
+
+    db = SessionLocal()
+    org_id = test_setup["org_a_id"]
+    proj_id = test_setup["proj_a_id"]
+
+    job = create_job(db, org_id=org_id, job_type="simulation_swmm", network_id=proj_id)
+
+    with pytest.raises(SolveurSWMMIndisponible, match="code retour 3"):
+        run_swmm_simulation_task(
+            job_id=job.id,
+            org_id=org_id,
+            network_id=proj_id,
+            parameters={"swmm_bin": "swmm5"},
+        )
+
+    db.refresh(job)
+    assert job.status == "failed"
+    assert "code retour 3" in (job.error_message or "")
+    assert db.query(Simulation).filter_by(id=job.id).first() is None
+
+    db.close()
+
+
+def test_swmm_worker_rpt_manquant(test_setup, monkeypatch):
+    """Solveur 'réussi' sans produire de .rpt : erreur explicite, jamais de RPT fabriqué."""
+    appels = _simuler_execution_swmm_reelle(monkeypatch, ecrire_rpt=False)
+    db = SessionLocal()
+    org_id = test_setup["org_a_id"]
+    proj_id = test_setup["proj_a_id"]
+
+    job = create_job(db, org_id=org_id, job_type="simulation_swmm", network_id=proj_id)
+
+    with pytest.raises(SolveurSWMMIndisponible, match="sans produire le rapport"):
+        run_swmm_simulation_task(
+            job_id=job.id,
+            org_id=org_id,
+            network_id=proj_id,
+            parameters={"swmm_bin": "swmm5"},
+        )
+
+    assert len(appels) == 1  # le solveur a bien été invoqué
+    db.refresh(job)
+    assert job.status == "failed"
+    assert db.query(Simulation).filter_by(id=job.id).first() is None
 
     db.close()
 
