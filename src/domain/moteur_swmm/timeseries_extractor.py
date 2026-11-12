@@ -159,6 +159,7 @@ def _compiler_hydraulique_noeuds(out, sampled_indices, times,
         entry["flooding_max_m3s"] = round(max((float(v) for v in floods.values()), default=0.0), 6)
 
         head_pairs: List[List[float]] = []
+        flood_pairs: List[List[float]] = []
         for idx in sampled_indices:
             t = times[idx]
             minute = _minute_de(t)
@@ -166,8 +167,14 @@ def _compiler_hydraulique_noeuds(out, sampled_indices, times,
             head_pairs.append([minute, round(h, 4)])
             if entry["max_head_sampled_m"] is None or h > entry["max_head_sampled_m"]:
                 entry["max_head_sampled_m"] = round(h, 4)
+            # CONTRÔLE P0.2/A — série de débordement au même pas : permet la
+            # classification à l'instantExact pour base="instant".
+            fl = float(floods.get(t, 0.0) or 0.0)
+            if fl > 0.0:
+                flood_pairs.append([minute, round(fl, 6)])
 
         entry["heads"] = head_pairs
+        entry["floods"] = flood_pairs
         result[nid] = entry
     return result
 

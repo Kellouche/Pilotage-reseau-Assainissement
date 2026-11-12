@@ -250,7 +250,7 @@ def _creer_simulation(db, ctx, data, suffix=""):
     return sim
 
 
-def _nh(head_max, invert=100.0, heads=None, flooding=0.0):
+def _nh(head_max, invert=100.0, heads=None, flooding=0.0, floods=None):
     return {
         "invert_m": invert,
         "max_head_m": head_max,
@@ -258,6 +258,7 @@ def _nh(head_max, invert=100.0, heads=None, flooding=0.0):
         "max_depth_m": round(max(0.0, head_max - invert), 4),
         "flooding_max_m3s": flooding,
         "heads": heads if heads is not None else [[0, head_max - 0.1], [60, head_max]],
+        "floods": floods if floods is not None else ([[60, flooding]] if flooding else []),
     }
 
 
@@ -416,6 +417,52 @@ def test_profil_historique_sans_out(ctx_profil_hgl):
         for s in res["segments"]:
             if s["node_id"] != "2674":
                 assert s["z_hgl"] is None
+    finally:
+        db.delete(sim)
+        db.commit()
+
+
+def test_profil_instantane_coherence_temporelle(ctx_profil_hgl):
+    """CONTRÔLE P0.2/A — un débordement survenu à un autre instant ne doit
+    pas être présenté comme un débordement à l'instant demandé : cote,
+    débordement et classification au même pas de temps."""
+    db, ctx = ctx_profil_hgl["db"], ctx_profil_hgl
+    # Cote requested instant=0 ; débordement survenu à t=120
+    nh = {"2674": _nh(
+        118.0,
+        heads=[[0, 105.0], [60, 105.0], [120, 118.0]],
+        flooding=0.4,
+        floods=[[120, 0.4]],
+    )}
+    sim = _creer_simulation(db, ctx, _sim_data_hgl(nh), suffix="_tps")
+    try:
+        # À t=0 : head=105 (probablement < terrain), PAS de débordement
+        res0 = get_profil_en_long(node_amont="2674", node_aval="2672",
+                                  base="instant", instant_minute=0,
+                                  db=db, tenant=ctx["tenant"])
+        seg0 = {s["node_id"]: s for s in res0["segments"]}["2674"]
+        assert seg0["z_hgl"] == pytest.approx(105.0, abs=0.01)
+        assert seg0["flooding_m3s"] == 0.0
+        assert seg0["hgl_regime"] != "debordement"
+
+        # À t=120 : head=118 (crête) + débordement au même pas
+        res120 = get_profil_en_long(node_amont="2674", node_aval="2672",
+                                    base="instant", instant_minute=120,
+                                    db=db, tenant=ctx["tenant"])
+        seg120 = {s["node_id"]: s for s in res120["segments"]}["2674"]
+        assert seg120["z_hgl"] == pytest.approx(118.0, abs=0.01)
+        assert seg120["flooding_m3s"] == pytest.approx(0.4)
+        assert seg120["hgl_regime"] == "debordement"
+
+        # Enveloppe max : head max=118 ET flooding max=0.4 → debordement
+        # (documenté comme maxima individuels, instants potentiellement
+        # differents — voir hgl_base_label).
+        resmax = get_profil_en_long(node_amont="2674", node_aval="2672",
+                                    db=db, tenant=ctx["tenant"])
+        segmax = {s["node_id"]: s for s in resmax["segments"]}["2674"]
+        assert segmax["z_hgl"] == pytest.approx(118.0, abs=0.01)
+        assert segmax["flooding_max_m3s"] == pytest.approx(0.4)
+        assert "enveloppe" in resmax["hgl_base_label"]
     finally:
         db.delete(sim)
         db.commit()

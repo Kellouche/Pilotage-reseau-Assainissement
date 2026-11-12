@@ -1458,6 +1458,29 @@ def get_profil_en_long(
                 return best[1]
             return nh.get("max_head_m")
 
+        def _flood_reel(nid: str) -> float:
+            """Débit de débordement RÉEL au même référentiel temporel que la
+            cote : à l'instant demandé (base="instant") ou maximum global
+            (base="max", enveloppe — instants potentiellement différents)."""
+            nh = _hydrau_noeud(nid)
+            if not nh:
+                return 0.0
+            if base == "instant":
+                # Même pas échantillonné que la cote : on retient la minute
+                # la plus proche dans `heads` puis le débordement à CETTE
+                # minute (0 si aucun événement à ce pas). Un débordement à
+                # un autre moment n'est jamais imputé à l'instant demandé.
+                heads_pairs = nh.get("heads") or []
+                if not heads_pairs:
+                    return 0.0
+                m_cible = min(heads_pairs,
+                              key=lambda p: abs(p[0] - (instant_minute or 0)))[0]
+                for m, v in (nh.get("floods") or []):
+                    if m == m_cible:
+                        return float(v)
+                return 0.0
+            return float(nh.get("flooding_max_m3s") or 0.0)
+
         hgl_source = ("swmm_out_max_head" if (sim_valide and node_hydraulics and base == "max")
                       else "swmm_out_instant" if (sim_valide and node_hydraulics and base == "instant")
                       else "indisponible")
@@ -1509,7 +1532,10 @@ def get_profil_en_long(
             hgl = _head_reel(nid)
             hgl_reel = hgl is not None
             nh_entry = _hydrau_noeud(nid) or {}
-            flooding_max = float(nh_entry.get("flooding_max_m3s") or 0.0)
+            # CONTRÔLE P0.2/A — débordement au MÊME référentiel temporel
+            # que la cote (instant exact ou enveloppe max documentée).
+            flooding_max = _flood_reel(nid)
+            flooding_global_max = float(nh_entry.get("flooding_max_m3s") or 0.0)
 
             node_sim = sim_node_results.get(nid, {})
             status_n = node_sim.get("status", "normal")
@@ -1603,7 +1629,8 @@ def get_profil_en_long(
                 "hgl_reel": hgl_reel,
                 "hgl_regime": hgl_regime,
                 "atteint_terrain": bool(hgl is not None and hgl >= z_terrain),
-                "flooding_max_m3s": round(flooding_max, 6) if hgl_reel else None,
+                "flooding_m3s": round(flooding_max, 6) if hgl_reel else None,
+                "flooding_max_m3s": round(flooding_global_max, 6) if hgl_reel else None,
                 "pression_m": pression_m,
                 "revanche_m": revanche_m,
                 "profondeur_m": round(profondeur, 2),
@@ -1678,8 +1705,11 @@ def get_profil_en_long(
             "hgl_base": base,
             "hgl_base_label": (
                 "enveloppe des cotes maximales individuelles — instants "
-                "potentiellement differents par noeud" if base == "max"
-                else "profil instantane a l'instant demande"),
+                "potentiellement differents par noeud ; la classification "
+                "(surcharge/inondation/debordement) porte sur ces memes "
+                "maxima individuels, pas sur un instant unique" if base == "max"
+                else "profil instantane a l'instant demande — cote, "
+                     "debordement et classification au meme pas de temps"),
             "instant_minute": instant_minute,
             "segments": segments,
             "alertes": alerts,
