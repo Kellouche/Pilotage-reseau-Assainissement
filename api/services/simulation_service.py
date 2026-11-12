@@ -302,6 +302,20 @@ def sauvegarder_simulation(
 
     cache_file = get_cache_simulation_file(gpkg_path, cluster_id, param_hash)
 
+    # Identité de propriété (3D.6) : estampillée dans le JSON pour que le
+    # repli disque legacy (`_resultatdeclare_projet`) puisse vérifier
+    # l'appartenance du fichier à ce projet/organisation.
+    org_id = tenant.org_id if (tenant and hasattr(tenant, "org_id")) else None
+    project_id = proj.id if proj else None
+    project_name = proj.name if proj else gpkg_path.stem
+    if isinstance(resultat, dict):
+        meta = resultat.setdefault("meta", {})
+        if isinstance(meta, dict):
+            if project_id:
+                meta["project_id"] = project_id
+            if org_id:
+                meta["org_id"] = org_id
+
     # 1. Sauvegarde du JSON complet sur disque
     try:
         with open(cache_file, "w", encoding="utf-8") as f:
@@ -311,10 +325,6 @@ def sauvegarder_simulation(
 
     # 2. Enregistrement en base de données SQLAlchemy
     try:
-        org_id = tenant.org_id if (tenant and hasattr(tenant, "org_id")) else None
-        project_id = proj.id if proj else None
-        project_name = proj.name if proj else gpkg_path.stem
-
         kpis_summary = {
             "param_hash": param_hash,
             "cluster_id": cluster_id,
@@ -360,34 +370,63 @@ def sauvegarder_simulation(
     return cache_file
 
 
+def _resultatdeclare_projet(data: Dict[str, Any], proj: Any) -> bool:
+    """
+    Garde-fou legacy (3D.6) : si le JSON de résultat DÉCLARE un project_id
+    ou org_id dans ses métadonnées, il doit correspondre au projet résolu.
+    Les anciens fichiers sans ces champs restent acceptés (compatibilité).
+    """
+    if proj is None or not isinstance(data, dict):
+        return True
+    meta = data.get("meta") or {}
+    pid = meta.get("project_id") or data.get("project_id")
+    oid = meta.get("org_id") or data.get("org_id")
+    if pid and str(pid) != str(proj.id):
+        return False
+    if oid and str(oid) != str(getattr(proj, "org_id", "")):
+        return False
+    return True
+
+
 def charger_derniere_simulation_disque_ou_db(gpkg_path: Path, db: Session, proj: Any = None) -> Optional[Dict[str, Any]]:
     """
     Recherche la simulation la plus récente enregistrée pour ce GeoPackage
     en vérifiant d'abord la table `simulations` en DB, puis le dossier `.simulation_cache/`.
+
+    Étape 3D.6 — durcissements :
+      - la requête DB n'est exécutée QUE si `proj` est fourni : jamais de
+        lecture non filtrée susceptible de traverser les organisations ;
+      - le résultat est chargé via `charger_resultat_simulation` (chemin
+        local OU clé ArtifactStore — compatible Celery/S3) ;
+      - le repli disque vérifie la propriété déclarée dans les métadonnées.
     """
     from api.models import Simulation
-    # 1. Vérifier la table Simulation
-    try:
-        query = db.query(Simulation).filter(Simulation.status == "completed")
-        if proj:
-            query = query.filter(Simulation.project_id == proj.id)
-        last_sim = query.order_by(Simulation.created_at.desc()).first()
-        if last_sim and last_sim.results_s3_key:
-            p = Path(last_sim.results_s3_key)
-            if p.exists():
-                with open(p, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                if data and est_simulation_valide(data):
+    # 1. Vérifier la table Simulation — uniquement dans le périmètre projet
+    if proj is not None:
+        try:
+            query = db.query(Simulation).filter(
+                Simulation.status == "completed",
+                Simulation.project_id == proj.id,
+            )
+            if getattr(proj, "org_id", None):
+                query = query.filter(Simulation.org_id == proj.org_id)
+            last_sim = query.order_by(Simulation.created_at.desc()).first()
+            if last_sim:
+                data = charger_resultat_simulation(last_sim)
+                if data and est_simulation_valide(data) \
+                        and _resultatdeclare_projet(data, proj):
                     return data
-    except Exception as e:
-        logger.warning("Erreur interrogation table simulations: %s", e)
+        except Exception as e:
+            logger.warning("Erreur interrogation table simulations: %s", e)
 
-    # 2. Fallback dossier .simulation_cache/ (content-adressé + legacy)
+    # 2. Fallback dossier .simulation_cache/ (content-adressé + legacy),
+    #    borné au GPKG du projet et à la propriété déclarée.
     for fpath in iter_fichiers_cache_simulation(gpkg_path):
         try:
             with open(fpath, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            if data and est_simulation_valide(data):
+            if data and est_simulation_valide(data) \
+                    and _resultatdeclare_projet(data, proj):
                 return data
         except Exception:
             continue

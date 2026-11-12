@@ -388,3 +388,70 @@ def test_endpoints_migres_ne_fuitent_pas_vers_autre_org(db, env):
             assert exc.value.status_code == 404
     finally:
         _nettoyer(db, [orgA, orgB], [pA, pB], [sA])
+
+
+# ---------------------------------------------------------------------------
+# Étape 3D.6 — Durcissement des chemins de restauration legacy
+# ---------------------------------------------------------------------------
+
+def test_restauration_sans_projet_ne_lit_pas_la_db(db, env):
+    """3D.6 — `charger_derniere_simulation_disque_ou_db(proj=None)` ne doit
+    JAMAIS interroger la table Simulation : avant correctif, la requête
+    n'était pas filtrée et pouvait retourner la sim d'une autre org."""
+    org = _org(db)
+    p = _projet(db, org, tmp=env)
+    s = _sim(db, org, p, _data_sim(), env)
+    try:
+        gpkg = Path(p.source_gpkg_key) if p.source_gpkg_key else Path("inexistant.gpkg")
+        assert svc.charger_derniere_simulation_disque_ou_db(gpkg, db, None) is None
+    finally:
+        _nettoyer(db, [org], [p], [s])
+
+
+def test_estampille_propriete_fichier_cache(db, env):
+    """3D.6 — un JSON estampillé project_id/org_id d'un autre projet est
+    rejeté ; un fichier legacy sans estampille reste accepté (compat)."""
+    orgA, orgB = _org(db), _org(db)
+    pA = _projet(db, orgA, tmp=env)
+    pB = _projet(db, orgB, tmp=env)
+    try:
+        data = _data_sim(cluster_id=1)
+        data["meta"]["project_id"] = pA.id
+        data["meta"]["org_id"] = orgA.id
+        assert not svc._resultatdeclare_projet(data, pB)
+        assert svc._resultatdeclare_projet(data, pA)
+        # legacy sans estampille → accepté pour compatibilité
+        assert svc._resultatdeclare_projet(_data_sim(cluster_id=1), pB)
+        # org_id seul incompatible → rejeté
+        data2 = _data_sim(cluster_id=1)
+        data2["meta"]["org_id"] = orgA.id
+        assert not svc._resultatdeclare_projet(data2, pB)
+    finally:
+        _nettoyer(db, [orgA, orgB], [pA, pB], [])
+
+
+def test_sauvegarde_estampille_projet_et_org(db, env):
+    """3D.6 — sauvegarder_simulation inscrit project_id/org_id dans meta
+    pour que le repli disque legacy soit vérifiable."""
+    from types import SimpleNamespace
+    org = _org(db)
+    p = _projet(db, org, tmp=env)
+    tenant = SimpleNamespace(org_id=org.id)
+    gpkg = Path(_creer_gpkg(env / "stamp.gpkg", marqueur="S"))
+    payload_data = {
+        "meta": {"cluster_id": 1, "cluster_nom": "B"},
+        "node_results": {}, "conduit_results": {},
+        "peak_outflow_m3s": 0.1,
+    }
+    f = svc.sauvegarder_simulation(
+        db=db, gpkg_path=gpkg, cluster_id=1, param_hash="h_test_stamp",
+        params_dict={"scenario_key": "pluie_decennale"},
+        resultat=dict(payload_data), proj=p, tenant=tenant)
+    try:
+        relu = json.loads(Path(f).read_text(encoding="utf-8"))
+        assert relu["meta"]["project_id"] == p.id
+        assert relu["meta"]["org_id"] == org.id
+        # et le garde-fou accepte bien ce fichier pour CE projet
+        assert svc._resultatdeclare_projet(relu, p)
+    finally:
+        _nettoyer(db, [org], [p], [])

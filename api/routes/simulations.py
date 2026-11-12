@@ -428,6 +428,15 @@ def run_native_swmm_simulation(
     # 3. Vérification du cache intelligent (Idempotence & Restauration)
     if not payload.force_recalculate:
         cached_resultat = _charger_cache_simulation(gpkg_path, cluster_id_effectif, param_hash)
+        # 3D.6 — un fichier de cache estampillé pour un AUTRE projet/org
+        # n'est jamais servi : traité comme un miss (recalcul propre).
+        if cached_resultat and proj is not None:
+            from api.services.simulation_service import _resultatdeclare_projet
+            if not _resultatdeclare_projet(cached_resultat, proj):
+                logger.warning(
+                    "Cache simulation ignoré : propriété différente (cluster %s)",
+                    cluster_id_effectif)
+                cached_resultat = None
         if cached_resultat:
             cached_resultat["source_gpkg"] = str(gpkg_path.resolve())
             cached_resultat["project_name"] = project_name or gpkg_path.stem
@@ -534,7 +543,8 @@ def get_latest_simulation(
         gpkg_eff = _resoudre_gpkg_effectif_pour_projet(db, proj)
         if gpkg_eff is None and Path("data/demo_reseau.gpkg").exists():
             gpkg_eff = Path("data/demo_reseau.gpkg")
-        if gpkg_eff and gpkg_eff.exists():
+        # 3D.6 — sans projet vérifiable, aucun résultat legacy n'est servi.
+        if proj is not None and gpkg_eff and gpkg_eff.exists():
             restored = _charger_derniere_simulation_disque_ou_db(gpkg_eff, db, proj)
             if restored and _est_simulation_valide(restored):
                 try:
@@ -633,8 +643,10 @@ def get_bassin_simulation(
         if project_name is None:
             project_name = "demo_reseau"
 
-    # 3. Fallback legacy : scan disque sur le GPKG effectif du projet
-    if gpkg_effectif is None or not gpkg_effectif.exists():
+    # 3. Fallback legacy : scan disque sur le GPKG effectif du projet —
+    #    uniquement si le projet est vérifiable (3D.6 : pas de service
+    #    d'un résultat sans périmètre d'accès établi).
+    if proj is None or gpkg_effectif is None or not gpkg_effectif.exists():
         return {"status": "none", "message": "Aucun réseau actif."}
 
     gpkg_path = gpkg_effectif
@@ -678,7 +690,10 @@ def get_bassin_simulation(
             try:
                 with open(fpath, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                if data and _est_simulation_valide(data):
+                # 3D.6 — propriété déclarée vérifiée avant tout service
+                from api.services.simulation_service import _resultatdeclare_projet
+                if data and _est_simulation_valide(data) \
+                        and _resultatdeclare_projet(data, proj):
                     # Même règle 3C.0 : le GPKG affiché = celui de la simulation
                     try:
                         gpkg_sim, _vmeta = resoudre_gpkg_pour_simulation(db, proj, data)
@@ -1102,8 +1117,9 @@ def get_profil_en_long(
     if ctx is not None:
         sim_data = ctx.data or {}
         active_gpkg = ctx.gpkg_path if (ctx.gpkg_path and ctx.gpkg_path.exists()) else None
-    elif gpkg_effectif and gpkg_effectif.exists():
-        # Repli legacy : simulation sans ligne DB (ancien cache disque)
+    elif proj is not None and gpkg_effectif and gpkg_effectif.exists():
+        # Repli legacy : simulation sans ligne DB (ancien cache disque) —
+        # uniquement si le projet est vérifiable (3D.6).
         try:
             restored = _charger_derniere_simulation_disque_ou_db(gpkg_effectif, db, proj)
             if restored and _est_simulation_valide(restored):
