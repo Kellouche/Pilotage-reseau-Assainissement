@@ -321,7 +321,7 @@ def _gpkg_partage_entre_projets(db: Session, gpkg_path: Path, proj) -> bool:
         try:
             if p.parent == Path(GPKG_CACHE_DIR):
                 return p.stem  # snapshot matérialisé : nom de fichier = sha256
-            return sha256_fichier(p, use_cache=True)
+            return sha256_fichier(p)
         except Exception:
             return None
 
@@ -603,13 +603,20 @@ def run_native_swmm_simulation(
             "apports_incompatibles": e.details,
         })
 
-    # 2. Empreinte canonique (hash) des paramètres de simulation
+    # 2. Empreinte canonique (hash) des paramètres de simulation.
+    #    LOT P1.4.1 — le sha256 de la version résolue (déjà calculé à
+    #    l'étape 1, frais et vérifié) sert d'identité de contenu pour le
+    #    cache : un seul hash par requête, valeur strictement identique.
+    _sha_gpkg_connu = (contexte.version_meta or {}).get("sha256")
     param_hash, params_dict = _generer_cle_cache_simulation(
-        gpkg_path, payload, extra_params=info_cache_dwf)
+        gpkg_path, payload, extra_params=info_cache_dwf,
+        gpkg_sha256=_sha_gpkg_connu)
 
     # 3. Vérification du cache intelligent (Idempotence & Restauration)
     if not payload.force_recalculate:
-        cached_resultat = _charger_cache_simulation(gpkg_path, cluster_id_effectif, param_hash)
+        cached_resultat = _charger_cache_simulation(
+            gpkg_path, cluster_id_effectif, param_hash,
+            gpkg_sha256=_sha_gpkg_connu)
         # 3D.6 — un fichier de cache estampillé pour un AUTRE projet/org
         # n'est jamais servi : traité comme un miss (recalcul propre).
         if cached_resultat and proj is not None:

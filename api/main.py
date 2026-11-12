@@ -455,7 +455,7 @@ def get_layers(
     cache_key = str(gpkg_target)
     try:
         from api.services.gpkg_versions import sha256_fichier
-        empreinte = sha256_fichier(gpkg_target, use_cache=True)[:16]
+        empreinte = sha256_fichier(gpkg_target)[:16]
         cache_key = f"{cache_org_id}|{cache_project_id}|{empreinte}"
     except Exception:
         pass

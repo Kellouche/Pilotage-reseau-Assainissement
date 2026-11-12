@@ -83,7 +83,7 @@ def _get_graph(chemin_gpkg: Optional[str] = None):
         # jamais le même graphe, même si le chemin source est réutilisé.
         try:
             from api.services.gpkg_versions import sha256_fichier
-            empreinte = sha256_fichier(Path(chemin_gpkg), use_cache=True)[:16]
+            empreinte = sha256_fichier(Path(chemin_gpkg))[:16]
             cache_key = f"{empreinte}|{chemin_gpkg}"
         except Exception:
             cache_key = str(chemin_gpkg)

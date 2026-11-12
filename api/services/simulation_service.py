@@ -122,19 +122,23 @@ def _sha256_gpkg(gpkg_path: Path) -> Optional[str]:
     try:
         if gpkg_path and Path(gpkg_path).exists():
             from api.services.gpkg_versions import sha256_fichier
-            return sha256_fichier(Path(gpkg_path), use_cache=True)
+            return sha256_fichier(Path(gpkg_path))
     except Exception as e:
         logger.warning("Empreinte SHA-256 GPKG impossible pour %s : %s", gpkg_path, e)
     return None
 
 
-def _cle_cache_gpkg(gpkg_path: Path) -> str:
+def _cle_cache_gpkg(gpkg_path: Path, sha256: Optional[str] = None) -> str:
     """
     Identité de cache basée sur le CONTENU du GPKG (SHA-256 tronqué),
     jamais sur le chemin : le snapshot matérialisé d'une version et le
     fichier source du projet partagent ainsi le même cache.
+    `sha256` peut être fourni par l'appelant (empreinte fraîche déjà
+    calculée lors de la résolution de version) pour éviter un re-hachage
+    du même fichier dans la même requête — il doit TOUJOURS provenir de
+    la résolution de la version simulée, jamais d'une valeur cachée.
     """
-    sha = _sha256_gpkg(gpkg_path)
+    sha = sha256 or _sha256_gpkg(gpkg_path)
     if sha:
         return sha[:16]
     stem = Path(gpkg_path).stem if gpkg_path else "inconnu"
@@ -147,15 +151,16 @@ def _repertoire_cache_simulation() -> Path:
     return Path(GPKG_CACHE_DIR).parent / ".simulation_cache"
 
 
-def iter_fichiers_cache_simulation(gpkg_path: Path):
+def iter_fichiers_cache_simulation(gpkg_path: Path, sha256: Optional[str] = None):
     """
     Itère les fichiers de cache candidats pour ce GPKG, du plus récent au plus ancien :
     d'abord les entrées content-adressées (SHA-256), puis le legacy
     <gpkg_path.parent>/.simulation_cache (stem historique) pour compatibilité.
     """
+    sha = sha256 or _sha256_gpkg(gpkg_path)
     candidats = []
-    cle = _cle_cache_gpkg(gpkg_path)
-    sha = _sha256_gpkg(gpkg_path)
+    cle = sha[:16] if sha else re.sub(
+        r'[^\w\-]+', '_', Path(gpkg_path).stem if gpkg_path else "inconnu")
     dossier = _repertoire_cache_simulation()
     if dossier.exists():
         candidats.extend(dossier.glob(f"sim_{cle}_cluster_*.json"))
@@ -206,7 +211,8 @@ def resoudre_gpkg_effectif_pour_projet(db: Session, proj: Any) -> Optional[Path]
 
 
 def generer_cle_cache_simulation(gpkg_path: Path, payload: Any,
-                                 extra_params: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
+                                 extra_params: Optional[Dict[str, Any]] = None,
+                                 gpkg_sha256: Optional[str] = None) -> Tuple[str, Dict[str, Any]]:
     """
     Génère un dictionnaire canonique normalisé et une empreinte SHA-256
     garantissant l'idempotence exacte de la simulation hydrodynamique.
@@ -216,7 +222,10 @@ def generer_cle_cache_simulation(gpkg_path: Path, payload: Any,
     """
     gpkg_stat = gpkg_path.stat() if gpkg_path.exists() else None
     gpkg_size = int(gpkg_stat.st_size) if gpkg_stat else 0
-    gpkg_sha256 = _sha256_gpkg(gpkg_path) if gpkg_stat else None
+    # LOT P1.4.1 — gpkg_sha256 peut être fourni par la résolution de version
+    # (empreinte fraîche du contenu exact) : même valeur, sans re-hachage.
+    if gpkg_sha256 is None:
+        gpkg_sha256 = _sha256_gpkg(gpkg_path) if gpkg_stat else None
 
     orph_ids = []
     if getattr(payload, "raccordements_orphelins", None):
@@ -263,11 +272,12 @@ def generer_cle_cache_simulation(gpkg_path: Path, payload: Any,
     return param_hash, params_dict
 
 
-def get_cache_simulation_file(gpkg_path: Path, cluster_id: Any, param_hash: str) -> Path:
+def get_cache_simulation_file(gpkg_path: Path, cluster_id: Any, param_hash: str,
+                              gpkg_sha256: Optional[str] = None) -> Path:
     """Retourne le chemin vers le fichier de persistance de simulation (content-adressé)."""
     cache_dir = _repertoire_cache_simulation()
     cache_dir.mkdir(parents=True, exist_ok=True)
-    clean_stem = _cle_cache_gpkg(gpkg_path)
+    clean_stem = _cle_cache_gpkg(gpkg_path, gpkg_sha256)
     clean_cid = re.sub(r'[^\w\-]+', '_', str(cluster_id))
     return cache_dir / f"sim_{clean_stem}_cluster_{clean_cid}_{param_hash}.json"
 
@@ -292,9 +302,10 @@ def est_simulation_valide(data: Any) -> bool:
     return True
 
 
-def charger_cache_simulation(gpkg_path: Path, cluster_id: Any, param_hash: str) -> Optional[Dict[str, Any]]:
+def charger_cache_simulation(gpkg_path: Path, cluster_id: Any, param_hash: str,
+                             gpkg_sha256: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Charge les résultats de la simulation si le fichier de cache existe."""
-    cache_file = get_cache_simulation_file(gpkg_path, cluster_id, param_hash)
+    cache_file = get_cache_simulation_file(gpkg_path, cluster_id, param_hash, gpkg_sha256)
     if cache_file.exists():
         try:
             with open(cache_file, "r", encoding="utf-8") as f:
@@ -322,7 +333,11 @@ def sauvegarder_simulation(
     """Sauvegarde les résultats complets sur disque et référence la simulation dans la base SQLite."""
     from api.models import Simulation
 
-    cache_file = get_cache_simulation_file(gpkg_path, cluster_id, param_hash)
+    # LOT P1.4.1 — même empreinte que le chemin de lecture : le nom de
+    # fichier cache reste identique lecture/écriture.
+    cache_file = get_cache_simulation_file(
+        gpkg_path, cluster_id, param_hash,
+        gpkg_sha256=(version_meta or {}).get("sha256"))
 
     # Identité de propriété (3D.6) : estampillée dans le JSON pour que le
     # repli disque legacy (`_resultatdeclare_projet`) puisse vérifier
@@ -1411,8 +1426,12 @@ def executer_en_async(
         k: v for k, v in params_exec.items()
         if not isinstance(v, (dict, list)) or k == "raccordements_orphelins"
     })
+    # LOT P1.4.1 — empreinte fraîche de la version résolue réutilisée
+    # comme identité de contenu (un seul hash, valeur identique partout).
+    _sha_gpkg_connu = (version_meta or {}).get("sha256")
     param_hash, params_dict = generer_cle_cache_simulation(
-        gpkg_path, _ns, extra_params=info_cache_dwf)
+        gpkg_path, _ns, extra_params=info_cache_dwf,
+        gpkg_sha256=_sha_gpkg_connu)
 
     debut = datetime.now(timezone.utc)
     try:
@@ -1444,7 +1463,9 @@ def executer_en_async(
         }
 
     # 9. Cache de calcul + ligne Simulation (même format que le synchrone)
-    cache_file = get_cache_simulation_file(gpkg_path, cluster_id_effectif, param_hash)
+    cache_file = get_cache_simulation_file(
+        gpkg_path, cluster_id_effectif, param_hash,
+        gpkg_sha256=_sha_gpkg_connu)
     try:
         cache_file.parent.mkdir(parents=True, exist_ok=True)
         with open(cache_file, "w", encoding="utf-8") as f:

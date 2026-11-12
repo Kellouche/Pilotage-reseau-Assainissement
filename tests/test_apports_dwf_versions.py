@@ -46,11 +46,9 @@ def _creer_gpkg(chemin: Path, codes_nodes, decalage: float = 0.0):
         crs="EPSG:32631",
     )
     gdf.to_file(str(chemin), layer="regards", driver="GPKG")
-    # Le cache d'empreintes legacy est clé (chemin, mtime int, taille) :
-    # une réécriture dans la même seconde peut conserver la même clé.
-    # On l'invalide explicitement pour garantir un sha recalculé.
-    from api.services.gpkg_versions import _SHA_CACHE
-    _SHA_CACHE.clear()
+    # LOT P1.4.1 — sha256_fichier ne met plus d'empreinte en cache : le sha
+    # recalculé reflète toujours le contenu réel, même après réécriture
+    # dans la même seconde.
 
 
 def _apport_dict(**kw):
@@ -294,7 +292,7 @@ def test_revalidation_explicite(ctx_p14):
     # Son sha est désormais différent de celui du fichier courant →
     # la revalidation est nécessaire (endpoint de contrôle)
     from api.services.gpkg_versions import sha256_fichier
-    sha_courant = sha256_fichier(ctx_p14["gpkg"], use_cache=False)
+    sha_courant = sha256_fichier(ctx_p14["gpkg"])
     assert sha_courant != sha_v1
 
     # La simulation est rejetée tant que l'apport n'est pas réconcilié
@@ -496,3 +494,82 @@ def test_modification_apport_invalide_cache():
     assert empreinte_apports([a1]) != empreinte_apports([a2])
     assert empreinte_apports([a1]) != empreinte_apports([a3])
     assert empreinte_apports([a1]) == empreinte_apports([dict(a1)])
+
+
+# ---------------------------------------------------------------------------
+# LOT P1.4.1 — SHA-256 legacy : recalcul garanti, jamais de cache
+# ---------------------------------------------------------------------------
+
+def test_sha256_fichier_remplacement_meme_taille_meme_mtime(tmp_path):
+    """Le sha est recalculé même si le fichier est remplacé dans la même
+    seconde, à taille identique ET mtime restauré — l'ancienne clé de
+    cache (chemin, mtime int, taille) serait strictement identique."""
+    import os
+    from api.services.gpkg_versions import sha256_fichier
+
+    f = tmp_path / "net.gpkg"
+    contenu_a = b"GP" + b"A" * 8192
+    contenu_b = b"GP" + b"B" * 8192
+    assert len(contenu_a) == len(contenu_b)
+    f.write_bytes(contenu_a)
+    sha_a = sha256_fichier(f)
+    st = f.stat()
+    f.write_bytes(contenu_b)
+    os.utime(f, ns=(st.st_atime_ns, st.st_mtime_ns))
+    sha_b = sha256_fichier(f)
+    assert sha_b != sha_a
+
+
+def test_sha256_fichier_stable_sur_meme_contenu(tmp_path):
+    """Non-régression : deux lectures du même contenu donnent le même sha."""
+    from api.services.gpkg_versions import sha256_fichier
+    f = tmp_path / "net.gpkg"
+    _creer_gpkg(f, ["REG_B1"])
+    assert sha256_fichier(f) == sha256_fichier(f)
+
+
+def test_apport_legacy_rejete_puis_revalide_apres_remplacement(ctx_p14):
+    """P1.4.1 — apport legacy estampillé sur l'ancien contenu : rejet après
+    remplacement du GPKG (mtime restauré pour reproduire le pire cas),
+    puis acceptation après revalidation explicite sur le nouveau sha."""
+    import os
+    from api.services.gpkg_versions import sha256_fichier, resoudre_version_pour_simulation
+
+    client = TestClient(app)
+    tok = _h(ctx_p14["token"])
+    pid = ctx_p14["proj"].id
+    db = ctx_p14["db"]
+    gpkg = ctx_p14["gpkg"]
+
+    r = client.post("/api/v1/apports", json={
+        "project_id": pid, "node_id": "REG_B1",
+        "mode_determination": "debit", "debit_moyen_m3s": 0.001}, headers=tok)
+    aid = r.json()["id"]
+    sha_v1 = r.json()["gpkg_sha256"]
+
+    # Remplacement du contenu + restauration du mtime (pire cas historique)
+    st = gpkg.stat()
+    _creer_gpkg(gpkg, ["REG_B1", "REG_B2"], decalage=123.0)
+    os.utime(gpkg, ns=(st.st_atime_ns, st.st_mtime_ns))
+
+    # Le sha résolu pour la simulation reflète le NOUVEAU contenu
+    _p, vmeta = resoudre_version_pour_simulation(db, ctx_p14["proj"])
+    sha_v2 = sha256_fichier(gpkg)
+    assert vmeta["sha256"] == sha_v2 != sha_v1
+
+    # L'apport estampillé sha_v1 est rejeté malgré mtime identique
+    with pytest.raises(ApportsDwfIncompatiblesError) as ei:
+        preparer_apports_pour_simulation(
+            db, ctx_p14["proj"], dwf_actif=True,
+            version_meta=vmeta, gpkg_path=_p)
+    assert "sha256_difference_legacy" in ei.value.details[0]["motif"]
+
+    # Revalidation explicite → estampillage sur le sha réel courant
+    rv = client.post(f"/api/v1/apports/{aid}/revalider", headers=tok)
+    assert rv.status_code == 200, rv.text
+    assert rv.json()["gpkg_sha256"] == sha_v2
+
+    apports, _ = preparer_apports_pour_simulation(
+        db, ctx_p14["proj"], dwf_actif=True,
+        version_meta=vmeta, gpkg_path=_p)
+    assert [a["id"] for a in apports] == [aid]

@@ -67,27 +67,23 @@ class GpkgSimulationError(Exception):
 # Empreinte & validation
 # ---------------------------------------------------------------------------
 
-# Cache d'empreintes legacy : (chemin, mtime, taille) -> sha256
-_SHA_CACHE: Dict[tuple, str] = {}
+def sha256_fichier(path: Path, buffer_size: int = 1024 * 1024) -> str:
+    """
+    Empreinte SHA-256 streaming d'un fichier (jamais chargé en mémoire).
 
-
-def sha256_fichier(path: Path, buffer_size: int = 1024 * 1024,
-                   use_cache: bool = False) -> str:
-    """Empreinte SHA-256 streaming d'un fichier (jamais chargé en mémoire)."""
+    LOT P1.4.1 — aucun cache : l'empreinte conditionne des décisions de
+    sécurité et de cohérence (estampillage DWF, hash de paramètres,
+    propriété des caches, clé du graphe réseau). Un cache clé sur
+    (chemin, mtime, taille) pouvait restituer un sha obsolète après un
+    remplacement de fichier dans la même seconde à taille identique.
+    Le coût du recalcul est négligeable devant une exécution SWMM.
+    """
     path = Path(path)
-    if use_cache:
-        st = path.stat()
-        cle = (str(path.resolve()), int(st.st_mtime), st.st_size)
-        if cle in _SHA_CACHE:
-            return _SHA_CACHE[cle]
     h = hashlib.sha256()
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(buffer_size), b""):
             h.update(chunk)
-    sha = h.hexdigest()
-    if use_cache:
-        _SHA_CACHE[cle] = sha
-    return sha
+    return h.hexdigest()
 
 
 def _trouver_couche(noms: List[str], mots_cles: List[str], exclusions: Optional[List[str]] = None) -> Optional[str]:
@@ -715,7 +711,7 @@ def resoudre_version_pour_simulation(
         if p.exists():
             return p, {
                 "version_id": None,
-                "sha256": sha256_fichier(p, use_cache=True),
+                "sha256": sha256_fichier(p),
                 "storage_kind": "LEGACY",
                 "materialized_path": str(p.resolve()),
             }
