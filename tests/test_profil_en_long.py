@@ -11,20 +11,50 @@ Objet : Tests automatisés du profil en long hydraulique interactif (Phase 6.A)
 import os
 import subprocess
 import tempfile
+import uuid
 from pathlib import Path
+from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
 os.environ["TESTING"] = "true"
 from api.database import SessionLocal
+from api.models import Organization, Project
 from api.routes.simulations import get_profil_en_long
 
+GPKG_PROFIL = Path("uploads/a66e32ad-f32b-4529-acc3-7a6026eb5a8a/network_Assainissement_Ville.gpkg")
 
-def test_profil_en_long_success():
+
+@pytest.fixture(scope="module")
+def tenant_profil():
+    """LOT P0.1 — contexte authentifié : org dédiée + projet unique pointant
+    sur le GeoPackage de référence (plus de repli anonyme/global)."""
+    if not GPKG_PROFIL.exists():
+        pytest.skip("GeoPackage de référence absent")
+    db = SessionLocal()
+    sfx = uuid.uuid4().hex[:8]
+    org = Organization(id=f"org_profil_{sfx}", name="Org Profil", slug=f"org-profil-{sfx}")
+    proj = Project(
+        id=f"proj_profil_{sfx}", org_id=org.id, name="Projet Profil",
+        source_gpkg_key=str(GPKG_PROFIL.resolve()), gpkg_version_id=None,
+        is_archived=False,
+    )
+    db.add_all([org, proj])
+    db.commit()
+    try:
+        yield SimpleNamespace(org_id=org.id)
+    finally:
+        db.delete(proj)
+        db.delete(org)
+        db.commit()
+        db.close()
+
+
+def test_profil_en_long_success(tenant_profil):
     """Vérifie le calcul réussi d'un profil en long entre 2 regards connectés."""
     db = SessionLocal()
     try:
-        res = get_profil_en_long(node_amont="2674", node_aval="2672", db=db)
+        res = get_profil_en_long(node_amont="2674", node_aval="2672", db=db, tenant=tenant_profil)
         assert res["status"] == "success"
         assert res["node_amont"] == "2674"
         assert res["node_aval"] == "2672"
@@ -47,12 +77,12 @@ def test_profil_en_long_success():
         db.close()
 
 
-def test_profil_en_long_reverse_auto_fallback():
+def test_profil_en_long_reverse_auto_fallback(tenant_profil):
     """Vérifie que l'algorithme retrouve le chemin amont/aval même si l'ordre est inversé,
     et que les segments commencent bien par l'amont."""
     db = SessionLocal()
     try:
-        res = get_profil_en_long(node_amont="2672", node_aval="2674", db=db)
+        res = get_profil_en_long(node_amont="2672", node_aval="2674", db=db, tenant=tenant_profil)
         assert res["status"] == "success"
         assert res["nb_troncons"] >= 1
         assert res["longueur_totale_m"] > 0
@@ -63,12 +93,12 @@ def test_profil_en_long_reverse_auto_fallback():
         db.close()
 
 
-def test_profil_en_long_node_not_found():
+def test_profil_en_long_node_not_found(tenant_profil):
     """Vérifie qu'un code de regard inexistant lève un code HTTP 404."""
     db = SessionLocal()
     try:
         with pytest.raises(HTTPException) as excinfo:
-            get_profil_en_long(node_amont="REG_TOTALEMENT_INCONNU_99999", node_aval="2672", db=db)
+            get_profil_en_long(node_amont="REG_TOTALEMENT_INCONNU_99999", node_aval="2672", db=db, tenant=tenant_profil)
         assert excinfo.value.status_code == 404
     finally:
         db.close()

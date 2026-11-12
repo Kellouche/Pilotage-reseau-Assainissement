@@ -206,15 +206,30 @@ def test_reponse_cached_message():
 # ---------------------------------------------------------------------------
 
 def test_resoudre_contexte_introuvable():
-    """Sans projet ni GPKG démo → ContexteProjetIntrouvable."""
+    """LOT P0.1 — org_id=None → ContexteProjetIntrouvable ; org valide → nominal."""
     from api.database import SessionLocal
+    from api.models import Organization, Project
+    from api.services.simulation_service import ContexteProjetIntrouvable
     db = SessionLocal()
     try:
-        # forcer le cas 'aucun projet' n'est pas trivial en DB réelle partagée ;
-        # on teste au moins que la fonction ne lève pas d'exception inattendue
-        # quand un projet existe (comportement nominal)
-        ctx = svc.resoudre_contexte_projet(db, None)
-        assert ctx.gpkg_path is None or Path(ctx.gpkg_path).exists()
+        # Sans organisation : plus aucun repli sur le premier projet de la base.
+        with pytest.raises(ContexteProjetIntrouvable):
+            svc.resoudre_contexte_projet(db, None)
+
+        # Comportement nominal : la première org ayant EXACTEMENT un projet
+        # actif résout un contexte (ou 409 si ambigu — jamais de .first()).
+        orgs = db.query(Organization).all()
+        resolu = False
+        for org in orgs:
+            n = db.query(Project).filter(
+                Project.org_id == org.id, Project.is_archived.is_(False)).count()
+            if n == 1:
+                ctx = svc.resoudre_contexte_projet(db, org.id)
+                assert ctx.gpkg_path is None or Path(ctx.gpkg_path).exists()
+                resolu = True
+                break
+        if not resolu:
+            pytest.skip("Aucune organisation à projet unique dans cette base")
     finally:
         db.close()
 

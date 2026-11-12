@@ -9,7 +9,7 @@ Objet : Schémas Pydantic de validation des requêtes et réponses SWMM
 """
 
 from pydantic import BaseModel, Field, ConfigDict, field_validator
-from typing import Optional, List, Any, Dict
+from typing import Optional, List, Any, Dict, Union
 from datetime import datetime
 
 # ============================================================
@@ -234,7 +234,9 @@ class SimulationCreate(BaseModel):
 
 class SimulationResponse(BaseModel):
     """Réponse d'une simulation."""
-    id: int
+    # LOT P0.1 — les Simulation.id sont des UUID (str) ; les jobs historiques
+    # pouvaient être numériques. Union pour ne pas casser la validation.
+    id: Union[int, str]
     job_id: str
     cluster_id: int
     status: str

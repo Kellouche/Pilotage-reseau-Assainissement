@@ -9,8 +9,40 @@ Objet : Tests automatisés de synchronisation de la simulation par bassin et non
 """
 
 from pathlib import Path
-from api.routes.simulations import get_bassin_simulation
+import uuid
+import pytest
+from types import SimpleNamespace
+from api.routes.simulations import get_bassin_simulation, download_latest_inp
 from api.database import SessionLocal
+from api.models import Organization, Project
+
+GPKG_BASSIN = Path("uploads/a66e32ad-f32b-4529-acc3-7a6026eb5a8a/network_Assainissement_Ville.gpkg")
+
+
+@pytest.fixture(scope="module")
+def ctx_bassin():
+    """LOT P0.1 — org dédiée + projet unique sur le GPKG de référence :
+    résolution strictement bornée au tenant (plus d'appel anonyme)."""
+    if not GPKG_BASSIN.exists():
+        pytest.skip("GeoPackage de référence absent")
+    db = SessionLocal()
+    sfx = uuid.uuid4().hex[:8]
+    org = Organization(id=f"org_bassin_{sfx}", name="Org Bassin", slug=f"org-bassin-{sfx}")
+    proj = Project(
+        id=f"proj_bassin_{sfx}", org_id=org.id, name="Projet Bassin",
+        source_gpkg_key=str(GPKG_BASSIN.resolve()), gpkg_version_id=None,
+        is_archived=False,
+    )
+    db.add_all([org, proj])
+    db.commit()
+    try:
+        yield {"db": db, "org": org, "proj": proj,
+               "tenant": SimpleNamespace(org_id=org.id)}
+    finally:
+        db.delete(proj)
+        db.delete(org)
+        db.commit()
+        db.close()
 
 def _get_full_cockpit_content():
     base = Path(__file__).resolve().parent.parent
@@ -32,28 +64,29 @@ def test_suppression_bandeau_flottant_doublon():
     assert 'gererAffichageSimulationPourBassin' in cockpit_content
 
 
-def test_endpoint_simulation_par_bassin():
+def test_endpoint_simulation_par_bassin(ctx_bassin):
     """Vérifie le fonctionnement de l'endpoint get_bassin_simulation."""
-    db = SessionLocal()
+    db = ctx_bassin["db"]
+    tenant = ctx_bassin["tenant"]
     try:
         # 1. Bassin sans calcul
-        r = get_bassin_simulation("999999", db=db, tenant=None)
+        r = get_bassin_simulation("999999", db=db, tenant=tenant)
         assert r["status"] == "none"
 
         # 2. Bassin avec calcul sauvegardé (ex: cluster 92 = 25_ouvrages_speciaux_348883)
-        r_exist = get_bassin_simulation("92", db=db, tenant=None)
+        r_exist = get_bassin_simulation("92", db=db, tenant=tenant)
         assert r_exist["status"] in ("none", "success")
         if r_exist["status"] == "success":
             assert "kpis" in r_exist or "conduit_results" in r_exist
             assert "meta" in r_exist
 
         # 3. Résolution robuste par nom textuel de bassin
-        r_nom = get_bassin_simulation("25_ouvrages_speciaux_348883", db=db, tenant=None)
+        r_nom = get_bassin_simulation("25_ouvrages_speciaux_348883", db=db, tenant=tenant)
         assert r_nom["status"] in ("none", "success")
         if r_nom["status"] == "success":
             assert "meta" in r_nom
     finally:
-        db.close()
+        pass
 
 
 def test_fermeture_automatique_modale_et_zoom_grande_echelle():
@@ -164,51 +197,28 @@ def test_resolution_et_contour_cluster_9_ouvrages_speciaux_345101():
     assert "matched_fp.get(\"regard_proche_id\")" in code_fb
 
 
-def test_export_modele_inp_nom_bassin_et_contenu():
+def test_export_modele_inp_nom_bassin_et_contenu(ctx_bassin):
     """Vérifie que l'export INP cible le nom du bassin versant sans déborder sur la totalité du réseau."""
-    from api.routes.simulations import _formater_nom_fichier_export, download_latest_inp
-    from api.database import SessionLocal
-    from api.models import Project
-    import uuid
+    from api.routes.simulations import _formater_nom_fichier_export
 
     # 1. Nom de fichier ciblé
     fn = _formater_nom_fichier_export("network_Assainissement_Ville", nom_bassin="9_ouvrages_speciaux_345101", ext="inp")
     assert fn == "9_ouvrages_speciaux_345101.inp", f"Attendu 9_ouvrages_speciaux_345101.inp, obtenu {fn}"
 
-    # 2. Appel de download_latest_inp avec cluster_id — 3C.5 : project_id
-    # explicite requis dès que plusieurs projets peuvent exister (plus de
-    # sélection arbitraire .first()).
-    db = SessionLocal()
-    proj = None
-    try:
-        gpkg_cand = Path("uploads/a66e32ad-f32b-4529-acc3-7a6026eb5a8a/network_Assainissement_Ville.gpkg")
-        if gpkg_cand.exists():
-            proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
-            if not proj:
-                proj = Project(
-                    id=str(uuid.uuid4()),
-                    name="Assainissement_Ville",
-                    org_id="org_test",
-                    is_archived=False
-                )
-                db.add(proj)
-            proj.source_gpkg_key = str(gpkg_cand)
-            # Le test cible la résolution legacy : invalider le pointeur de
-            # version (3B) pour que source_gpkg_key soit bien utilisé.
-            proj.gpkg_version_id = None
-            db.commit()
-
-        kwargs = {"project_id": proj.id} if proj is not None else {}
-        resp = download_latest_inp(cluster_id="98", db=db, tenant=None, **kwargs)
-        assert resp.status_code == 200
-        disp = resp.headers.get("content-disposition", "")
-        assert 'filename="9_ouvrages_speciaux_345101.inp"' in disp
-        body = resp.body.decode("utf-8")
-        assert "[JUNCTIONS]" in body
-        assert "[CONDUITS]" in body
-        assert len(body.splitlines()) > 500
-    finally:
-        db.close()
+    # 2. Appel de download_latest_inp avec cluster_id et project_id explicite
+    # (LOT P0.1 — tenant authentifié, périmètre projet strict).
+    db = ctx_bassin["db"]
+    tenant = ctx_bassin["tenant"]
+    proj = ctx_bassin["proj"]
+    resp = download_latest_inp(
+        cluster_id="98", project_id=proj.id, db=db, tenant=tenant)
+    assert resp.status_code == 200
+    disp = resp.headers.get("content-disposition", "")
+    assert 'filename="9_ouvrages_speciaux_345101.inp"' in disp
+    body = resp.body.decode("utf-8")
+    assert "[JUNCTIONS]" in body
+    assert "[CONDUITS]" in body
+    assert len(body.splitlines()) > 500
 
 
 def test_suppression_popups_blanches_indesirables():

@@ -52,62 +52,66 @@ def _resoudre_gpkg_versionne(db: Session, proj: Any):
     return resoudre_version_pour_simulation(db, proj)
 
 
-def resoudre_contexte_projet(db: Session, org_id: Optional[str]) -> ContexteProjet:
+def resoudre_contexte_projet(
+    db: Session,
+    org_id: Optional[str],
+    project_id: Optional[str] = None,
+    autoriser_demo: bool = False,
+) -> ContexteProjet:
     """
-    Résout le projet actif et son GeoPackage source.
-    Reproduit fidèlement la logique historique de POST /simulations/run :
-    projet du tenant en priorité, puis premier projet non archivé, puis la
-    démo data/demo_reseau.gpkg en dernier recours.
+    LOT P0.1 — Résout le projet actif et son GeoPackage source, STRICTEMENT
+    dans le périmètre de l'organisation authentifiée.
+
+    Règles :
+      - `org_id` est OBLIGATOIRE : aucun contexte → ContexteProjetIntrouvable
+        (plus de repli sur le premier projet de toute la base) ;
+      - `project_id` explicite → le projet doit exister, appartenir à org_id
+        et ne pas être archivé ;
+      - sans `project_id` → exactement UN projet actif de l'org est toléré
+        (compatibilité contrat existant) ; plusieurs → ProjetAmbigu (→ 409) ;
+      - une organisation sans projet actif → ContexteSimulationIntrouvable,
+        SAUF `autoriser_demo=True` (mode démo explicitement activé) qui
+        retourne le GPKG data/demo_reseau.gpkg sans projet ;
+      - un projet résolu mais sans GPKG exploitable → erreur explicite,
+        JAMAIS de substitution par le réseau d'un autre projet.
+
     Étape 3B : si le projet a une version GPKG, le chemin retourné est le
     snapshot matérialisé et version_meta décrit la version capturée.
     """
-    from api.models import Project
+    if not org_id:
+        raise ContexteProjetIntrouvable("Contexte d'organisation requis.")
 
-    gpkg_path = None
-    project_name = None
-    version_meta = None
     proj = None
-    if org_id:
-        proj = db.query(Project).filter(
-            Project.org_id == org_id,
-            Project.is_archived.is_(False)
-        ).first()
-        if proj:
-            project_name = proj.name
-            chemin, vmeta = _resoudre_gpkg_versionne(db, proj)
-            if chemin is not None:
-                gpkg_path = Path(chemin)
-                version_meta = vmeta
-            elif getattr(proj, "gpkg_version_id", None):
-                raise ContexteProjetIntrouvable(
-                    vmeta.get("erreur", "Version GPKG indisponible pour ce projet.")
-                )
-            elif proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
-                gpkg_path = Path(proj.source_gpkg_key)
+    try:
+        proj = _resoudre_projet_pour_simulation(db, org_id, project_id)
+    except ContexteSimulationIntrouvable:
+        # Repli démo UNIQUEMENT si : aucun project_id explicite, mode démo
+        # explicitement autorisé, et fichier de démonstration présent.
+        if project_id is not None or not autoriser_demo:
+            raise
+        cand = Path("data/demo_reseau.gpkg")
+        if cand.exists():
+            return ContexteProjet(project=None, gpkg_path=cand,
+                                  project_name="demo_reseau")
+        raise
 
-    if not gpkg_path:
-        proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
-        if proj:
-            if not project_name:
-                project_name = proj.name
-            chemin, vmeta = _resoudre_gpkg_versionne(db, proj)
-            if chemin is not None:
-                gpkg_path = Path(chemin)
-                version_meta = vmeta
-            elif getattr(proj, "gpkg_version_id", None):
-                raise ContexteProjetIntrouvable(
-                    vmeta.get("erreur", "Version GPKG indisponible pour ce projet.")
-                )
-            elif proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
-                gpkg_path = Path(proj.source_gpkg_key)
-        else:
-            cand = Path("data/demo_reseau.gpkg")
-            if cand.exists():
-                gpkg_path = cand
-                project_name = "demo_reseau"
+    project_name = proj.name
+    chemin, vmeta = _resoudre_gpkg_versionne(db, proj)
+    gpkg_path = None
+    version_meta = None
+    if chemin is not None:
+        gpkg_path = Path(chemin)
+        version_meta = vmeta
+    elif getattr(proj, "gpkg_version_id", None):
+        raise ContexteProjetIntrouvable(
+            vmeta.get("erreur", "Version GPKG indisponible pour ce projet.")
+        )
+    elif proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
+        gpkg_path = Path(proj.source_gpkg_key)
 
     if not gpkg_path or not gpkg_path.exists():
-        raise ContexteProjetIntrouvable("Réseau hydraulique introuvable pour ce projet.")
+        raise ContexteProjetIntrouvable(
+            "Réseau hydraulique introuvable pour ce projet.")
 
     return ContexteProjet(project=proj, gpkg_path=gpkg_path,
                           project_name=project_name, version_meta=version_meta)
@@ -960,26 +964,30 @@ def persister_resultat_simulation(simulation: Any, data: Dict[str, Any]) -> bool
 def _resoudre_projet_pour_simulation(db: Session, org_id: Optional[str],
                                     project_id: Optional[str]) -> Any:
     """
-    Résout le projet cible SANS sélection arbitraire :
+    LOT P0.1 — résolution de projet SANS sélection arbitraire et STRICTEMENT
+    bornée à l'organisation authentifiée :
+      - org_id OBLIGATOIRE : aucun contexte → ContexteSimulationIntrouvable
+        (plus de scan de toute la base pour un contexte anonyme) ;
       - project_id explicite → doit exister et appartenir à org_id ;
-      - sinon, les projets actifs de l'org (ou de toute la base si org_id
-        est None, compatibilité dev mono-tenant) : exactement UN seul est
+      - sinon, les projets actifs de l'org : exactement UN seul est
         toléré ; plusieurs → ProjetAmbigu ; zéro → ContexteSimulationIntrouvable.
     """
     from api.models import Project
+
+    if not org_id:
+        raise ContexteSimulationIntrouvable("Contexte d'organisation requis.")
 
     if project_id:
         proj = db.get(Project, project_id)
         if proj is None or proj.is_archived:
             raise ContexteSimulationIntrouvable("Projet introuvable ou archivé.")
-        if org_id and proj.org_id != org_id:
+        if proj.org_id != org_id:
             raise ContexteSimulationIntrouvable(
                 "Le projet demandé n'appartient pas à l'organisation.")
         return proj
 
-    q = db.query(Project).filter(Project.is_archived.is_(False))
-    if org_id:
-        q = q.filter(Project.org_id == org_id)
+    q = db.query(Project).filter(
+        Project.is_archived.is_(False), Project.org_id == org_id)
     projets = q.order_by(Project.id).all()
     if not projets:
         raise ContexteSimulationIntrouvable("Aucun projet actif pour ce contexte.")

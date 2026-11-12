@@ -20,11 +20,48 @@ logger = logging.getLogger(__name__)
 
 from api.database import get_db
 from api import schemas, crud
-from api.core.security import get_tenant_context, get_tenant_context_optional, TenantContext
+from api.core.security import get_tenant_context, TenantContext
 from api.core.jobs import create_job, update_job
 from api.models import Organization, Project
 
 router = APIRouter(prefix="/simulations", tags=["Simulations"])
+
+
+def _org_id_requete(tenant) -> str:
+    """
+    LOT P0.1 — organisation obligatoire pour toute route sensible de
+    simulation. `tenant` est résolu par `get_tenant_context` (401 HTTP
+    avant d'atteindre la route) ; ce garde-fou couvre aussi les appels
+    internes directs sans contexte authentifié.
+    """
+    org_id = getattr(tenant, "org_id", None)
+    if not org_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentification requise.")
+    return org_id
+
+
+def _mode_demo_reseau() -> bool:
+    """
+    LOT P0.1 — mode démo explicitement activé via DRAINPILOT_MODE_DEMO_RESEAU.
+    Désactivé par défaut : le repli data/demo_reseau.gpkg n'est JAMAIS
+    un contournement de l'authentification ni une substitution inter-projets.
+    """
+    try:
+        from config.settings import MODE_DEMO_RESEAU
+        return bool(MODE_DEMO_RESEAU)
+    except Exception:
+        return False
+
+
+def _gpkg_demo_autorise() -> Optional[Path]:
+    """GPKG de démonstration si et seulement si le mode démo est activé."""
+    if _mode_demo_reseau():
+        cand = Path("data/demo_reseau.gpkg")
+        if cand.exists():
+            return cand
+    return None
 
 
 # ============================================================
@@ -37,11 +74,10 @@ def list_simulations(
     limit: int = 100,
     status: Optional[str] = None,
     db: Session = Depends(get_db),
-    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
+    tenant: TenantContext = Depends(get_tenant_context),
 ):
-    """Liste toutes les simulations (ordre décroissant)."""
-    org_id = tenant.org.id if tenant else None
-    sims = crud.get_simulations(db=db, skip=skip, limit=limit, status=status, org_id=org_id)
+    """Liste les simulations de l'organisation authentifiée (ordre décroissant)."""
+    sims = crud.get_simulations(db=db, skip=skip, limit=limit, status=status, org_id=_org_id_requete(tenant))
     return [s.to_dict() for s in sims]
 
 @router.post("", response_model=schemas.SimulationResponse, status_code=status.HTTP_202_ACCEPTED)
@@ -183,6 +219,8 @@ class SimulationRunRequest(BaseModel):
     station_id: Optional[str] = "chlef_anrh_siege"
     raccordements_orphelins: Optional[List[Dict[str, Any]]] = None
     force_recalculate: Optional[bool] = False
+    # LOT P0.1 — projet explicite (requis si plusieurs projets actifs)
+    project_id: Optional[str] = None
     # Paramètres de simulation d'un Bulletin Météorologique Spécial (BMS ONM)
     bms_mode: Optional[bool] = False
     bms_vigilance: Optional[str] = "orange"
@@ -208,6 +246,7 @@ from api.services.simulation_service import (
     resoudre_gpkg_effectif_pour_projet as _resoudre_gpkg_effectif_pour_projet,
     construire_reponse_simulation as _construire_reponse_simulation,
     resoudre_contexte_projet as _resoudre_contexte_projet,
+    _resoudre_projet_pour_simulation,
     executer_moteur_swmm as _executer_moteur_swmm,
     resoudre_simulation_courante,
     ContexteSimulationIntrouvable,
@@ -446,7 +485,7 @@ def get_simulation_ouvrages_proches(
     cluster_id: str,
     rayon_m: float = 45.0,
     db: Session = Depends(get_db),
-    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
+    tenant: TenantContext = Depends(get_tenant_context),
 ):
     """
     Retourne les ouvrages spéciaux orphelins (déversoirs d'orage, trop-pleins, stations de relevage)
@@ -456,22 +495,18 @@ def get_simulation_ouvrages_proches(
     from api.models import Project
     from api.services.simulation_service import resoudre_gpkg_effectif_pour_projet
 
+    org_id = _org_id_requete(tenant)
     gpkg_path = None
-    proj = None
-    if tenant and hasattr(tenant, "org_id") and tenant.org_id:
-        proj = db.query(Project).filter(
-            Project.org_id == tenant.org_id,
-            Project.is_archived.is_(False)
-        ).first()
+    try:
+        proj = _resoudre_projet_pour_simulation(db, org_id, None)
+    except ProjetAmbigu as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ContexteSimulationIntrouvable:
+        proj = None
+    if proj is not None:
         gpkg_path = resoudre_gpkg_effectif_pour_projet(db, proj)
-
-    if not gpkg_path:
-        proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
-        gpkg_path = resoudre_gpkg_effectif_pour_projet(db, proj)
-        if not gpkg_path:
-            cand = Path("data/demo_reseau.gpkg")
-            if cand.exists():
-                gpkg_path = cand
+    if gpkg_path is None:
+        gpkg_path = _gpkg_demo_autorise()
 
     if not gpkg_path or not gpkg_path.exists():
         raise HTTPException(status_code=404, detail="Réseau hydraulique introuvable pour ce projet.")
@@ -483,20 +518,28 @@ def get_simulation_ouvrages_proches(
 def run_native_swmm_simulation(
     payload: SimulationRunRequest,
     db: Session = Depends(get_db),
-    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
+    tenant: TenantContext = Depends(get_tenant_context),
 ):
     """
     Exécute la simulation hydrodynamique EPA SWMM 5.2 native pour le réseau actif.
     Sauvegarde systématiquement les résultats sur disque et en base de données.
     Implémente un cache intelligent : si aucun paramètre de simulation n'a changé
     et que le recalcul n'est pas forcé, restaure instantanément la simulation sauvegardée.
+
+    LOT P0.1 — authentification stricte, organisation et projet résolus
+    explicitement dans le périmètre du tenant (jamais de repli global).
     """
 
     # 1. Résolution du projet et du GeoPackage via le service métier unique
-    org_id = tenant.org_id if (tenant and hasattr(tenant, "org_id")) else None
+    org_id = _org_id_requete(tenant)
     try:
-        contexte = _resoudre_contexte_projet(db, org_id)
-    except ContexteProjetIntrouvable:
+        contexte = _resoudre_contexte_projet(
+            db, org_id,
+            project_id=payload.project_id,
+            autoriser_demo=_mode_demo_reseau())
+    except ProjetAmbigu as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except (ContexteProjetIntrouvable, ContexteSimulationIntrouvable):
         raise HTTPException(status_code=404, detail="Réseau hydraulique introuvable pour ce projet.")
 
     gpkg_path = contexte.gpkg_path
@@ -608,7 +651,7 @@ def run_native_swmm_simulation(
 @router.get("/latest")
 def get_latest_simulation(
     db: Session = Depends(get_db),
-    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional)
+    tenant: TenantContext = Depends(get_tenant_context)
 ):
     """
     Retourne les résultats et cartographies thématiques de la dernière simulation exécutée
@@ -628,7 +671,7 @@ def get_latest_simulation(
         _resoudre_projet_pour_simulation,
     )
 
-    org_id = tenant.org_id if (tenant and hasattr(tenant, "org_id") and tenant.org_id) else None
+    org_id = _org_id_requete(tenant)
 
     ctx = None
     try:
@@ -654,8 +697,8 @@ def get_latest_simulation(
             except (ContexteSimulationIntrouvable, ProjetAmbigu):
                 proj = None
         gpkg_eff = _resoudre_gpkg_effectif_pour_projet(db, proj)
-        if gpkg_eff is None and Path("data/demo_reseau.gpkg").exists():
-            gpkg_eff = Path("data/demo_reseau.gpkg")
+        if gpkg_eff is None:
+            gpkg_eff = _gpkg_demo_autorise()
         # 3D.6 — sans projet vérifiable, aucun résultat legacy n'est servi.
         if proj is not None and gpkg_eff and gpkg_eff.exists():
             restored = _charger_derniere_simulation_disque_ou_db(gpkg_eff, db, proj)
@@ -678,8 +721,8 @@ def get_latest_simulation(
         src = data.get("source_gpkg")
         if src and Path(src).exists():
             gpkg_sim = Path(src)
-    if gpkg_sim is None and Path("data/demo_reseau.gpkg").exists():
-        gpkg_sim = Path("data/demo_reseau.gpkg")
+    if gpkg_sim is None:
+        gpkg_sim = _gpkg_demo_autorise()
 
     if gpkg_sim is not None:
         data["source_gpkg"] = str(gpkg_sim.resolve())
@@ -694,7 +737,7 @@ def get_latest_simulation(
 def get_bassin_simulation(
     cluster_id: str,
     db: Session = Depends(get_db),
-    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional)
+    tenant: TenantContext = Depends(get_tenant_context)
 ):
     """
     Retourne la simulation la plus récente enregistrée pour un bassin versant spécifique.
@@ -709,7 +752,7 @@ def get_bassin_simulation(
         _resoudre_projet_pour_simulation,
     )
 
-    org_id = tenant.org_id if (tenant and hasattr(tenant, "org_id") and tenant.org_id) else None
+    org_id = _org_id_requete(tenant)
 
     # 1. Lookup DB-first via le service contextuel : simulation du
     #    projet/tenant correspondant au bassin, plus récente d'abord,
@@ -732,8 +775,8 @@ def get_bassin_simulation(
         gpkg_sim = ctx.gpkg_path
         if gpkg_sim is None:
             gpkg_sim = _resoudre_gpkg_effectif_pour_projet(db, proj)
-        if gpkg_sim is None and Path("data/demo_reseau.gpkg").exists():
-            gpkg_sim = Path("data/demo_reseau.gpkg")
+        if gpkg_sim is None:
+            gpkg_sim = _gpkg_demo_autorise()
         if gpkg_sim is not None and gpkg_sim.exists():
             data["source_gpkg"] = str(gpkg_sim.resolve())
             data["project_name"] = project_name or gpkg_sim.stem
@@ -751,9 +794,9 @@ def get_bassin_simulation(
         project_name = proj.name
 
     gpkg_effectif = _resoudre_gpkg_effectif_pour_projet(db, proj)
-    if gpkg_effectif is None and Path("data/demo_reseau.gpkg").exists():
-        gpkg_effectif = Path("data/demo_reseau.gpkg")
-        if project_name is None:
+    if gpkg_effectif is None:
+        gpkg_effectif = _gpkg_demo_autorise()
+        if gpkg_effectif is not None and project_name is None:
             project_name = "demo_reseau"
 
     # 3. Fallback legacy : scan disque sur le GPKG effectif du projet —
@@ -828,7 +871,7 @@ def get_bassin_simulation(
 def validate_simulation_buffer(
     payload: ValidateBufferRequest,
     db: Session = Depends(get_db),
-    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional)
+    tenant: TenantContext = Depends(get_tenant_context)
 ):
     """
     Valide et enregistre le choix du buffer Voronoï (ex. 35m, 45m ou 60m)
@@ -845,7 +888,7 @@ def validate_simulation_buffer(
         ProjetAmbigu,
     )
 
-    org_id = tenant.org_id if (tenant and hasattr(tenant, "org_id") and tenant.org_id) else None
+    org_id = _org_id_requete(tenant)
     try:
         ctx = resoudre_simulation_courante(db, org_id=org_id, resoudre_gpkg=False)
     except (ContexteSimulationIntrouvable, ProjetAmbigu):
@@ -869,12 +912,13 @@ def validate_simulation_buffer(
 @router.get("/agents/interpretation")
 def get_agents_interpretation(
     db: Session = Depends(get_db),
-    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
+    tenant: TenantContext = Depends(get_tenant_context),
 ):
     """
     Retourne le diagnostic causal complet et les prescriptions de l'équipe
     multi-agents d'expertise pour la simulation autorisée du contexte courant.
     """
+    _org_id_requete(tenant)
     # 3D.2 — plus de lecture de la globale : simulation résolue par contexte
     ctx = _contexte_simulation_autorise(db, tenant)
     sim_data = ctx.data if ctx else None
@@ -921,10 +965,11 @@ def download_latest_inp(
     cluster_id: Optional[str] = None,
     project_id: Optional[str] = None,
     db: Session = Depends(get_db),
-    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional)
+    tenant: TenantContext = Depends(get_tenant_context)
 ):
     """Télécharge le fichier d'entrée (.inp) généré pour le bassin ou la dernière simulation."""
 
+    _org_id_requete(tenant)
     content = None
     bassin_nom = None
     nom_reseau = None
@@ -947,9 +992,10 @@ def download_latest_inp(
     if proj is not None:
         active_gpkg = _resoudre_gpkg_effectif_pour_projet(db, proj)
         nom_reseau = proj.name
-    if active_gpkg is None and proj is None and Path("data/demo_reseau.gpkg").exists():
-        active_gpkg = Path("data/demo_reseau.gpkg")
-        nom_reseau = "demo_reseau"
+    if active_gpkg is None and proj is None:
+        active_gpkg = _gpkg_demo_autorise()
+        if active_gpkg is not None:
+            nom_reseau = "demo_reseau"
 
     # 2. Si cluster_id demandé sans simulation autorisée correspondante,
     # chercher dans le cache content-adressé du GPKG effectif du projet —
@@ -1003,10 +1049,11 @@ def download_latest_rpt(
     cluster_id: Optional[str] = None,
     project_id: Optional[str] = None,
     db: Session = Depends(get_db),
-    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional)
+    tenant: TenantContext = Depends(get_tenant_context)
 ):
     """Télécharge le rapport officiel (.rpt) généré par la simulation."""
 
+    _org_id_requete(tenant)
     content = None
     bassin_nom = None
     nom_reseau = None
@@ -1028,9 +1075,10 @@ def download_latest_rpt(
     if proj is not None:
         active_gpkg = _resoudre_gpkg_effectif_pour_projet(db, proj)
         nom_reseau = proj.name
-    if active_gpkg is None and proj is None and Path("data/demo_reseau.gpkg").exists():
-        active_gpkg = Path("data/demo_reseau.gpkg")
-        nom_reseau = "demo_reseau"
+    if active_gpkg is None and proj is None:
+        active_gpkg = _gpkg_demo_autorise()
+        if active_gpkg is not None:
+            nom_reseau = "demo_reseau"
 
     # 2. Si cluster_id demandé sans simulation autorisée correspondante,
     # chercher dans le cache content-adressé du GPKG effectif du projet —
@@ -1073,7 +1121,7 @@ def download_latest_rpt(
 def telecharger_ordre_mission_bms_pdf(
     cluster_id: Optional[str] = None,
     db: Session = Depends(get_db),
-    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
+    tenant: TenantContext = Depends(get_tenant_context),
 ):
     """
     Génère et télécharge l'ordre de mission terrain officiel (PDF)
@@ -1081,6 +1129,8 @@ def telecharger_ordre_mission_bms_pdf(
     Identifie la liste prioritaire des regards et collecteurs à curer et sécuriser.
     """
     from src.domain.bms_ordre_mission import generer_pdf_ordre_mission_bms
+
+    _org_id_requete(tenant)
 
     # 3D.2 — simulation AUTORISÉE du contexte courant, jamais la globale.
     # Contrat historique préservé : PDF générique (données vides) si aucune
@@ -1122,7 +1172,7 @@ def telecharger_ordre_mission_bms_pdf(
 def telecharger_rapport_diagnostic_pdf(
     cluster_id: Optional[str] = None,
     db: Session = Depends(get_db),
-    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
+    tenant: TenantContext = Depends(get_tenant_context),
 ):
     """
     Génère et télécharge le rapport d'expertise hydraulique complet (PDF)
@@ -1132,6 +1182,8 @@ def telecharger_rapport_diagnostic_pdf(
     estimation financière des travaux prioritaires.
     """
     from src.domain.rapport_diagnostic import generer_pdf_rapport_diagnostic
+
+    _org_id_requete(tenant)
 
     # 3D.2 — simulation AUTORISÉE du contexte courant (filtre cluster_id
     # éventuel), jamais la globale partagée ni une restauration non filtrée.
@@ -1175,7 +1227,7 @@ def get_profil_en_long(
     node_amont: str,
     node_aval: str,
     db: Session = Depends(get_db),
-    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
+    tenant: TenantContext = Depends(get_tenant_context),
 ):
     """
     Calcule et retourne le profil en long hydraulique entre deux regards.
@@ -1194,17 +1246,19 @@ def get_profil_en_long(
         _resoudre_projet_pour_simulation,
     )
 
-    org_id = tenant.org_id if (tenant and hasattr(tenant, "org_id") and tenant.org_id) else None
+    org_id = _org_id_requete(tenant)
 
     # Projet résolu de façon non ambiguë + GPKG courant (fallback lecture seule)
     proj = None
     try:
         proj = _resoudre_projet_pour_simulation(db, org_id, None)
-    except (ContexteSimulationIntrouvable, ProjetAmbigu):
+    except ProjetAmbigu as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ContexteSimulationIntrouvable:
         proj = None
     gpkg_effectif = _resoudre_gpkg_effectif_pour_projet(db, proj)
-    if gpkg_effectif is None and Path("data/demo_reseau.gpkg").exists():
-        gpkg_effectif = Path("data/demo_reseau.gpkg")
+    if gpkg_effectif is None:
+        gpkg_effectif = _gpkg_demo_autorise()
 
     # Simulation autorisée du contexte : données HGL + snapshot GPKG exact
     sim_data: Dict[str, Any] = {}
@@ -1568,7 +1622,7 @@ def get_profil_en_long(
 def get_simulation_timeseries(
     cluster_id: Optional[Union[int, str]] = None,
     db: Session = Depends(get_db),
-    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
+    tenant: TenantContext = Depends(get_tenant_context),
 ):
     """
     Retourne les séries temporelles extraites du fichier binaire .out de SWMM
@@ -1577,7 +1631,7 @@ def get_simulation_timeseries(
     Étape 3D.4 — séries lues depuis la simulation AUTORISÉE du contexte
     (org/projet), plus jamais depuis la globale `_DERNIERE_SIMULATION`.
     """
-    org_id = tenant.org_id if (tenant and hasattr(tenant, "org_id") and tenant.org_id) else None
+    org_id = _org_id_requete(tenant)
 
     # Simulation autorisée : filtre bassin si fourni, sinon dernière du projet
     ctx = None
@@ -1637,13 +1691,12 @@ def get_simulation_timeseries(
 def get_simulation(
     simulation_id: str,
     db: Session = Depends(get_db),
-    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
+    tenant: TenantContext = Depends(get_tenant_context),
 ):
-    """Récupère une simulation par ID."""
+    """Récupère une simulation par ID (périmètre organisation strict)."""
     if simulation_id in ("profil-en-long", "timeseries", "latest", "run", "recalculate", "export", "bassin"):
         raise HTTPException(status_code=404, detail=f"Endpoint '{simulation_id}' non trouvé")
-    org_id = tenant.org.id if tenant else None
-    sim = crud.get_simulation(db, simulation_id, org_id=org_id)
+    sim = crud.get_simulation(db, simulation_id, org_id=_org_id_requete(tenant))
     if not sim:
         raise HTTPException(status_code=404, detail="Simulation non trouvée")
     return sim.to_dict()
@@ -1653,11 +1706,10 @@ def get_simulation(
 def get_simulation_by_job(
     job_id: str,
     db: Session = Depends(get_db),
-    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
+    tenant: TenantContext = Depends(get_tenant_context),
 ):
     """Récupère une simulation par job_id (Celery)."""
-    org_id = tenant.org.id if tenant else None
-    sim = crud.get_simulation_by_job_id(db, job_id, org_id=org_id)
+    sim = crud.get_simulation_by_job_id(db, job_id, org_id=_org_id_requete(tenant))
     if not sim:
         raise HTTPException(status_code=404, detail="Job non trouvé")
     return sim.to_dict()
@@ -1670,16 +1722,15 @@ def list_cluster_simulations(
     skip: int = 0,
     limit: int = 50,
     db: Session = Depends(get_db),
-    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
+    tenant: TenantContext = Depends(get_tenant_context),
 ):
-    """Liste des simulations d'un cluster."""
-    org_id = tenant.org.id if tenant else None
+    """Liste des simulations d'un cluster (périmètre organisation strict)."""
     sims = crud.get_simulations(
         db=db,
         status=status,
         skip=skip,
         limit=limit,
-        org_id=org_id,
+        org_id=_org_id_requete(tenant),
     )
     return [s.to_dict() for s in sims if (s.summary_kpis or {}).get("cluster_id") == cluster_id]
 
@@ -1719,11 +1770,10 @@ def _result_url_simulation(sim) -> Optional[str]:
 def get_simulation_status(
     job_id: str,
     db: Session = Depends(get_db),
-    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
+    tenant: TenantContext = Depends(get_tenant_context),
 ):
     """Polling du statut d'une simulation."""
-    org_id = tenant.org.id if tenant else None
-    sim = crud.get_simulation_by_job_id(db, job_id, org_id=org_id)
+    sim = crud.get_simulation_by_job_id(db, job_id, org_id=_org_id_requete(tenant))
     if not sim:
         raise HTTPException(status_code=404, detail="Job non trouvé")
 
@@ -1744,11 +1794,10 @@ def get_simulation_status(
 def cancel_simulation(
     simulation_id: str,
     db: Session = Depends(get_db),
-    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
+    tenant: TenantContext = Depends(get_tenant_context),
 ):
     """Annule une simulation en attente (pending/running)."""
-    org_id = tenant.org.id if tenant else None
-    sim = crud.get_simulation(db, simulation_id, org_id=org_id)
+    sim = crud.get_simulation(db, simulation_id, org_id=_org_id_requete(tenant))
     if not sim:
         raise HTTPException(status_code=404, detail="Simulation non trouvée")
 

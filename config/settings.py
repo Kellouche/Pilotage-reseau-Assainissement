@@ -67,3 +67,8 @@ MAX_CLUSTERS = 79  # nombre d'exutoires
 # Synchronisation
 SYNC_DELTA_MAX_DAYS = 30  # delta max en jours
 VERSION_INCREMENT_ON_UPDATE = True  # incrémenter version à chaque modification
+
+# Mode démo explicite (LOT P0.1) : autorise le repli sur data/demo_reseau.gpkg
+# pour une organisation AUTHENTIFIÉE ne possédant aucun projet actif.
+# Désactivé par défaut : jamais de contournement de l'authentification.
+MODE_DEMO_RESEAU = os.getenv("DRAINPILOT_MODE_DEMO_RESEAU", "false").lower() == "true"

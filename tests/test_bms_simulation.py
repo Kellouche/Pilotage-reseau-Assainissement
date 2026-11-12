@@ -24,8 +24,12 @@ def test_bms_preview_fonction():
 
 
 def test_telecharger_ordre_mission_bms_pdf():
+    from types import SimpleNamespace
     from api.routes.simulations import telecharger_ordre_mission_bms_pdf
-    resp = telecharger_ordre_mission_bms_pdf(cluster_id=None, db=None, tenant=None)
+    # LOT P0.1 — tenant explicite requis ; sans simulation autorisée, le PDF
+    # générique (données vides) reste produit dans le périmètre de l'org.
+    tenant = SimpleNamespace(org_id="org_sans_simulation_test")
+    resp = telecharger_ordre_mission_bms_pdf(cluster_id=None, db=None, tenant=tenant)
     assert resp.status_code == 200
     assert resp.media_type == "application/pdf"
     assert resp.body.startswith(b"%PDF-")
