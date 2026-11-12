@@ -151,7 +151,11 @@ def _motif_incompatibilite(a: Dict[str, Any],
 
 def _details_incompatibilite(a: Dict[str, Any], motif: str,
                              version_meta: Dict[str, Any]) -> Dict[str, Any]:
+    # LOT P1.5.1 — `code` = code motif STABLE (sans les valeurs interpolées)
+    # pour les clients ; `motif` conserve le détail lisible complet.
+    code = motif.split(" (", 1)[0].strip()
     return {
+        "code": code,
         "apport_id": a.get("id"),
         "node_id": a.get("node_id"),
         "apport_gpkg_version_id": a.get("gpkg_version_id"),

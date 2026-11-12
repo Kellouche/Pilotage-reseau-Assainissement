@@ -192,21 +192,90 @@ def lister_apports_a_reconcilier(
     tenant: TenantContext = Depends(get_tenant_context),
 ):
     """
-    LOT P1.4 — apports ACTIFS sans estampillage GPKG (créés avant P1.4 ou
-    sur une version désormais différente). Ces apports sont rejetés à la
-    simulation tant qu'ils ne sont pas réconciliés via /revalider.
+    LOT P1.5.1 — inventaire EXHAUSTIF des apports actifs non admissibles à
+    la simulation : tout apport actif dont l'estampillage diffère de la
+    version GPKG courante (version_id et/ou sha256), sans estampillage
+    (historique non réconcilié) ou sur un nœud absent du réseau courant.
+
+    Strictement en lecture seule : aucun ré-estampillage, aucune
+    réconciliation automatique — la seule voie reste
+    POST /apports/{id}/revalider. Les apports INACTIFS ne bloquent pas la
+    simulation et ne figurent pas dans cette liste (visibles via GET /).
+
+    Contrat :
+      - project_id, count : inchangés (count = nb d'apports incompatibles) ;
+      - apports : ApportDwfResponse des apports incompatibles ;
+      - incompatibles : détail par apport (code motif stable, estampillage
+        de l'apport, version/sha du réseau courant, action attendue) ;
+      - reseau_courant : version_id / sha256 / storage_kind résolus ;
+      - erreur : renseigné si le GPKG courant ne peut pas être résolu —
+        dans ce cas TOUS les apports actifs sont signalés
+        'gpkg_courant_indisponible' (la simulation échouerait en amont,
+        avant même la validation DWF).
     """
     proj = _resoudre_projet(db, tenant, project_id)
-    q = db.query(ApportDwf).filter(
+    apports = [a.to_dict() for a in db.query(ApportDwf).filter(
         ApportDwf.org_id == tenant.org_id,
         ApportDwf.project_id == proj.id,
         ApportDwf.actif.is_(True),
-        ApportDwf.gpkg_sha256.is_(None),
-    ).order_by(ApportDwf.created_at)
+    ).order_by(ApportDwf.created_at).all()]
+
+    gpkg_path, version_meta = resoudre_gpkg_effectif_pour_projet_avec_meta(
+        db, proj)
+    version_meta = version_meta or {}
+    gpkg_path = Path(gpkg_path) if gpkg_path else None
+    reseau_disponible = (
+        gpkg_path is not None and gpkg_path.exists())
+
+    incompatibles: list = []
+    if not apports:
+        pass
+    elif not reseau_disponible:
+        # Réseau courant irrésolvable : aucune estampille ne peut être
+        # vérifiée — chaque apport actif est signalé non vérifiable.
+        for a in apports:
+            incompatibles.append({
+                "code": "gpkg_courant_indisponible",
+                "apport_id": a.get("id"),
+                "node_id": a.get("node_id"),
+                "apport_gpkg_version_id": a.get("gpkg_version_id"),
+                "apport_gpkg_sha256": a.get("gpkg_sha256"),
+                "simulation_gpkg_version_id": version_meta.get("version_id"),
+                "simulation_gpkg_sha256": version_meta.get("sha256"),
+                "simulation_storage_kind": version_meta.get("storage_kind"),
+                "motif": ("réseau GPKG courant indisponible : estampillage "
+                          "invérifiable"),
+                "action_attendue": ("rendre le GeoPackage du projet accessible "
+                                    "puis revalider l'apport"),
+            })
+    else:
+        # Réutilisation STRICTE des règles de validation P1.4 — aucune
+        # duplication : valider_apports_pour_version applique exactement
+        # les mêmes contrôles (estampillage, version, sha, nœud du snapshot)
+        # que preparer_apports_pour_simulation au lancement.
+        from api.services.apports_dwf_service import (
+            ApportsDwfIncompatiblesError,
+            valider_apports_pour_version,
+        )
+        try:
+            valider_apports_pour_version(apports, version_meta, gpkg_path)
+        except ApportsDwfIncompatiblesError as e:
+            incompatibles = e.details
+
+    ids_incompatibles = {d.get("apport_id") for d in incompatibles}
     return {
         "project_id": proj.id,
-        "apports": [a.to_dict() for a in q.all()],
-        "count": q.count(),
+        "apports": [a for a in apports if a.get("id") in ids_incompatibles],
+        "incompatibles": incompatibles,
+        "count": len(incompatibles),
+        "reseau_courant": {
+            "gpkg_version_id": version_meta.get("version_id"),
+            "gpkg_sha256": version_meta.get("sha256"),
+            "storage_kind": version_meta.get("storage_kind"),
+            "disponible": reseau_disponible,
+        },
+        "erreur": (version_meta.get("erreur") if not reseau_disponible
+                   else None),
     }
 
 
