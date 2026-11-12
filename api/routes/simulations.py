@@ -721,13 +721,31 @@ def validate_simulation_buffer(
     """
     Valide et enregistre le choix du buffer Voronoï (ex. 35m, 45m ou 60m)
     retenu par l'utilisateur suite à l'analyse de sensibilité.
+
+    Étape 3D.4 — le buffer est appliqué à la simulation AUTORISÉE du
+    contexte (org/projet) et persisté dans son résultat ; la globale
+    `_DERNIERE_SIMULATION` n'est plus mutée ni lue ici.
     """
-    global _DERNIERE_SIMULATION
-    if _DERNIERE_SIMULATION:
-        if "buffer_sensitivity" in _DERNIERE_SIMULATION and _DERNIERE_SIMULATION["buffer_sensitivity"]:
-            _DERNIERE_SIMULATION["buffer_sensitivity"]["active_buffer_m"] = payload.buffer_m
-        if "meta" in _DERNIERE_SIMULATION:
-            _DERNIERE_SIMULATION["meta"]["buffer_m"] = payload.buffer_m
+    from api.services.simulation_service import (
+        resoudre_simulation_courante,
+        persister_resultat_simulation,
+        ContexteSimulationIntrouvable,
+        ProjetAmbigu,
+    )
+
+    org_id = tenant.org_id if (tenant and hasattr(tenant, "org_id") and tenant.org_id) else None
+    try:
+        ctx = resoudre_simulation_courante(db, org_id=org_id, resoudre_gpkg=False)
+    except (ContexteSimulationIntrouvable, ProjetAmbigu):
+        ctx = None
+
+    if ctx is not None and ctx.data:
+        data = ctx.data
+        if data.get("buffer_sensitivity"):
+            data["buffer_sensitivity"]["active_buffer_m"] = payload.buffer_m
+        if data.get("meta"):
+            data["meta"]["buffer_m"] = payload.buffer_m
+        persister_resultat_simulation(ctx.simulation, data)
 
     return {
         "status": "success",
@@ -1453,66 +1471,51 @@ def get_simulation_timeseries(
     """
     Retourne les séries temporelles extraites du fichier binaire .out de SWMM
     pour animer la propagation de l'onde de crue (Time Slider).
+
+    Étape 3D.4 — séries lues depuis la simulation AUTORISÉE du contexte
+    (org/projet), plus jamais depuis la globale `_DERNIERE_SIMULATION`.
     """
-    global _DERNIERE_SIMULATION
+    org_id = tenant.org_id if (tenant and hasattr(tenant, "org_id") and tenant.org_id) else None
 
-    # Si la mémoire est vide (ex: redémarrage serveur), restaurer automatiquement la dernière simulation
-    if not _DERNIERE_SIMULATION or not _est_simulation_valide(_DERNIERE_SIMULATION):
+    # Simulation autorisée : filtre bassin si fourni, sinon dernière du projet
+    ctx = None
+    sim_data: Dict[str, Any] = {}
+    for filtres in (({"cluster_id": cluster_id} if cluster_id is not None else {}), {}):
         try:
-            get_latest_simulation(db=db, tenant=tenant)
-        except Exception:
-            pass
+            ctx = resoudre_simulation_courante(
+                db, org_id=org_id, resoudre_gpkg=False, **filtres)
+            sim_data = ctx.data or {}
+            break
+        except (ContexteSimulationIntrouvable, ProjetAmbigu):
+            continue
 
-    # 1. Vérifier si _DERNIERE_SIMULATION contient les séries temporelles
-    if _DERNIERE_SIMULATION and _est_simulation_valide(_DERNIERE_SIMULATION):
-        ts = _DERNIERE_SIMULATION.get("timeseries")
+    # 1. Séries temporelles déjà présentes dans le résultat persisté
+    if sim_data and _est_simulation_valide(sim_data):
+        ts = sim_data.get("timeseries")
         if ts and ts.get("status") == "SUCCESS":
             from src.domain.moteur_swmm.timeseries_extractor import enrichir_timeseries_pluie
-            ts = enrichir_timeseries_pluie(ts, _DERNIERE_SIMULATION)
-            _DERNIERE_SIMULATION["timeseries"] = ts
-            return ts
+            return enrichir_timeseries_pluie(ts, sim_data)
 
         # Génération à la volée si l'INP est disponible
-        inp_content = _DERNIERE_SIMULATION.get("inp_content")
+        inp_content = sim_data.get("inp_content")
         if inp_content:
             logger.info("Génération à la volée des séries temporelles (Phase 6.B)...")
             try:
                 from src.domain.moteur_swmm.execution_solver import executer_solver_swmm
                 _, _, ts_gen = executer_solver_swmm(inp_content, return_timeseries=True)
                 if ts_gen and ts_gen.get("status") == "SUCCESS":
-                    _DERNIERE_SIMULATION["timeseries"] = ts_gen
-                    # Persister dans le cache disque
-                    try:
-                        gpkg_src = _DERNIERE_SIMULATION.get("source_gpkg")
-                        param_h = _DERNIERE_SIMULATION.get("param_hash")
-                        cid = _DERNIERE_SIMULATION.get("meta", {}).get("cluster_id") or 1
-                        if gpkg_src and param_h:
-                            cfile = _get_cache_simulation_file(Path(gpkg_src), cid, param_h)
-                            if cfile.exists():
-                                with open(cfile, "w", encoding="utf-8") as f:
-                                    json.dump(_DERNIERE_SIMULATION, f, ensure_ascii=False)
-                    except Exception as e_w:
-                        logger.warning("Échec persistance cache timeseries: %s", e_w)
+                    sim_data["timeseries"] = ts_gen
+                    # Persister dans le résultat de LA simulation (fichier local
+                    # ou clé store), jamais dans un cache anonyme.
+                    if ctx is not None and ctx.simulation is not None:
+                        from api.services.simulation_service import persister_resultat_simulation
+                        persister_resultat_simulation(ctx.simulation, sim_data)
                     return ts_gen
             except Exception as e_calc:
                 logger.warning("Erreur calcul à la volée timeseries: %s", e_calc)
 
-    # 2. Chercher dans le cache cluster si demandé
-    if cluster_id is not None:
-        try:
-            cid_int = int(cluster_id)
-            if cid_int in _CACHE_SIMULATIONS_PAR_CLUSTER:
-                cached = _CACHE_SIMULATIONS_PAR_CLUSTER[cid_int]
-                if cached and "timeseries" in cached and cached["timeseries"].get("status") == "SUCCESS":
-                    from src.domain.moteur_swmm.timeseries_extractor import enrichir_timeseries_pluie
-                    ts_cluster = enrichir_timeseries_pluie(cached["timeseries"], cached)
-                    cached["timeseries"] = ts_cluster
-                    return ts_cluster
-        except Exception:
-            pass
-
-    # 3. Si aucune simulation active avec séries temporelles
-    if not _DERNIERE_SIMULATION or not _est_simulation_valide(_DERNIERE_SIMULATION):
+    # 2. Si aucune simulation autorisée avec séries temporelles
+    if not sim_data or not _est_simulation_valide(sim_data):
         raise HTTPException(
             status_code=404,
             detail="Aucune simulation active disponible. Veuillez lancer une simulation SWMM au préalable pour activer l'animation temporelle."

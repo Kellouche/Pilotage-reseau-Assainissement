@@ -627,6 +627,34 @@ def charger_resultat_simulation(simulation: Any) -> Optional[Dict[str, Any]]:
     return None
 
 
+def persister_resultat_simulation(simulation: Any, data: Dict[str, Any]) -> bool:
+    """
+    Réécrit le JSON de résultat d'une simulation via le même adaptateur que
+    `charger_resultat_simulation` : chemin local si `results_s3_key` est un
+    fichier, sinon clé ArtifactStore (put_bytes). Retourne True si écrit.
+    """
+    cle = getattr(simulation, "results_s3_key", None)
+    if not cle or not isinstance(data, dict):
+        return False
+    cle = str(cle)
+    try:
+        p = Path(cle)
+        if p.exists() and p.is_file():
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False)
+            return True
+    except Exception as e:
+        logger.warning("Persistance résultat simulation (chemin local) impossible: %s", e)
+    try:
+        from api.core.storage import get_storage
+        get_storage().put_bytes(cle, json.dumps(data, ensure_ascii=False).encode("utf-8"),
+                                content_type="application/json")
+        return True
+    except Exception as e:
+        logger.warning("Persistance résultat simulation (store %s) impossible: %s", cle, e)
+        return False
+
+
 def _resoudre_projet_pour_simulation(db: Session, org_id: Optional[str],
                                     project_id: Optional[str]) -> Any:
     """
