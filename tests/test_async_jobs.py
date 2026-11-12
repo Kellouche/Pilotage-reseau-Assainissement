@@ -9,7 +9,6 @@ Objet : Tests unitaires du système de gestion des jobs asynchrones
 """
 
 import json
-import subprocess
 import pytest
 from starlette.testclient import TestClient
 
@@ -19,7 +18,7 @@ from api.models import Organization, User, Membership, Project, Cluster, Regard,
 from api.core.auth import hash_password, create_access_token
 from api.core.jobs import create_job, update_job, get_job, list_jobs
 from api.core.storage import get_storage, LocalStore
-from workers.tasks.swmm_tasks import run_swmm_simulation_task, SolveurSWMMIndisponible
+from workers.tasks.swmm_tasks import run_swmm_simulation_task
 import workers.tasks.swmm_tasks as swmm_tasks_module
 from api import schemas
 from api.routes.simulations import launch_simulation
@@ -197,17 +196,23 @@ def _spy_moteur(monkeypatch, resultat=None, erreur=None):
     return appels
 
 
-def _interdire_subprocess_worker(monkeypatch):
-    """Prouve que le worker n'appelle JAMAIS subprocess directement."""
-    def interdit(*a, **kw):
-        raise AssertionError("subprocess ne doit plus être appelé par le worker")
-    monkeypatch.setattr(swmm_tasks_module.subprocess, "run", interdit)
+def _verifier_worker_sans_chemin_hydraulique():
+    """Preuve statique : le worker ne contient plus AUCUN chemin
+    d'exécution hydraulique autonome (ni subprocess, ni INP, ni solveur)."""
+    from pathlib import Path
+    src = Path(swmm_tasks_module.__file__).read_text(encoding="utf-8")
+    for interdit in ("import subprocess", "subprocess.run", "shutil.which(",
+                     "import shutil", "_execute_swmm_solver(",
+                     "_build_swmm_inp_content(", "_parse_swmm_report(",
+                     "SolveurSWMMIndisponible(", "select(Regard)",
+                     "select(Canalisation)", "put_bytes(", "get_storage("):
+        assert interdit not in src, f"Chemin hydraulique résiduel : {interdit}"
 
 
 def test_swmm_simulation_worker_task(test_setup, monkeypatch):
     """Le worker délègue à SimulationService : même moteur, même GPKG, ResultStore."""
     appels_moteur = _spy_moteur(monkeypatch)
-    _interdire_subprocess_worker(monkeypatch)
+    _verifier_worker_sans_chemin_hydraulique()
     db = SessionLocal()
     org_id = test_setup["org_a_id"]
     proj_id = test_setup["proj_a_id"]
@@ -277,7 +282,7 @@ def test_swmm_simulation_worker_task(test_setup, monkeypatch):
 def test_swmm_worker_moteur_en_echec(test_setup, monkeypatch):
     """Erreur métier propagée : job FAILED, simulation FAILED, aucun artefact."""
     _spy_moteur(monkeypatch, erreur=RuntimeError("pyswmm indisponible"))
-    _interdire_subprocess_worker(monkeypatch)
+    _verifier_worker_sans_chemin_hydraulique()
     db = SessionLocal()
     org_id = test_setup["org_a_id"]
     proj_id = test_setup["proj_a_id"]
@@ -306,7 +311,7 @@ def test_swmm_worker_moteur_en_echec(test_setup, monkeypatch):
 def test_swmm_worker_gpkg_absent(test_setup, monkeypatch):
     """Projet sans GPKG disponible : interruption explicite, job FAILED."""
     _spy_moteur(monkeypatch)
-    _interdire_subprocess_worker(monkeypatch)
+    _verifier_worker_sans_chemin_hydraulique()
     db = SessionLocal()
     org_id = test_setup["org_a_id"]
     # Projet Org A sans aucun GPKG
@@ -391,7 +396,7 @@ def test_service_async_bms_applique(test_setup, monkeypatch):
 def test_result_url_priorise_resultstore(test_setup, monkeypatch):
     """Une sim Celery complétée expose result_url pointant vers ResultStore result.json."""
     _spy_moteur(monkeypatch)
-    _interdire_subprocess_worker(monkeypatch)
+    _verifier_worker_sans_chemin_hydraulique()
     db = SessionLocal()
     org_id = test_setup["org_a_id"]
     proj_id = test_setup["proj_a_id"]
@@ -435,7 +440,8 @@ def test_result_url_repli_results_s3_key_legacy(test_setup):
     tenant = _construire_tenant(db, org_id, "ingenieur@regie-alpha.dz")
     status = get_simulation_status(job_id="legacy_job", db=db, tenant=tenant)
 
-    assert status["result_url"].endswith(f"key={cle_legacy}")
+    assert f"key={cle_legacy}" in status["result_url"]
+    assert "project_id=proj_alpha_id" in status["result_url"]
     db.close()
 
 
@@ -472,59 +478,6 @@ def test_resoudre_simulation_resultstore_sans_results_s3_key(test_setup):
     assert ctx.data["node_results"]
     db.close()
 
-
-# --- Tests unitaires du helper _execute_swmm_solver (conservé jusqu'au lot 3C.7.5) ---
-# Le worker ne l'appelle plus ; ces tests verrouillent son contrat
-# « jamais de résultat synthétique » en attendant son retrait.
-
-
-def test_helper_solveur_absent():
-    with pytest.raises(SolveurSWMMIndisponible, match="introuvable"):
-        swmm_tasks_module._execute_swmm_solver(
-            inp_content="[TITLE]x", regards=[], conduites=[],
-            duree_heures=1.0, scenario_pluie="pluie_decennale",
-            parameters={"swmm_bin": "binaire_swmm_inexistant_3c73"},
-        )
-
-
-def test_helper_solveur_non_executable(monkeypatch):
-    monkeypatch.setattr(swmm_tasks_module.shutil, "which", lambda name: "/fake/swmm5")
-
-    def refuse(cmd, **kw):
-        raise PermissionError(13, "Permission denied", cmd[0])
-    monkeypatch.setattr(swmm_tasks_module.subprocess, "run", refuse)
-
-    with pytest.raises(SolveurSWMMIndisponible, match="inaccessible"):
-        swmm_tasks_module._execute_swmm_solver(
-            inp_content="[TITLE]x", regards=[], conduites=[],
-            duree_heures=1.0, scenario_pluie="p", parameters={"swmm_bin": "swmm5"},
-        )
-
-
-def test_helper_solveur_echec_execution(monkeypatch):
-    monkeypatch.setattr(swmm_tasks_module.shutil, "which", lambda name: "/fake/swmm5")
-    monkeypatch.setattr(
-        swmm_tasks_module.subprocess, "run",
-        lambda cmd, **kw: subprocess.CompletedProcess(cmd, 3, "", "boom"))
-
-    with pytest.raises(SolveurSWMMIndisponible, match="code retour 3"):
-        swmm_tasks_module._execute_swmm_solver(
-            inp_content="[TITLE]x", regards=[], conduites=[],
-            duree_heures=1.0, scenario_pluie="p", parameters={"swmm_bin": "swmm5"},
-        )
-
-
-def test_helper_solveur_sans_rpt(monkeypatch):
-    monkeypatch.setattr(swmm_tasks_module.shutil, "which", lambda name: "/fake/swmm5")
-    monkeypatch.setattr(
-        swmm_tasks_module.subprocess, "run",
-        lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, "", ""))
-
-    with pytest.raises(SolveurSWMMIndisponible, match="sans produire le rapport"):
-        swmm_tasks_module._execute_swmm_solver(
-            inp_content="[TITLE]x", regards=[], conduites=[],
-            duree_heures=1.0, scenario_pluie="p", parameters={"swmm_bin": "swmm5"},
-        )
 
 
 # ============================================================
@@ -800,20 +753,64 @@ def test_api_artifact_download_stealth_security(test_setup):
     content = b"%PDF-1.4 Mock confidential report"
     storage.put_bytes(key_a, content, content_type="application/pdf")
 
-    # 1. Org A télécharge son propre fichier -> 200 OK avec le contenu
-    resp_a = download_artifact(key=key_a, tenant=tenant_a)
+    # 1. Org A télécharge son propre fichier (contexte projet déclaré) -> 200 OK
+    resp_a = download_artifact(key=key_a, project_id=proj_a, tenant=tenant_a, db=db)
     assert resp_a.body == content
     assert resp_a.media_type == "application/pdf"
 
+    # 1b. Sans project_id sur une clé projet -> refus (contexte ambigu)
+    with pytest.raises(HTTPException) as exc_no_proj:
+        download_artifact(key=key_a, project_id=None, tenant=tenant_a, db=db)
+    assert exc_no_proj.value.status_code == 404
+
     # 2. Org B tente de télécharger le fichier de Org A -> Stealth 404
     with pytest.raises(HTTPException) as exc_info_b:
-        download_artifact(key=key_a, tenant=tenant_b)
+        download_artifact(key=key_a, project_id=proj_a, tenant=tenant_b, db=db)
     assert exc_info_b.value.status_code == 404
 
     # 3. Tentative de traversée de répertoire -> Stealth 404
     hack_key = f"{org_a.id}/../../etc/shadow"
     with pytest.raises(HTTPException) as exc_info_hack:
-        download_artifact(key=hack_key, tenant=tenant_a)
+        download_artifact(key=hack_key, project_id=None, tenant=tenant_a, db=db)
     assert exc_info_hack.value.status_code == 404
 
     db.close()
+
+
+def test_artifact_download_isolation_projet(test_setup):
+    """3C.7.5 — une clé d'un AUTRE projet de la même organisation est refusée
+    lorsque le contexte projet déclaré ne correspond pas."""
+    db = SessionLocal()
+    org_a = db.query(Organization).filter_by(id=test_setup["org_a_id"]).first()
+    user_a = db.query(User).filter_by(email="ingenieur@regie-alpha.dz").first()
+    tenant_a = TenantContext(actor=user_a, org=org_a, role="admin")
+
+    proj_a = test_setup["proj_a_id"]
+    proj_b = Project(id="proj_alpha_b", org_id=org_a.id, name="Réseau Est", slug="net-est-b")
+    db.add(proj_b)
+    db.commit()
+
+    try:
+        storage = get_storage()
+        key_b = f"{org_a.id}/{proj_b.id}/reports/secret.pdf"
+        storage.put_bytes(key_b, b"%PDF secret projet B", content_type="application/pdf")
+
+        # Contexte projet A + clé projet B -> 404
+        with pytest.raises(HTTPException) as exc:
+            download_artifact(key=key_b, project_id=proj_a, tenant=tenant_a, db=db)
+        assert exc.value.status_code == 404
+
+        # Contexte projet B déclaré + clé projet B -> 200 (même org)
+        resp = download_artifact(key=key_b, project_id=proj_b.id, tenant=tenant_a, db=db)
+        assert resp.body == b"%PDF secret projet B"
+
+        # Segment non-projet (licences) : contrôle org seul, comportement legacy
+        key_lic = f"{org_a.id}/licences/bc_001_justificatif.pdf"
+        storage.put_bytes(key_lic, b"pdf-licence", content_type="application/pdf")
+        resp_lic = download_artifact(key=key_lic, project_id=None, tenant=tenant_a, db=db)
+        assert resp_lic.body == b"pdf-licence"
+    finally:
+        # Nettoyage : la base de test est partagée avec d'autres modules
+        db.delete(proj_b)
+        db.commit()
+        db.close()

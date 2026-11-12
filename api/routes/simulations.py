@@ -1703,12 +1703,15 @@ def _result_url_simulation(sim) -> Optional[str]:
         store = ResultStore()
         key = store.cle(ref, ArtifactKind.RESULT_JSON)
         if store.store.exists(key):
-            return f"/api/v1/artifacts/download?key={key}"
+            return (f"/api/v1/artifacts/download?key={key}"
+                    f"&project_id={ref.project_id}")
     except Exception:
         pass
     cle = getattr(sim, "results_s3_key", None)
     if cle:
-        return f"/api/v1/artifacts/download?key={cle}"
+        projet = getattr(sim, "project_id", None)
+        suffix = f"&project_id={projet}" if projet else ""
+        return f"/api/v1/artifacts/download?key={cle}{suffix}"
     return None
 
 
