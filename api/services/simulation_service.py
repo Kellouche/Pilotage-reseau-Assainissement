@@ -1232,3 +1232,229 @@ def reprise_resultat_simulation(simulation: Any,
     statut["persistance_complete"] = (
         statut["manifeste"] == "PERSISTED" and not statut["anomalies"])
     return statut
+
+
+# ============================================================
+# LOT 3C.7.3 — Point d'entrée métier asynchrone (adaptateur Celery)
+# ============================================================
+# `executer_en_async` est LE point d'entrée unique pour le worker Celery :
+# même résolution GPKG versionnée, même MoteurSWMM/PySWMM, même cache,
+# même ResultStore que le chemin synchrone. Aucune dépendance à Celery,
+# FastAPI ou Request — la session DB est injectée par l'appelant.
+
+
+def resoudre_gpkg_pour_projet(db: Session, proj: Any) -> Tuple[Path, Dict[str, Any]]:
+    """
+    Résout le GPKG d'un projet EXPLICITE (jamais de sélection inter-projets).
+    Retourne (gpkg_path, version_meta). Une version référencée mais
+    indisponible n'est JAMAIS remplacée par un autre fichier : lève
+    ContexteProjetIntrouvable.
+    """
+    chemin, meta = _resoudre_gpkg_versionne(db, proj)
+    if chemin is not None:
+        return Path(chemin), meta or {}
+    raise ContexteProjetIntrouvable(
+        (meta or {}).get("erreur", "GeoPackage indisponible pour ce projet."))
+
+
+def executer_en_async(
+    db: Session,
+    *,
+    org_id: str,
+    project_id: Optional[str] = None,
+    cluster_id: Any = None,
+    parameters: Optional[Dict[str, Any]] = None,
+    simulation_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Exécute une simulation SWMM pour le worker Celery via le service métier
+    unique. Rejoue la même chaîne que POST /simulations/run :
+
+      identité (org/projet/cluster) → GPKG versionné → scénario BMS →
+      MoteurSWMM (PySWMM) → cache .simulation_cache → ligne Simulation →
+      ResultStore (result.json / model.inp / report.rpt + manifeste).
+
+    `parameters` suit le contrat SimulationCreate (scenario_pluie,
+    duree_heures, bms_*, buffer_m, typologie_sol, ...). Les clés d'identité
+    (org_id, project_id, simulation_id, cluster_id) sont forcées depuis le
+    contexte vérifié — jamais écrasables par les paramètres utilisateur.
+
+    Lève ContexteProjetIntrouvable / ValueError sur toute incohérence
+    d'identité ou d'intrant ; les erreurs du moteur se propagent après
+    marquage de la Simulation en 'failed'.
+    """
+    from api.models import Organization, Project, Cluster, Simulation
+
+    params_bruts = dict(parameters or {})
+
+    # 1. Identité organisation — rechargée depuis la base, jamais déduite
+    org = db.get(Organization, org_id)
+    if org is None:
+        raise ContexteProjetIntrouvable(
+            f"Organisation introuvable : {org_id}")
+
+    # 2. Projet explicite rattaché à l'organisation
+    if not project_id:
+        raise ContexteProjetIntrouvable(
+            "project_id explicite requis pour l'exécution asynchrone.")
+    proj = db.get(Project, project_id)
+    if (proj is None or getattr(proj, "org_id", None) != org_id
+            or getattr(proj, "is_archived", False)):
+        raise ContexteProjetIntrouvable(
+            f"Projet {project_id} introuvable ou non autorisé pour {org_id}.")
+
+    # 3. GPKG versionné : snapshot exact, jamais de repli inter-versions
+    gpkg_path, version_meta = resoudre_gpkg_pour_projet(db, proj)
+
+    # 4. Cluster/bassin : doit appartenir au projet ET à l'organisation
+    cluster_id_effectif = cluster_id if cluster_id is not None else params_bruts.get("cluster_id")
+    if cluster_id_effectif is None:
+        raise ValueError(
+            "Sectorisation requise : cluster_id (ou bassin) obligatoire "
+            "avant simulation SWMM.")
+    try:
+        cluster = db.get(Cluster, int(cluster_id_effectif))
+    except (TypeError, ValueError):
+        cluster = None
+    if (cluster is None or getattr(cluster, "org_id", None) != org_id
+            or str(getattr(cluster, "network_id", "")) != str(project_id)):
+        raise ValueError(
+            f"Cluster {cluster_id_effectif} incohérent avec le projet "
+            f"{project_id} / organisation {org_id}.")
+
+    # 5. Ligne Simulation : existante (créée par la route, id = job_id) ou
+    #    créée à la demande — toujours rattachée à org/projet vérifiés.
+    sim = db.get(Simulation, simulation_id) if simulation_id else None
+    if sim is not None:
+        if (getattr(sim, "org_id", None) not in (None, org_id)
+                or (getattr(sim, "project_id", None)
+                    and str(sim.project_id) != str(project_id))):
+            raise ValueError(
+                f"Simulation {simulation_id} incohérente avec le contexte "
+                f"org={org_id} projet={project_id}.")
+    if sim is None:
+        sim = Simulation(
+            id=simulation_id or str(uuid.uuid4()),
+            org_id=org_id,
+            project_id=project_id,
+            status="running",
+            scenario_pluie=str(params_bruts.get("scenario_pluie", "pluie_decennale")),
+            duree_heures=float(params_bruts.get("duree_heures", 24.0)),
+        )
+        db.add(sim)
+        db.commit()
+
+    # 6. Contrat de paramètres moteur (noms SimulationRunRequest) —
+    #    identité retirée des paramètres utilisateur.
+    params_exec = dict(params_bruts)
+    for cle_identite in ("org_id", "project_id", "simulation_id",
+                         "network_id", "swmm_bin"):
+        params_exec.pop(cle_identite, None)
+    params_exec["scenario_key"] = (
+        params_exec.pop("scenario_pluie", None)
+        or params_exec.get("scenario_key")
+        or "pluie_decennale"
+    )
+    params_exec["cluster_id"] = cluster_id_effectif
+
+    # 7. Empreinte canonique + exécution via le MOTEUR UNIQUE (PySWMM)
+    from types import SimpleNamespace
+    _ns = SimpleNamespace(**{
+        k: v for k, v in params_exec.items()
+        if not isinstance(v, (dict, list)) or k == "raccordements_orphelins"
+    })
+    param_hash, params_dict = generer_cle_cache_simulation(gpkg_path, _ns)
+
+    debut = datetime.now(timezone.utc)
+    try:
+        resultat = executer_moteur_swmm(
+            gpkg_path, params_exec, execution_mode="celery")
+    except Exception:
+        sim.status = "failed"
+        db.commit()
+        raise
+    execution_time = round(
+        (datetime.now(timezone.utc) - debut).total_seconds(), 2)
+
+    # 8. Enrichissement provenance/contexte (identique au chemin synchrone)
+    resultat["source_gpkg"] = str(gpkg_path.resolve())
+    resultat["project_name"] = proj.name or gpkg_path.stem
+    resultat["param_hash"] = param_hash
+    prov = resultat.setdefault("provenance", {})
+    prov["gpkg_version_id"] = version_meta.get("version_id")
+    prov["gpkg_sha256"] = version_meta.get("sha256")
+    prov["gpkg_storage_kind"] = version_meta.get("storage_kind")
+    prov["execution_mode"] = "celery"
+    if getattr(cluster, "exutoire_noeud", None):
+        from api.services.gpkg_versions import exutoire_present_dans_gpkg
+        prov["coherence"] = {
+            "exutoire_noeud": cluster.exutoire_noeud,
+            "exutoire_present_dans_version": exutoire_present_dans_gpkg(
+                gpkg_path, cluster.exutoire_noeud),
+            "bassin_ref": getattr(cluster, "bassin_ref", None),
+        }
+
+    # 9. Cache de calcul + ligne Simulation (même format que le synchrone)
+    cache_file = get_cache_simulation_file(gpkg_path, cluster_id_effectif, param_hash)
+    try:
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(cache_file, "w", encoding="utf-8") as f:
+            json.dump(resultat, f, ensure_ascii=False)
+    except Exception as e:
+        logger.error("Cache simulation async non écrit (%s) : %s", cache_file, e)
+
+    kpis_summary = {
+        "param_hash": param_hash,
+        "cluster_id": cluster_id_effectif,
+        "scenario_key": params_dict.get("scenario_key"),
+        "parameters": params_dict,
+        "peak_outflow_m3s": resultat.get("peak_outflow_m3s"),
+        "routing_continuity_error_pct": resultat.get("routing_continuity_error_pct"),
+        "flooded_nodes_count": resultat.get("flooded_nodes_count", 0),
+        "provenance": resultat.get("provenance"),
+        "execution_mode": "celery",
+        "job_id": sim.id,
+        "cached_at": datetime.now(timezone.utc).isoformat(),
+    }
+    sim.status = "completed"
+    sim.name = f"SWMM_{proj.name}_{cluster_id_effectif}_{params_dict.get('scenario_key', 'pluie')}"
+    sim.scenario_pluie = str(params_dict.get("scenario_key", "pluie_decennale"))
+    sim.duree_heures = float(params_dict.get("duree_heures") or 24.0)
+    sim.results_s3_key = str(cache_file.resolve())
+    sim.gpkg_version_id = version_meta.get("version_id") if proj else None
+    sim.gpkg_sha256 = version_meta.get("sha256")
+    sim.bassin_ref = getattr(cluster, "bassin_ref", None)
+    sim.exutoire_noeud = getattr(cluster, "exutoire_noeud", None)
+    sim.summary_kpis = kpis_summary
+    sim.execution_time_seconds = execution_time
+    db.commit()
+
+    # 10. ResultStore : artefacts permanents + manifeste (identique au synchrone)
+    statut_store = _persister_resultats_store(sim, resultat)
+    try:
+        kpis = dict(sim.summary_kpis or {})
+        kpis["result_store"] = statut_store
+        sim.summary_kpis = kpis
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.warning("Statut ResultStore async non persisté : %s", e)
+
+    return {
+        "simulation_id": sim.id,
+        "job_id": sim.id,
+        "org_id": org_id,
+        "project_id": project_id,
+        "cluster_id": cluster_id_effectif,
+        "param_hash": param_hash,
+        "cache_file": str(cache_file.resolve()),
+        "gpkg": {
+            "path": str(gpkg_path),
+            "version_id": version_meta.get("version_id"),
+            "sha256": version_meta.get("sha256"),
+            "storage_kind": version_meta.get("storage_kind"),
+        },
+        "result_store": statut_store,
+        "execution_time_seconds": execution_time,
+        "peak_outflow_m3s": resultat.get("peak_outflow_m3s"),
+    }

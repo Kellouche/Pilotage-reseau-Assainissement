@@ -60,9 +60,7 @@ def run_swmm_simulation_task(
     Exécute une simulation SWMM complète en tâche de fond.
     """
     params = parameters or {}
-    start_time = time.time()
     db = SessionLocal()
-    storage = get_storage()
 
     logger.info("Démarrage de la simulation SWMM: job_id=%s, org_id=%s, network_id=%s", job_id, org_id, network_id)
 
@@ -90,119 +88,50 @@ def run_swmm_simulation_task(
             message="Chargement des données du réseau et validation topologique...",
         )
 
-        # Vérifier le projet si fourni — un network_id sans projet
-        # correspondant dans l'organisation est une incohérence fatale
-        project = None
-        if network_id:
-            project = db.execute(
-                select(Project).where(Project.id == network_id, Project.org_id == org_id)
-            ).scalar_one_or_none()
-            if project is None:
-                raise ValueError(
-                    f"Projet {network_id} introuvable pour l'organisation {org_id} "
-                    f"(job {job_id})"
-                )
+        # Étapes 2 à 5 : DÉLÉGATION au service métier unique.
+        # Le worker est un simple adaptateur d'orchestration : identité,
+        # GPKG versionné, scénario BMS, MoteurSWMM/PySWMM, cache et
+        # ResultStore sont entièrement pris en charge par SimulationService.
+        # AUCUNE logique hydraulique, construction INP ou solveur direct
+        # ne doit subsister ici.
+        params.setdefault("scenario_pluie", scenario_pluie)
+        params.setdefault("duree_heures", duree_heures)
 
-        # Étape 2 : Extraction des éléments hydrauliques
-        update_job(
-            db,
-            job_id,
-            progress=25,
-            message="Extraction des tronçons, regards et exutoires...",
-        )
-
-        cluster_id = params.get("cluster_id")
-        regards_query = select(Regard).where(Regard.org_id == org_id)
-        conduites_query = select(Canalisation).where(Canalisation.org_id == org_id)
-        if network_id:
-            regards_query = regards_query.where(Regard.network_id == network_id)
-            conduites_query = conduites_query.where(Canalisation.network_id == network_id)
-        if cluster_id is not None:
-            regards_query = regards_query.where(Regard.cluster_id == cluster_id)
-            conduites_query = conduites_query.where(Canalisation.cluster_id == cluster_id)
-
-        regards = list(db.execute(regards_query).scalars().all())
-        conduites = list(db.execute(conduites_query).scalars().all())
-
-        # Étape 3 : Génération du modèle SWMM .inp
         update_job(
             db,
             job_id,
             progress=45,
-            message="Génération du modèle SWMM (.inp) et transfert dans le stockage d'artefacts...",
+            message="Résolution du contexte organisation/projet et du GPKG versionné...",
         )
 
-        inp_content = _build_swmm_inp_content(
-            title=f"SWMM Simulation Job {job_id} ({scenario_pluie})",
-            regards=regards,
-            conduites=conduites,
-            duree_heures=duree_heures,
-            parameters=params,
-        )
-
-        # Archivage du fichier .inp dans l'ArtifactStore
-        proj_slug_or_id = project.id if project else (network_id or "global")
-        inp_key = build_swmm_inp_key(org_id, proj_slug_or_id, f"model_{job_id}.inp")
-        storage.put_bytes(inp_key, inp_content.encode("utf-8"), content_type="text/plain")
-
-        # Étape 4 : Exécution du solveur hydraulique
+        from api.services.simulation_service import executer_en_async
         update_job(
             db,
             job_id,
             progress=65,
-            message="Exécution du solveur hydraulique EPA SWMM 5.2 (calcul des équations de Saint-Venant)...",
+            message="Exécution du moteur EPA SWMM via PySWMM (SimulationService)...",
         )
 
-        kpis, rpt_text = _execute_swmm_solver(
-            inp_content=inp_content,
-            regards=regards,
-            conduites=conduites,
-            duree_heures=duree_heures,
-            scenario_pluie=scenario_pluie,
-            parameters=params,
-        )
-
-        # Étape 5 : Analyse des débordements et archivage des résultats
-        update_job(
-            db,
-            job_id,
-            progress=85,
-            message="Analyse des surcharges, détection des nœuds inondés et archivage...",
-        )
-
-        # Sauvegarder le rapport .rpt et le résumé .json dans le stockage
-        rpt_key = build_simulation_result_key(org_id, proj_slug_or_id, job_id, "report.rpt")
-        summary_key = build_simulation_result_key(org_id, proj_slug_or_id, job_id, "summary.json")
-
-        storage.put_bytes(rpt_key, rpt_text.encode("utf-8"), content_type="text/plain")
-        storage.put_bytes(summary_key, json.dumps(kpis, indent=2).encode("utf-8"), content_type="application/json")
-
-        execution_time = round(time.time() - start_time, 2)
-
-        # Enregistrer ou mettre à jour la simulation en DB
-        sim = Simulation(
-            id=job_id,
+        execution = executer_en_async(
+            db=db,
             org_id=org_id,
-            project_id=project.id if project else network_id,
-            name=params.get("name", f"Simulation {scenario_pluie}"),
-            status="completed",
-            scenario_pluie=scenario_pluie,
-            duree_heures=duree_heures,
-            results_s3_key=summary_key,
-            summary_kpis=kpis,
-            execution_time_seconds=execution_time,
+            project_id=network_id or params.get("project_id"),
+            cluster_id=params.get("cluster_id"),
+            parameters=params,
+            simulation_id=job_id,
         )
-        db.merge(sim)
-        db.commit()
 
         # Étape 6 : Clôture du Job avec succès
         result_payload = {
             "simulation_id": job_id,
-            "inp_key": inp_key,
-            "rpt_key": rpt_key,
-            "summary_key": summary_key,
-            "kpis": kpis,
-            "execution_time_seconds": execution_time,
+            "project_id": execution.get("project_id"),
+            "cluster_id": execution.get("cluster_id"),
+            "param_hash": execution.get("param_hash"),
+            "gpkg": execution.get("gpkg"),
+            "result_key": (execution.get("result_store") or {}).get("result_key"),
+            "result_store": execution.get("result_store"),
+            "peak_outflow_m3s": execution.get("peak_outflow_m3s"),
+            "execution_time_seconds": execution.get("execution_time_seconds"),
         }
 
         update_job(
@@ -214,7 +143,10 @@ def run_swmm_simulation_task(
             result_refs=result_payload,
         )
 
-        logger.info("Simulation SWMM réussie: job_id=%s, durée=%.2fs", job_id, execution_time)
+        logger.info(
+            "Simulation SWMM réussie: job_id=%s, durée=%ss",
+            job_id, execution.get("execution_time_seconds"),
+        )
         return result_payload
 
     except Exception as e:

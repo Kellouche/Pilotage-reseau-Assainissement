@@ -74,7 +74,9 @@ def test_setup(tmp_path, monkeypatch):
     mem_b = Membership(org_id=org_b.id, user_id=user_b.id, role="engineer")
 
     # Éléments de réseau pour Org A
-    proj_a = Project(id="proj_alpha_id", org_id=org_a.id, name="Réseau Ouest", slug="net-alpha")
+    gpkg_a = tmp_path / "reseau_alpha.gpkg"
+    gpkg_a.write_bytes(b"fake-gpkg-content-for-async-tests")
+    proj_a = Project(id="proj_alpha_id", org_id=org_a.id, name="Réseau Ouest", slug="net-alpha", source_gpkg_key=str(gpkg_a))
     regard_a1 = Regard(code="R1", org_id=org_a.id, network_id=proj_a.id, profrad=12.5, profondeur=2.5, longitude=3.0, latitude=36.7)
     regard_a2 = Regard(code="R2", org_id=org_a.id, network_id=proj_a.id, profrad=10.0, profondeur=2.8, longitude=3.01, latitude=36.71)
     conduite_a = Canalisation(fid="C1", org_id=org_a.id, network_id=proj_a.id, id_amont="R1", id_aval="R2", longueur=75.0, diametre=0.4)
@@ -158,196 +160,281 @@ def test_job_multi_tenant_isolation(test_setup):
     db.close()
 
 
-RPT_EPA_SWMM_FAKE = """EPA STORM WATER MANAGEMENT MODEL - VERSION 5.2
-Analysis Options
-  Flow Units ............... CMS
-  Flow Continuity (m3)
-    Total Inflow ........... 1234.500
-    Total Outflow .......... 1200.000
-    Continuity Error (%) ... 2.79
-"""
+# ============================================================
+# LOT 3C.7.3 — Worker Celery = adaptateur de SimulationService
+# ============================================================
+
+import api.services.simulation_service as simulation_service
 
 
-def _simuler_execution_swmm_reelle(monkeypatch, ecrire_rpt=True):
-    """
-    Mock contrôlé du solveur : le binaire est 'trouvé' et subprocess.run
-    écrit réellement le fichier .rpt attendu dans le répertoire temporaire.
-    Retourne la liste des appels subprocess pour vérification.
-    """
+def _resultat_moteur_fake():
+    """Résultat minimal valide au format MoteurSWMM (injecté à la frontière moteur)."""
+    return {
+        "meta": {"bbox": [3.0, 36.7, 3.01, 36.71], "conduits_count": 1, "junctions_count": 2},
+        "node_results": {"R1": {"max_depth_m": 0.1}},
+        "conduit_results": {"C1": {"max_q_m3s": 0.05}},
+        "peak_outflow_m3s": 0.05,
+        "routing_continuity_error_pct": 1.0,
+        "flooded_nodes_count": 0,
+        "inp_content": "[TITLE]\nTest INP",
+        "rpt_content": "EPA STORM WATER MANAGEMENT MODEL - VERSION 5.2\nTotal Inflow 100.0",
+        "provenance": {"nature": "REAL", "engine": "EPA SWMM"},
+        "timeseries": {"status": "SUCCESS", "steps": []},
+    }
+
+
+def _spy_moteur(monkeypatch, resultat=None, erreur=None):
+    """Espionne executer_moteur_swmm (frontière moteur) et prouve les appels réels."""
     appels = []
-    monkeypatch.setattr(swmm_tasks_module.shutil, "which", lambda name: f"/fake/bin/{name}")
 
-    def fake_run(cmd, **kwargs):
-        appels.append(cmd)
-        if ecrire_rpt:
-            with open(cmd[2], "w", encoding="utf-8") as f:
-                f.write(RPT_EPA_SWMM_FAKE)
-        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+    def fake(gpkg_path, params, execution_mode="sync"):
+        appels.append({"gpkg_path": gpkg_path, "params": dict(params), "execution_mode": execution_mode})
+        if erreur is not None:
+            raise erreur
+        return dict(resultat if resultat is not None else _resultat_moteur_fake())
 
-    monkeypatch.setattr(swmm_tasks_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(simulation_service, "executer_moteur_swmm", fake)
     return appels
 
 
+def _interdire_subprocess_worker(monkeypatch):
+    """Prouve que le worker n'appelle JAMAIS subprocess directement."""
+    def interdit(*a, **kw):
+        raise AssertionError("subprocess ne doit plus être appelé par le worker")
+    monkeypatch.setattr(swmm_tasks_module.subprocess, "run", interdit)
+
+
 def test_swmm_simulation_worker_task(test_setup, monkeypatch):
-    """Exécute la tâche de simulation SWMM (solveur réel mocké) et vérifie les artefacts."""
-    appels = _simuler_execution_swmm_reelle(monkeypatch)
+    """Le worker délègue à SimulationService : même moteur, même GPKG, ResultStore."""
+    appels_moteur = _spy_moteur(monkeypatch)
+    _interdire_subprocess_worker(monkeypatch)
     db = SessionLocal()
     org_id = test_setup["org_a_id"]
     proj_id = test_setup["proj_a_id"]
 
     job = create_job(db, org_id=org_id, job_type="simulation_swmm", network_id=proj_id)
 
-    # Exécution de la tâche
     result = run_swmm_simulation_task(
         job_id=job.id,
         org_id=org_id,
         network_id=proj_id,
         scenario_pluie="pluie_decennale",
         duree_heures=12.0,
+        parameters={"cluster_id": test_setup["cluster_a_id"], "project_id": proj_id,
+                    "simulation_id": job.id, "scenario_pluie": "pluie_decennale",
+                    "duree_heures": 12.0},
     )
 
-    # Le chemin réel du solveur a effectivement été appelé
-    assert len(appels) == 1
-    assert appels[0][0].endswith("swmm5")
-    assert appels[0][1].endswith(".inp")
+    # 1. Le moteur COMMUN a été appelé exactement une fois, en mode celery,
+    #    sur le GPKG résolu du projet (source_gpkg_key legacy)
+    assert len(appels_moteur) == 1
+    appel = appels_moteur[0]
+    assert appel["execution_mode"] == "celery"
+    assert str(appel["gpkg_path"]).endswith("reseau_alpha.gpkg")
+    assert appel["params"]["cluster_id"] == test_setup["cluster_a_id"]
+    assert appel["params"]["scenario_key"] == "pluie_decennale"
+    # Les clés d'identité ne polluent pas le contrat moteur
+    assert "project_id" not in appel["params"]
+    assert "simulation_id" not in appel["params"]
 
+    # 2. Payload de clôture : référence ResultStore, pas d'anciennes clés
     assert result["simulation_id"] == job.id
-    assert "kpis" in result
-    assert result["kpis"]["total_inflow_m3"] == 1234.5
-    assert result["kpis"]["engine_version"] == "5.2"
-    assert result["kpis"]["provenance"]["nature"] == "REAL"
-    assert result["kpis"]["provenance"]["execution_mode"] == "celery"
-    assert len(result["kpis"]["provenance"]["inp_sha256"]) == 64
+    assert result["param_hash"]
+    assert result["result_store"]["complet"] is True
+    assert result["result_key"]
 
-    # Vérification dans ArtifactStore
+    # 3. Artefacts ResultStore réellement déposés et lisibles
     storage = get_storage()
-    assert storage.exists(result["inp_key"]) is True
-    assert storage.exists(result["rpt_key"]) is True
-    assert storage.exists(result["summary_key"]) is True
+    assert storage.exists(result["result_key"]) is True
 
-    # Vérification du job en DB
+    # 4. Ligne Simulation = job_id, complétée, provenance celery
+    db.expire_all()
+    sim = db.query(Simulation).filter_by(id=job.id).first()
+    assert sim is not None
+    assert sim.status == "completed"
+    assert sim.org_id == org_id
+    assert sim.project_id == proj_id
+    assert sim.results_s3_key.endswith(".json")
+    prov = (sim.summary_kpis or {}).get("provenance") or {}
+    assert prov.get("execution_mode") == "celery"
+    assert prov.get("gpkg_sha256")
+
+    # 5. Le même service de lecture que le chemin synchrone fonctionne
+    from api.services.simulation_service import charger_resultat_simulation
+    data = charger_resultat_simulation(sim)
+    assert data is not None
+    assert data.get("node_results")
+
+    # 6. Job complété avec références de résultat
     db.refresh(job)
     assert job.status == "completed"
     assert job.progress == 100
-    assert "summary_key" in job.result_refs
+    assert "result_key" in (job.result_refs or {})
 
     db.close()
 
 
-def test_swmm_worker_solveur_absent(test_setup, monkeypatch):
-    """Binaire SWMM absent : exception explicite, job FAILED, aucun artefact ni résultat synthétique."""
-    monkeypatch.delenv("SWMM_BINARY_PATH", raising=False)
+def test_swmm_worker_moteur_en_echec(test_setup, monkeypatch):
+    """Erreur métier propagée : job FAILED, simulation FAILED, aucun artefact."""
+    _spy_moteur(monkeypatch, erreur=RuntimeError("pyswmm indisponible"))
+    _interdire_subprocess_worker(monkeypatch)
     db = SessionLocal()
     org_id = test_setup["org_a_id"]
     proj_id = test_setup["proj_a_id"]
 
     job = create_job(db, org_id=org_id, job_type="simulation_swmm", network_id=proj_id)
 
-    with pytest.raises(SolveurSWMMIndisponible, match="introuvable"):
+    with pytest.raises(RuntimeError, match="pyswmm indisponible"):
         run_swmm_simulation_task(
             job_id=job.id,
             org_id=org_id,
             network_id=proj_id,
-            parameters={"swmm_bin": "binaire_swmm_inexistant_3c71"},
+            parameters={"cluster_id": test_setup["cluster_a_id"], "project_id": proj_id,
+                        "simulation_id": job.id},
         )
 
     db.refresh(job)
     assert job.status == "failed"
-    assert "Binaire SWMM introuvable" in (job.error_message or "")
+    assert "pyswmm indisponible" in (job.error_message or "")
 
-    # Aucune Simulation créée, aucun artefact de résultat déposé
-    assert db.query(Simulation).filter_by(id=job.id).first() is None
-    storage = get_storage()
-    assert not storage.exists(f"{org_id}/{proj_id}/simulations/{job.id}/summary.json")
-    assert not storage.exists(f"{org_id}/{proj_id}/simulations/{job.id}/report.rpt")
+    sim = db.query(Simulation).filter_by(id=job.id).first()
+    assert sim is not None and sim.status == "failed"
 
     db.close()
 
 
-def test_swmm_worker_solveur_non_executable(test_setup, monkeypatch):
-    """Binaire présent mais non exécutable : erreur OS propagée en SolveurSWMMIndisponible."""
-    monkeypatch.setattr(swmm_tasks_module.shutil, "which", lambda name: f"/fake/bin/{name}")
+def test_swmm_worker_gpkg_absent(test_setup, monkeypatch):
+    """Projet sans GPKG disponible : interruption explicite, job FAILED."""
+    _spy_moteur(monkeypatch)
+    _interdire_subprocess_worker(monkeypatch)
+    db = SessionLocal()
+    org_id = test_setup["org_a_id"]
+    # Projet Org A sans aucun GPKG
+    proj_sans = Project(id="proj_sans_gpkg", org_id=org_id, name="Sans GPKG", slug="sans-gpkg")
+    db.add(proj_sans)
+    db.commit()
 
-    def refuse_run(cmd, **kwargs):
-        raise PermissionError(13, "Permission denied", cmd[0])
+    job = create_job(db, org_id=org_id, job_type="simulation_swmm", network_id=proj_sans.id)
 
-    monkeypatch.setattr(swmm_tasks_module.subprocess, "run", refuse_run)
+    with pytest.raises(Exception):
+        run_swmm_simulation_task(
+            job_id=job.id,
+            org_id=org_id,
+            network_id=proj_sans.id,
+            parameters={"cluster_id": test_setup["cluster_a_id"], "project_id": proj_sans.id,
+                        "simulation_id": job.id},
+        )
 
+    # Le cluster appartient à proj_alpha, pas à proj_sans → refus cluster OU gpkg
+    db.refresh(job)
+    assert job.status == "failed"
+    db.close()
+
+
+def test_service_metier_independence_celery():
+    """SimulationService ne doit dépendre ni de Celery ni de FastAPI."""
+    from pathlib import Path
+    src = Path(simulation_service.__file__).read_text(encoding="utf-8")
+    for interdit in ("import celery", "from celery", "from fastapi", "import fastapi",
+                     "from starlette", "celery_app"):
+        assert interdit not in src.lower(), f"Dépendance interdite : {interdit}"
+
+
+def test_service_async_bms_applique(test_setup, monkeypatch):
+    """Les paramètres BMS sont réellement préparés par le chemin commun (preparer_scenario_bms)."""
+    from src.domain.moteur_swmm import MoteurSWMM
+
+    appels = []
+
+    def fake_exec(self, **kwargs):
+        appels.append(kwargs)
+        return _resultat_moteur_fake()
+
+    monkeypatch.setattr(MoteurSWMM, "executer_simulation", fake_exec)
     db = SessionLocal()
     org_id = test_setup["org_a_id"]
     proj_id = test_setup["proj_a_id"]
 
-    job = create_job(db, org_id=org_id, job_type="simulation_swmm", network_id=proj_id)
+    result = simulation_service.executer_en_async(
+        db,
+        org_id=org_id,
+        project_id=proj_id,
+        cluster_id=test_setup["cluster_a_id"],
+        parameters={
+            "scenario_pluie": "pluie_decennale",
+            "bms_mode": True,
+            "bms_cumul_mm": 45.0,
+            "bms_vigilance": "orange",
+            "project_id": "tentative_ecrasement",  # ne doit PAS être honoré
+        },
+        simulation_id="sim_test_bms_001",
+    )
+
+    assert len(appels) == 1
+    kw = appels[0]
+    # Le scénario BMS a été construit et injecté comme scenario_personnalise
+    assert kw["scenario_key"] == "bms_alerte"
+    assert kw["scenario_personnalise"] is not None
+    assert kw["cluster_id"] == test_setup["cluster_a_id"]
+    assert kw["execution_mode"] == "celery"
+    # L'identité projet n'a pas été écrasée par les paramètres
+    assert result["project_id"] == proj_id
+    assert result["gpkg"]["sha256"]
+    db.close()
+
+
+# --- Tests unitaires du helper _execute_swmm_solver (conservé jusqu'au lot 3C.7.5) ---
+# Le worker ne l'appelle plus ; ces tests verrouillent son contrat
+# « jamais de résultat synthétique » en attendant son retrait.
+
+
+def test_helper_solveur_absent():
+    with pytest.raises(SolveurSWMMIndisponible, match="introuvable"):
+        swmm_tasks_module._execute_swmm_solver(
+            inp_content="[TITLE]x", regards=[], conduites=[],
+            duree_heures=1.0, scenario_pluie="pluie_decennale",
+            parameters={"swmm_bin": "binaire_swmm_inexistant_3c73"},
+        )
+
+
+def test_helper_solveur_non_executable(monkeypatch):
+    monkeypatch.setattr(swmm_tasks_module.shutil, "which", lambda name: "/fake/swmm5")
+
+    def refuse(cmd, **kw):
+        raise PermissionError(13, "Permission denied", cmd[0])
+    monkeypatch.setattr(swmm_tasks_module.subprocess, "run", refuse)
 
     with pytest.raises(SolveurSWMMIndisponible, match="inaccessible"):
-        run_swmm_simulation_task(
-            job_id=job.id,
-            org_id=org_id,
-            network_id=proj_id,
-            parameters={"swmm_bin": "swmm5"},
+        swmm_tasks_module._execute_swmm_solver(
+            inp_content="[TITLE]x", regards=[], conduites=[],
+            duree_heures=1.0, scenario_pluie="p", parameters={"swmm_bin": "swmm5"},
         )
 
-    db.refresh(job)
-    assert job.status == "failed"
-    assert db.query(Simulation).filter_by(id=job.id).first() is None
 
-    db.close()
-
-
-def test_swmm_worker_echec_execution_solveur(test_setup, monkeypatch):
-    """Code retour non nul du solveur : erreur propagée, aucun résultat de remplacement."""
-    monkeypatch.setattr(swmm_tasks_module.shutil, "which", lambda name: f"/fake/bin/{name}")
-
-    def echec_run(cmd, **kwargs):
-        return subprocess.CompletedProcess(cmd, 3, stdout="", stderr="ERREUR: invalid junction")
-
-    monkeypatch.setattr(swmm_tasks_module.subprocess, "run", echec_run)
-
-    db = SessionLocal()
-    org_id = test_setup["org_a_id"]
-    proj_id = test_setup["proj_a_id"]
-
-    job = create_job(db, org_id=org_id, job_type="simulation_swmm", network_id=proj_id)
+def test_helper_solveur_echec_execution(monkeypatch):
+    monkeypatch.setattr(swmm_tasks_module.shutil, "which", lambda name: "/fake/swmm5")
+    monkeypatch.setattr(
+        swmm_tasks_module.subprocess, "run",
+        lambda cmd, **kw: subprocess.CompletedProcess(cmd, 3, "", "boom"))
 
     with pytest.raises(SolveurSWMMIndisponible, match="code retour 3"):
-        run_swmm_simulation_task(
-            job_id=job.id,
-            org_id=org_id,
-            network_id=proj_id,
-            parameters={"swmm_bin": "swmm5"},
+        swmm_tasks_module._execute_swmm_solver(
+            inp_content="[TITLE]x", regards=[], conduites=[],
+            duree_heures=1.0, scenario_pluie="p", parameters={"swmm_bin": "swmm5"},
         )
 
-    db.refresh(job)
-    assert job.status == "failed"
-    assert "code retour 3" in (job.error_message or "")
-    assert db.query(Simulation).filter_by(id=job.id).first() is None
 
-    db.close()
-
-
-def test_swmm_worker_rpt_manquant(test_setup, monkeypatch):
-    """Solveur 'réussi' sans produire de .rpt : erreur explicite, jamais de RPT fabriqué."""
-    appels = _simuler_execution_swmm_reelle(monkeypatch, ecrire_rpt=False)
-    db = SessionLocal()
-    org_id = test_setup["org_a_id"]
-    proj_id = test_setup["proj_a_id"]
-
-    job = create_job(db, org_id=org_id, job_type="simulation_swmm", network_id=proj_id)
+def test_helper_solveur_sans_rpt(monkeypatch):
+    monkeypatch.setattr(swmm_tasks_module.shutil, "which", lambda name: "/fake/swmm5")
+    monkeypatch.setattr(
+        swmm_tasks_module.subprocess, "run",
+        lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, "", ""))
 
     with pytest.raises(SolveurSWMMIndisponible, match="sans produire le rapport"):
-        run_swmm_simulation_task(
-            job_id=job.id,
-            org_id=org_id,
-            network_id=proj_id,
-            parameters={"swmm_bin": "swmm5"},
+        swmm_tasks_module._execute_swmm_solver(
+            inp_content="[TITLE]x", regards=[], conduites=[],
+            duree_heures=1.0, scenario_pluie="p", parameters={"swmm_bin": "swmm5"},
         )
-
-    assert len(appels) == 1  # le solveur a bien été invoqué
-    db.refresh(job)
-    assert job.status == "failed"
-    assert db.query(Simulation).filter_by(id=job.id).first() is None
-
-    db.close()
 
 
 # ============================================================
