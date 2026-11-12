@@ -183,9 +183,36 @@ from api.services.simulation_service import (
     construire_reponse_simulation as _construire_reponse_simulation,
     resoudre_contexte_projet as _resoudre_contexte_projet,
     executer_moteur_swmm as _executer_moteur_swmm,
+    resoudre_simulation_courante,
+    ContexteSimulationIntrouvable,
+    ProjetAmbigu,
     ContexteProjetIntrouvable,
 )
 from api.services.bassin_reference import resoudre_bassin
+
+
+def _contexte_simulation_autorise(db: Session, tenant, cluster_id=None,
+                                  simulation_id=None):
+    """
+    Étape 3D.2 — résout la simulation AUTORISÉE pour le tenant courant via
+    le service contextuel (org_id/project_id stricts, jamais la globale
+    _DERNIERE_SIMULATION). Retourne un ContexteSimulation ou None si aucune
+    simulation n'est autorisée pour ce périmètre.
+    """
+    if db is None:
+        return None
+    org_id = tenant.org_id if (tenant and hasattr(tenant, "org_id") and tenant.org_id) else None
+    try:
+        return resoudre_simulation_courante(
+            db,
+            org_id=org_id,
+            simulation_id=simulation_id,
+            cluster_id=cluster_id,
+            resoudre_gpkg=False,
+        )
+    except (ContexteSimulationIntrouvable, ProjetAmbigu) as e:
+        logger.info("Aucune simulation autorisée pour ce contexte : %s", e)
+        return None
 
 
 
@@ -744,28 +771,33 @@ def validate_simulation_buffer(
 
 
 @router.get("/agents/interpretation")
-def get_agents_interpretation():
+def get_agents_interpretation(
+    db: Session = Depends(get_db),
+    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
+):
     """
     Retourne le diagnostic causal complet et les prescriptions de l'équipe
-    multi-agents d'expertise pour la dernière simulation.
+    multi-agents d'expertise pour la simulation autorisée du contexte courant.
     """
-    global _DERNIERE_SIMULATION
-    if not _DERNIERE_SIMULATION or "agents_expertise" not in _DERNIERE_SIMULATION:
+    # 3D.2 — plus de lecture de la globale : simulation résolue par contexte
+    ctx = _contexte_simulation_autorise(db, tenant)
+    sim_data = ctx.data if ctx else None
+    if not sim_data or "agents_expertise" not in sim_data:
         raise HTTPException(
             status_code=404,
             detail="Aucune simulation active disponible pour l'équipe multi-agents. Veuillez lancer une simulation."
         )
     return {
         "status": "success",
-        "agents_expertise": _DERNIERE_SIMULATION.get("agents_expertise", {}),
-        "buffer_sensitivity": _DERNIERE_SIMULATION.get("buffer_sensitivity", {}),
-        "meta": _DERNIERE_SIMULATION.get("meta", {}),
+        "agents_expertise": sim_data.get("agents_expertise", {}),
+        "buffer_sensitivity": sim_data.get("buffer_sensitivity", {}),
+        "meta": sim_data.get("meta", {}),
         "kpis": {
-            "routing_continuity_error_pct": _DERNIERE_SIMULATION.get("routing_continuity_error_pct"),
-            "peak_outflow_m3s": _DERNIERE_SIMULATION.get("peak_outflow_m3s"),
-            "total_outflow_m3": _DERNIERE_SIMULATION.get("total_outflow_m3"),
-            "flooded_nodes_count": _DERNIERE_SIMULATION.get("flooded_nodes_count", 0),
-            "surcharged_nodes_count": _DERNIERE_SIMULATION.get("surcharged_nodes_count", 0),
+            "routing_continuity_error_pct": sim_data.get("routing_continuity_error_pct"),
+            "peak_outflow_m3s": sim_data.get("peak_outflow_m3s"),
+            "total_outflow_m3": sim_data.get("total_outflow_m3"),
+            "flooded_nodes_count": sim_data.get("flooded_nodes_count", 0),
+            "surcharged_nodes_count": sim_data.get("surcharged_nodes_count", 0),
         }
     }
 
@@ -801,6 +833,17 @@ def download_latest_inp(
     bassin_nom = None
     nom_reseau = None
 
+    # 3D.2 — priorité : INP de la simulation AUTORISÉE du contexte courant
+    # (org_id/project_id vérifiés), jamais la globale partagée.
+    ctx = _contexte_simulation_autorise(db, tenant, cluster_id=cluster_id)
+    if ctx and ctx.data:
+        content = ctx.data.get("inp_content")
+        if content:
+            meta = ctx.data.get("meta") or {}
+            bassin_nom = meta.get("bassin_nom") or meta.get("cluster_nom")
+            nom_reseau = (ctx.project.name if ctx.project else None) \
+                or ctx.data.get("project_name")
+
     active_gpkg = None
     if db and tenant and hasattr(tenant, "org_id") and tenant.org_id:
         proj = db.query(Project).filter(Project.org_id == tenant.org_id, Project.is_archived.is_(False)).first()
@@ -818,20 +861,8 @@ def download_latest_inp(
         active_gpkg = Path("data/demo_reseau.gpkg")
         nom_reseau = "demo_reseau"
 
-    # 1. Vérifier si _DERNIERE_SIMULATION correspond
-    if _DERNIERE_SIMULATION and _est_simulation_valide(_DERNIERE_SIMULATION):
-        cur_cid = str(_DERNIERE_SIMULATION.get("meta", {}).get("cluster_id") or "").lower()
-        cur_cnom = str(_DERNIERE_SIMULATION.get("meta", {}).get("cluster_nom") or "").lower()
-        cur_bnom = str(_DERNIERE_SIMULATION.get("meta", {}).get("bassin_nom") or "").lower()
-        target = str(cluster_id).strip().lower() if cluster_id else None
-
-        if not target or target in (cur_cid, cur_cnom, cur_bnom):
-            content = _DERNIERE_SIMULATION.get("inp_content")
-            bassin_nom = _DERNIERE_SIMULATION.get("meta", {}).get("bassin_nom") or _DERNIERE_SIMULATION.get("meta", {}).get("cluster_nom")
-            if not nom_reseau:
-                nom_reseau = _DERNIERE_SIMULATION.get("project_name")
-
-    # 2. Si cluster_id demandé mais non dans _DERNIERE_SIMULATION, chercher dans le cache
+    # 2. Si cluster_id demandé sans simulation autorisée correspondante,
+    # chercher dans le cache content-adressé du GPKG effectif du projet.
     if not content and cluster_id and active_gpkg:
         clean_cid = str(cluster_id).strip().lower()
         for cand in _iter_fichiers_cache_simulation(active_gpkg):
@@ -888,6 +919,16 @@ def download_latest_rpt(
     bassin_nom = None
     nom_reseau = None
 
+    # 3D.2 — priorité : RPT de la simulation AUTORISÉE du contexte courant.
+    ctx = _contexte_simulation_autorise(db, tenant, cluster_id=cluster_id)
+    if ctx and ctx.data:
+        content = ctx.data.get("rpt_content")
+        if content:
+            meta = ctx.data.get("meta") or {}
+            bassin_nom = meta.get("bassin_nom") or meta.get("cluster_nom")
+            nom_reseau = (ctx.project.name if ctx.project else None) \
+                or ctx.data.get("project_name")
+
     active_gpkg = None
     if db and tenant and hasattr(tenant, "org_id") and tenant.org_id:
         proj = db.query(Project).filter(Project.org_id == tenant.org_id, Project.is_archived.is_(False)).first()
@@ -905,20 +946,8 @@ def download_latest_rpt(
         active_gpkg = Path("data/demo_reseau.gpkg")
         nom_reseau = "demo_reseau"
 
-    # 1. Vérifier si _DERNIERE_SIMULATION correspond
-    if _DERNIERE_SIMULATION and _est_simulation_valide(_DERNIERE_SIMULATION):
-        cur_cid = str(_DERNIERE_SIMULATION.get("meta", {}).get("cluster_id") or "").lower()
-        cur_cnom = str(_DERNIERE_SIMULATION.get("meta", {}).get("cluster_nom") or "").lower()
-        cur_bnom = str(_DERNIERE_SIMULATION.get("meta", {}).get("bassin_nom") or "").lower()
-        target = str(cluster_id).strip().lower() if cluster_id else None
-
-        if not target or target in (cur_cid, cur_cnom, cur_bnom):
-            content = _DERNIERE_SIMULATION.get("rpt_content")
-            bassin_nom = _DERNIERE_SIMULATION.get("meta", {}).get("bassin_nom") or _DERNIERE_SIMULATION.get("meta", {}).get("cluster_nom")
-            if not nom_reseau:
-                nom_reseau = _DERNIERE_SIMULATION.get("project_name")
-
-    # 2. Si cluster_id demandé mais non dans _DERNIERE_SIMULATION, chercher dans le cache
+    # 2. Si cluster_id demandé sans simulation autorisée correspondante,
+    # chercher dans le cache content-adressé du GPKG effectif du projet.
     if not content and cluster_id and active_gpkg:
         clean_cid = str(cluster_id).strip().lower()
         for cand in _iter_fichiers_cache_simulation(active_gpkg):
@@ -963,10 +992,13 @@ def telecharger_ordre_mission_bms_pdf(
     pour les équipes d'intervention de l'ONA en cas d'alerte météo BMS.
     Identifie la liste prioritaire des regards et collecteurs à curer et sécuriser.
     """
-    global _DERNIERE_SIMULATION
     from src.domain.bms_ordre_mission import generer_pdf_ordre_mission_bms
 
-    sim_data = _DERNIERE_SIMULATION if (_DERNIERE_SIMULATION and _est_simulation_valide(_DERNIERE_SIMULATION)) else {}
+    # 3D.2 — simulation AUTORISÉE du contexte courant, jamais la globale.
+    # Contrat historique préservé : PDF générique (données vides) si aucune
+    # simulation autorisée — jamais les données d'un autre tenant.
+    ctx = _contexte_simulation_autorise(db, tenant)
+    sim_data = ctx.data if ctx else {}
     bms_info = sim_data.get("bms_info")
 
     nom_bassin = (
@@ -1011,41 +1043,12 @@ def telecharger_rapport_diagnostic_pdf(
     bilan de continuité massique, volumes inondés, durées de submersion,
     estimation financière des travaux prioritaires.
     """
-    global _DERNIERE_SIMULATION
     from src.domain.rapport_diagnostic import generer_pdf_rapport_diagnostic
 
-    sim_data = _DERNIERE_SIMULATION if (_DERNIERE_SIMULATION and _est_simulation_valide(_DERNIERE_SIMULATION)) else {}
-
-    # Si cluster_id demandé, tenter de charger la simulation correspondante
-    if cluster_id and (not sim_data or not _est_simulation_valide(sim_data)):
-        try:
-            from api.models import Project
-            active_gpkg = None
-            proj = None
-            if tenant and hasattr(tenant, "org_id") and tenant.org_id:
-                proj = db.query(Project).filter(
-                    Project.org_id == tenant.org_id,
-                    Project.is_archived.is_(False)
-                ).first()
-                active_gpkg = _resoudre_gpkg_effectif_pour_projet(db, proj)
-            if not active_gpkg:
-                proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
-                active_gpkg = _resoudre_gpkg_effectif_pour_projet(db, proj)
-                if active_gpkg is None and Path("data/demo_reseau.gpkg").exists():
-                    active_gpkg = Path("data/demo_reseau.gpkg")
-
-            if active_gpkg and active_gpkg.exists():
-                restored = _charger_derniere_simulation_disque_ou_db(active_gpkg, db, proj)
-                if restored and _est_simulation_valide(restored):
-                    # Vérifier si ce cluster correspond
-                    restored_cid = str(restored.get("meta", {}).get("cluster_id") or "")
-                    restored_cnom = str(restored.get("meta", {}).get("cluster_nom") or "").lower()
-                    target = str(cluster_id).strip().lower()
-                    if target in (restored_cid, restored_cnom) or target in restored_cnom:
-                        sim_data = restored
-                        _DERNIERE_SIMULATION = restored
-        except Exception as e:
-            logger.warning("Échec chargement simulation pour cluster %s: %s", cluster_id, e)
+    # 3D.2 — simulation AUTORISÉE du contexte courant (filtre cluster_id
+    # éventuel), jamais la globale partagée ni une restauration non filtrée.
+    ctx = _contexte_simulation_autorise(db, tenant, cluster_id=cluster_id)
+    sim_data = ctx.data if ctx else None
 
     if not sim_data or not _est_simulation_valide(sim_data):
         raise HTTPException(

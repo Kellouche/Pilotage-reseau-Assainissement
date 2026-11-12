@@ -334,3 +334,57 @@ def test_donnees_invalides_ignorees(db, env):
             svc.resoudre_simulation_courante(db, org_id=org.id, resoudre_gpkg=False)
     finally:
         _nettoyer(db, [org], [p], [s_bad, s_ok])
+
+
+# ---------------------------------------------------------------------------
+# 3D.2 — Non-fuite inter-tenant sur les endpoints migrés
+# ---------------------------------------------------------------------------
+
+def test_endpoints_migres_ne_fuitent_pas_vers_autre_org(db, env):
+    """Org A a une sim avec contenu distinctif ; org B (sans sim) ne doit
+    recevoir AUCUNE de ses données via les endpoints migrés."""
+    from types import SimpleNamespace
+    from fastapi import HTTPException
+    from api.routes import simulations as sim_routes
+
+    orgA, orgB = _org(db), _org(db)
+    pA = _projet(db, orgA, tmp=env)
+    pB = _projet(db, orgB, tmp=env)
+
+    data_a = _data_sim(cluster_id=7)
+    data_a["inp_content"] = "[TITLE]\nSECRET_RESEAU_A"
+    data_a["rpt_content"] = "RAPPORT_SECRET_A"
+    data_a["agents_expertise"] = {"agent1": {"diagnostic": "SECRET_A"}}
+    sA = _sim(db, orgA, pA, data_a, env, nom_suffix="A")
+
+    tenantA = SimpleNamespace(org_id=orgA.id)
+    tenantB = SimpleNamespace(org_id=orgB.id)
+    try:
+        # --- Côté A : accès nominal ---
+        r_inp = sim_routes.download_latest_inp(db=db, tenant=tenantA)
+        assert r_inp.status_code == 200
+        assert "SECRET_RESEAU_A" in r_inp.body.decode("utf-8")
+        r_rpt = sim_routes.download_latest_rpt(db=db, tenant=tenantA)
+        assert "RAPPORT_SECRET_A" in r_rpt.body.decode("utf-8")
+        r_agents = sim_routes.get_agents_interpretation(db=db, tenant=tenantA)
+        assert r_agents["agents_expertise"]["agent1"]["diagnostic"] == "SECRET_A"
+
+        # --- Côté B : aucune donnée de A (404 explicite, jamais de fuite) ---
+        # /bms/ordre-mission-pdf : contrat = PDF toujours généré, mais avec
+        # les données de la sim AUTORISÉE uniquement (vide pour B → PDF générique).
+        resp_b = sim_routes.telecharger_ordre_mission_bms_pdf(db=db, tenant=tenantB)
+        assert resp_b.status_code == 200
+        assert resp_b.media_type == "application/pdf"
+        resp_a = sim_routes.telecharger_ordre_mission_bms_pdf(db=db, tenant=tenantA)
+        assert resp_a.status_code == 200
+        for appel in (
+            lambda: sim_routes.download_latest_inp(db=db, tenant=tenantB),
+            lambda: sim_routes.download_latest_rpt(db=db, tenant=tenantB),
+            lambda: sim_routes.get_agents_interpretation(db=db, tenant=tenantB),
+            lambda: sim_routes.telecharger_rapport_diagnostic_pdf(db=db, tenant=tenantB),
+        ):
+            with pytest.raises(HTTPException) as exc:
+                appel()
+            assert exc.value.status_code == 404
+    finally:
+        _nettoyer(db, [orgA, orgB], [pA, pB], [sA])

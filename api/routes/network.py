@@ -965,24 +965,19 @@ def export_network_inp(
         with open(original_inp, "r", encoding="utf-8", errors="ignore") as f:
             inp_content = f.read()
     else:
-        from api.routes.simulations import _DERNIERE_SIMULATION
-        if _DERNIERE_SIMULATION and _DERNIERE_SIMULATION.get("inp_content"):
-            inp_content = _DERNIERE_SIMULATION["inp_content"]
-            b_nom = _DERNIERE_SIMULATION.get("meta", {}).get("bassin_nom") or _DERNIERE_SIMULATION.get("meta", {}).get("cluster_nom")
-            if b_nom:
-                project_name = f"{project_name or gpkg_path.stem}_{b_nom}"
-        else:
-            moteur = MoteurSWMM()
-            inp_content, _ = moteur.assembler_modele_inp(
-                gpkg_path=gpkg_path,
-                cluster_id=None,
-                pente_moyenne_pct=1.0
-            )
-            try:
-                with open(original_inp, "w", encoding="utf-8") as f:
-                    f.write(inp_content)
-            except Exception:
-                pass
+        # 3D.2 — plus de lecture de _DERNIERE_SIMULATION (état global non
+        # cloisonné) : le modèle est assemblé depuis le GPKG du projet.
+        moteur = MoteurSWMM()
+        inp_content, _ = moteur.assembler_modele_inp(
+            gpkg_path=gpkg_path,
+            cluster_id=None,
+            pente_moyenne_pct=1.0
+        )
+        try:
+            with open(original_inp, "w", encoding="utf-8") as f:
+                f.write(inp_content)
+        except Exception:
+            pass
 
     nom_reseau = project_name or gpkg_path.stem
     r = re.sub(r'\.(gpkg|inp)$', '', str(nom_reseau).strip(), flags=re.I)
