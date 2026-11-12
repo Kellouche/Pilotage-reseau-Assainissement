@@ -20,9 +20,9 @@ logger = logging.getLogger(__name__)
 
 from api.database import get_db
 from api import schemas, crud
-from api.core.security import get_tenant_context_optional, TenantContext
-from api.core.jobs import create_job
-from api.models import Organization
+from api.core.security import get_tenant_context, get_tenant_context_optional, TenantContext
+from api.core.jobs import create_job, update_job
+from api.models import Organization, Project
 
 router = APIRouter(prefix="/simulations", tags=["Simulations"])
 
@@ -49,35 +49,56 @@ def launch_simulation(
     simulation: schemas.SimulationCreate,
     user_id: str = "system",
     db: Session = Depends(get_db),
-    tenant: Optional[TenantContext] = Depends(get_tenant_context_optional),
+    tenant: TenantContext = Depends(get_tenant_context),
 ):
     """
     Lance une simulation SWMM asynchrone pour un cluster (Phase 2.4).
     Retourne immédiatement avec un job_id pour polling ou WebSocket.
-    """
-    org_id = tenant.org.id if tenant else None
-    if not org_id:
-        default_org = db.query(Organization).first()
-        org_id = default_org.id if default_org else "org_default"
 
-    # Vérifier cluster existe
-    cluster = crud.get_cluster(db, simulation.cluster_id, org_id=org_id if tenant else None)
-    if not cluster:
+    Identité : l'organisation provient exclusivement du contexte
+    d'authentification validé — aucun repli arbitraire.
+    `cluster.network_id` est l'identifiant du projet (Network = Project).
+    """
+    org_id = tenant.org_id
+
+    # Vérifier cluster existe ET appartient à l'organisation authentifiée
+    cluster = crud.get_cluster(db, simulation.cluster_id, org_id=org_id)
+    if not cluster or getattr(cluster, "org_id", None) != org_id:
         raise HTTPException(status_code=404, detail="Cluster non trouvé")
 
-    network_id = getattr(cluster, "network_id", None)
+    # Le projet (alias Network) doit exister et appartenir à la même organisation
+    project_id = getattr(cluster, "network_id", None)
+    if not project_id:
+        raise HTTPException(
+            status_code=422,
+            detail="Le cluster sélectionné n'est rattaché à aucun projet.",
+        )
+    project = db.get(Project, project_id)
+    if project is None or getattr(project, "org_id", None) != org_id:
+        raise HTTPException(status_code=404, detail="Projet introuvable pour ce cluster.")
+
     scenario_pluie = (simulation.parameters or {}).get("scenario_pluie", "pluie_decennale")
     duree_heures = float((simulation.parameters or {}).get("duree_heures", 24.0))
+
+    # Identifiants explicites transmis au worker pour vérification de cohérence
+    parametres_worker = {
+        **(simulation.parameters or {}),
+        "cluster_id": simulation.cluster_id,
+        "project_id": project_id,
+        "scenario_pluie": scenario_pluie,
+        "duree_heures": duree_heures,
+    }
 
     # 1. Créer le Job asynchrone
     job = create_job(
         db=db,
         org_id=org_id,
         job_type="simulation_swmm",
-        network_id=network_id,
+        network_id=project_id,
         payload={
             "cluster_id": simulation.cluster_id,
-            "parameters": simulation.parameters or {},
+            "project_id": project_id,
+            "parameters": parametres_worker,
             "scenario_pluie": scenario_pluie,
             "duree_heures": duree_heures,
         },
@@ -89,34 +110,42 @@ def launch_simulation(
         cluster_id=simulation.cluster_id,
         job_id=job.id,
         parameters=simulation.parameters,
-        created_by=tenant.user.id if (tenant and tenant.user) else user_id,
+        created_by=tenant.user.id if tenant.user else user_id,
         org_id=org_id,
-        project_id=network_id,
+        project_id=project_id,
         scenario_pluie=scenario_pluie,
         duree_heures=duree_heures,
     )
+    parametres_worker["simulation_id"] = sim_obj.id
 
-    # 3. Déclencher la tâche Celery asynchrone
+    # 3. Publier la tâche Celery — JAMAIS d'exécution synchrone de repli
     try:
         from workers.tasks.swmm_tasks import run_swmm_simulation_task
         run_swmm_simulation_task.delay(
             job_id=job.id,
             org_id=org_id,
-            network_id=network_id,
+            network_id=project_id,
             scenario_pluie=scenario_pluie,
             duree_heures=duree_heures,
-            parameters={"cluster_id": simulation.cluster_id, **(simulation.parameters or {})},
+            parameters=parametres_worker,
         )
-    except Exception:
-        # Fallback synchrone propre si Redis / Celery broker non disponible
-        from workers.tasks.swmm_tasks import run_swmm_simulation_task
-        run_swmm_simulation_task(
-            job_id=job.id,
-            org_id=org_id,
-            network_id=network_id,
-            scenario_pluie=scenario_pluie,
-            duree_heures=duree_heures,
-            parameters={"cluster_id": simulation.cluster_id, **(simulation.parameters or {})},
+    except Exception as exc:
+        logger.error(
+            "Échec de publication Celery pour job %s (org %s) : %s",
+            job.id, org_id, exc,
+        )
+        update_job(
+            db,
+            job.id,
+            status="failed",
+            message="Publication de la tâche asynchrone impossible.",
+            error_message=f"Broker Celery indisponible : {exc}",
+        )
+        sim_obj.status = "failed"
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Service de calcul asynchrone temporairement indisponible. Réessayez ultérieurement.",
         )
 
     return sim_obj.to_dict()

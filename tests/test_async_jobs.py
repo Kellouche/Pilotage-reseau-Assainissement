@@ -21,6 +21,8 @@ from api.core.jobs import create_job, update_job, get_job, list_jobs
 from api.core.storage import get_storage, LocalStore
 from workers.tasks.swmm_tasks import run_swmm_simulation_task, SolveurSWMMIndisponible
 import workers.tasks.swmm_tasks as swmm_tasks_module
+from api import schemas
+from api.routes.simulations import launch_simulation
 from workers.tasks.mnt_tasks import run_mnt_extraction_task
 
 
@@ -345,6 +347,193 @@ def test_swmm_worker_rpt_manquant(test_setup, monkeypatch):
     assert job.status == "failed"
     assert db.query(Simulation).filter_by(id=job.id).first() is None
 
+    db.close()
+
+
+# ============================================================
+# LOT 3C.7.2 — Sécurisation identité et lancement asynchrone
+# ============================================================
+
+
+def _construire_tenant(db, org_id, email):
+    """Construit un TenantContext réel pour les tests directs de route."""
+    org = db.query(Organization).filter_by(id=org_id).first()
+    user = db.query(User).filter_by(email=email).first()
+    return TenantContext(actor=user, org=org, role="admin")
+
+
+class _FakeTacheCelery:
+    """Substitut de tâche Celery : capture les arguments de .delay()."""
+
+    def __init__(self, erreur=None):
+        self.appels = []
+        self.erreur = erreur
+
+    def delay(self, **kwargs):
+        if self.erreur is not None:
+            raise self.erreur
+        self.appels.append(kwargs)
+        return "fake-task-id"
+
+
+def _patch_tache(monkeypatch, fake):
+    """La route importe run_swmm_simulation_task au moment de l'appel :
+    patcher l'attribut du module suffit et prouve l'appel réel."""
+    monkeypatch.setattr(swmm_tasks_module, "run_swmm_simulation_task", fake)
+
+
+def test_launch_simulation_sans_authentification_refuse(test_setup):
+    """Aucun tenant : la dépendance stricte rejette en 401 — plus de Organization.first()."""
+    client = TestClient(app)
+    resp = client.post("/api/v1/simulations", json={"cluster_id": 101})
+    assert resp.status_code == 401
+
+
+def test_launch_simulation_tenant_valide(test_setup, monkeypatch):
+    """Tenant valide : organisation résolue depuis le contexte, job pending, tâche publiée."""
+    fake = _FakeTacheCelery()
+    _patch_tache(monkeypatch, fake)
+    db = SessionLocal()
+    tenant = _construire_tenant(db, test_setup["org_a_id"], "ingenieur@regie-alpha.dz")
+
+    payload = schemas.SimulationCreate(cluster_id=test_setup["cluster_a_id"], parameters={"scenario_pluie": "pluie_decennale"})
+    result = launch_simulation(simulation=payload, db=db, tenant=tenant)
+
+    assert result["status"] == "pending"
+    assert result["org_id"] == test_setup["org_a_id"]
+    assert result["project_id"] == test_setup["proj_a_id"]
+
+    # Vérification des identifiants réellement transmis au worker
+    assert len(fake.appels) == 1
+    appel = fake.appels[0]
+    assert appel["job_id"] == result["id"]
+    assert appel["org_id"] == test_setup["org_a_id"]
+    assert appel["network_id"] == test_setup["proj_a_id"]
+    assert appel["parameters"]["project_id"] == test_setup["proj_a_id"]
+    assert appel["parameters"]["simulation_id"] == result["id"]
+    assert appel["parameters"]["cluster_id"] == test_setup["cluster_a_id"]
+
+    # Job et Simulation cohérents, aucun orphelin
+    job = db.query(Job).filter_by(id=result["id"]).first()
+    assert job is not None and job.status == "pending"
+    db.close()
+
+
+def test_launch_simulation_cluster_autre_org_refuse(test_setup, monkeypatch):
+    """Cluster appartenant à une autre organisation : refus stealth 404."""
+    fake = _FakeTacheCelery()
+    _patch_tache(monkeypatch, fake)
+    db = SessionLocal()
+    tenant = _construire_tenant(db, test_setup["org_a_id"], "ingenieur@regie-alpha.dz")
+
+    # Créer un cluster dans Org B
+    proj_b = Project(id="proj_beta_id", org_id=test_setup["org_b_id"], name="Réseau Beta", slug="net-beta")
+    db.add(proj_b)
+    db.flush()
+    cluster_b = Cluster(id=202, org_id=test_setup["org_b_id"], network_id=proj_b.id, nom="Bassin Beta")
+    db.add(cluster_b)
+    db.commit()
+
+    payload = schemas.SimulationCreate(cluster_id=cluster_b.id)
+    with pytest.raises(HTTPException) as exc:
+        launch_simulation(simulation=payload, db=db, tenant=tenant)
+    assert exc.value.status_code == 404
+    assert fake.appels == []
+    db.close()
+
+
+def test_launch_simulation_projet_incoherent_refuse(test_setup, monkeypatch):
+    """Cluster Org A rattaché à un projet Org B : refus explicite, aucune publication."""
+    fake = _FakeTacheCelery()
+    _patch_tache(monkeypatch, fake)
+    db = SessionLocal()
+    tenant = _construire_tenant(db, test_setup["org_a_id"], "ingenieur@regie-alpha.dz")
+
+    proj_b = Project(id="proj_gamma_id", org_id=test_setup["org_b_id"], name="Réseau Gamma", slug="net-gamma")
+    db.add(proj_b)
+    db.flush()
+    cluster_incoherent = Cluster(id=303, org_id=test_setup["org_a_id"], network_id=proj_b.id, nom="Cluster incohérent")
+    db.add(cluster_incoherent)
+    db.commit()
+
+    payload = schemas.SimulationCreate(cluster_id=cluster_incoherent.id)
+    with pytest.raises(HTTPException) as exc:
+        launch_simulation(simulation=payload, db=db, tenant=tenant)
+    assert exc.value.status_code == 404
+    assert fake.appels == []
+    db.close()
+
+
+def test_launch_simulation_cluster_sans_projet_refuse(test_setup, monkeypatch):
+    """Cluster sans network_id : refus 422 explicite."""
+    fake = _FakeTacheCelery()
+    _patch_tache(monkeypatch, fake)
+    db = SessionLocal()
+    tenant = _construire_tenant(db, test_setup["org_a_id"], "ingenieur@regie-alpha.dz")
+
+    cluster_orphelin = Cluster(id=404, org_id=test_setup["org_a_id"], network_id=None, nom="Sans projet")
+    db.add(cluster_orphelin)
+    db.commit()
+
+    payload = schemas.SimulationCreate(cluster_id=cluster_orphelin.id)
+    with pytest.raises(HTTPException) as exc:
+        launch_simulation(simulation=payload, db=db, tenant=tenant)
+    assert exc.value.status_code == 422
+    assert fake.appels == []
+    db.close()
+
+
+def test_launch_simulation_broker_indisponible(test_setup, monkeypatch):
+    """Échec de publication Celery : 503, job FAILED, simulation FAILED — aucun orphelin pending."""
+    fake = _FakeTacheCelery(erreur=ConnectionError("broker Redis injoignable"))
+    _patch_tache(monkeypatch, fake)
+    db = SessionLocal()
+    tenant = _construire_tenant(db, test_setup["org_a_id"], "ingenieur@regie-alpha.dz")
+
+    payload = schemas.SimulationCreate(cluster_id=test_setup["cluster_a_id"])
+    with pytest.raises(HTTPException) as exc:
+        launch_simulation(simulation=payload, db=db, tenant=tenant)
+    assert exc.value.status_code == 503
+
+    # Le job créé avant l'échec est explicitement FAILED, pas laissé 'pending'
+    jobs = db.query(Job).filter_by(org_id=test_setup["org_a_id"], job_type="simulation_swmm").all()
+    assert len(jobs) == 1
+    assert jobs[0].status == "failed"
+    assert "Broker Celery indisponible" in (jobs[0].error_message or "")
+
+    sim = db.query(Simulation).filter_by(id=jobs[0].id).first()
+    assert sim is not None
+    assert sim.status == "failed"
+
+    db.close()
+
+
+def test_swmm_worker_identifiants_incoherents(test_setup):
+    """Le worker refuse de traiter une tâche dont project_id/simulation_id ne correspondent pas."""
+    db = SessionLocal()
+    org_id = test_setup["org_a_id"]
+    proj_id = test_setup["proj_a_id"]
+
+    job = create_job(db, org_id=org_id, job_type="simulation_swmm", network_id=proj_id)
+
+    with pytest.raises(ValueError, match="Incohérence d'identité"):
+        run_swmm_simulation_task(
+            job_id=job.id,
+            org_id=org_id,
+            network_id=proj_id,
+            parameters={"project_id": "un_autre_projet", "cluster_id": 101},
+        )
+
+    with pytest.raises(ValueError, match="Incohérence d'identité"):
+        run_swmm_simulation_task(
+            job_id=job.id,
+            org_id=org_id,
+            network_id=proj_id,
+            parameters={"simulation_id": "un_autre_id", "cluster_id": 101},
+        )
+
+    db.refresh(job)
+    assert job.status == "failed"
     db.close()
 
 

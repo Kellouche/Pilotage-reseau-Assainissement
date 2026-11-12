@@ -67,6 +67,20 @@ def run_swmm_simulation_task(
     logger.info("Démarrage de la simulation SWMM: job_id=%s, org_id=%s, network_id=%s", job_id, org_id, network_id)
 
     try:
+        # Étape 0 : Cohérence des identifiants transmis par la route
+        params_project_id = params.get("project_id")
+        params_simulation_id = params.get("simulation_id")
+        if params_project_id and network_id and str(params_project_id) != str(network_id):
+            raise ValueError(
+                f"Incohérence d'identité : project_id={params_project_id} "
+                f"ne correspond pas à network_id={network_id} (job {job_id})"
+            )
+        if params_simulation_id and str(params_simulation_id) != str(job_id):
+            raise ValueError(
+                f"Incohérence d'identité : simulation_id={params_simulation_id} "
+                f"ne correspond pas au job {job_id}"
+            )
+
         # Étape 1 : Initialisation
         update_job(
             db,
@@ -76,12 +90,18 @@ def run_swmm_simulation_task(
             message="Chargement des données du réseau et validation topologique...",
         )
 
-        # Vérifier le projet si fourni
+        # Vérifier le projet si fourni — un network_id sans projet
+        # correspondant dans l'organisation est une incohérence fatale
         project = None
         if network_id:
             project = db.execute(
                 select(Project).where(Project.id == network_id, Project.org_id == org_id)
             ).scalar_one_or_none()
+            if project is None:
+                raise ValueError(
+                    f"Projet {network_id} introuvable pour l'organisation {org_id} "
+                    f"(job {job_id})"
+                )
 
         # Étape 2 : Extraction des éléments hydrauliques
         update_job(
