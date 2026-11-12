@@ -510,7 +510,8 @@ def resoudre_gpkg_pour_simulation(
 ) -> Tuple[Optional[Path], Dict[str, Any]]:
     """
     Étape 3C.0 — résout le GPKG EXACT ayant produit `data_simulation`
-    (dict résultat JSON persisté, ou _DERNIERE_SIMULATION).
+    (dict résultat JSON persisté — la globale `_DERNIERE_SIMULATION` a été
+    supprimée en 3D.5).
 
     Ordre strict :
       1. `provenance.gpkg_version_id` → GpkgVersion validé dans le contexte

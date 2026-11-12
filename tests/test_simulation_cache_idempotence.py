@@ -26,7 +26,6 @@ from api.routes.simulations import (
     _charger_derniere_simulation_disque_ou_db,
     run_native_swmm_simulation,
     get_latest_simulation,
-    reinitialiser_derniere_simulation,
     SimulationRunRequest
 )
 
@@ -178,8 +177,6 @@ def test_persistance_disque_et_base_de_donnees():
 
 def test_route_run_simulation_cache_hit_et_force_recalculate():
     """Vérifie l'exécution via run_native_swmm_simulation : cache hit instantané (cached=True) et recalcul (cached=False)."""
-    reinitialiser_derniere_simulation()
-
     db = SessionLocal()
     try:
         proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
@@ -232,8 +229,7 @@ def test_route_run_simulation_cache_hit_et_force_recalculate():
         assert "restaurés" in res_cached["message"]
         assert elapsed < 0.1, f"Le hit de cache doit répondre instantanément (< 100ms), obtenu {elapsed:.3f}s"
 
-        # 2. Vérification get_latest_simulation après purge de la mémoire
-        reinitialiser_derniere_simulation()
+        # 2. Vérification get_latest_simulation (résolution DB, 3D.5)
         res_latest = get_latest_simulation(db=db, tenant=None)
         assert res_latest["status"] == "success"
         assert res_latest["cached"] is True

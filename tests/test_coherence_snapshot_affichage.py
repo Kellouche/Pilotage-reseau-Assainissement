@@ -259,6 +259,14 @@ def _tenant(ctx):
     return TenantContext(actor=None, org=ctx["org"], role="admin")
 
 
+def _sim_autorisee(db, org_id, **kwargs):
+    """Résout la simulation autorisée exactement comme les routes (3D.5 :
+    plus de lecture de la globale `_DERNIERE_SIMULATION`, supprimée)."""
+    from api.services.simulation_service import resoudre_simulation_courante
+    return resoudre_simulation_courante(
+        db, org_id=org_id, resoudre_gpkg=True, **kwargs)
+
+
 def test_latest_utilise_snapshot_de_la_simulation(db, endpoint_ctx, env_versions):
     """Sim sur V1, projet passé à V2 : /latest affiche toujours V1."""
     from api.routes import simulations as sim_routes
@@ -276,15 +284,10 @@ def test_latest_utilise_snapshot_de_la_simulation(db, endpoint_ctx, env_versions
     v2 = gv.enregistrer_version_gpkg(db, ctx["proj"], gpkg2, valider=False)
     db.commit()
 
-    ancien = sim_routes._DERNIERE_SIMULATION
-    sim_routes._DERNIERE_SIMULATION = {}
-    try:
-        resp = sim_routes.get_latest_simulation(db=db, tenant=_tenant(ctx))
-        sim = sim_routes._DERNIERE_SIMULATION
-        assert sim and gv.sha256_fichier(sim["source_gpkg"]) == v1.sha256, (
-            f"latest aurait dû utiliser le snapshot V1, obtenu {sim.get('source_gpkg')}")
-    finally:
-        sim_routes._DERNIERE_SIMULATION = ancien
+    resp = sim_routes.get_latest_simulation(db=db, tenant=_tenant(ctx))
+    ctx2 = _sim_autorisee(db, ctx["org"].id)
+    assert ctx2.gpkg_path and gv.sha256_fichier(ctx2.gpkg_path) == v1.sha256, (
+        f"latest aurait dû utiliser le snapshot V1, obtenu {ctx2.gpkg_path}")
 
 
 def test_bassin_choisit_simulation_la_plus_recente(db, endpoint_ctx):
@@ -306,15 +309,10 @@ def test_bassin_choisit_simulation_la_plus_recente(db, endpoint_ctx):
     _sim_row(db, ctx, recent_data, bassin_ref="exutoire:3479",
              created_at=now)
 
-    ancien = sim_routes._DERNIERE_SIMULATION
-    sim_routes._DERNIERE_SIMULATION = {}
-    try:
-        resp = sim_routes.get_bassin_simulation(cluster_id="exutoire:3479", db=db, tenant=_tenant(ctx))
-        sim = sim_routes._DERNIERE_SIMULATION
-        assert sim is not None and sim.get("meta", {}).get("bassin_nom") == "RECENTE_SIM", (
-            f"Attendu RECENTE_SIM, obtenu {resp} / {sim.get('meta') if sim else None}")
-    finally:
-        sim_routes._DERNIERE_SIMULATION = ancien
+    resp = sim_routes.get_bassin_simulation(cluster_id="exutoire:3479", db=db, tenant=_tenant(ctx))
+    ctx2 = _sim_autorisee(db, ctx["org"].id, cluster_id="exutoire:3479")
+    assert ctx2.data.get("meta", {}).get("bassin_nom") == "RECENTE_SIM", (
+        f"Attendu RECENTE_SIM, obtenu {resp} / {ctx2.data.get('meta')}")
 
 
 def test_bassin_simulation_version_v1_apres_passage_v2(db, endpoint_ctx, env_versions):
@@ -331,15 +329,10 @@ def test_bassin_simulation_version_v1_apres_passage_v2(db, endpoint_ctx, env_ver
     gv.enregistrer_version_gpkg(db, ctx["proj"], gpkg2, valider=False)
     db.commit()
 
-    ancien = sim_routes._DERNIERE_SIMULATION
-    sim_routes._DERNIERE_SIMULATION = {}
-    try:
-        sim_routes.get_bassin_simulation(cluster_id="exutoire:1111", db=db, tenant=_tenant(ctx))
-        sim = sim_routes._DERNIERE_SIMULATION
-        assert sim is not None
-        assert gv.sha256_fichier(sim["source_gpkg"]) == v1.sha256
-    finally:
-        sim_routes._DERNIERE_SIMULATION = ancien
+    sim_routes.get_bassin_simulation(cluster_id="exutoire:1111", db=db, tenant=_tenant(ctx))
+    ctx2 = _sim_autorisee(db, ctx["org"].id, cluster_id="exutoire:1111")
+    assert ctx2.gpkg_path is not None
+    assert gv.sha256_fichier(ctx2.gpkg_path) == v1.sha256
 
 
 def test_bassin_isolation_tenant(db, endpoint_ctx, env_versions):
@@ -365,18 +358,12 @@ def test_bassin_isolation_tenant(db, endpoint_ctx, env_versions):
     db.commit()
     tenant_b = TenantContext(actor=None, org=org_b, role="admin")
 
-    ancien = sim_routes._DERNIERE_SIMULATION
-    sim_routes._DERNIERE_SIMULATION = {}
-    try:
-        resp = sim_routes.get_bassin_simulation(cluster_id="exutoire:9999", db=db, tenant=tenant_b)
-        assert resp.get("status") == "none", (
-            f"Le tenant B ne devrait voir aucune simulation du tenant A, obtenu {resp}")
-        assert not sim_routes._DERNIERE_SIMULATION
-    finally:
-        sim_routes._DERNIERE_SIMULATION = ancien
-        db.query(Project).filter(Project.id == proj_b.id).delete(synchronize_session=False)
-        db.query(Organization).filter(Organization.id == org_b.id).delete(synchronize_session=False)
-        db.commit()
+    resp = sim_routes.get_bassin_simulation(cluster_id="exutoire:9999", db=db, tenant=tenant_b)
+    assert resp.get("status") == "none", (
+        f"Le tenant B ne devrait voir aucune simulation du tenant A, obtenu {resp}")
+    db.query(Project).filter(Project.id == proj_b.id).delete(synchronize_session=False)
+    db.query(Organization).filter(Organization.id == org_b.id).delete(synchronize_session=False)
+    db.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -453,7 +440,7 @@ def test_e2e_http_latest_snapshot_v1_puis_reseau_v2(env_versions):
     org_id, proj_id = membership.org_id, proj.id
 
     sim_ids, version_ids = [], []
-    ancien = sim_routes._DERNIERE_SIMULATION
+    from api.services.simulation_service import resoudre_simulation_courante
     try:
         # --- V1 : réseau 2 regards / 2 canalisations ---
         gpkg_v1 = _creer_gpkg(env_versions / f"e2e_v1_{sfx}.gpkg",
@@ -481,11 +468,12 @@ def test_e2e_http_latest_snapshot_v1_puis_reseau_v2(env_versions):
         sim_ids.append(sim_id)
 
         # GET /latest → la simulation V1 doit afficher le snapshot V1
-        sim_routes._DERNIERE_SIMULATION = {}
         r1 = client.get("/api/v1/simulations/latest", headers=headers)
         assert r1.status_code == 200, r1.text
         assert r1.json().get("status") == "success"
-        sha_affiche = gv.sha256_fichier(sim_routes._DERNIERE_SIMULATION["source_gpkg"])
+        c1 = resoudre_simulation_courante(
+            s, org_id=org_id, project_id=proj_id, resoudre_gpkg=True)
+        sha_affiche = gv.sha256_fichier(c1.gpkg_path)
         assert sha_affiche == v1.sha256
 
         # --- Remplacement : V2 = 7 regards / 1 canalisation ---
@@ -499,10 +487,11 @@ def test_e2e_http_latest_snapshot_v1_puis_reseau_v2(env_versions):
         assert proj.gpkg_version_id == v2.id
 
         # GET /latest → toujours la simulation V1 (snapshot figé)
-        sim_routes._DERNIERE_SIMULATION = {}
         r2 = client.get("/api/v1/simulations/latest", headers=headers)
         assert r2.status_code == 200, r2.text
-        sha_affiche2 = gv.sha256_fichier(sim_routes._DERNIERE_SIMULATION["source_gpkg"])
+        c2 = resoudre_simulation_courante(
+            s, org_id=org_id, project_id=proj_id, resoudre_gpkg=True)
+        sha_affiche2 = gv.sha256_fichier(c2.gpkg_path)
         assert sha_affiche2 == v1.sha256, (
             f"latest aurait dû rester sur V1 ({v1.sha256[:12]}), "
             f"obtenu {sha_affiche2[:12]}")
@@ -514,7 +503,6 @@ def test_e2e_http_latest_snapshot_v1_puis_reseau_v2(env_versions):
         assert comp["regards"] == 7 and comp["conduites"] == 1, (
             f"layers devrait refléter V2 (7/1), obtenu {comp}")
     finally:
-        sim_routes._DERNIERE_SIMULATION = ancien
         # Nettoyage complet : sim → versions → projet → membership → user → org
         if sim_ids:
             s.query(Simulation).filter(Simulation.id.in_(sim_ids)).delete(synchronize_session=False)

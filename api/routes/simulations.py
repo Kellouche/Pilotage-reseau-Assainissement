@@ -133,13 +133,10 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from src.domain.moteur_swmm import MoteurSWMM, SCENARIOS_PLUIE
 
-_DERNIERE_SIMULATION: Dict[str, Any] = {}
-
-
-def reinitialiser_derniere_simulation():
-    """Efface la dernière simulation en cache pour éviter les fuites entre réseaux."""
-    global _DERNIERE_SIMULATION
-    _DERNIERE_SIMULATION = {}
+# Étape 3D.5 — `_DERNIERE_SIMULATION` (état global mutable partagé entre
+# requêtes/utilisateurs) a été supprimée : toute lecture de résultat passe
+# par `resoudre_simulation_courante` (service contextuel, isolation
+# org_id/project_id stricte) et la persistance Simulation/GPKG.
 
 
 class SimulationRunRequest(BaseModel):
@@ -381,7 +378,6 @@ def run_native_swmm_simulation(
     Implémente un cache intelligent : si aucun paramètre de simulation n'a changé
     et que le recalcul n'est pas forcé, restaure instantanément la simulation sauvegardée.
     """
-    global _DERNIERE_SIMULATION
 
     # 1. Résolution du projet et du GeoPackage via le service métier unique
     org_id = tenant.org_id if (tenant and hasattr(tenant, "org_id")) else None
@@ -435,7 +431,6 @@ def run_native_swmm_simulation(
         if cached_resultat:
             cached_resultat["source_gpkg"] = str(gpkg_path.resolve())
             cached_resultat["project_name"] = project_name or gpkg_path.stem
-            _DERNIERE_SIMULATION = cached_resultat
             logger.info("Simulation SWMM restaurée depuis la sauvegarde (cluster %s, hash %s)", cluster_id_effectif, param_hash)
             return _construire_reponse_simulation(cached_resultat, cached=True)
 
@@ -463,8 +458,6 @@ def run_native_swmm_simulation(
                         gpkg_path, exutoire_persiste),
                     "bassin_ref": bassin_ref_persiste,
                 }
-
-        _DERNIERE_SIMULATION = resultat
 
         # 5. Persistance sur disque et en base de données SQLite
         _sauvegarder_simulation(
@@ -500,12 +493,10 @@ def get_latest_simulation(
     pour le réseau actif. Si la mémoire est vide (ex: redémarrage serveur), charge automatiquement
     la dernière simulation sauvegardée sur disque ou en base de données.
 
-    Étape 3D.3 — la simulation est résolue par contexte organisation/projet
-    via `resoudre_simulation_courante` (DB d'abord), plus jamais lue depuis
-    la globale `_DERNIERE_SIMULATION` (qui n'est plus alimentée que pour
-    compatibilité transitoire avec les endpoints pas encore migrés).
+    Étape 3D.3/3D.5 — la simulation est résolue par contexte
+    organisation/projet via `resoudre_simulation_courante` (DB d'abord).
+    La globale `_DERNIERE_SIMULATION` a été supprimée (3D.5).
     """
-    global _DERNIERE_SIMULATION
     from api.services.gpkg_versions import (
         resoudre_gpkg_pour_simulation,
         GpkgSimulationError,
@@ -556,7 +547,6 @@ def get_latest_simulation(
                     project_name = proj.name
 
     if data is None:
-        _DERNIERE_SIMULATION = {}
         return {"status": "none", "message": "Aucune simulation enregistrée pour ce réseau."}
 
     if gpkg_sim is None:
@@ -574,9 +564,6 @@ def get_latest_simulation(
     else:
         data["project_name"] = project_name or data.get("project_name")
 
-    # Compatibilité transitoire (3D.4/3D.5) : /timeseries et /validate-buffer
-    # lisent encore la globale — on n'y dépose que LA simulation autorisée.
-    _DERNIERE_SIMULATION = data
     return _construire_reponse_simulation(data, cached=True)
 
 
@@ -590,7 +577,6 @@ def get_bassin_simulation(
     Retourne la simulation la plus récente enregistrée pour un bassin versant spécifique.
     Supporte la recherche par cluster_id numérique (ex: 92) ou nom (ex: 25_ouvrages_speciaux_348883).
     """
-    global _DERNIERE_SIMULATION
     from api.services.gpkg_versions import (
         resoudre_gpkg_pour_simulation,
         GpkgSimulationError,
@@ -628,7 +614,6 @@ def get_bassin_simulation(
         if gpkg_sim is not None and gpkg_sim.exists():
             data["source_gpkg"] = str(gpkg_sim.resolve())
             data["project_name"] = project_name or gpkg_sim.stem
-            _DERNIERE_SIMULATION = data
             return _construire_reponse_simulation(data, cached=True)
 
     # 2. Repli legacy : résolution non ambiguë du projet puis scan disque
@@ -702,7 +687,6 @@ def get_bassin_simulation(
                     gpkg_aff = gpkg_sim if (gpkg_sim and gpkg_sim.exists()) else gpkg_path
                     data["source_gpkg"] = str(gpkg_aff.resolve())
                     data["project_name"] = project_name or gpkg_aff.stem
-                    _DERNIERE_SIMULATION = data
                     return _construire_reponse_simulation(data, cached=True)
             except HTTPException:
                 raise
@@ -1078,7 +1062,6 @@ def get_profil_en_long(
     Chemin topologique amont→aval avec cotes géométriques (radiers, terrain naturel,
     génératrices supérieures) et ligne de charge HGL issue de la dernière simulation SWMM.
     """
-    global _DERNIERE_SIMULATION
 
     # 3D.3 — le profil est tracé sur le GPKG DE LA SIMULATION autorisée du
     # contexte (org/projet), jamais sur le fichier mutable ni la globale.
@@ -1119,7 +1102,6 @@ def get_profil_en_long(
     if ctx is not None:
         sim_data = ctx.data or {}
         active_gpkg = ctx.gpkg_path if (ctx.gpkg_path and ctx.gpkg_path.exists()) else None
-        _DERNIERE_SIMULATION = sim_data  # compatibilité transitoire 3D.4/3D.5
     elif gpkg_effectif and gpkg_effectif.exists():
         # Repli legacy : simulation sans ligne DB (ancien cache disque)
         try:
@@ -1128,7 +1110,6 @@ def get_profil_en_long(
                 gpkg_rest, _vmeta = resoudre_gpkg_pour_simulation(db, proj, restored)
                 sim_data = restored
                 active_gpkg = gpkg_rest if (gpkg_rest and gpkg_rest.exists()) else gpkg_effectif
-                _DERNIERE_SIMULATION = sim_data
         except GpkgSimulationError as e:
             raise HTTPException(status_code=409, detail=str(e))
         except Exception as e_rest:

@@ -29,7 +29,8 @@ def test_formater_nom_fichier_export_basique():
 
 def test_download_simulation_inp_nom_dynamique(tmp_path):
     """3D.2 — les téléchargements servent la simulation AUTORISÉE du contexte
-    (ligne Simulation persistée), plus la globale _DERNIERE_SIMULATION."""
+    (ligne Simulation persistée) — la globale _DERNIERE_SIMULATION a été
+    supprimée en 3D.5."""
     db = SessionLocal()
     sfx = uuid.uuid4().hex[:10]
     org = Organization(id=f"org_{sfx}", name="Org", slug=f"org-{sfx}")

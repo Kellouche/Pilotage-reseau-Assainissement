@@ -432,12 +432,8 @@ def load_benchmark_dataset(
     project.pipes_count = ds["pipes_count"]
     db.commit()
 
-    # Effacer immédiatement les résultats de simulation du précédent modèle
-    try:
-        from api.routes.simulations import reinitialiser_derniere_simulation
-        reinitialiser_derniere_simulation()
-    except Exception:
-        pass
+    # Les résultats de simulation sont isolés par org/projet (3D.5) :
+    # plus d'état global à effacer lors d'un rechargement de réseau.
     try:
         from api.routes.qualite import reinitialiser_cache_qualite
         reinitialiser_cache_qualite()
@@ -504,11 +500,7 @@ def load_demo_network(
     project.outfalls_count = 1
     db.commit()
 
-    try:
-        from api.routes.simulations import reinitialiser_derniere_simulation
-        reinitialiser_derniere_simulation()
-    except Exception:
-        pass
+
     try:
         from api.routes.qualite import reinitialiser_cache_qualite
         reinitialiser_cache_qualite()
@@ -575,11 +567,7 @@ def load_master_network(
     project.pipes_count = 11000
     db.commit()
 
-    try:
-        from api.routes.simulations import reinitialiser_derniere_simulation
-        reinitialiser_derniere_simulation()
-    except Exception:
-        pass
+
     try:
         from api.routes.qualite import reinitialiser_cache_qualite
         reinitialiser_cache_qualite()
@@ -626,11 +614,7 @@ def reset_project_network(
         project.name = "Nouveau Projet (Vierge)"
         db.commit()
 
-    try:
-        from api.routes.simulations import reinitialiser_derniere_simulation
-        reinitialiser_derniere_simulation()
-    except Exception:
-        pass
+
     try:
         from api.routes.qualite import reinitialiser_cache_qualite
         reinitialiser_cache_qualite()
@@ -722,11 +706,7 @@ async def upload_network_gpkg(
     )
     db.commit()
 
-    try:
-        from api.routes.simulations import reinitialiser_derniere_simulation
-        reinitialiser_derniere_simulation()
-    except Exception:
-        pass
+
     try:
         from api.routes.qualite import reinitialiser_cache_qualite
         reinitialiser_cache_qualite()

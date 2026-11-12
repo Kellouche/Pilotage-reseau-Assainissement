@@ -17,8 +17,7 @@ from fastapi import HTTPException
 from api.database import SessionLocal
 from src.domain.moteur_swmm.timeseries_extractor import extraire_series_temporelles
 from src.domain.moteur_swmm.execution_solver import executer_solver_swmm
-from api.routes.simulations import get_simulation_timeseries, _DERNIERE_SIMULATION
-from api.routes import simulations
+from api.routes.simulations import get_simulation_timeseries
 from types import SimpleNamespace
 from api.models import Organization, Project, Simulation
 import json
