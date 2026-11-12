@@ -76,9 +76,19 @@ def _json_safe(value):
     return value
 
 def _get_graph(chemin_gpkg: Optional[str] = None):
-    """Get cached graph, building it once per GeoPackage path."""
+    """Get cached graph, building it once per GeoPackage content (SHA-256 + chemin)."""
     global _GRAPH_CACHES, _GRAPH_STATUS
-    cache_key = str(chemin_gpkg) if chemin_gpkg else "default"
+    if chemin_gpkg:
+        # Clé content-adressée : deux versions GPKG distinctes ne partagent
+        # jamais le même graphe, même si le chemin source est réutilisé.
+        try:
+            from api.services.gpkg_versions import sha256_fichier
+            empreinte = sha256_fichier(Path(chemin_gpkg), use_cache=True)[:16]
+            cache_key = f"{empreinte}|{chemin_gpkg}"
+        except Exception:
+            cache_key = str(chemin_gpkg)
+    else:
+        cache_key = "default"
     if cache_key not in _GRAPH_CACHES or _GRAPH_CACHES[cache_key] is None:
         _GRAPH_STATUS = "building"
         try:
@@ -170,6 +180,7 @@ def recalculate_all_clusters(
     """
     user = _get_current_user_from_request(request, db)
     chemin_gpkg = None
+    from api.services.simulation_service import resoudre_gpkg_effectif_pour_projet
     if user:
         primary_membership = user.memberships[0] if user.memberships else None
         if primary_membership:
@@ -177,15 +188,15 @@ def recalculate_all_clusters(
                 Project.org_id == primary_membership.org_id,
                 Project.is_archived.is_(False)
             ).first()
-            if project and project.source_gpkg_key:
-                cand = Path(project.source_gpkg_key)
-                if cand.exists():
-                    chemin_gpkg = str(cand)
+            chemin = resoudre_gpkg_effectif_pour_projet(db, project)
+            if chemin is not None:
+                chemin_gpkg = str(chemin)
 
     if not chemin_gpkg:
         proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
-        if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
-            chemin_gpkg = str(Path(proj.source_gpkg_key))
+        chemin = resoudre_gpkg_effectif_pour_projet(db, proj)
+        if chemin is not None:
+            chemin_gpkg = str(chemin)
 
     return _calculate_clusters_sync(db, persist=persist, chemin_gpkg=chemin_gpkg)
 
@@ -234,8 +245,10 @@ def _calculate_clusters_background():
     """Background worker that creates its own DB session and runs the calculation."""
     db = SessionLocal()
     try:
+        from api.services.simulation_service import resoudre_gpkg_effectif_pour_projet
         proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
-        chemin_gpkg = proj.source_gpkg_key if (proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists()) else None
+        _chemin = resoudre_gpkg_effectif_pour_projet(db, proj)
+        chemin_gpkg = str(_chemin) if _chemin is not None else None
         result = _calculate_clusters(db, persist=True, chemin_gpkg=chemin_gpkg)
         _log_cluster("[cluster][background] Recalculation completed", flush=True)
         # Optionally log result summary
@@ -387,11 +400,18 @@ def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional
         _log_cluster(f"[cluster] {len(cycles_casses)} cycle(s) neutralise(s) avant tracage", flush=True)
 
     # Résolution du projet porteur du GeoPackage (portée d'unicité des clusters)
+    # 3C.0 : le chemin peut être un snapshot matérialisé — on compare le chemin
+    # EFFECTIF résolu de chaque projet (version courante), pas source_gpkg_key.
     projet_cible = None
     if chemin_gpkg:
         try:
+            from api.services.simulation_service import resoudre_gpkg_effectif_pour_projet
             gpkg_resolu = str(Path(chemin_gpkg).resolve())
             for cand in db.query(Project).filter(Project.is_archived.is_(False)).all():
+                eff = resoudre_gpkg_effectif_pour_projet(db, cand)
+                if eff is not None and str(Path(eff).resolve()) == gpkg_resolu:
+                    projet_cible = cand
+                    break
                 if cand.source_gpkg_key and Path(cand.source_gpkg_key).exists() \
                         and str(Path(cand.source_gpkg_key).resolve()) == gpkg_resolu:
                     projet_cible = cand
@@ -740,16 +760,21 @@ def recalculate_cluster(cluster_id: int, background_tasks: BackgroundTasks, db: 
 
 
 @router.get("/{cluster_id}/geojson")
-def export_cluster_geojson(cluster_id: int, db: Session = Depends(get_db)):
+def export_cluster_geojson(cluster_id: int, request: Request = None, db: Session = Depends(get_db)):
     """Export d'un cluster au format GeoJSON avec ordre topologique."""
     from src.domain.detecteur_clusters import tracer_cluster_depuis_exutoire, construire_geojson_cluster
     from src.domain.graphe_reseau import calculer_ordre_topologique
-    
+
     cluster = crud.get_cluster(db, cluster_id)
     if not cluster:
         raise HTTPException(status_code=404, detail="Cluster non trouvé")
-    
-    G = _get_graph()
+
+    # 3C.0 : le graphe doit être construit sur le GPKG résolu du projet
+    # (snapshot versionné), jamais sur le repli codé en dur de construire_graphe.
+    chemin_gpkg = _trouver_chemin_gpkg(db, request)
+    if not chemin_gpkg:
+        raise HTTPException(status_code=404, detail="GeoPackage réseau introuvable.")
+    G = _get_graph(chemin_gpkg)
     target_node = cluster.exutoire_noeud
     node_tuple = target_node
     if not node_tuple:
@@ -769,18 +794,24 @@ def export_cluster_geojson(cluster_id: int, db: Session = Depends(get_db)):
 
 
 def _trouver_chemin_gpkg(db: Session, request: Optional[Request] = None) -> Optional[str]:
-    """Résout le chemin absolu du fichier GeoPackage du projet actif."""
+    """
+    Résout le chemin du GeoPackage du projet actif via le versionnement (3B/3C.0) :
+    snapshot immuable de la version courante si versionné, sinon source_gpkg_key.
+    """
+    from api.services.simulation_service import resoudre_gpkg_effectif_pour_projet
     user = _get_current_user_from_request(request, db) if request else None
     if user and user.memberships:
         proj = db.query(Project).filter(
             Project.org_id == user.memberships[0].org_id,
             Project.is_archived.is_(False)
         ).first()
-        if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
-            return str(Path(proj.source_gpkg_key))
+        chemin = resoudre_gpkg_effectif_pour_projet(db, proj)
+        if chemin is not None:
+            return str(chemin)
     proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
-    if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
-        return str(Path(proj.source_gpkg_key))
+    chemin = resoudre_gpkg_effectif_pour_projet(db, proj)
+    if chemin is not None:
+        return str(chemin)
     cand = Path("data/demo_reseau.gpkg")
     if cand.exists():
         return str(cand)

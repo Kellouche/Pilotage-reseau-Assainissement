@@ -407,32 +407,39 @@ def get_layers(
         user = _get_authenticated_user(request, db)
 
     # Détermination du fichier GeoPackage pour le projet actif
+    # 3C.0 : résolution via le versionnement (snapshot immuable si versionné)
+    # et clé de cache intégrant org/projet/SHA-256 du contenu.
+    from api.services.simulation_service import resoudre_gpkg_effectif_pour_projet
     gpkg_target = None
     project_name = "Nouveau Projet"
+    cache_org_id = "anon"
+    cache_project_id = "none"
 
     if user and db:
         primary_membership = user.memberships[0] if user.memberships else None
         if primary_membership:
+            cache_org_id = primary_membership.org_id
             project = db.query(Project).filter(
                 Project.org_id == primary_membership.org_id,
                 Project.is_archived.is_(False)
             ).first()
             if project:
                 project_name = project.name
-                if project.source_gpkg_key:
-                    cand = Path(project.source_gpkg_key)
-                    if cand.exists():
-                        gpkg_target = cand
+                cache_project_id = project.id
+                chemin_eff = resoudre_gpkg_effectif_pour_projet(db, project)
+                if chemin_eff is not None:
+                    gpkg_target = chemin_eff
 
     # Si aucun réseau n'est chargé et qu'aucun utilisateur n'est connecté -> Fallback projet actif local ou démo
     if not gpkg_target and not user and db:
         project = db.query(Project).filter(Project.is_archived.is_(False)).first()
         if project:
             project_name = project.name
-            if project.source_gpkg_key:
-                cand = Path(project.source_gpkg_key)
-                if cand.exists():
-                    gpkg_target = cand
+            cache_project_id = project.id
+            cache_org_id = project.org_id or "anon"
+            chemin_eff = resoudre_gpkg_effectif_pour_projet(db, project)
+            if chemin_eff is not None:
+                gpkg_target = chemin_eff
         if not gpkg_target:
             cand = Path("data/demo_reseau.gpkg")
             if cand.exists():
@@ -443,7 +450,15 @@ def get_layers(
         empty_response["project_name"] = project_name
         return empty_response
 
+    # Clé de cache content-adressée : org + projet + SHA-256 du GPKG —
+    # deux versions ne partagent jamais leurs données cartographiques.
     cache_key = str(gpkg_target)
+    try:
+        from api.services.gpkg_versions import sha256_fichier
+        empreinte = sha256_fichier(gpkg_target, use_cache=True)[:16]
+        cache_key = f"{cache_org_id}|{cache_project_id}|{empreinte}"
+    except Exception:
+        pass
 
     if cache_key in _LAYERS_CACHE and not has_bounds:
         res = dict(_LAYERS_CACHE[cache_key])

@@ -83,22 +83,21 @@ def reinitialiser_cache_qualite(gpkg_path: Optional[Path] = None):
 
 
 def get_active_project_and_gpkg(db: Session, tenant_ctx: Optional[TenantContext] = None):
-    """Résout le chemin du GeoPackage et le nom du projet actif."""
+    """Résout le chemin du GeoPackage et le nom du projet actif (version courante, 3C.0)."""
+    from api.services.simulation_service import resoudre_gpkg_effectif_pour_projet
     if tenant_ctx and tenant_ctx.org_id:
         project = db.query(Project).filter(
             Project.org_id == tenant_ctx.org_id,
             Project.is_archived.is_(False)
         ).first()
-        if project and project.source_gpkg_key:
-            cand = Path(project.source_gpkg_key)
-            if cand.exists():
-                return cand, project.name
+        chemin = resoudre_gpkg_effectif_pour_projet(db, project)
+        if chemin is not None:
+            return chemin, project.name
 
     project = db.query(Project).filter(Project.is_archived.is_(False)).first()
-    if project and project.source_gpkg_key:
-        cand = Path(project.source_gpkg_key)
-        if cand.exists():
-            return cand, project.name
+    chemin = resoudre_gpkg_effectif_pour_projet(db, project)
+    if chemin is not None:
+        return chemin, project.name
 
     demo_cand = Path("data/demo_reseau.gpkg")
     if demo_cand.exists():

@@ -53,6 +53,16 @@ class GpkgInvalide(Exception):
         super().__init__("; ".join(raisons))
 
 
+class GpkgSimulationError(Exception):
+    """
+    Étape 3C.0 — erreur métier : la provenance GPKG d'une simulation ne peut
+    pas être résolue de façon intègre (version absente, invalide ou
+    incohérente avec le projet/tenant). Jamais de substitution silencieuse
+    par une autre version.
+    """
+    pass
+
+
 # ---------------------------------------------------------------------------
 # Empreinte & validation
 # ---------------------------------------------------------------------------
@@ -470,6 +480,129 @@ def version_disponible(version: Any) -> Tuple[bool, str]:
         return (False, f"storage_kind inconnu : {version.storage_kind}")
     except Exception as e:
         return (False, str(e))
+
+
+def _valider_version_pour_contexte(version: Any, project: Any) -> None:
+    """Garde tenant/projet : la version DOIT appartenir au projet courant."""
+    if project is not None and (
+        version.project_id != project.id or version.org_id != project.org_id
+    ):
+        raise GpkgSimulationError(
+            "Version GPKG de la simulation incohérente avec le projet/tenant courant."
+        )
+
+
+def _materialiser_version_versionnee(db: Session, project: Any, version: Any) -> Path:
+    _valider_version_pour_contexte(version, project)
+    ok, raison = version_disponible(version)
+    if not ok:
+        raise GpkgSimulationError(f"Version GPKG de la simulation indisponible : {raison}")
+    try:
+        return materialiser_version(version)
+    except Exception as e:
+        raise GpkgSimulationError(f"Matérialisation GPKG de la simulation impossible : {e}")
+
+
+def resoudre_gpkg_pour_simulation(
+    db: Session,
+    project: Any,
+    data_simulation: Optional[Dict[str, Any]],
+) -> Tuple[Optional[Path], Dict[str, Any]]:
+    """
+    Étape 3C.0 — résout le GPKG EXACT ayant produit `data_simulation`
+    (dict résultat JSON persisté, ou _DERNIERE_SIMULATION).
+
+    Ordre strict :
+      1. `provenance.gpkg_version_id` → GpkgVersion validé dans le contexte
+         projet/tenant → matérialisation atomique du snapshot ; si la ligne
+         version a disparu, repli sur l'empreinte SHA-256 (jamais sur la
+         version courante) ;
+      2. `provenance.gpkg_sha256` → version (project_id, sha256) du projet,
+         sinon `source_gpkg` si son empreinte réelle correspond ;
+      3. `source_gpkg` si le fichier existe (provenance absente = legacy) ;
+      4. rien de résoluble → (None, meta) : l'appelant applique le fallback
+         legacy (GPKG courant du projet).
+
+    Une provenance EXPLICITE mais irrésoluble (version absente ET empreinte
+    invérifiable, incohérence tenant) lève GpkgSimulationError —
+    jamais de substitution silencieuse par la version courante.
+    """
+    if not isinstance(data_simulation, dict):
+        return None, {}
+
+    prov = data_simulation.get("provenance") or {}
+    version_id = prov.get("gpkg_version_id")
+    sha_attendu = prov.get("gpkg_sha256")
+    source_gpkg = data_simulation.get("source_gpkg")
+
+    # 1. Version explicite
+    version_id_perdu = False
+    if version_id:
+        from api.models import GpkgVersion
+        version = db.get(GpkgVersion, version_id)
+        if version is not None:
+            chemin = _materialiser_version_versionnee(db, project, version)
+            return chemin, {
+                "version_id": version.id,
+                "sha256": version.sha256,
+                "storage_kind": version.storage_kind,
+                "resolution": "gpkg_version_id",
+                "materialized_path": str(chemin),
+            }
+        # Ligne GpkgVersion absente (ex. base réinitialisée alors que le
+        # JSON persisté survit) : on ne substitue PAS la version courante,
+        # on tente la vérification par empreinte SHA-256 ci-dessous.
+        version_id_perdu = True
+
+    # 2. Empreinte explicite sans version_id
+    if sha_attendu:
+        version = None
+        if project is not None:
+            version = _version_existe(db, project.id, sha_attendu)
+        if version is not None:
+            chemin = _materialiser_version_versionnee(db, project, version)
+            return chemin, {
+                "version_id": version.id,
+                "sha256": version.sha256,
+                "storage_kind": version.storage_kind,
+                "resolution": "gpkg_sha256",
+                "materialized_path": str(chemin),
+            }
+        # Pas de version enregistrée : le source_gpkg peut encore être le
+        # bon contenu SI son empreinte réelle correspond à la provenance.
+        if source_gpkg and Path(source_gpkg).exists():
+            if sha256_fichier(Path(source_gpkg)) == sha_attendu:
+                return Path(source_gpkg), {
+                    "version_id": None,
+                    "sha256": sha_attendu,
+                    "storage_kind": "SOURCE_GPKG_VERIFIE",
+                    "resolution": "source_gpkg_sha256",
+                    "materialized_path": str(Path(source_gpkg).resolve()),
+                }
+        raise GpkgSimulationError(
+            "Empreinte GPKG de la simulation sans version correspondante "
+            "et source_gpkg absent ou divergent — substitution interdite."
+        )
+
+    # 3. Aucune provenance exploitable : legacy — source_gpkg si présent.
+    #    Une provenance EXPLICITE irrésoluble (version_id perdu sans empreinte
+    #    vérifiable) reste une erreur métier : pas de repli silencieux.
+    if version_id_perdu:
+        raise GpkgSimulationError(
+            f"Version GPKG {version_id} de la simulation introuvable en base "
+            "et empreinte SHA-256 absente ou invérifiable — substitution interdite."
+        )
+    if source_gpkg and Path(source_gpkg).exists():
+        return Path(source_gpkg), {
+            "version_id": None,
+            "sha256": None,
+            "storage_kind": "LEGACY_SIMULATION",
+            "resolution": "source_gpkg_legacy",
+            "materialized_path": str(Path(source_gpkg).resolve()),
+        }
+
+    # 4. Rien d'exploitable → fallback legacy à la charge de l'appelant
+    return None, {}
 
 
 def exutoire_present_dans_gpkg(gpkg_path: Path, exutoire_noeud: Optional[str]) -> Optional[bool]:

@@ -372,13 +372,15 @@ def list_available_datasets(
         if not proj:
             proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
 
-        if proj and proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
+        from api.services.simulation_service import resoudre_gpkg_effectif_pour_projet
+        chemin_eff = resoudre_gpkg_effectif_pour_projet(db, proj)
+        if chemin_eff is not None:
             active_project = {
                 "id": proj.id,
                 "name": proj.name or "Projet Réseau Actif",
                 "pipes_count": proj.pipes_count or 0,
                 "nodes_count": proj.nodes_count or 0,
-                "gpkg_path": proj.source_gpkg_key
+                "gpkg_path": str(chemin_eff)
             }
     except Exception as e:
         print(f"[datasets] Erreur extraction projet actif: {e}", flush=True)
@@ -773,13 +775,13 @@ def get_network_subcatchments(
 
     gpkg_path = None
     if tenant_ctx and tenant_ctx.org_id:
+        from api.services.simulation_service import resoudre_gpkg_effectif_pour_projet
         project = db.query(Project).filter(
             Project.org_id == tenant_ctx.org_id,
             Project.is_archived.is_(False)
         ).first()
-        if project and project.source_gpkg_key and Path(project.source_gpkg_key).exists():
-            gpkg_path = Path(project.source_gpkg_key)
-        else:
+        gpkg_path = resoudre_gpkg_effectif_pour_projet(db, project)
+        if gpkg_path is None:
             return {
                 "type": "FeatureCollection",
                 "features": [],
@@ -792,7 +794,7 @@ def get_network_subcatchments(
         if cand.exists():
             gpkg_path = cand
 
-    if not gpkg_path.exists():
+    if gpkg_path is None or not gpkg_path.exists():
         return {
             "type": "FeatureCollection",
             "features": [],
@@ -884,12 +886,12 @@ def get_network_orphelins_geojson(
 
     gpkg_path = None
     if tenant_ctx and tenant_ctx.org_id:
+        from api.services.simulation_service import resoudre_gpkg_effectif_pour_projet
         project = db.query(Project).filter(
             Project.org_id == tenant_ctx.org_id,
             Project.is_archived.is_(False)
         ).first()
-        if project and project.source_gpkg_key and Path(project.source_gpkg_key).exists():
-            gpkg_path = Path(project.source_gpkg_key)
+        gpkg_path = resoudre_gpkg_effectif_pour_projet(db, project)
 
     if not gpkg_path or not gpkg_path.exists():
         cand = Path("uploads/a66e32ad-f32b-4529-acc3-7a6026eb5a8a/network_Assainissement_Ville.gpkg")
@@ -931,6 +933,7 @@ def export_network_inp(
 
     gpkg_path = None
     project_name = None
+    from api.services.simulation_service import resoudre_gpkg_effectif_pour_projet
     if tenant_ctx and tenant_ctx.org_id:
         project = db.query(Project).filter(
             Project.org_id == tenant_ctx.org_id,
@@ -938,16 +941,14 @@ def export_network_inp(
         ).first()
         if project:
             project_name = project.name
-            if project.source_gpkg_key and Path(project.source_gpkg_key).exists():
-                gpkg_path = Path(project.source_gpkg_key)
+            gpkg_path = resoudre_gpkg_effectif_pour_projet(db, project)
 
     if not gpkg_path or not gpkg_path.exists():
         project = db.query(Project).filter(Project.is_archived.is_(False)).first()
         if project:
             if not project_name:
                 project_name = project.name
-            if project.source_gpkg_key and Path(project.source_gpkg_key).exists():
-                gpkg_path = Path(project.source_gpkg_key)
+            gpkg_path = resoudre_gpkg_effectif_pour_projet(db, project)
 
     if not gpkg_path or not gpkg_path.exists():
         cand = Path("data/demo_reseau.gpkg")
