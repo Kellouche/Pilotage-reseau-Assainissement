@@ -175,8 +175,11 @@ def test_export_modele_inp_nom_bassin_et_contenu():
     fn = _formater_nom_fichier_export("network_Assainissement_Ville", nom_bassin="9_ouvrages_speciaux_345101", ext="inp")
     assert fn == "9_ouvrages_speciaux_345101.inp", f"Attendu 9_ouvrages_speciaux_345101.inp, obtenu {fn}"
 
-    # 2. Appel de download_latest_inp avec cluster_id
+    # 2. Appel de download_latest_inp avec cluster_id — 3C.5 : project_id
+    # explicite requis dès que plusieurs projets peuvent exister (plus de
+    # sélection arbitraire .first()).
     db = SessionLocal()
+    proj = None
     try:
         gpkg_cand = Path("uploads/a66e32ad-f32b-4529-acc3-7a6026eb5a8a/network_Assainissement_Ville.gpkg")
         if gpkg_cand.exists():
@@ -195,7 +198,8 @@ def test_export_modele_inp_nom_bassin_et_contenu():
             proj.gpkg_version_id = None
             db.commit()
 
-        resp = download_latest_inp(cluster_id="98", db=db, tenant=None)
+        kwargs = {"project_id": proj.id} if proj is not None else {}
+        resp = download_latest_inp(cluster_id="98", db=db, tenant=None, **kwargs)
         assert resp.status_code == 200
         disp = resp.headers.get("content-disposition", "")
         assert 'filename="9_ouvrages_speciaux_345101.inp"' in disp

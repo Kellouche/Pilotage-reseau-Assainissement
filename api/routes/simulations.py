@@ -189,7 +189,7 @@ from api.services.bassin_reference import resoudre_bassin
 
 
 def _contexte_simulation_autorise(db: Session, tenant, cluster_id=None,
-                                  simulation_id=None):
+                                  simulation_id=None, project_id=None):
     """
     Étape 3D.2 — résout la simulation AUTORISÉE pour le tenant courant via
     le service contextuel (org_id/project_id stricts, jamais la globale
@@ -203,6 +203,7 @@ def _contexte_simulation_autorise(db: Session, tenant, cluster_id=None,
         return resoudre_simulation_courante(
             db,
             org_id=org_id,
+            project_id=project_id,
             simulation_id=simulation_id,
             cluster_id=cluster_id,
             resoudre_gpkg=False,
@@ -210,6 +211,89 @@ def _contexte_simulation_autorise(db: Session, tenant, cluster_id=None,
     except (ContexteSimulationIntrouvable, ProjetAmbigu) as e:
         logger.info("Aucune simulation autorisée pour ce contexte : %s", e)
         return None
+
+
+def _projet_pour_export_repli(db: Session, tenant, project_id: Optional[str] = None):
+    """
+    Correctif 3C/R2 — résolution stricte du projet pour les replis disque
+    des téléchargements INP/RPT : jamais de `.first()` ; plusieurs projets
+    possibles → 409 explicite ; `project_id` explicite invalide ou hors
+    organisation → 404 ; aucun projet → None (repli démo uniquement).
+    """
+    from api.services.simulation_service import _resoudre_projet_pour_simulation
+    org_id = tenant.org_id if (tenant and hasattr(tenant, "org_id") and tenant.org_id) else None
+    try:
+        return _resoudre_projet_pour_simulation(db, org_id, project_id)
+    except ProjetAmbigu as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ContexteSimulationIntrouvable:
+        if project_id:
+            raise HTTPException(
+                status_code=404, detail="Projet introuvable ou non autorisé.")
+        return None
+
+
+def _gpkg_partage_entre_projets(db: Session, gpkg_path: Path, proj) -> bool:
+    """
+    Correctif 3C/R1 — True si un AUTRE projet actif peut résoudre le même
+    contenu GPKG (snapshot matérialisé identique ou SHA-256 identique).
+    Dans ce cas, un fichier `.simulation_cache` non estampillé a un
+    propriétaire ambigu et ne doit pas être servi.
+    """
+    from api.models import Project
+    from api.services.gpkg_versions import GPKG_CACHE_DIR, sha256_fichier
+
+    def _sha_effectif(p: Path) -> Optional[str]:
+        try:
+            if p.parent == Path(GPKG_CACHE_DIR):
+                return p.stem  # snapshot matérialisé : nom de fichier = sha256
+            return sha256_fichier(p, use_cache=True)
+        except Exception:
+            return None
+
+    sha_cible = _sha_effectif(gpkg_path)
+    if not sha_cible:
+        return True  # unicité invérifiable → prudence
+    for autre in db.query(Project).filter(
+            Project.is_archived.is_(False), Project.id != proj.id).all():
+        try:
+            p2 = _resoudre_gpkg_effectif_pour_projet(db, autre)
+        except Exception:
+            continue
+        if p2 is None:
+            continue
+        if _sha_effectif(p2) == sha_cible:
+            return True
+    return False
+
+
+def _fichier_cache_appartenant(db: Session, proj, gpkg_path: Path,
+                               data: Dict[str, Any]) -> bool:
+    """
+    Correctif 3C/R1 — propriété d'un fichier `.simulation_cache` avant tout
+    service dans les téléchargements :
+      - `proj` résolu : estampille project_id/org_id contradictoire → refus ;
+        estampille conforme → accepté ; non estampillé (legacy) → accepté
+        seulement si le GPKG n'est pas partagé avec un autre projet ;
+      - `proj` absent (mode démo sans projet) : seuls les fichiers SANS
+        estampille sont admissibles — une estampille vers un projet ne
+        peut pas être vérifiée → refus par prudence.
+    Le nom de fichier et `cluster_id` ne sont JAMAIS une preuve de propriété.
+    """
+    from api.services.simulation_service import _resultatdeclare_projet
+    if not isinstance(data, dict):
+        return False
+    meta = data.get("meta") or {}
+    estampille = bool(
+        meta.get("project_id") or meta.get("org_id")
+        or data.get("project_id") or data.get("org_id"))
+    if proj is None:
+        return not estampille
+    if not _resultatdeclare_projet(data, proj):
+        return False
+    if estampille:
+        return True
+    return not _gpkg_partage_entre_projets(db, gpkg_path, proj)
 
 
 
@@ -806,11 +890,11 @@ def _formater_nom_fichier_export(nom_reseau: Optional[str], nom_bassin: Optional
 @router.get("/download/inp")
 def download_latest_inp(
     cluster_id: Optional[str] = None,
+    project_id: Optional[str] = None,
     db: Session = Depends(get_db),
     tenant: Optional[TenantContext] = Depends(get_tenant_context_optional)
 ):
     """Télécharge le fichier d'entrée (.inp) généré pour le bassin ou la dernière simulation."""
-    from api.models import Project
 
     content = None
     bassin_nom = None
@@ -818,7 +902,8 @@ def download_latest_inp(
 
     # 3D.2 — priorité : INP de la simulation AUTORISÉE du contexte courant
     # (org_id/project_id vérifiés), jamais la globale partagée.
-    ctx = _contexte_simulation_autorise(db, tenant, cluster_id=cluster_id)
+    ctx = _contexte_simulation_autorise(
+        db, tenant, cluster_id=cluster_id, project_id=project_id)
     if ctx and ctx.data:
         content = ctx.data.get("inp_content")
         if content:
@@ -827,25 +912,19 @@ def download_latest_inp(
             nom_reseau = (ctx.project.name if ctx.project else None) \
                 or ctx.data.get("project_name")
 
+    # 3C.5/R2 — résolution stricte du projet (jamais de .first()).
+    proj = _projet_pour_export_repli(db, tenant, project_id=project_id)
     active_gpkg = None
-    if db and tenant and hasattr(tenant, "org_id") and tenant.org_id:
-        proj = db.query(Project).filter(Project.org_id == tenant.org_id, Project.is_archived.is_(False)).first()
-        _gpkg_eff = _resoudre_gpkg_effectif_pour_projet(db, proj)
-        if _gpkg_eff is not None:
-            active_gpkg = _gpkg_eff
-            nom_reseau = proj.name
-    if not active_gpkg and db:
-        proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
-        _gpkg_eff = _resoudre_gpkg_effectif_pour_projet(db, proj)
-        if _gpkg_eff is not None:
-            active_gpkg = _gpkg_eff
-            nom_reseau = proj.name
-    if not active_gpkg and Path("data/demo_reseau.gpkg").exists():
+    if proj is not None:
+        active_gpkg = _resoudre_gpkg_effectif_pour_projet(db, proj)
+        nom_reseau = proj.name
+    if active_gpkg is None and proj is None and Path("data/demo_reseau.gpkg").exists():
         active_gpkg = Path("data/demo_reseau.gpkg")
         nom_reseau = "demo_reseau"
 
     # 2. Si cluster_id demandé sans simulation autorisée correspondante,
-    # chercher dans le cache content-adressé du GPKG effectif du projet.
+    # chercher dans le cache content-adressé du GPKG effectif du projet —
+    # 3C.5/R1 : propriété vérifiée pour chaque fichier avant service.
     if not content and cluster_id and active_gpkg:
         clean_cid = str(cluster_id).strip().lower()
         for cand in _iter_fichiers_cache_simulation(active_gpkg):
@@ -853,7 +932,8 @@ def download_latest_inp(
                 try:
                     with open(cand, "r", encoding="utf-8") as cf:
                         cd = json.load(cf)
-                    if _est_simulation_valide(cd) and cd.get("inp_content"):
+                    if _est_simulation_valide(cd) and cd.get("inp_content") \
+                            and _fichier_cache_appartenant(db, proj, active_gpkg, cd):
                         content = cd["inp_content"]
                         bassin_nom = cd.get("meta", {}).get("bassin_nom") or cd.get("meta", {}).get("cluster_nom") or cluster_id
                         break
@@ -892,18 +972,19 @@ def download_latest_inp(
 @router.get("/download/rpt")
 def download_latest_rpt(
     cluster_id: Optional[str] = None,
+    project_id: Optional[str] = None,
     db: Session = Depends(get_db),
     tenant: Optional[TenantContext] = Depends(get_tenant_context_optional)
 ):
     """Télécharge le rapport officiel (.rpt) généré par la simulation."""
-    from api.models import Project
 
     content = None
     bassin_nom = None
     nom_reseau = None
 
     # 3D.2 — priorité : RPT de la simulation AUTORISÉE du contexte courant.
-    ctx = _contexte_simulation_autorise(db, tenant, cluster_id=cluster_id)
+    ctx = _contexte_simulation_autorise(
+        db, tenant, cluster_id=cluster_id, project_id=project_id)
     if ctx and ctx.data:
         content = ctx.data.get("rpt_content")
         if content:
@@ -912,25 +993,19 @@ def download_latest_rpt(
             nom_reseau = (ctx.project.name if ctx.project else None) \
                 or ctx.data.get("project_name")
 
+    # 3C.5/R2 — résolution stricte du projet (jamais de .first()).
+    proj = _projet_pour_export_repli(db, tenant, project_id=project_id)
     active_gpkg = None
-    if db and tenant and hasattr(tenant, "org_id") and tenant.org_id:
-        proj = db.query(Project).filter(Project.org_id == tenant.org_id, Project.is_archived.is_(False)).first()
-        _gpkg_eff = _resoudre_gpkg_effectif_pour_projet(db, proj)
-        if _gpkg_eff is not None:
-            active_gpkg = _gpkg_eff
-            nom_reseau = proj.name
-    if not active_gpkg and db:
-        proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
-        _gpkg_eff = _resoudre_gpkg_effectif_pour_projet(db, proj)
-        if _gpkg_eff is not None:
-            active_gpkg = _gpkg_eff
-            nom_reseau = proj.name
-    if not active_gpkg and Path("data/demo_reseau.gpkg").exists():
+    if proj is not None:
+        active_gpkg = _resoudre_gpkg_effectif_pour_projet(db, proj)
+        nom_reseau = proj.name
+    if active_gpkg is None and proj is None and Path("data/demo_reseau.gpkg").exists():
         active_gpkg = Path("data/demo_reseau.gpkg")
         nom_reseau = "demo_reseau"
 
     # 2. Si cluster_id demandé sans simulation autorisée correspondante,
-    # chercher dans le cache content-adressé du GPKG effectif du projet.
+    # chercher dans le cache content-adressé du GPKG effectif du projet —
+    # 3C.5/R1 : propriété vérifiée pour chaque fichier avant service.
     if not content and cluster_id and active_gpkg:
         clean_cid = str(cluster_id).strip().lower()
         for cand in _iter_fichiers_cache_simulation(active_gpkg):
@@ -938,7 +1013,8 @@ def download_latest_rpt(
                 try:
                     with open(cand, "r", encoding="utf-8") as cf:
                         cd = json.load(cf)
-                    if _est_simulation_valide(cd) and cd.get("rpt_content"):
+                    if _est_simulation_valide(cd) and cd.get("rpt_content") \
+                            and _fichier_cache_appartenant(db, proj, active_gpkg, cd):
                         content = cd["rpt_content"]
                         bassin_nom = cd.get("meta", {}).get("bassin_nom") or cd.get("meta", {}).get("cluster_nom") or cluster_id
                         break
