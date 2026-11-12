@@ -173,6 +173,27 @@ def iter_fichiers_cache_simulation(gpkg_path: Path):
     return sorted(uniq.values(), key=lambda x: x.stat().st_mtime, reverse=True)
 
 
+def resoudre_gpkg_effectif_pour_projet_avec_meta(
+    db: Session, proj: Any
+) -> Tuple[Optional[Path], Dict[str, Any]]:
+    """
+    LOT P1.4 — comme resoudre_gpkg_effectif_pour_projet mais retourne aussi
+    les métadonnées de version (version_id, sha256, storage_kind) :
+    indispensable à l'estampillage des apports DWF et à leur validation
+    stricte contre la version exacte du réseau.
+    """
+    if proj is None:
+        return None, {}
+    chemin, meta = _resoudre_gpkg_versionne(db, proj)
+    if chemin is not None:
+        return Path(chemin), meta or {}
+    if getattr(proj, "gpkg_version_id", None):
+        return None, meta or {}
+    if proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
+        return Path(proj.source_gpkg_key), meta or {}
+    return None, meta or {}
+
+
 def resoudre_gpkg_effectif_pour_projet(db: Session, proj: Any) -> Optional[Path]:
     """
     Chemin GPKG effectif pour les endpoints de lecture (téléchargements, PDF) :
@@ -180,16 +201,8 @@ def resoudre_gpkg_effectif_pour_projet(db: Session, proj: Any) -> Optional[Path]
     sinon source_gpkg_key. Si une version est référencée mais indisponible,
     retourne None — jamais de repli silencieux sur un fichier différent.
     """
-    if proj is None:
-        return None
-    chemin, _meta = _resoudre_gpkg_versionne(db, proj)
-    if chemin is not None:
-        return Path(chemin)
-    if getattr(proj, "gpkg_version_id", None):
-        return None
-    if proj.source_gpkg_key and Path(proj.source_gpkg_key).exists():
-        return Path(proj.source_gpkg_key)
-    return None
+    chemin, _meta = resoudre_gpkg_effectif_pour_projet_avec_meta(db, proj)
+    return chemin
 
 
 def generer_cle_cache_simulation(gpkg_path: Path, payload: Any,
@@ -1373,12 +1386,23 @@ def executer_en_async(
     )
     params_exec["cluster_id"] = cluster_id_effectif
 
-    # 6bis. LOT P1.3 — apports DWF actifs du projet (org/projet vérifiés
-    #    ci-dessus). `dwf_actif=False` dans les paramètres = désactivation
-    #    explicite du scénario. L'empreinte entre dans la clé de cache.
-    from api.services.apports_dwf_service import preparer_apports_pour_simulation
-    apports_dwf, info_cache_dwf = preparer_apports_pour_simulation(
-        db, proj, dwf_actif=params_exec.get("dwf_actif"))
+    # 6bis. LOT P1.3/P1.4 — apports DWF actifs du projet (org/projet vérifiés
+    #    ci-dessus), validés STRICTEMENT contre la version GPKG résolue à
+    #    l'étape 3 : tout apport non réconcilié fait échouer le job avant
+    #    génération INP et lancement moteur. `dwf_actif=False` dans les
+    #    paramètres = désactivation explicite du scénario. L'empreinte
+    #    entre dans la clé de cache.
+    from api.services.apports_dwf_service import (
+        preparer_apports_pour_simulation,
+    )
+    try:
+        apports_dwf, info_cache_dwf = preparer_apports_pour_simulation(
+            db, proj, dwf_actif=params_exec.get("dwf_actif"),
+            version_meta=version_meta, gpkg_path=gpkg_path)
+    except Exception:
+        sim.status = "failed"
+        db.commit()
+        raise
     params_exec["apports_dwf"] = apports_dwf
 
     # 7. Empreinte canonique + exécution via le MOTEUR UNIQUE (PySWMM)

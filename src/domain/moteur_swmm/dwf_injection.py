@@ -244,6 +244,8 @@ def construire_injection_dwf(
                     "eh": a.get("eh"),
                     "debit_specifique_l_hab_j": a.get("debit_specifique_l_hab_j"),
                     "profile_key": a.get("profile_key"),
+                    "gpkg_version_id": a.get("gpkg_version_id"),
+                    "gpkg_sha256": a.get("gpkg_sha256"),
                     "methode_injection": methode,
                     **detail,
                 })
@@ -272,6 +274,8 @@ def construire_injection_dwf(
                         "eh": a.get("eh"),
                         "debit_specifique_l_hab_j": a.get("debit_specifique_l_hab_j"),
                         "profile_key": a.get("profile_key"),
+                        "gpkg_version_id": a.get("gpkg_version_id"),
+                        "gpkg_sha256": a.get("gpkg_sha256"),
                         "methode_injection": "INFLOWS_TIMESERIES",
                         "timeseries": ts_name,
                     })

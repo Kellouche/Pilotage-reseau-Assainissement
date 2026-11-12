@@ -26,6 +26,7 @@ from api.schemas import (
 from api.services.simulation_service import (
     _resoudre_projet_pour_simulation,
     resoudre_gpkg_effectif_pour_projet,
+    resoudre_gpkg_effectif_pour_projet_avec_meta,
     ContexteSimulationIntrouvable,
     ProjetAmbigu,
 )
@@ -63,14 +64,13 @@ def _apport_scoped(db: Session, tenant: TenantContext, apport_id: str) -> Apport
 # Validation des nœuds contre le GPKG versionné du projet
 # ---------------------------------------------------------------------------
 
-def _noeuds_valides_projet(db: Session, proj: Project) -> Set[str]:
+def _contexte_noeuds(db: Session, proj: Project):
     """
-    Ensemble des identifiants de nœuds valides = _clean_node_id(Code) de la
-    couche 'regards' du GPKG effectif du projet (versionné si applicable).
-    Lève HTTPException 422 si le réseau est indisponible ou illisible :
-    sans référentiel, aucun rattachement ne peut être validé.
+    LOT P1.4 — résout (noeuds_valides, gpkg_path, version_meta) en une
+    seule passe : le jeu de nœuds et l'estampillage (version_id + sha256)
+    proviennent TOUJOURS de la même version du GPKG.
     """
-    gpkg_path = resoudre_gpkg_effectif_pour_projet(db, proj)
+    gpkg_path, version_meta = resoudre_gpkg_effectif_pour_projet_avec_meta(db, proj)
     if gpkg_path is None or not Path(gpkg_path).exists():
         raise HTTPException(
             status_code=422,
@@ -97,7 +97,12 @@ def _noeuds_valides_projet(db: Session, proj: Project) -> Set[str]:
     from src.domain.moteur_swmm.constants import _clean_node_id
     noeuds = {_clean_node_id(c) for c in regards.get("Code", [])}
     noeuds.discard("")
-    return noeuds
+    return noeuds, gpkg_path, version_meta
+
+
+def _noeuds_valides_projet(db: Session, proj: Project) -> Set[str]:
+    """Ensemble des identifiants de nœuds valides du GPKG effectif du projet."""
+    return _contexte_noeuds(db, proj)[0]
 
 
 def _valider_noeud(db: Session, proj: Project, node_id: str) -> str:
@@ -111,6 +116,25 @@ def _valider_noeud(db: Session, proj: Project, node_id: str) -> str:
             status_code=422,
             detail=f"Nœud '{nid}' inexistant dans le réseau du projet.")
     return nid
+
+
+def _valider_noeud_et_version(db: Session, proj: Project, node_id: str):
+    """
+    LOT P1.4 — valide le nœud ET retourne l'estampillage (version_id,
+    sha256) de la version exacte du GPKG qui l'a validé. Les deux
+    proviennent de la même lecture : impossible de valider sur V1 et
+    estampiller V2.
+    """
+    from src.domain.moteur_swmm.constants import _clean_node_id
+    nid = _clean_node_id(node_id)
+    if not nid:
+        raise HTTPException(status_code=422, detail="Identifiant de nœud invalide.")
+    noeuds, _gpkg_path, version_meta = _contexte_noeuds(db, proj)
+    if nid not in noeuds:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Nœud '{nid}' inexistant dans le réseau du projet.")
+    return nid, version_meta
 
 
 # ---------------------------------------------------------------------------
@@ -161,6 +185,31 @@ def lister_noeuds_disponibles(
     return {"project_id": proj.id, "noeuds": noeuds, "count": len(noeuds)}
 
 
+@router.get("/a-reconcilier")
+def lister_apports_a_reconcilier(
+    project_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    tenant: TenantContext = Depends(get_tenant_context),
+):
+    """
+    LOT P1.4 — apports ACTIFS sans estampillage GPKG (créés avant P1.4 ou
+    sur une version désormais différente). Ces apports sont rejetés à la
+    simulation tant qu'ils ne sont pas réconciliés via /revalider.
+    """
+    proj = _resoudre_projet(db, tenant, project_id)
+    q = db.query(ApportDwf).filter(
+        ApportDwf.org_id == tenant.org_id,
+        ApportDwf.project_id == proj.id,
+        ApportDwf.actif.is_(True),
+        ApportDwf.gpkg_sha256.is_(None),
+    ).order_by(ApportDwf.created_at)
+    return {
+        "project_id": proj.id,
+        "apports": [a.to_dict() for a in q.all()],
+        "count": q.count(),
+    }
+
+
 @router.post("", response_model=ApportDwfResponse, status_code=201)
 def creer_apport(
     payload: ApportDwfCreate,
@@ -169,12 +218,16 @@ def creer_apport(
 ):
     """Crée un apport de temps sec sur un nœud du projet."""
     proj = _resoudre_projet(db, tenant, payload.project_id)
-    node_id = _valider_noeud(db, proj, payload.node_id)
+    node_id, version_meta = _valider_noeud_et_version(db, proj, payload.node_id)
 
     apport = ApportDwf(
         org_id=tenant.org_id,
         project_id=proj.id,
         node_id=node_id,
+        # LOT P1.4 — estampillage : version exacte du GPKG qui a validé
+        # ce nœud (version_id NULL pour les projets legacy : sha seul).
+        gpkg_version_id=version_meta.get("version_id"),
+        gpkg_sha256=version_meta.get("sha256"),
         nature=payload.nature,
         mode_determination=payload.mode_determination,
         debit_moyen_m3s=(
@@ -233,7 +286,14 @@ def modifier_apport(
     data = payload.model_dump(exclude_unset=True)
     nouveau_node = data.pop("node_id", None)
     if nouveau_node is not None and proj is not None:
-        apport.node_id = _valider_noeud(db, proj, nouveau_node)
+        # LOT P1.4 — changer de nœud est une REVALIDATION : le nœud est
+        # vérifié sur la version courante et l'estampillage est renouvelé.
+        # Les autres modifications (débit, profil, nature…) ne touchent
+        # JAMAIS l'estampillage.
+        apport.node_id, version_meta = _valider_noeud_et_version(
+            db, proj, nouveau_node)
+        apport.gpkg_version_id = version_meta.get("version_id")
+        apport.gpkg_sha256 = version_meta.get("sha256")
 
     # Cohérence mode : si le mode passe à 'eh' sans eh fourni, on conserve
     # l'eh existant ; si 'debit', on purge les champs eh.
@@ -255,6 +315,32 @@ def modifier_apport(
         apport.debit_specifique_l_hab_j = None
 
     _calculer_debit(apport)
+    db.commit()
+    db.refresh(apport)
+    return apport.to_dict()
+
+
+@router.post("/{apport_id}/revalider", response_model=ApportDwfResponse)
+def revalider_apport(
+    apport_id: str,
+    db: Session = Depends(get_db),
+    tenant: TenantContext = Depends(require_role("engineer")),
+):
+    """
+    LOT P1.4 — réconciliation explicite d'un apport sur la version
+    COURANTE du GPKG du projet : le nœud est revérifié dans le snapshot
+    (422 s'il a disparu) puis l'estampillage (gpkg_version_id /
+    gpkg_sha256) est renouvelé. C'est la SEULE voie pour réestampiller
+    un apport — les modifications de débit/profil/nature ne le font
+    jamais automatiquement.
+    """
+    apport = _apport_scoped(db, tenant, apport_id)
+    proj = db.get(Project, apport.project_id)
+    if proj is None:
+        raise HTTPException(status_code=404, detail="Projet introuvable.")
+    _nid, version_meta = _valider_noeud_et_version(db, proj, apport.node_id)
+    apport.gpkg_version_id = version_meta.get("version_id")
+    apport.gpkg_sha256 = version_meta.get("sha256")
     db.commit()
     db.refresh(apport)
     return apport.to_dict()

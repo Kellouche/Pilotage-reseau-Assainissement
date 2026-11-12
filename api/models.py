@@ -689,6 +689,15 @@ class ApportDwf(Base):
     debit_specifique_l_hab_j: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     profile_key: Mapped[str] = mapped_column(String(50), default="constant", nullable=False)
     actif: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # LOT P1.4 — estampillage de la version GPKG contre laquelle le nœud a
+    # été validé. NULL = apport historique non réconcilié (rejeté à la
+    # simulation tant que non ré-estampillé via POST /apports/{id}/revalider).
+    # gpkg_version_id reste NULL pour les projets legacy (pas de version
+    # artificielle) : seule gpkg_sha256 les identifie.
+    gpkg_version_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("gpkg_versions.id", ondelete="SET NULL"),
+        nullable=True)
+    gpkg_sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     source: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     observations: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_by_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
@@ -714,6 +723,8 @@ class ApportDwf(Base):
             "debit_specifique_l_hab_j": self.debit_specifique_l_hab_j,
             "profile_key": self.profile_key,
             "actif": self.actif,
+            "gpkg_version_id": self.gpkg_version_id,
+            "gpkg_sha256": self.gpkg_sha256,
             "source": self.source,
             "observations": self.observations,
             "created_at": self.created_at.isoformat() if self.created_at else None,

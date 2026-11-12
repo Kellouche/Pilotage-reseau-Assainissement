@@ -366,10 +366,15 @@ def test_preparer_apports_isolation_projet(tmp_path):
                    slug=f"{pref}-p", is_archived=False)
     proj2 = Project(id=f"{pref}_p2", org_id=org2.id, name="P2",
                     slug=f"{pref}-p2", is_archived=False)
+    # LOT P1.4 — les apports actifs doivent être estampillés sur la version
+    # simulée : on les stampe sur un sha legacy fictif cohérent.
+    META_LEGACY = {"version_id": None, "sha256": "sha_test_p13",
+                   "storage_kind": "LEGACY"}
     a1 = ApportDwf(id=f"{pref}_a1", org_id=org.id, project_id=proj.id,
                    node_id="N1", nature="domestique",
                    mode_determination="debit", debit_moyen_m3s=0.001,
-                   profile_key="constant", actif=True)
+                   profile_key="constant", actif=True,
+                   gpkg_sha256="sha_test_p13")
     a2 = ApportDwf(id=f"{pref}_a2", org_id=org.id, project_id=proj.id,
                    node_id="N2", nature="industriel",
                    mode_determination="debit", debit_moyen_m3s=0.002,
@@ -377,20 +382,23 @@ def test_preparer_apports_isolation_projet(tmp_path):
     a3 = ApportDwf(id=f"{pref}_a3", org_id=org2.id, project_id=proj2.id,
                    node_id="N3", nature="autre",
                    mode_determination="debit", debit_moyen_m3s=0.003,
-                   profile_key="constant", actif=True)
+                   profile_key="constant", actif=True,
+                   gpkg_sha256="sha_test_p13")
     db.add_all([org, org2, proj, proj2, a1, a2, a3])
     db.commit()
     try:
         res = resoudre_apports_dwf(db, proj)
         assert [a["id"] for a in res] == [f"{pref}_a1"]  # actif seul, bon projet
-        apports, info = preparer_apports_pour_simulation(db, proj, dwf_actif=True)
+        apports, info = preparer_apports_pour_simulation(
+            db, proj, dwf_actif=True, version_meta=META_LEGACY)
         assert len(apports) == 1 and "apports_dwf_sha256" in info
         # Désactivation explicite
         apports_off, info_off = preparer_apports_pour_simulation(
             db, proj, dwf_actif=False)
         assert apports_off == [] and info_off["dwf_actif"] is False
         # Projet sans apports → liste vide mais empreinte stable
-        apports_v, _ = preparer_apports_pour_simulation(db, proj2, dwf_actif=True)
+        apports_v, _ = preparer_apports_pour_simulation(
+            db, proj2, dwf_actif=True, version_meta=META_LEGACY)
         assert [a["id"] for a in apports_v] == [f"{pref}_a3"]
     finally:
         for o in (a1, a2, a3, proj, proj2, org, org2):

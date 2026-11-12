@@ -139,6 +139,9 @@ def init_db():
             "ALTER TABLE simulations ADD COLUMN gpkg_sha256 VARCHAR(64)",
             "ALTER TABLE simulations ADD COLUMN bassin_ref VARCHAR(120)",
             "ALTER TABLE simulations ADD COLUMN exutoire_noeud VARCHAR(100)",
+            # LOT P1.4 — estampillage GPKG des apports DWF (migration douce)
+            "ALTER TABLE apports_dwf ADD COLUMN gpkg_version_id VARCHAR(36)",
+            "ALTER TABLE apports_dwf ADD COLUMN gpkg_sha256 VARCHAR(64)",
         ):
             try:
                 conn.execute(text(ddl))

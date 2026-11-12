@@ -230,6 +230,11 @@ class SimulationCreate(BaseModel):
     cluster_id: int = Field(..., gt=0, description="ID du cluster à simuler")
     parameters: Optional[Dict[str, Any]] = Field(None, description="Paramètres SWMM optionnels")
     options: Optional[Dict[str, Any]] = Field(None, description="Options de simulation")
+    # LOT P1.4 — contrat typé (synchrone ET Celery) : None/True = apports
+    # DWF actifs injectés (défaut) ; False = désactivation explicite du
+    # scénario, sans suppression des apports configurés.
+    dwf_actif: Optional[bool] = Field(
+        None, description="False = désactive l'injection des apports DWF pour ce run")
 
 
 class SimulationResponse(BaseModel):
@@ -422,6 +427,10 @@ class ApportDwfResponse(BaseModel):
     debit_specifique_l_hab_j: Optional[float] = None
     profile_key: str
     actif: bool
+    gpkg_version_id: Optional[str] = Field(
+        None, description="Version GPKG validée (NULL = non réconcilié / legacy)")
+    gpkg_sha256: Optional[str] = Field(
+        None, description="Empreinte SHA-256 du GPKG validé")
     source: Optional[str] = None
     observations: Optional[str] = None
     created_at: Optional[str] = None

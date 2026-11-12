@@ -123,6 +123,9 @@ def launch_simulation(
         "project_id": project_id,
         "scenario_pluie": scenario_pluie,
         "duree_heures": duree_heures,
+        # LOT P1.4 — champ typé SimulationCreate.dwf_actif : prioritaire
+        # sur toute valeur parasite présente dans le dict `parameters`.
+        "dwf_actif": simulation.dwf_actif,
     }
 
     # 1. Créer le Job asynchrone
@@ -581,12 +584,24 @@ def run_native_swmm_simulation(
             detail="Règle hydraulique d'ingénierie : La sectorisation préalable en bassins versants d'exutoires est obligatoire avant la simulation SWMM. Veuillez sélectionner un bassin versant à simuler."
         )
 
-    # 1bis. LOT P1.3 — résolution des apports DWF actifs du projet dans le
-    #    périmètre org/projet (proj=None en mode démo → aucun apport).
+    # 1bis. LOT P1.3/P1.4 — résolution des apports DWF actifs du projet dans
+    #    le périmètre org/projet (proj=None en mode démo → aucun apport),
+    #    puis VALIDATION STRICTE contre la version exacte du GPKG résolue
+    #    ci-dessus : tout apport non réconcilié → 422 avant cache et moteur.
     #    Leur empreinte entre dans la clé de cache.
-    from api.services.apports_dwf_service import preparer_apports_pour_simulation
-    apports_dwf, info_cache_dwf = preparer_apports_pour_simulation(
-        db, proj, dwf_actif=payload.dwf_actif)
+    from api.services.apports_dwf_service import (
+        ApportsDwfIncompatiblesError,
+        preparer_apports_pour_simulation,
+    )
+    try:
+        apports_dwf, info_cache_dwf = preparer_apports_pour_simulation(
+            db, proj, dwf_actif=payload.dwf_actif,
+            version_meta=contexte.version_meta, gpkg_path=gpkg_path)
+    except ApportsDwfIncompatiblesError as e:
+        raise HTTPException(status_code=422, detail={
+            "message": str(e),
+            "apports_incompatibles": e.details,
+        })
 
     # 2. Empreinte canonique (hash) des paramètres de simulation
     param_hash, params_dict = _generer_cle_cache_simulation(
