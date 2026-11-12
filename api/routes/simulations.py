@@ -499,81 +499,84 @@ def get_latest_simulation(
     Retourne les résultats et cartographies thématiques de la dernière simulation exécutée
     pour le réseau actif. Si la mémoire est vide (ex: redémarrage serveur), charge automatiquement
     la dernière simulation sauvegardée sur disque ou en base de données.
+
+    Étape 3D.3 — la simulation est résolue par contexte organisation/projet
+    via `resoudre_simulation_courante` (DB d'abord), plus jamais lue depuis
+    la globale `_DERNIERE_SIMULATION` (qui n'est plus alimentée que pour
+    compatibilité transitoire avec les endpoints pas encore migrés).
     """
     global _DERNIERE_SIMULATION
-    from api.models import Project
     from api.services.gpkg_versions import (
         resoudre_gpkg_pour_simulation,
         GpkgSimulationError,
     )
-    from api.services.simulation_service import resoudre_gpkg_effectif_pour_projet
+    from api.services.simulation_service import (
+        resoudre_simulation_courante,
+        _resoudre_projet_pour_simulation,
+    )
 
-    # Projet courant : tenant en priorité, puis premier non archivé
-    proj = None
-    project_name = None
-    if tenant and hasattr(tenant, "org_id") and tenant.org_id:
-        try:
-            proj = db.query(Project).filter(
-                Project.org_id == tenant.org_id,
-                Project.is_archived.is_(False)
-            ).first()
-        except Exception:
-            proj = None
-    if proj is None:
-        try:
-            proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
-        except Exception:
-            proj = None
-    if proj is not None:
-        project_name = proj.name
+    org_id = tenant.org_id if (tenant and hasattr(tenant, "org_id") and tenant.org_id) else None
 
-    # GPKG courant du projet (versionnée si applicable) — fallback display
-    gpkg_effectif = resoudre_gpkg_effectif_pour_projet(db, proj)
-    if gpkg_effectif is None and Path("data/demo_reseau.gpkg").exists():
-        gpkg_effectif = Path("data/demo_reseau.gpkg")
-        if project_name is None:
-            project_name = "demo_reseau"
+    ctx = None
+    try:
+        ctx = resoudre_simulation_courante(db, org_id=org_id, resoudre_gpkg=True)
+    except ProjetAmbigu as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ContexteSimulationIntrouvable:
+        ctx = None
+    except GpkgSimulationError as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
-    # 1. Simulation en mémoire : résoudre LE GPKG qui l'a produite (3C.0)
-    data = None
-    gpkg_sim = None
-    if _DERNIERE_SIMULATION and _est_simulation_valide(_DERNIERE_SIMULATION):
-        try:
-            gpkg_sim, _vmeta = resoudre_gpkg_pour_simulation(db, proj, _DERNIERE_SIMULATION)
-        except GpkgSimulationError as e:
-            logger.warning("Simulation en mémoire non résolvable pour ce projet : %s", e)
-            _DERNIERE_SIMULATION = {}
-        else:
-            data = _DERNIERE_SIMULATION
-            if gpkg_sim is None:
-                gpkg_sim = gpkg_effectif
+    data = ctx.data if ctx else None
+    proj = ctx.project if ctx else None
+    gpkg_sim = ctx.gpkg_path if ctx else None
+    project_name = proj.name if proj else None
 
-    # 2. Restauration DB/disque pour LE PROJET COURANT si nécessaire
+    # Repli legacy : simulation sans ligne DB (ancien cache disque), borné
+    # au projet résolu de façon non ambiguë.
     if data is None:
-        if gpkg_effectif and gpkg_effectif.exists():
-            restored = _charger_derniere_simulation_disque_ou_db(gpkg_effectif, db, proj)
+        if proj is None:
+            try:
+                proj = _resoudre_projet_pour_simulation(db, org_id, None)
+            except (ContexteSimulationIntrouvable, ProjetAmbigu):
+                proj = None
+        gpkg_eff = _resoudre_gpkg_effectif_pour_projet(db, proj)
+        if gpkg_eff is None and Path("data/demo_reseau.gpkg").exists():
+            gpkg_eff = Path("data/demo_reseau.gpkg")
+        if gpkg_eff and gpkg_eff.exists():
+            restored = _charger_derniere_simulation_disque_ou_db(gpkg_eff, db, proj)
             if restored and _est_simulation_valide(restored):
                 try:
-                    gpkg_sim, _vmeta = resoudre_gpkg_pour_simulation(db, proj, restored)
+                    gpkg_rest, _vmeta = resoudre_gpkg_pour_simulation(db, proj, restored)
                 except GpkgSimulationError as e:
                     raise HTTPException(status_code=409, detail=str(e))
-                if gpkg_sim is None:
-                    gpkg_sim = gpkg_effectif
-                restored["source_gpkg"] = str(gpkg_sim.resolve())
-                restored["project_name"] = project_name or gpkg_sim.stem
-                _DERNIERE_SIMULATION = restored
                 data = restored
-            else:
-                _DERNIERE_SIMULATION = {}
-                return {"status": "none", "message": "Aucune simulation enregistrée pour ce réseau."}
-        else:
-            _DERNIERE_SIMULATION = {}
-            return {"status": "none", "message": "Aucune simulation enregistrée pour ce réseau."}
+                gpkg_sim = gpkg_rest if gpkg_rest is not None else gpkg_eff
+                if project_name is None and proj is not None:
+                    project_name = proj.name
+
+    if data is None:
+        _DERNIERE_SIMULATION = {}
+        return {"status": "none", "message": "Aucune simulation enregistrée pour ce réseau."}
+
+    if gpkg_sim is None:
+        gpkg_sim = _resoudre_gpkg_effectif_pour_projet(db, proj)
+    if gpkg_sim is None:
+        src = data.get("source_gpkg")
+        if src and Path(src).exists():
+            gpkg_sim = Path(src)
+    if gpkg_sim is None and Path("data/demo_reseau.gpkg").exists():
+        gpkg_sim = Path("data/demo_reseau.gpkg")
 
     if gpkg_sim is not None:
         data["source_gpkg"] = str(gpkg_sim.resolve())
-        data["project_name"] = project_name or gpkg_sim.stem
+        data["project_name"] = project_name or data.get("project_name") or gpkg_sim.stem
+    else:
+        data["project_name"] = project_name or data.get("project_name")
 
+    # Compatibilité transitoire (3D.4/3D.5) : /timeseries et /validate-buffer
+    # lisent encore la globale — on n'y dépose que LA simulation autorisée.
+    _DERNIERE_SIMULATION = data
     return _construire_reponse_simulation(data, cached=True)
 
 
@@ -588,101 +591,64 @@ def get_bassin_simulation(
     Supporte la recherche par cluster_id numérique (ex: 92) ou nom (ex: 25_ouvrages_speciaux_348883).
     """
     global _DERNIERE_SIMULATION
-    from api.models import Project
     from api.services.gpkg_versions import (
         resoudre_gpkg_pour_simulation,
         GpkgSimulationError,
     )
-    from api.services.simulation_service import resoudre_gpkg_effectif_pour_projet
+    from api.services.simulation_service import (
+        resoudre_simulation_courante,
+        _resoudre_projet_pour_simulation,
+    )
 
-    # Projet courant : tenant en priorité, puis premier non archivé
+    org_id = tenant.org_id if (tenant and hasattr(tenant, "org_id") and tenant.org_id) else None
+
+    # 1. Lookup DB-first via le service contextuel : simulation du
+    #    projet/tenant correspondant au bassin, plus récente d'abord,
+    #    identité = cluster_id/bassin_ref/exutoire_noeud (3D.3).
+    ctx = None
+    try:
+        ctx = resoudre_simulation_courante(
+            db, org_id=org_id, cluster_id=cluster_id, resoudre_gpkg=True)
+    except ProjetAmbigu as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ContexteSimulationIntrouvable:
+        ctx = None
+    except GpkgSimulationError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+    if ctx is not None:
+        proj = ctx.project
+        project_name = proj.name if proj else None
+        data = ctx.data
+        gpkg_sim = ctx.gpkg_path
+        if gpkg_sim is None:
+            gpkg_sim = _resoudre_gpkg_effectif_pour_projet(db, proj)
+        if gpkg_sim is None and Path("data/demo_reseau.gpkg").exists():
+            gpkg_sim = Path("data/demo_reseau.gpkg")
+        if gpkg_sim is not None and gpkg_sim.exists():
+            data["source_gpkg"] = str(gpkg_sim.resolve())
+            data["project_name"] = project_name or gpkg_sim.stem
+            _DERNIERE_SIMULATION = data
+            return _construire_reponse_simulation(data, cached=True)
+
+    # 2. Repli legacy : résolution non ambiguë du projet puis scan disque
+    #    sur le GPKG effectif (compatibilité anciennes simulations sans ligne DB).
     proj = None
     project_name = None
-    if tenant and hasattr(tenant, "org_id") and tenant.org_id:
-        try:
-            proj = db.query(Project).filter(
-                Project.org_id == tenant.org_id,
-                Project.is_archived.is_(False)
-            ).first()
-        except Exception:
-            proj = None
-    if proj is None:
-        try:
-            proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
-        except Exception:
-            proj = None
+    try:
+        proj = _resoudre_projet_pour_simulation(db, org_id, None)
+    except (ContexteSimulationIntrouvable, ProjetAmbigu):
+        proj = None
     if proj is not None:
         project_name = proj.name
 
-    # GPKG courant du projet — fallback display/legacy
-    gpkg_effectif = resoudre_gpkg_effectif_pour_projet(db, proj)
+    gpkg_effectif = _resoudre_gpkg_effectif_pour_projet(db, proj)
     if gpkg_effectif is None and Path("data/demo_reseau.gpkg").exists():
         gpkg_effectif = Path("data/demo_reseau.gpkg")
         if project_name is None:
             project_name = "demo_reseau"
 
-    cible = str(cluster_id).strip()
-    cible_low = cible.lower()
-
-    def _simulation_correspond_a_bassin(sim: Any) -> bool:
-        """Identité du bassin : bassin_ref > cluster_id persisté > nom (dernier recours)."""
-        if sim.bassin_ref and str(sim.bassin_ref).strip().lower() == cible_low:
-            return True
-        if sim.exutoire_noeud and str(sim.exutoire_noeud).strip().lower() == cible_low:
-            return True
-        kpis = sim.summary_kpis or {}
-        for cle in ("cluster_id",):
-            if str(kpis.get(cle, "")).strip().lower() == cible_low:
-                return True
-        params = kpis.get("parameters") or {}
-        if isinstance(params, dict) and str(params.get("cluster_id", "")).strip().lower() == cible_low:
-            return True
-        nom = str(sim.name or "").lower()
-        return bool(nom and cible_low in nom)
-
-    # 1. Lookup DB-first : simulations du projet/tenant, plus récentes d'abord
-    try:
-        from api.models import Simulation as _Sim
-        q = db.query(_Sim).filter(_Sim.status == "completed")
-        if proj is not None:
-            q = q.filter(_Sim.project_id == proj.id)
-        elif tenant and getattr(tenant, "org_id", None):
-            q = q.filter(_Sim.org_id == tenant.org_id)
-        sims_candidates = q.order_by(_Sim.created_at.desc()).limit(80).all()
-    except Exception as e:
-        logger.warning("Lookup simulations pour bassin %s impossible : %s", cluster_id, e)
-        sims_candidates = []
-
-    for sim in sims_candidates:
-        if not _simulation_correspond_a_bassin(sim):
-            continue
-        if not sim.results_s3_key:
-            continue
-        p_json = Path(sim.results_s3_key)
-        if not p_json.exists():
-            continue
-        try:
-            with open(p_json, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except Exception:
-            continue
-        if not data or not _est_simulation_valide(data):
-            continue
-        # La provenance de CETTE simulation détermine le GPKG affiché (3C.0)
-        try:
-            gpkg_sim, _vmeta = resoudre_gpkg_pour_simulation(db, proj, data)
-        except GpkgSimulationError as e:
-            raise HTTPException(status_code=409, detail=str(e))
-        if gpkg_sim is None:
-            gpkg_sim = gpkg_effectif
-        if gpkg_sim is None or not gpkg_sim.exists():
-            continue
-        data["source_gpkg"] = str(gpkg_sim.resolve())
-        data["project_name"] = project_name or gpkg_sim.stem
-        _DERNIERE_SIMULATION = data
-        return _construire_reponse_simulation(data, cached=True)
-
-    # 2. Fallback legacy : scan disque sur le GPKG effectif du projet
+    # 3. Fallback legacy : scan disque sur le GPKG effectif du projet
     if gpkg_effectif is None or not gpkg_effectif.exists():
         return {"status": "none", "message": "Aucun réseau actif."}
 
@@ -1096,54 +1062,61 @@ def get_profil_en_long(
     """
     global _DERNIERE_SIMULATION
 
-    # 3C.0 — le profil doit être tracé sur le GPKG DE LA SIMULATION affichée,
-    # jamais sur le fichier mutable courant du projet.
-    from api.models import Project
+    # 3D.3 — le profil est tracé sur le GPKG DE LA SIMULATION autorisée du
+    # contexte (org/projet), jamais sur le fichier mutable ni la globale.
     from api.services.gpkg_versions import (
         resoudre_gpkg_pour_simulation,
         GpkgSimulationError,
     )
-    from api.services.simulation_service import resoudre_gpkg_effectif_pour_projet
+    from api.services.simulation_service import (
+        resoudre_simulation_courante,
+        _resoudre_projet_pour_simulation,
+    )
 
+    org_id = tenant.org_id if (tenant and hasattr(tenant, "org_id") and tenant.org_id) else None
+
+    # Projet résolu de façon non ambiguë + GPKG courant (fallback lecture seule)
     proj = None
-    if tenant and hasattr(tenant, "org_id") and tenant.org_id:
-        try:
-            proj = db.query(Project).filter(
-                Project.org_id == tenant.org_id,
-                Project.is_archived.is_(False)
-            ).first()
-        except Exception:
-            proj = None
-    if proj is None:
-        try:
-            proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
-        except Exception:
-            proj = None
-
-    # GPKG courant du projet : sert de fallback ET de base de restauration
-    gpkg_effectif = resoudre_gpkg_effectif_pour_projet(db, proj)
+    try:
+        proj = _resoudre_projet_pour_simulation(db, org_id, None)
+    except (ContexteSimulationIntrouvable, ProjetAmbigu):
+        proj = None
+    gpkg_effectif = _resoudre_gpkg_effectif_pour_projet(db, proj)
     if gpkg_effectif is None and Path("data/demo_reseau.gpkg").exists():
         gpkg_effectif = Path("data/demo_reseau.gpkg")
 
-    # S'assurer qu'une simulation valide est disponible (restauration DB/disque)
-    if not _DERNIERE_SIMULATION or not _est_simulation_valide(_DERNIERE_SIMULATION):
-        if gpkg_effectif and gpkg_effectif.exists():
-            try:
-                restored = _charger_derniere_simulation_disque_ou_db(gpkg_effectif, db, proj)
-                if restored and _est_simulation_valide(restored):
-                    _DERNIERE_SIMULATION = restored
-            except Exception as e_rest:
-                logger.warning("Échec restauration simulation pour profil en long: %s", e_rest)
-
-    # Résolution du GPKG d'affichage : celui de la simulation si disponible,
-    # sinon le GPKG courant du projet (aucune simulation → lecture seule réseau)
+    # Simulation autorisée du contexte : données HGL + snapshot GPKG exact
+    sim_data: Dict[str, Any] = {}
     active_gpkg = None
-    if _DERNIERE_SIMULATION and _est_simulation_valide(_DERNIERE_SIMULATION):
+    ctx = None
+    try:
+        ctx = resoudre_simulation_courante(db, org_id=org_id, resoudre_gpkg=True)
+    except ProjetAmbigu as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ContexteSimulationIntrouvable:
+        ctx = None
+    except GpkgSimulationError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+    if ctx is not None:
+        sim_data = ctx.data or {}
+        active_gpkg = ctx.gpkg_path if (ctx.gpkg_path and ctx.gpkg_path.exists()) else None
+        _DERNIERE_SIMULATION = sim_data  # compatibilité transitoire 3D.4/3D.5
+    elif gpkg_effectif and gpkg_effectif.exists():
+        # Repli legacy : simulation sans ligne DB (ancien cache disque)
         try:
-            gpkg_sim, _vmeta = resoudre_gpkg_pour_simulation(db, proj, _DERNIERE_SIMULATION)
+            restored = _charger_derniere_simulation_disque_ou_db(gpkg_effectif, db, proj)
+            if restored and _est_simulation_valide(restored):
+                gpkg_rest, _vmeta = resoudre_gpkg_pour_simulation(db, proj, restored)
+                sim_data = restored
+                active_gpkg = gpkg_rest if (gpkg_rest and gpkg_rest.exists()) else gpkg_effectif
+                _DERNIERE_SIMULATION = sim_data
         except GpkgSimulationError as e:
             raise HTTPException(status_code=409, detail=str(e))
-        active_gpkg = gpkg_sim if (gpkg_sim and gpkg_sim.exists()) else None
+        except Exception as e_rest:
+            logger.warning("Échec restauration simulation pour profil en long: %s", e_rest)
+
+    # Sans simulation autorisée : lecture seule du réseau courant du projet
     if active_gpkg is None:
         active_gpkg = gpkg_effectif
 
@@ -1250,9 +1223,9 @@ def get_profil_en_long(
         node_elevs: Dict[str, float] = {}
         sim_node_results: Dict[str, Any] = {}
         sim_meta: Dict[str, Any] = {}
-        if _DERNIERE_SIMULATION and _est_simulation_valide(_DERNIERE_SIMULATION):
-            sim_node_results = _DERNIERE_SIMULATION.get("node_results", {})
-            sim_meta = _DERNIERE_SIMULATION.get("meta", {})
+        if sim_data and _est_simulation_valide(sim_data):
+            sim_node_results = sim_data.get("node_results", {})
+            sim_meta = sim_data.get("meta", {})
             # Élévations depuis le meta de la simulation (node_elevs injecté dans meta)
             meta_node_elevs = sim_meta.get("node_elevs", {})
             if meta_node_elevs:
@@ -1337,8 +1310,8 @@ def get_profil_en_long(
                     }
                     # Résultats simulation sur cette conduite
                     cond_sim = {}
-                    if _DERNIERE_SIMULATION:
-                        all_cond = _DERNIERE_SIMULATION.get("conduit_results", {})
+                    if sim_data:
+                        all_cond = sim_data.get("conduit_results", {})
                         # Trouver la conduite par u_node/d_node
                         for ck, cv in all_cond.items():
                             if cv.get("u_node") == nid and cv.get("d_node") == next_nid:
@@ -1455,7 +1428,7 @@ def get_profil_en_long(
             "z_min": round(z_min, 3),
             "z_max": round(z_max, 3),
             "conduites_en_charge": conduites_en_charge,
-            "simulation_active": bool(_DERNIERE_SIMULATION and _est_simulation_valide(_DERNIERE_SIMULATION)),
+            "simulation_active": bool(sim_data and _est_simulation_valide(sim_data)),
             "segments": segments,
             "alertes": alerts,
         }
