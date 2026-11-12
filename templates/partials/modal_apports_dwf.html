@@ -1,0 +1,206 @@
+<!--
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Objet : LOT P1.5.2 — Modale de gestion des apports de temps sec (DWF)
+================================================================================
+-->
+
+    <!-- Modal Apports de Temps Sec (DWF) — LOT P1.5.2 -->
+    <div id="modal-apports-dwf" onclick="if(event.target === this) fermerModalApportsDwf();" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(6px); z-index: 3100; align-items: center; justify-content: center;">
+        <div style="background: #1e293b; color: #f8fafc; border-radius: 16px; width: 94%; max-width: 980px; max-height: 92vh; display: flex; flex-direction: column; border: 1px solid rgba(255, 255, 255, 0.15); box-shadow: 0 25px 50px rgba(0, 0, 0, 0.6); overflow: hidden;">
+
+            <!-- ===== En-tête ===== -->
+            <div style="background: #0f172a; padding: 16px 24px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="width: 38px; height: 38px; border-radius: 10px; background: linear-gradient(135deg, #059669, #047857); display: flex; align-items: center; justify-content: center; font-size: 18px; color: white;">
+                        <i class="fas fa-faucet-drip"></i>
+                    </div>
+                    <div>
+                        <h5 style="margin: 0; font-weight: 700; font-size: 1.05rem;">Apports de temps sec (DWF)</h5>
+                        <small style="color: #94a3b8;" id="dwf-projet-nom">—</small>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <span class="badge" id="dwf-cpt-actifs" style="background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.4); font-size: 0.75rem; padding: 4px 10px; font-weight: 700;">
+                        <i class="fas fa-check-circle me-1"></i>0 actif(s)
+                    </span>
+                    <span class="badge" id="dwf-cpt-incompat" style="display:none; background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.4); font-size: 0.75rem; padding: 4px 10px; font-weight: 700;">
+                        <i class="fas fa-exclamation-triangle me-1"></i>0 à réconcilier
+                    </span>
+                    <button id="btn-dwf-nouveau" onclick="ouvrirFormulaireDwf()" class="btn btn-sm" style="background: #059669; color: white; border: none; font-weight: 700; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 0.82rem; box-shadow: 0 4px 12px rgba(5,150,105,0.35);">
+                        <i class="fas fa-plus me-1"></i> Nouvel apport
+                    </button>
+                    <button onclick="fermerModalApportsDwf()" style="background: transparent; border: none; color: #94a3b8; font-size: 24px; cursor: pointer; line-height: 1;">&times;</button>
+                </div>
+            </div>
+
+            <!-- ===== Corps ===== -->
+            <div style="padding: 20px 24px; overflow-y: auto; flex: 1;">
+
+                <!-- Statut / chargement / erreurs -->
+                <div id="dwf-statut" style="margin-bottom: 14px; font-size: 0.82rem; color: #94a3b8;"></div>
+                <div id="dwf-note-lecture-seule" style="display:none; margin-bottom: 14px; background: rgba(148,163,184,0.08); border: 1px solid rgba(148,163,184,0.3); border-radius: 8px; padding: 8px 12px; font-size: 0.78rem; color: #94a3b8;">
+                    <i class="fas fa-eye me-1"></i> Profil en lecture seule : la création, la modification, la suppression et la réconciliation sont réservées aux ingénieurs.
+                </div>
+                <div id="dwf-alerte-reseau" style="display:none; margin-bottom: 14px; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.45); border-radius: 10px; padding: 12px 14px; font-size: 0.82rem; color: #fca5a5;"></div>
+                <div id="dwf-message-form" style="display:none; margin-bottom: 14px; border-radius: 8px; padding: 10px 12px; font-size: 0.8rem;"></div>
+
+                <!-- ===== Vue liste ===== -->
+                <div id="dwf-vue-liste">
+
+                    <!-- Zone de réconciliation -->
+                    <div id="dwf-zone-reconcil" style="display:none; margin-bottom: 16px;">
+                        <div style="font-weight: 700; font-size: 0.8rem; color: #f87171; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                            <i class="fas fa-link-slash"></i> Réconciliation avec le réseau courant
+                        </div>
+                        <div id="dwf-liste-incompat" style="display: grid; gap: 10px;"></div>
+                    </div>
+
+                    <!-- Filtres + recherche -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px;">
+                        <div style="display: flex; gap: 6px; flex-wrap: wrap;" id="dwf-filtres">
+                            <button class="dwf-filtre-btn" data-filtre="tous" onclick="definirFiltreDwf('tous')" style="padding: 5px 12px; border-radius: 6px; font-size: 0.76rem; font-weight: 700; border: 1px solid rgba(56,189,248,0.4); background: rgba(56,189,248,0.15); color: #38bdf8; cursor: pointer;">Tous</button>
+                            <button class="dwf-filtre-btn" data-filtre="actifs" onclick="definirFiltreDwf('actifs')" style="padding: 5px 12px; border-radius: 6px; font-size: 0.76rem; font-weight: 700; border: 1px solid rgba(255,255,255,0.12); background: transparent; color: #94a3b8; cursor: pointer;">Actifs</button>
+                            <button class="dwf-filtre-btn" data-filtre="inactifs" onclick="definirFiltreDwf('inactifs')" style="padding: 5px 12px; border-radius: 6px; font-size: 0.76rem; font-weight: 700; border: 1px solid rgba(255,255,255,0.12); background: transparent; color: #94a3b8; cursor: pointer;">Inactifs</button>
+                            <button class="dwf-filtre-btn" data-filtre="reconcilier" onclick="definirFiltreDwf('reconcilier')" style="padding: 5px 12px; border-radius: 6px; font-size: 0.76rem; font-weight: 700; border: 1px solid rgba(255,255,255,0.12); background: transparent; color: #94a3b8; cursor: pointer;">À réconcilier</button>
+                        </div>
+                        <input type="text" id="dwf-recherche" oninput="DWF.recherche = this.value; rendreListeDwf();" placeholder="Rechercher un regard (ex. REG_12)…" style="padding: 7px 12px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #f8fafc; font-size: 0.8rem; width: 260px;">
+                    </div>
+
+                    <!-- Liste des apports -->
+                    <div id="dwf-liste" style="display: grid; gap: 10px;"></div>
+                    <div id="dwf-liste-vide" style="display:none; text-align: center; color: #64748b; font-size: 0.85rem; padding: 30px 10px;">
+                        <i class="fas fa-faucet" style="font-size: 1.6rem; margin-bottom: 8px; display: block; opacity: 0.5;"></i>
+                        Aucun apport de temps sec pour ce projet.
+                    </div>
+                </div>
+
+                <!-- ===== Vue formulaire (création / modification) ===== -->
+                <div id="dwf-vue-form" style="display:none;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+                        <div style="font-weight: 700; font-size: 0.95rem; color: #34d399;" id="dwf-form-titre">
+                            <i class="fas fa-plus-circle me-1"></i> Nouvel apport DWF
+                        </div>
+                        <button onclick="retourListeDwf()" style="background: transparent; border: 1px solid rgba(255,255,255,0.15); color: #94a3b8; padding: 5px 12px; border-radius: 6px; font-size: 0.78rem; cursor: pointer;">
+                            <i class="fas fa-arrow-left me-1"></i> Retour à la liste
+                        </button>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+                        <!-- Colonne gauche : paramètres -->
+                        <div style="display: flex; flex-direction: column; gap: 12px;">
+                            <div>
+                                <label style="font-size: 0.76rem; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 5px;">
+                                    <i class="fas fa-bullseye me-1" style="color:#38bdf8;"></i> Regard du réseau *
+                                </label>
+                                <input type="text" id="dwf-f-node" list="dwf-liste-noeuds" placeholder="Identifiant du regard (ex. REG_12)…" autocomplete="off"
+                                       style="width: 100%; padding: 9px 12px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #f8fafc; font-size: 0.85rem;">
+                                <datalist id="dwf-liste-noeuds"></datalist>
+                                <small style="color: #64748b; font-size: 0.7rem;" id="dwf-f-node-aide">Issu du GeoPackage du projet — le nœud est revérifié à l'enregistrement.</small>
+                            </div>
+
+                            <div>
+                                <label style="font-size: 0.76rem; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 5px;">
+                                    <i class="fas fa-tag me-1" style="color:#38bdf8;"></i> Nature de l'apport *
+                                </label>
+                                <select id="dwf-f-nature" style="width: 100%; padding: 9px 12px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #f8fafc; font-size: 0.85rem;">
+                                    <option value="domestique">Domestique (eaux usées domestiques)</option>
+                                    <option value="industriel">Industriel</option>
+                                    <option value="infiltration">Infiltration / drainage</option>
+                                    <option value="autre">Autre</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label style="font-size: 0.76rem; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 5px;">
+                                    <i class="fas fa-sliders-h me-1" style="color:#38bdf8;"></i> Mode de détermination *
+                                </label>
+                                <div style="display: flex; gap: 8px;">
+                                    <button type="button" id="dwf-f-mode-debit-btn" onclick="definirModeDwf('debit')" style="flex:1; padding: 8px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; border: 1px solid rgba(56,189,248,0.5); background: rgba(56,189,248,0.15); color: #38bdf8; cursor: pointer;">
+                                        <i class="fas fa-tachometer-alt me-1"></i> Débit mesuré
+                                    </button>
+                                    <button type="button" id="dwf-f-mode-eh-btn" onclick="definirModeDwf('eh')" style="flex:1; padding: 8px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; border: 1px solid rgba(255,255,255,0.12); background: transparent; color: #94a3b8; cursor: pointer;">
+                                        <i class="fas fa-users me-1"></i> Équivalent-habitant
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Bloc débit -->
+                            <div id="dwf-f-bloc-debit">
+                                <label style="font-size: 0.76rem; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 5px;">
+                                    <i class="fas fa-water me-1" style="color:#38bdf8;"></i> Débit moyen *
+                                </label>
+                                <div style="display: flex; gap: 8px; align-items: center;">
+                                    <input type="number" id="dwf-f-debit" step="any" min="0" placeholder="ex. 0.0035" style="flex: 1; padding: 9px 12px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #f8fafc; font-size: 0.85rem;">
+                                    <span style="font-size: 0.78rem; color: #94a3b8; white-space: nowrap;">m³/s</span>
+                                </div>
+                                <small style="color: #64748b; font-size: 0.7rem;" id="dwf-f-debit-ls">= 0 L/s</small>
+                            </div>
+
+                            <!-- Bloc EH -->
+                            <div id="dwf-f-bloc-eh" style="display:none;">
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                                    <div>
+                                        <label style="font-size: 0.76rem; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 5px;">Équivalent-habitant (EH) *</label>
+                                        <input type="number" id="dwf-f-eh" step="any" min="0" placeholder="ex. 450" style="width: 100%; padding: 9px 12px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #f8fafc; font-size: 0.85rem;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 0.76rem; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 5px;">Débit spécifique (L/EH/j) *</label>
+                                        <input type="number" id="dwf-f-debitspec" step="any" min="0" placeholder="ex. 200" value="200" style="width: 100%; padding: 9px 12px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #f8fafc; font-size: 0.85rem;">
+                                    </div>
+                                </div>
+                                <small style="color: #f59e0b; font-size: 0.7rem; display: block; margin-top: 4px;">
+                                    <i class="fas fa-info-circle me-1"></i>Le débit spécifique est un paramètre du projet : 200 L/EH/j est une valeur par défaut d'affichage, <strong>pas une valeur réglementaire universelle</strong>. Le débit dérivé s'affiche ci-contre.
+                                </small>
+                                <small style="color: #34d399; font-size: 0.75rem;" id="dwf-f-eh-resultat">Q̄ dérivé = —</small>
+                            </div>
+
+                            <div>
+                                <label style="font-size: 0.76rem; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 5px;">
+                                    <i class="fas fa-chart-area me-1" style="color:#38bdf8;"></i> Profil temporel (168 h — semaine type)
+                                </label>
+                                <select id="dwf-f-profil" onchange="afficherApercuProfilDwf()" style="width: 100%; padding: 9px 12px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #f8fafc; font-size: 0.85rem;">
+                                </select>
+                                <small style="color: #64748b; font-size: 0.7rem;" id="dwf-f-profil-desc"></small>
+                            </div>
+
+                            <div>
+                                <label style="font-size: 0.76rem; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 5px;">Source / référence</label>
+                                <input type="text" id="dwf-f-source" maxlength="255" placeholder="ex. Mesure terrain, facturation, étude 2024…" style="width: 100%; padding: 9px 12px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #f8fafc; font-size: 0.85rem;">
+                            </div>
+
+                            <div>
+                                <label style="font-size: 0.76rem; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 5px;">Observations</label>
+                                <textarea id="dwf-f-observations" rows="2" placeholder="Précisions, hypothèses, réserves…" style="width: 100%; padding: 9px 12px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #f8fafc; font-size: 0.85rem; resize: vertical;"></textarea>
+                            </div>
+                        </div>
+
+                        <!-- Colonne droite : aperçu graphique + état -->
+                        <div style="display: flex; flex-direction: column; gap: 12px;">
+                            <div style="background: #0f172a; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px; flex: 1; min-height: 220px;">
+                                <div style="font-size: 0.74rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 8px;">
+                                    <i class="fas fa-chart-line me-1"></i> Profil horaire type (facteur × Q̄)
+                                </div>
+                                <div style="position: relative; height: 200px;">
+                                    <canvas id="dwf-canvas-profil"></canvas>
+                                </div>
+                                <div id="dwf-profil-vide" style="position:absolute; inset: 34px 12px auto 12px; text-align:center; color:#475569; font-size:0.78rem; display:none;">Sélectionnez un profil pour prévisualiser ses 168 facteurs.</div>
+                            </div>
+                            <label style="display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: #cbd5e1; cursor: pointer; user-select: none;">
+                                <input type="checkbox" id="dwf-f-actif" checked style="accent-color: #10b981; width: 16px; height: 16px; cursor: pointer;">
+                                <span>Apport <strong>actif</strong> — injecté dans les simulations DWF (temps sec et pluie)</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px;">
+                        <button onclick="retourListeDwf()" style="background: transparent; border: 1px solid rgba(255,255,255,0.15); color: #94a3b8; padding: 9px 16px; border-radius: 8px; font-size: 0.82rem; cursor: pointer;">Annuler</button>
+                        <button id="btn-dwf-soumettre" onclick="soumettreFormulaireDwf()" class="btn btn-sm" style="background: #059669; color: white; border: none; font-weight: 700; padding: 9px 20px; border-radius: 8px; cursor: pointer; font-size: 0.85rem;">
+                            <i class="fas fa-save me-1"></i> Enregistrer l'apport
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
