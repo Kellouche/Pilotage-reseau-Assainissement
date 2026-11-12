@@ -1226,14 +1226,30 @@ def telecharger_rapport_diagnostic_pdf(
 def get_profil_en_long(
     node_amont: str,
     node_aval: str,
+    base: str = "max",
+    instant_minute: Optional[int] = None,
     db: Session = Depends(get_db),
     tenant: TenantContext = Depends(get_tenant_context),
 ):
     """
     Calcule et retourne le profil en long hydraulique entre deux regards.
     Chemin topologique amont→aval avec cotes géométriques (radiers, terrain naturel,
-    génératrices supérieures) et ligne de charge HGL issue de la dernière simulation SWMM.
+    génératrices supérieures) et ligne de charge HGL.
+
+    LOT P0.2 — la HGL provient EXCLUSIVEMENT des cotes hydrauliques réelles
+    extraites du fichier .out SWMM (HYDRAULIC_HEAD / INVERT_DEPTH /
+    FLOODING_LOSSES) et persistées dans la simulation (`timeseries.
+    node_hydraulics`) :
+      - base="max" (défaut) : enveloppe des cotes maximales atteintes ;
+      - base="instant" + instant_minute : cote à l'instant demandé ;
+      - sans données .out (simulation historique) : z_hgl=None et
+        hgl_source="indisponible" — aucune valeur estimée n'est présentée
+        comme un résultat SWMM.
     """
+    if base not in ("max", "instant"):
+        raise HTTPException(status_code=422, detail="base doit être 'max' ou 'instant'.")
+    if base == "instant" and instant_minute is None:
+        raise HTTPException(status_code=422, detail="instant_minute requis avec base='instant'.")
 
     # 3D.3 — le profil est tracé sur le GPKG DE LA SIMULATION autorisée du
     # contexte (org/projet), jamais sur le fichier mutable ni la globale.
@@ -1397,13 +1413,54 @@ def get_profil_en_long(
         node_elevs: Dict[str, float] = {}
         sim_node_results: Dict[str, Any] = {}
         sim_meta: Dict[str, Any] = {}
-        if sim_data and _est_simulation_valide(sim_data):
+        # LOT P0.2 — cotes hydrauliques RÉELLES (.out SWMM) persistées dans
+        # timeseries.node_hydraulics ; absentes pour les simulations
+        # historiques → HGL signalée indisponible, jamais estimée.
+        node_hydraulics: Dict[str, Any] = {}
+        sim_valide = bool(sim_data and _est_simulation_valide(sim_data))
+        if sim_valide:
             sim_node_results = sim_data.get("node_results", {})
             sim_meta = sim_data.get("meta", {})
+            ts_data = sim_data.get("timeseries") or {}
+            node_hydraulics = ts_data.get("node_hydraulics") or sim_data.get("node_hydraulics") or {}
             # Élévations depuis le meta de la simulation (node_elevs injecté dans meta)
             meta_node_elevs = sim_meta.get("node_elevs", {})
             if meta_node_elevs:
                 node_elevs.update(meta_node_elevs)
+            # Cotes d'invert réellement utilisées par SWMM (section .inp)
+            for nh_nid, nh in node_hydraulics.items():
+                inv = nh.get("invert_m")
+                if inv is not None:
+                    node_elevs.setdefault(str(nh_nid), float(inv))
+
+        def _hydrau_noeud(nid: str) -> Optional[Dict[str, Any]]:
+            """Entrée node_hydraulics pour un nœud du graphe (clés = noms .out/INP)."""
+            if nid in node_hydraulics:
+                return node_hydraulics[nid]
+            nc = _clean_node_id(nid)
+            if nc in node_hydraulics:
+                return node_hydraulics[nc]
+            for k, v in node_hydraulics.items():
+                if _clean_node_id(k) == nc:
+                    return v
+            return None
+
+        def _head_reel(nid: str) -> Optional[float]:
+            """Cote hydraulique réelle SWMM pour le nœud (max ou instant)."""
+            nh = _hydrau_noeud(nid)
+            if not nh:
+                return None
+            if base == "instant":
+                pairs = nh.get("heads") or []
+                if not pairs:
+                    return nh.get("max_head_m")
+                best = min(pairs, key=lambda p: abs(p[0] - (instant_minute or 0)))
+                return best[1]
+            return nh.get("max_head_m")
+
+        hgl_source = ("swmm_out_max_head" if (sim_valide and node_hydraulics and base == "max")
+                      else "swmm_out_instant" if (sim_valide and node_hydraulics and base == "instant")
+                      else "indisponible")
 
         # Construire les séries du profil
         segments = []
@@ -1446,25 +1503,32 @@ def get_profil_en_long(
 
             z_gen_sup = z_rad + diam_m
 
-            # HGL et régime hydraulique : le statut du nœud dans node_results
-            # fait foi ; à défaut (nœud non listé = fonctionnement normal), on
-            # conserve un plan d'eau et une ligne de charge plausibles pour que
-            # le profil affiche le remplissage et les hachures sur tout le tracé.
-            hgl = None
-            hgl_regime = "libre"
+            # LOT P0.2 — HGL = cote hydraulique RÉELLE du .out SWMM.
+            # Aucune reconstruction heuristique : si la cote n'est pas
+            # disponible, z_hgl reste None et hgl_reel=False.
+            hgl = _head_reel(nid)
+            hgl_reel = hgl is not None
+            nh_entry = _hydrau_noeud(nid) or {}
+            flooding_max = float(nh_entry.get("flooding_max_m3s") or 0.0)
+
             node_sim = sim_node_results.get(nid, {})
             status_n = node_sim.get("status", "normal")
-            if status_n == "flooded":
-                hgl = z_terrain + 0.05  # Débordement franc au-dessus du sol
-                hgl_regime = "debordement"
-            elif status_n == "surcharged":
-                # Mise en charge dans la cheminée : nettement visible au-dessus de la génératrice sup
-                hgl = z_gen_sup + max(0.1, (z_terrain - z_gen_sup) * 0.82)
-                hgl_regime = "surcharge"
+            if hgl is not None:
+                if flooding_max > 0.0 or hgl >= z_terrain:
+                    hgl_regime = "debordement"
+                elif hgl > z_gen_sup:
+                    hgl_regime = "surcharge"
+                else:
+                    hgl_regime = "libre"
             else:
-                # Écoulement à surface libre sain dans la conduite
-                hgl = z_rad + min(profondeur * 0.5, diam_m * 0.7)
-                hgl_regime = "libre"
+                # Donnée .out absente : le statut RPT (donnée SWMM réelle)
+                # qualifie le régime, mais aucune cote n'est inventée.
+                if status_n == "flooded":
+                    hgl_regime = "debordement"
+                elif status_n == "surcharged":
+                    hgl_regime = "surcharge"
+                else:
+                    hgl_regime = "inconnu"
 
             # Trouver la conduite qui sort de ce nœud vers le suivant
             conduit = None
@@ -1503,14 +1567,9 @@ def get_profil_en_long(
                         conduit["status"] = "inconnu"
                         conduit["color"] = "#64748b"
 
-            # Si le nœud n'est pas listé dans node_results mais que le tronçon
-            # sortant est en surcharge, refléter la mise en charge sur la HGL
-            if hgl_regime == "libre" and conduit and conduit.get("status") in ("surcharge", "critique", "debordement"):
-                diam_sortant_m = (conduit.get("diam_mm") or 600.0) / 1000.0
-                z_gs_sortant = z_rad + diam_sortant_m
-                hgl = (z_gs_sortant + max(0.1, (z_terrain - z_gs_sortant) * 0.82)
-                       if z_terrain > z_gs_sortant else z_gs_sortant + 0.15)
-                hgl_regime = "surcharge"
+            # LOT P0.2 — plus de rehaussement heuristique de la HGL depuis le
+            # statut de la conduite : la cote .out fait foi. Le statut réel
+            # de la conduite reste reporté dans conduit_sortant.
 
             z_gs = z_rad + (conduit["diam_mm"] / 1000.0 if conduit else diam_m)
             pression_m = round(max(0.0, hgl - z_gs), 2) if (hgl and hgl > z_gs) else 0.0
@@ -1532,6 +1591,7 @@ def get_profil_en_long(
                 "z_gen_superieure": round(z_gs, 3),
                 "z_eau_conduite": round(z_eau_conduite, 3),
                 "z_hgl": round(hgl, 3) if hgl is not None else None,
+                "hgl_reel": hgl_reel,
                 "hgl_regime": hgl_regime,
                 "pression_m": pression_m,
                 "revanche_m": revanche_m,
@@ -1602,7 +1662,10 @@ def get_profil_en_long(
             "z_min": round(z_min, 3),
             "z_max": round(z_max, 3),
             "conduites_en_charge": conduites_en_charge,
-            "simulation_active": bool(sim_data and _est_simulation_valide(sim_data)),
+            "simulation_active": bool(sim_valide),
+            "hgl_source": hgl_source,
+            "hgl_base": base,
+            "instant_minute": instant_minute,
             "segments": segments,
             "alertes": alerts,
         }

@@ -84,6 +84,92 @@ def _extraire_surface_totale_inp(inp_path: Optional[str]) -> float:
     return round(tot_area, 2)
 
 
+def _extraire_inverts_noeuds_inp(inp_path: Optional[str]) -> Dict[str, float]:
+    """
+    LOT P0.2 — extrait les cotes d'invert des nœuds SWMM depuis le .inp
+    (sections [JUNCTIONS], [OUTFALLS], [STORAGE] — 2e colonne = Elevation).
+    Ce sont les cotes réellement utilisées par le moteur, pas une estimation.
+    """
+    inverts: Dict[str, float] = {}
+    if not inp_path or not os.path.exists(inp_path):
+        return inverts
+    in_node = False
+    try:
+        with open(inp_path, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                s = line.strip()
+                if not s or s.startswith(";"):
+                    continue
+                if s.startswith("["):
+                    in_node = s.upper() in ("[JUNCTIONS]", "[OUTFALLS]", "[STORAGE]")
+                    continue
+                if in_node:
+                    parts = s.split()
+                    if len(parts) >= 2:
+                        try:
+                            inverts[parts[0]] = float(parts[1])
+                        except Exception:
+                            pass
+    except Exception as e:
+        logger.warning("Erreur lecture inverts nœuds depuis %s: %s", inp_path, e)
+    return inverts
+
+
+def _compiler_hydraulique_noeuds(out, sampled_indices, times,
+                                 inverts: Dict[str, float]) -> Dict[str, Any]:
+    """
+    LOT P0.2 — extraction des cotes hydrauliques RÉELLES par nœud depuis le
+    fichier .out SWMM (attributs natifs pyswmm/swmm-toolkit) :
+      - HYDRAULIC_HEAD  : cote de la surface libre / charge piézométrique (m) ;
+      - INVERT_DEPTH    : tirant d'eau au-dessus de l'invert (m) ;
+      - FLOODING_LOSSES : débit de débordement en surface (m3/s).
+    Sémantique vérifiée empiriquement : HEAD = Elevation_INP + INVERT_DEPTH
+    en surface libre ; en pression, HEAD est la cote piézométrique.
+    Retourne {node_id: {invert_m, max_head_m, max_head_minute, max_depth_m,
+    flooding_max_m3s, heads: [[minute, head], ...]}}.
+    """
+    start_dt = times[0]
+    result: Dict[str, Any] = {}
+    for nid in out.nodes.keys():
+        entry: Dict[str, Any] = {}
+        if nid in inverts:
+            entry["invert_m"] = round(inverts[nid], 4)
+        try:
+            heads = out.node_series(nid, NodeAttribute.HYDRAULIC_HEAD)
+            depths = out.node_series(nid, NodeAttribute.INVERT_DEPTH)
+            floods = out.node_series(nid, NodeAttribute.FLOODING_LOSSES)
+        except Exception:
+            continue
+
+        head_pairs: List[List[float]] = []
+        max_head = -1.0
+        max_head_min = 0
+        max_depth = 0.0
+        max_flood = 0.0
+        for idx in sampled_indices:
+            t = times[idx]
+            minute = int((t - start_dt).total_seconds() / 60.0)
+            h = float(heads.get(t, 0.0) or 0.0)
+            head_pairs.append([minute, round(h, 4)])
+            if h > max_head:
+                max_head = h
+                max_head_min = minute
+            d = float(depths.get(t, 0.0) or 0.0)
+            if d > max_depth:
+                max_depth = d
+            fl = float(floods.get(t, 0.0) or 0.0)
+            if fl > max_flood:
+                max_flood = fl
+
+        entry["max_head_m"] = round(max_head, 4) if max_head >= 0 else None
+        entry["max_head_minute"] = max_head_min
+        entry["max_depth_m"] = round(max_depth, 4)
+        entry["flooding_max_m3s"] = round(max_flood, 6)
+        entry["heads"] = head_pairs
+        result[nid] = entry
+    return result
+
+
 def _interpoler_pluie(ts_points: List[tuple], minute: int) -> float:
     """Interpole l'intensité pluvieuse (mm/h) à la minute donnée."""
     if not ts_points:
@@ -367,6 +453,17 @@ def extraire_series_temporelles(out_path: str, max_steps: int = 60, inp_path: Op
                     "links": active_links
                 })
 
+            # LOT P0.2 — cotes hydrauliques RÉELLES par nœud (.out + .inp),
+            # pour le profil en long HGL. Extraction en lecture seule, avant
+            # suppression du fichier .out par l'appelant.
+            try:
+                inverts_inp = _extraire_inverts_noeuds_inp(inp_path)
+                node_hydraulics = _compiler_hydraulique_noeuds(
+                    out, sampled_indices, times, inverts_inp)
+            except Exception as e_h:
+                logger.warning("Extraction hydraulique nœuds impossible: %s", e_h)
+                node_hydraulics = {}
+
             # Calcul des bilans volumiques et hydrologiques globaux
             # 1. Volume d'eau écoulé à l'exutoire (m3) par intégration trapézoïdale
             total_outflow_vol_m3 = 0.0
@@ -406,6 +503,8 @@ def extraire_series_temporelles(out_path: str, max_steps: int = 60, inp_path: Op
                 "total_outflow_volume_m3": total_outflow_vol_m3,
                 "runoff_coefficient": runoff_coef,
                 "outfall_nodes": outfall_nodes,
+                "node_hydraulics": node_hydraulics,
+                "hgl_source": "swmm_out" if node_hydraulics else "indisponible",
                 "time_labels": [s["time_str"] for s in steps_data],
                 "rainfall_series": [s["rainfall_mmh"] for s in steps_data],
                 "outflow_series": [s["outflow_m3s"] for s in steps_data],
