@@ -16,6 +16,57 @@ from typing import Dict, Any
 logger = logging.getLogger("swmm_platform.moteur_swmm.analyse_rapport")
 
 
+def _lire_node_depth_summary(rpt_text: str):
+    """Parse la section « Node Depth Summary » du .rpt.
+
+    Retourne (dict nodé par identifiant SWMM exact, statut) où statut vaut
+    'ok', 'illisible' ou 'absent'. Aucune correspondance approximative :
+    seuls les identifiants littéraux du rapport sont retenus.
+    """
+    if "Node Depth Summary" not in rpt_text:
+        return {}, "absent"
+    try:
+        depth_part = rpt_text.split("Node Depth Summary", 1)[1]
+        out = {}
+        parsed = 0
+        for line in depth_part.splitlines():
+            # Fin de section : ligne de séparation ou titre de section
+            # suivante (les lignes « *** » d'en-tête précèdent les données).
+            if parsed > 0 and ("***" in line or "Summary" in line):
+                break
+            parts = line.split()
+            if len(parts) >= 8 and parts[1] in ("JUNCTION", "OUTFALL", "STORAGE", "DIVIDER"):
+                try:
+                    _hm = str(parts[6]).split(":")
+                    out[parts[0]] = {
+                        "node": parts[0],
+                        "type": parts[1],
+                        "avg_depth_m": float(parts[2]),
+                        "max_depth_m": float(parts[3]),
+                        "max_hgl_m": float(parts[4]),
+                        "max_time_minute": int(parts[5]) * 1440 + int(_hm[0]) * 60 + int(_hm[1]),
+                        "max_time_str": str(parts[6]),
+                        "reported_max_depth_m": float(parts[7]),
+                    }
+                    parsed += 1
+                except Exception:
+                    pass
+        return out, ("ok" if parsed > 0 else "illisible")
+    except Exception as e_depth:
+        logger.warning("Node Depth Summary illisible: %s", e_depth)
+        return {}, f"erreur: {e_depth}"
+
+
+def extraire_maxima_noeuds_rpt(rpt_text: str) -> Dict[str, Dict[str, Any]]:
+    """Maxima nodaux SWMM (pas de routage) depuis un .rpt persisté.
+    Retourne {} si la section est absente ou illisible — jamais
+    d'estimation de remplacement."""
+    maxima, status = _lire_node_depth_summary(rpt_text or "")
+    if status != "ok":
+        return {}
+    return maxima
+
+
 def analyser_rapport_swmm_impl(rpt_text: str, meta: Dict[str, Any]) -> Dict[str, Any]:
     """
     Parse et extrait les indicateurs clés (KPIs) et les résultats cartographiques
@@ -34,6 +85,8 @@ def analyser_rapport_swmm_impl(rpt_text: str, meta: Dict[str, Any]) -> Dict[str,
         "flooded_nodes": [],
         "node_results": {},
         "conduit_results": {},
+        "node_depth_maxima": {},
+        "node_depth_maxima_status": "absent",
         "compliance_continuity": True
     }
 
@@ -120,7 +173,7 @@ def analyser_rapport_swmm_impl(rpt_text: str, meta: Dict[str, Any]) -> Dict[str,
                         "peak_flood_flow_cms": 0.0,
                         "flood_volume_m3": 0.0,
                         "status": "surcharged" if h_surch > 0 else "normal",
-                        "color": "#f59e0b" if h_surch > 0 else "#3b82f6"
+                        "color": "#f97316" if h_surch > 0 else "#3b82f6"
                     }
                 except Exception:
                     pass
@@ -135,26 +188,51 @@ def analyser_rapport_swmm_impl(rpt_text: str, meta: Dict[str, Any]) -> Dict[str,
                 try:
                     h_flood = float(parts[1])
                     pk_flood = float(parts[2])
-                    vol_flood = float(parts[5]) * 1000.0
+                    # Volume TOTAL débordé rapporté par SWMM (.rpt, unité
+                    # 10^6 l). Aucune estimation de remplacement : une valeur
+                    # nulle signifie « arrondi par le rapport », pas « mesuré ».
+                    vol_flood = round(float(parts[5]) * 1000.0, 3)
+                    # Instant du maximum de débordement (précision : la minute,
+                    # convention .rpt « days hr:min ») — jamais extrapolé.
+                    flood_time_minute = None
+                    try:
+                        _hm = str(parts[4]).split(":")
+                        flood_time_minute = int(parts[3]) * 1440 + int(_hm[0]) * 60 + int(_hm[1])
+                    except Exception:
+                        pass
+                    ponded_depth_m = None
+                    try:
+                        ponded_depth_m = float(parts[6]) if len(parts) >= 7 else 0.0
+                    except Exception:
+                        ponded_depth_m = 0.0
                     if h_flood > 0:
-                        if vol_flood <= 0.0 and pk_flood > 0:
-                            vol_estime = round(0.5 * pk_flood * (h_flood * 3600.0), 3)
-                            vol_flood = max(vol_estime, 0.05)
-                        else:
-                            vol_flood = round(vol_flood, 3)
-
                         if nid not in kpis["node_results"]:
                             kpis["node_results"][nid] = {"node": nid, "hours_surcharged": h_flood}
                         kpis["node_results"][nid].update({
                             "hours_flooded": h_flood,
                             "peak_flood_flow_cms": pk_flood,
                             "flood_volume_m3": vol_flood,
+                            "flood_time_minute": flood_time_minute,
+                            "ponded_depth_m": ponded_depth_m,
+                            # flood_volume_m3 = valeur BRUTE du .rpt (unité
+                            # 10^6 l, 3 décimales → résolution ~1 m³). Une
+                            # valeur nulle n'est PAS une mesure nulle : le
+                            # volume exact n'est pas déterminable.
+                            "flood_volume_estime": False,
                             "status": "flooded",
-                            "color": "#ef4444"
+                            "color": "#dc2626"
                         })
                         kpis["flooded_nodes"].append(kpis["node_results"][nid])
                 except Exception:
                     pass
+
+    # 7b. Maxima nodaux au pas de calcul (Node Depth Summary)
+    # Source d'autorité pour la HGL maximale : ces valeurs sont des maxima
+    # calculés par SWMM à CHAQUE pas de routage, contrairement au .out qui
+    # n'échantillonne qu'aux instants de rapport (REPORT_STEP).
+    _depth_maxima, _depth_status = _lire_node_depth_summary(rpt_text)
+    kpis["node_depth_maxima"] = _depth_maxima
+    kpis["node_depth_maxima_status"] = _depth_status
 
     kpis["flooded_nodes_count"] = len(kpis["flooded_nodes"])
     kpis["surcharged_nodes_count"] = sum(1 for n in kpis["node_results"].values() if n.get("status") in ("surcharged", "flooded"))
@@ -182,15 +260,15 @@ def analyser_rapport_swmm_impl(rpt_text: str, meta: Dict[str, Any]) -> Dict[str,
 
                     if q_ratio >= 1.0 or d_ratio >= 1.0:
                         c_status = "surcharge"
-                        color = "#ef4444"
+                        color = "#f97316"
                         label = "Surcharge (> 100%)"
                     elif q_ratio >= 0.8 or d_ratio >= 0.8:
                         c_status = "critique"
-                        color = "#f97316"
+                        color = "#f59e0b"
                         label = "Critique (80-100%)"
                     elif q_ratio >= 0.5 or d_ratio >= 0.5:
                         c_status = "moderee"
-                        color = "#facc15"
+                        color = "#eab308"
                         label = "Modéré (50-80%)"
                     else:
                         c_status = "normal"
@@ -355,4 +433,53 @@ def analyser_rapport_swmm_impl(rpt_text: str, meta: Dict[str, Any]) -> Dict[str,
     kpis["bilan_hydraulique_decisionnel"] = texte_decisionnel
     kpis["compliance_continuity"] = abs(kpis["routing_continuity_error_pct"]) <= 5.0
     return kpis
+
+
+def enrichir_hydraulique_noeuds(kpis: Dict[str, Any]) -> None:
+    """
+    Injecte dans ``timeseries.node_hydraulics`` les maxima calculés par SWMM
+    à chaque pas de routage, synthétisés dans le .rpt :
+
+    - ``Node Depth Summary`` → ``rpt_max_head_m`` (HGL max), ``rpt_max_depth_m``,
+      ``rpt_reported_max_depth_m`` (max aux instants de rapport),
+      ``rpt_max_head_minute`` (précision : la minute) ;
+    - ``Node Flooding Summary`` → ``rpt_flood_max_m3s``, ``rpt_flood_minute``,
+      ``rpt_flood_volume_m3``.
+
+    Les champs ``.out`` (``max_head_m``, ``flooding_max_m3s``) sont conservés
+    tels quels et marqués ``*_source = "out_report_step"`` : ce sont des maxima
+    AUX INSTANTS DE RAPPORT, pas nécessairement les pics internes du moteur.
+    Aucune valeur n'est estimée : une section .rpt absente laisse les champs
+    rpt_* simplement absents.
+    """
+    ts = kpis.get("timeseries")
+    nh = ts.get("node_hydraulics") if isinstance(ts, dict) else None
+    if not isinstance(nh, dict) or not nh:
+        return
+    maxima = kpis.get("node_depth_maxima") or {}
+    node_res = kpis.get("node_results") or {}
+    for nid, ent in nh.items():
+        if not isinstance(ent, dict):
+            continue
+        ent.setdefault("max_head_source", "out_report_step")
+        ent.setdefault("flooding_source", "out_report_step")
+        # max_head_m provient du .out : maximum aux instants de rapport,
+        # jamais présenté comme exhaustif au pas de routage.
+        ent["max_head_exhaustif"] = False
+        rpt = maxima.get(nid)
+        if rpt:
+            ent["rpt_max_head_m"] = rpt.get("max_hgl_m")
+            ent["rpt_max_head_minute"] = rpt.get("max_time_minute")
+            ent["rpt_max_depth_m"] = rpt.get("max_depth_m")
+            ent["rpt_reported_max_depth_m"] = rpt.get("reported_max_depth_m")
+            ent["hgl_max_source"] = "rpt_node_depth_summary"
+        nr = node_res.get(nid) or {}
+        if float(nr.get("hours_flooded") or 0.0) > 0.0 or nr.get("status") == "flooded":
+            ent["rpt_flood_max_m3s"] = nr.get("peak_flood_flow_cms")
+            ent["rpt_flood_minute"] = nr.get("flood_time_minute")
+            ent["rpt_flood_volume_m3"] = nr.get("flood_volume_m3")
+            # True = valeur non fiable (estimation historique ou absente) ;
+            # False = volume brut rapporté par SWMM (résolution ~1 m³).
+            ent["flood_volume_estime"] = bool(nr.get("flood_volume_estime", True))
+            ent["flooding_source"] = "rpt_node_flooding_summary"
 

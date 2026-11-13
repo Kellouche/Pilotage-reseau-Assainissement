@@ -100,6 +100,37 @@ Objet : Modale de paramétrage de pluie, stations ANRH et déclenchement SWMM 5.
                     </div>
                 </div>
 
+                <!-- Apports de temps sec (DWF) — LOT P1.5.3 : activation et
+                     compatibilité avant lancement. Les compteurs proviennent
+                     des API /apports existantes (aucune règle dupliquée). -->
+                <div id="sim-dwf-section" style="display: none; margin-bottom: 16px; background: rgba(5, 150, 105, 0.08); border: 1px solid rgba(52, 211, 153, 0.35); border-radius: 10px; padding: 12px 14px;">
+                    <div style="display: flex; align-items: flex-start; gap: 10px;">
+                        <i class="fas fa-faucet-drip" style="color: #34d399; font-size: 1.15rem; margin-top: 2px;"></i>
+                        <div style="flex: 1;">
+                            <label for="sim-chk-dwf-actif" style="font-weight: 700; color: #34d399; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
+                                <input type="checkbox" id="sim-chk-dwf-actif" style="accent-color: #34d399; width: 16px; height: 16px; cursor: pointer;">
+                                Activer les apports DWF (eaux usées — temps sec)
+                            </label>
+                            <div id="sim-dwf-stats" style="font-size: 0.74rem; color: #94a3b8; margin-top: 5px; line-height: 1.5;">
+                                <i class="fas fa-circle-notch fa-spin me-1"></i> Évaluation des apports du projet…
+                            </div>
+                            <div id="sim-dwf-alerte-incompat" style="display: none; margin-top: 8px; padding: 8px 10px; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.45); border-radius: 6px; font-size: 0.74rem; color: #fcd34d; line-height: 1.45;">
+                                <i class="fas fa-exclamation-triangle me-1"></i>
+                                <span id="sim-dwf-alerte-texte"></span>
+                                <button type="button" onclick="ouvrirModalApportsDwf()" style="background: rgba(245,158,11,0.2); border: 1px solid rgba(245,158,11,0.6); color: #fbbf24; border-radius: 5px; padding: 2px 8px; font-size: 0.7rem; font-weight: 700; cursor: pointer; margin-left: 6px;">
+                                    Ouvrir la réconciliation DWF
+                                </button>
+                            </div>
+                            <div style="margin-top: 6px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                <small style="color: #6ee7b7; font-size: 0.7rem;"><i class="fas fa-info-circle me-1"></i>Indépendant de la pluie : conservé sur tous les scénarios (T2/T10/T50/T100, orage, BMS).</small>
+                                <button type="button" onclick="ouvrirModalApportsDwf()" style="background: rgba(52,211,153,0.12); border: 1px solid rgba(52,211,153,0.45); color: #34d399; border-radius: 6px; padding: 4px 10px; font-size: 0.72rem; font-weight: 700; cursor: pointer;">
+                                    <i class="fas fa-cog me-1"></i> Gérer les apports DWF
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Choix station, scénario et intensité pluviométrique réglable (référentiel ANRH / UHBC) -->
                 <div style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">

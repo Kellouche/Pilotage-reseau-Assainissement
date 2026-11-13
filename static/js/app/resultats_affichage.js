@@ -15,6 +15,41 @@
             if (!data || !data.conduit_results || !data.node_results) return;
             window._dernierResultatSimulation = data;
 
+            // LOT P1.5.3 — traçabilité DWF dans la légende : réutilise la
+            // provenance existante (provenance.apports_dwf du résultat),
+            // jamais de mécanisme parallèle.
+            const _dwfProv = (data && data.provenance && data.provenance.apports_dwf)
+                || (data && data.kpis && data.kpis.provenance
+                    ? data.kpis.provenance.apports_dwf : null);
+            const _dwfLeg = document.getElementById('sim-legend-dwf-info');
+            if (_dwfLeg) {
+                if (_dwfProv) {
+                    const nInj = Array.isArray(_dwfProv.injectes) ? _dwfProv.injectes.length : 0;
+                    const nIgn = Array.isArray(_dwfProv.ignores) ? _dwfProv.ignores.length : 0;
+                    _dwfLeg.style.display = 'block';
+                    _dwfLeg.innerHTML = nInj > 0
+                        ? `<i class="fas fa-faucet-drip me-1"></i> Apports DWF : <b>${nInj} injecté(s)</b>${nIgn > 0 ? ` — ${nIgn} ignoré(s)` : ''}`
+                        : `<i class="fas fa-faucet-drip me-1"></i> Apports DWF : <b>aucun injecté</b>${nIgn > 0 ? ` — ${nIgn} ignoré(s)` : ''}`;
+                } else {
+                    _dwfLeg.style.display = 'none';
+                    _dwfLeg.innerHTML = '';
+                }
+            }
+
+            // P0 — couleur dérivée du STATUT sémantique (stable entre les
+            // versions de résultats persistés) : surcharge = orange,
+            // critique = ambre, modérée = jaune, normale = vert.
+            // Le rouge est réservé au débordement réel (regards flooded).
+            const _couleurConduite = function(r) {
+                const parStatut = {
+                    surcharge: '#f97316',
+                    critique: '#f59e0b',
+                    moderee: '#eab308',
+                    normal: '#10b981'
+                };
+                return parStatut[r && r.status] || (r && r.color) || '#10b981';
+            };
+
             // Réactiver les boutons d'animation et d'analyse hydrologique si une simulation est disponible
             if (typeof _desactiverBoutonsHydro === 'function') {
                 _desactiverBoutonsHydro();
@@ -127,7 +162,7 @@
                         const r = conduitByNodes[`${u}->${d}`] || conduitByNodes[`${d}->${u}`];
                         if (!r) return { opacity: 0, weight: 0 };
 
-                        const col = r.color || '#10b981';
+                        const col = _couleurConduite(r);
                         const isSurcharge = (r.status === 'surcharge' || (r.depth_ratio >= 1.0) || (r.flow_ratio >= 1.0));
                         const isCritique = (r.status === 'critique' || (r.depth_ratio >= 0.8));
                         const w = isSurcharge ? 6.0 : (isCritique ? 5.0 : 4.0);
@@ -151,14 +186,14 @@
                         const dPct = (r.depth_ratio * 100).toFixed(0);
                         const popupHtml = `
                             <div style="font-family: inherit; font-size: 12px; min-width: 230px; line-height: 1.45;">
-                                <div style="font-weight: 800; font-size: 13px; color: ${r.color}; margin-bottom: 6px; border-bottom: 1px solid rgba(0,0,0,0.1); padding-bottom: 4px;">
+                                <div style="font-weight: 800; font-size: 13px; color: ${_couleurConduite(r)}; margin-bottom: 6px; border-bottom: 1px solid rgba(0,0,0,0.1); padding-bottom: 4px;">
                                     <i class="fas fa-water me-1"></i> Conduite ${r.link_id || ''} (${u} &rarr; ${d})
                                 </div>
-                                <div style="margin-bottom: 5px; font-weight: 700; color: ${r.color}; font-size: 11.5px;">
+                                <div style="margin-bottom: 5px; font-weight: 700; color: ${_couleurConduite(r)}; font-size: 11.5px;">
                                     Taux de charge : ${r.label || 'Normal'}
                                 </div>
                                 <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
-                                    <tr><td style="color:#64748b; padding:2px 0;">Charge Q/Qmax :</td><td style="font-weight:700; text-align:right; color:${r.color};">${qPct} %</td></tr>
+                                    <tr><td style="color:#64748b; padding:2px 0;">Charge Q/Qmax :</td><td style="font-weight:700; text-align:right; color:${_couleurConduite(r)};">${qPct} %</td></tr>
                                     <tr><td style="color:#64748b; padding:2px 0;">Remplissage H/D :</td><td style="font-weight:700; text-align:right;">${dPct} %</td></tr>
                                     <tr><td style="color:#64748b; padding:2px 0;">Débit de pointe :</td><td style="font-weight:700; text-align:right;">${(r.max_flow_cms || 0).toFixed(3)} m³/s</td></tr>
                                     <tr><td style="color:#64748b; padding:2px 0;">Vitesse maximale :</td><td style="font-weight:700; text-align:right;">${(r.max_velocity_ms || 0).toFixed(2)} m/s</td></tr>

@@ -359,6 +359,90 @@ window.dessinerRaccordementsOrphelinsSurCarte = function() {
         // ==========================================
         window._modePluieActif = 'projet';
 
+        // ==========================================
+        // LOT P1.5.3 — APPORTS DWF DANS LE LANCEMENT
+        // ==========================================
+        // Les compteurs proviennent des API existantes (/network/datasets,
+        // /apports?actif_seulement, /apports/a-reconcilier) : aucune règle
+        // de compatibilité n'est dupliquée côté client.
+        window._dwfSimulationInfo = { charge: false, actifs: 0, compatibles: 0, incompatibles: 0, projetId: null };
+
+        window.chargerInfosDwfSimulation = async function() {
+            const section = document.getElementById('sim-dwf-section');
+            const stats = document.getElementById('sim-dwf-stats');
+            const chk = document.getElementById('sim-chk-dwf-actif');
+            const alerte = document.getElementById('sim-dwf-alerte-incompat');
+            const alerteTxt = document.getElementById('sim-dwf-alerte-texte');
+            const info = window._dwfSimulationInfo;
+            info.charge = false;
+            if (!section || !stats) return;
+
+            const token = localStorage.getItem('swmm_access_token');
+            const headers = {};
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+            const j = { headers: headers, credentials: 'include' };
+
+            try {
+                const ds = await fetch('/api/v1/network/datasets?_t=' + Date.now(), j).then(r => r.ok ? r.json() : null);
+                const ap = ds && ds.active_project;
+                if (!ap || !ap.id) {
+                    section.style.display = 'block';
+                    stats.innerHTML = '<i class="fas fa-info-circle me-1" style="color:#94a3b8;"></i> Aucun projet actif : les apports DWF ne sont pas évalués.';
+                    if (chk) { chk.checked = false; chk.disabled = true; }
+                    if (alerte) alerte.style.display = 'none';
+                    return;
+                }
+                info.projetId = ap.id;
+                const pid = `project_id=${encodeURIComponent(ap.id)}`;
+                const [apports, recon] = await Promise.all([
+                    fetch(`/api/v1/apports?${pid}&actif_seulement=true`, j).then(r => r.ok ? r.json() : []),
+                    fetch(`/api/v1/apports/a-reconcilier?${pid}`, j).then(r => r.ok ? r.json() : null),
+                ]);
+                const actifs = Array.isArray(apports) ? apports : [];
+                const incompatibles = (recon && Array.isArray(recon.incompatibles)) ? recon.incompatibles : [];
+                const nIncompat = (recon && typeof recon.count === 'number') ? recon.count : incompatibles.length;
+                info.actifs = actifs.length;
+                info.incompatibles = nIncompat;
+                info.compatibles = Math.max(0, actifs.length - nIncompat);
+                info.charge = true;
+
+                section.style.display = 'block';
+                if (chk) chk.disabled = false;
+
+                if (actifs.length === 0) {
+                    stats.innerHTML = '<i class="fas fa-info-circle me-1" style="color:#6ee7b7;"></i> <b>0 apport DWF actif</b> pour ce projet — comportement historique inchangé.';
+                    if (chk) chk.checked = false;
+                } else {
+                    stats.innerHTML =
+                        `<b style="color:#34d399;">${actifs.length} apport(s) actif(s)</b> — ` +
+                        `<b style="color:#6ee7b7;">${info.compatibles} compatible(s)</b> avec le réseau courant — ` +
+                        `<b style="color:${nIncompat > 0 ? '#fbbf24' : '#6ee7b7'};">${nIncompat} incompatible(s)</b>.` +
+                        (nIncompat > 0 ? ' La simulation sera refusée tant que les apports incompatibles ne sont pas réconciliés.' : '');
+                    // Défaut : DWF proposé dès qu'il existe des apports
+                    // actifs. La compatibilité est affichée à côté ; si des
+                    // apports sont incompatibles, le lancement retournera
+                    // le 422 structuré avec accès à la réconciliation —
+                    // jamais de désactivation silencieuse des apports.
+                    if (chk) chk.checked = (info.compatibles > 0 || nIncompat === 0);
+                }
+
+                if (alerte && alerteTxt) {
+                    if (nIncompat > 0) {
+                        alerteTxt.textContent = `${nIncompat} apport(s) DWF incompatible(s) avec la version du réseau — réconciliation requise avant injection.`;
+                        alerte.style.display = 'block';
+                    } else {
+                        alerte.style.display = 'none';
+                    }
+                }
+            } catch (err) {
+                console.warn('[DWF] Évaluation des apports impossible :', err);
+                section.style.display = 'block';
+                stats.innerHTML = '<i class="fas fa-exclamation-triangle me-1" style="color:#fbbf24;"></i> Apports DWF non évalués (API indisponible) — le comportement par défaut du serveur s\'applique.';
+                if (chk) { chk.checked = false; chk.disabled = false; }
+                if (alerte) alerte.style.display = 'none';
+            }
+        };
+
         window.basculerModePluie = function(mode) {
             window._modePluieActif = mode;
             const btnProjet = document.getElementById('tab-mode-pluie-projet');
@@ -734,8 +818,15 @@ window.dessinerRaccordementsOrphelinsSurCarte = function() {
                 bmsProfil = document.getElementById('sim-bms-profil') ? document.getElementById('sim-bms-profil').value : 'cloche';
             }
 
+            // LOT P1.5.3 — DWF : la valeur de l'interrupteur est transmise
+            // explicitement (true/false) ; null si la section n'a pas pu
+            // être évaluée → le serveur applique sa règle par défaut.
+            const chkDwf = document.getElementById('sim-chk-dwf-actif');
+            const dwfActif = (chkDwf && !chkDwf.disabled) ? chkDwf.checked : null;
+
             const payloadBody = {
                 scenario_key: isBms ? 'bms_alerte' : scen,
+                dwf_actif: dwfActif,
                 duree_heures: duree,
                 pas_routage_sec: pasRoutage,
                 pente_moyenne_pct: penteVal,
@@ -765,11 +856,21 @@ window.dessinerRaccordementsOrphelinsSurCarte = function() {
             .then(async r => {
                 if (!r.ok) {
                     let errMsg = `Erreur ${r.status}`;
+                    let errDwfIncompatibles = null;
                     try {
                         const rawText = await r.text();
                         try {
                             const errData = JSON.parse(rawText);
-                            errMsg = errData.detail || errData.message || errMsg;
+                            // LOT P1.5.3 — 422 compatibilité DWF : le detail
+                            // est un objet {message, apports_incompatibles}.
+                            if (errData && errData.detail && typeof errData.detail === 'object') {
+                                if (Array.isArray(errData.detail.apports_incompatibles)) {
+                                    errDwfIncompatibles = errData.detail.apports_incompatibles;
+                                }
+                                errMsg = errData.detail.message || errMsg;
+                            } else {
+                                errMsg = (errData && (errData.detail || errData.message)) || errMsg;
+                            }
                         } catch (_) {
                             if (rawText && rawText.length < 250) errMsg = rawText;
                         }
@@ -779,7 +880,9 @@ window.dessinerRaccordementsOrphelinsSurCarte = function() {
                     } else if (r.status === 500 && (!errMsg || errMsg === 'Erreur 500')) {
                         errMsg = "Erreur interne 500 du serveur lors du calcul SWMM 5.2.";
                     }
-                    throw new Error(errMsg);
+                    const err = new Error(errMsg);
+                    err.dwfIncompatibles = errDwfIncompatibles;
+                    throw err;
                 }
                 return r.json();
             })
@@ -934,7 +1037,24 @@ window.dessinerRaccordementsOrphelinsSurCarte = function() {
                 btn.disabled = false;
                 btn.innerHTML = '<i class="fas fa-play me-2"></i> Lancer la Simulation SWMM 5.2';
                 statusDiv.style.display = 'block';
-                statusDiv.innerHTML = `<span style="color: #ef4444;"><i class="fas fa-exclamation-triangle me-1"></i> Erreur : ${err.message}</span>`;
+                if (err && Array.isArray(err.dwfIncompatibles) && err.dwfIncompatibles.length > 0) {
+                    // LOT P1.5.3 — incompatibilité DWF : message précis +
+                    // accès direct au panneau de réconciliation. Aucune
+                    // relance automatique : décision explicite de l'ingénieur.
+                    const n = err.dwfIncompatibles.length;
+                    const details = err.dwfIncompatibles.slice(0, 4).map(d =>
+                        `• apport ${d.apport_id != null ? d.apport_id : '?'} (nœud ${d.node_id || '?'}) : ${d.motif || d.code || 'incompatible'}${d.code ? ' [' + d.code + ']' : ''}`
+                    ).join('<br>');
+                    const suite = n > 4 ? `<br><small>… et ${n - 4} autre(s)</small>` : '';
+                    statusDiv.innerHTML =
+                        `<span style="color:#fbbf24;"><i class="fas fa-exclamation-triangle me-1"></i> <b>Apports DWF incompatibles (${n})</b> — la simulation n'a pas été lancée.</span><br>` +
+                        `<small style="color:#cbd5e1; display:block; margin:6px 0;">${details}${suite}</small>` +
+                        `<button type="button" onclick="ouvrirModalApportsDwf()" style="background: rgba(245,158,11,0.2); border: 1px solid rgba(245,158,11,0.6); color: #fbbf24; border-radius: 6px; padding: 5px 12px; font-size: 0.76rem; font-weight: 700; cursor: pointer;">
+                            <i class="fas fa-tools me-1"></i> Ouvrir le panneau de réconciliation DWF
+                        </button>`;
+                } else {
+                    statusDiv.innerHTML = `<span style="color: #ef4444;"><i class="fas fa-exclamation-triangle me-1"></i> Erreur : ${err.message}</span>`;
+                }
                 if (typeof window.mettreAJourIndicateurBassin === 'function') {
                     window.mettreAJourIndicateurBassin(clusterId, { status: 'selected' });
                 }

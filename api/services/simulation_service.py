@@ -657,7 +657,8 @@ def executer_moteur_swmm(
         gpkg_path=gpkg_path,
         scenario_key=eff["scenario_key"],
         duree_heures=eff["duree_heures"],
-        pas_routage_sec=params.get("pas_routage_sec"),
+        pas_routage_sec=(params.get("pas_routage_sec")
+                         if params.get("pas_routage_sec") is not None else 5),
         pente_moyenne_pct=params.get("pente_moyenne_pct"),
         cluster_id=params.get("cluster_id"),
         tampon_buffer_m=params.get("buffer_m"),

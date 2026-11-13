@@ -337,5 +337,10 @@ window.reinitialiserAffichageSimulation = function() {
                     }
                 }
                 m.style.display = 'flex';
+                // LOT P1.5.3 — évaluer les apports DWF du projet à chaque
+                // ouverture (compteurs + défaut de l'interrupteur).
+                if (typeof window.chargerInfosDwfSimulation === 'function') {
+                    window.chargerInfosDwfSimulation();
+                }
             }
         };

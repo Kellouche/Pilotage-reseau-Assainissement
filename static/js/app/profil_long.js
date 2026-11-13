@@ -390,7 +390,7 @@ function afficherProfilLong(data) {
         bLongueur.style.display = 'inline-block';
     }
     if (bSurcharges) {
-        bSurcharges.textContent = `${data.conduites_en_charge} surcharge${data.conduites_en_charge > 1 ? 's' : ''}`;
+        bSurcharges.textContent = `${data.conduites_en_charge} conduite${data.conduites_en_charge > 1 ? 's' : ''} en charge`;
         bSurcharges.style.display = data.conduites_en_charge > 0 ? 'inline-block' : 'none';
     }
 
@@ -417,25 +417,33 @@ function afficherProfilLong(data) {
 
     // 4. Préparer les données pour Chart.js
     const labels = data.segments.map(s => `${s.node_id}\n(${s.distance_m}m)`);
+    const aTerrain = data.segments.some(s => s.z_terrain != null);
+    const aSommet = data.segments.some(s => s.z_sommet_regard != null);
     const terrainData = data.segments.map(s => ({ x: s.distance_m, y: s.z_terrain }));
+    const sommetData = data.segments.map(s => ({ x: s.distance_m, y: s.z_sommet_regard }));
     const genSupData = data.segments.map(s => ({ x: s.distance_m, y: s.z_gen_superieure }));
     const radierData = data.segments.map(s => ({ x: s.distance_m, y: s.z_radier }));
-    const eauConduiteData = data.segments.map(s => ({ x: s.distance_m, y: s.z_eau_conduite !== undefined ? s.z_eau_conduite : s.z_radier }));
+    const eauConduiteData = data.segments.map(s => ({ x: s.distance_m, y: s.z_eau_conduite !== undefined && s.z_eau_conduite !== null ? s.z_eau_conduite : s.z_radier }));
     const hglData = data.segments.map(s => ({ x: s.distance_m, y: s.z_hgl }));
+
+    const _estDebordement = s => s.hgl_regime === 'debordement'
+        || (s.node_status === 'flooded' && data.hgl_base !== 'instant');
+    const _estSurcharge = s => s.hgl_regime === 'surcharge'
+        || (s.hgl_regime !== 'debordement' && s.z_hgl != null && s.z_gen_superieure != null && s.z_hgl > s.z_gen_superieure);
 
     // Classification couleur et taille des points HGL (🟢 Libre / 🟡 Surcharge / 🔴 Débordement)
     const hglPointColors = data.segments.map(s => {
-        if (s.hgl_regime === 'debordement' || (s.z_hgl && s.z_hgl >= s.z_terrain)) {
-            return '#ef4444'; // 🔴 Débordement au sol
-        } else if (s.hgl_regime === 'surcharge' || (s.z_hgl && s.z_hgl > s.z_gen_superieure)) {
-            return '#f59e0b'; // 🟡 Surcharge en cheminée
+        if (_estDebordement(s)) {
+            return '#dc2626';
+        } else if (_estSurcharge(s)) {
+            return '#f97316';
         }
-        return '#10b981'; // 🟢 Écoulement libre
+        return '#10b981';
     });
 
     const hglPointRadius = data.segments.map(s => {
-        if (s.hgl_regime === 'debordement' || (s.z_hgl && s.z_hgl >= s.z_terrain)) return 7;
-        if (s.hgl_regime === 'surcharge' || (s.z_hgl && s.z_hgl > s.z_gen_superieure)) return 5.5;
+        if (_estDebordement(s)) return 7;
+        if (_estSurcharge(s)) return 5.5;
         return 4;
     });
 
@@ -455,7 +463,7 @@ function afficherProfilLong(data) {
         data: {
             labels: labels,
             datasets: [
-                {
+                ...(aTerrain ? [{
                     label: 'Terrain naturel (MNT)',
                     data: terrainData,
                     borderColor: '#10b981',
@@ -465,7 +473,18 @@ function afficherProfilLong(data) {
                     pointBackgroundColor: '#10b981',
                     fill: false,
                     tension: 0.1
-                },
+                }] : []),
+                ...(aSommet ? [{
+                    label: 'Sommet de regard (SWMM MaxDepth)',
+                    data: sommetData,
+                    borderColor: '#0d9488',
+                    backgroundColor: 'transparent',
+                    borderWidth: 1.8,
+                    borderDash: [2, 3],
+                    pointRadius: 0,
+                    fill: false,
+                    tension: 0
+                }] : []),
                 {
                     label: 'Génératrice supérieure (haut de conduite)',
                     data: genSupData,
@@ -513,15 +532,17 @@ function afficherProfilLong(data) {
                     tension: 0.15
                 },
                 {
-                    label: 'Alerte : HGL ≥ Terrain',
-                    data: data.segments.map(s =>
-                        (s.z_hgl != null && s.z_hgl >= s.z_terrain)
-                            ? { x: s.distance_m, y: s.z_hgl }
-                            : null
-                    ),
+                    label: 'Alerte : débordement confirmé (SWMM)',
+                    // Points objets systématiques (jamais null) : Chart.js
+                    // rejette les entrées null mélangées en mode objet.
+                    // Visibilité pilotée par pointRadius.
+                    data: data.segments.map(s => ({
+                        x: s.distance_m,
+                        y: (s.z_hgl != null ? s.z_hgl : (s.z_sommet_regard != null ? s.z_sommet_regard : s.z_radier))
+                    })),
                     showLine: false,
                     pointStyle: 'triangle',
-                    pointRadius: 9,
+                    pointRadius: data.segments.map(s => _estDebordement(s) ? 9 : 0),
                     pointHoverRadius: 12,
                     pointBackgroundColor: '#ef4444',
                     pointBorderColor: '#ffffff',
@@ -557,7 +578,9 @@ function afficherProfilLong(data) {
                     displayColors: false,
                     // N'afficher l'infobulle que sur les points des regards (dataset HGL)
                     filter: function(tooltipItem) {
-                        return tooltipItem.datasetIndex === 4;
+                        const lbl = tooltipItem.dataset && tooltipItem.dataset.label;
+                        return lbl === 'Ligne de charge HGL (zone de surpression hachuree)'
+                            || lbl === 'Ligne de charge HGL (zone de surpression hachurée)';
                     },
                     callbacks: {
                         title: function(items) {
@@ -569,10 +592,14 @@ function afficherProfilLong(data) {
                         label: function(item) {
                             const s = data.segments[item.dataIndex];
                             if (!s) return '';
-                            if (s.hgl_regime === 'debordement' || (s.z_hgl && s.z_hgl >= s.z_terrain)) {
-                                return `🔴 État : Débordement au sol (HGL ≥ terrain)`;
-                            } else if (s.hgl_regime === 'surcharge' || (s.z_hgl && s.z_hgl > s.z_gen_superieure)) {
-                                return `🟡 État : Conduite en surcharge`;
+                            if (_estDebordement(s)) {
+                                return `🔴 État : Débordement confirmé par SWMM (perte en surface)`;
+                            } else if (s.hgl_regime === 'inondation') {
+                                return `🟠 État : Niveau ≥ terrain naturel (sans perte mesurée)`;
+                            } else if (_estSurcharge(s)) {
+                                return `🟠 État : Conduite en surcharge`;
+                            } else if (s.hgl_regime === 'inconnu' || s.z_hgl == null) {
+                                return `⚪ État : Donnée hydraulique indisponible`;
                             }
                             return `🟢 État : Écoulement libre`;
                         }

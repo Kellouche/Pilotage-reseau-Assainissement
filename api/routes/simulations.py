@@ -1360,20 +1360,43 @@ def get_profil_en_long(
         canalisations = gpd.read_file(str(active_gpkg), layer=pipe_layer)
 
         # Construire un index regard Code→géométrie+attributs
+        # P0 — altimétrie : une cote n'est « terrain » (MNT) que si elle
+        # provient d'une source altimétrique réelle (COTETN/COTTN/COORDZ).
+        # Profondeur sert uniquement de repli pour le radier quand une cote
+        # terrain vérifiée existe ; sinon aucune altitude n'est inventée.
+        def _col_val(r, name):
+            if name not in r or r[name] is None or pd.isna(r[name]):
+                return None
+            try:
+                v = float(r[name])
+            except (TypeError, ValueError):
+                return None
+            return v if v > 0 else None
+
         node_index: Dict[str, Any] = {}
         for _, r in regards.iterrows():
             nid = _clean_node_id(r.get("Code"), fallback=str(r.name))
             if nid:
-                prof = float(r["Profondeur"]) if ("Profondeur" in r and r["Profondeur"] is not None and not pd.isna(r["Profondeur"]) and float(r["Profondeur"]) > 0) else 2.0
-                cotetn = float(r["COTETN"]) if ("COTETN" in r and r["COTETN"] is not None and not pd.isna(r["COTETN"]) and float(r["COTETN"]) > 0) else None
-                cotrad = float(r["COTRAD"]) if ("COTRAD" in r and r["COTRAD"] is not None and not pd.isna(r["COTRAD"]) and float(r["COTRAD"]) > 0) else None
+                prof = _col_val(r, "Profondeur")
+                cotetn = _col_val(r, "COTETN")
+                cottn = _col_val(r, "COTTN")
+                coordz = _col_val(r, "COORDZ")
+                cotrad = _col_val(r, "COTRAD")
+                # Cote terrain vérifiée : première source altimétrique réelle.
+                terrain_val, terrain_src = None, "absent"
+                for cand, src in ((cotetn, "COTETN"), (cottn, "COTTN"), (coordz, "COORDZ")):
+                    if cand is not None:
+                        terrain_val, terrain_src = cand, src
+                        break
                 node_index[nid] = {
                     "code": nid,
                     "x": r.geometry.x if r.geometry else 0.0,
                     "y": r.geometry.y if r.geometry else 0.0,
                     "profondeur": prof,
-                    "cotetn": cotetn,
+                    "cotetn": terrain_val,
                     "cotrad": cotrad,
+                    "terrain_reel": terrain_val is not None,
+                    "terrain_source": terrain_src,
                 }
 
         # Construire le graphe amont→aval pour trouver le chemin
@@ -1467,6 +1490,77 @@ def get_profil_en_long(
                 if inv is not None:
                     node_elevs.setdefault(str(nh_nid), float(inv))
 
+            # P0 — enrichissement à la volée pour les simulations persistées
+            # AVANT le lot P0 : node_hydraulics sans champs rpt_*, mais le
+            # .rpt et node_results sont conservés dans le résultat → les
+            # maxima au pas de routage et le débordement réel restent
+            # accessibles sans relancer SWMM. Lecture seule, jamais
+            # d'estimation : section .rpt absente → champs simplement absents.
+            try:
+                _besoin_rpt = any(
+                    isinstance(_nh, dict) and _nh.get("rpt_max_head_m") is None
+                    for _nh in node_hydraulics.values()
+                )
+                if _besoin_rpt and sim_data.get("rpt_content"):
+                    from src.domain.moteur_swmm.analyse_rapport import (
+                        extraire_maxima_noeuds_rpt,
+                    )
+                    _maxima_rpt = extraire_maxima_noeuds_rpt(sim_data["rpt_content"])
+                    for _mnid, _mm in (_maxima_rpt or {}).items():
+                        _ent = node_hydraulics.get(_mnid)
+                        if isinstance(_ent, dict) and _ent.get("rpt_max_head_m") is None:
+                            _ent["rpt_max_head_m"] = _mm.get("max_hgl_m")
+                            _ent["rpt_max_head_minute"] = _mm.get("max_time_minute")
+                            _ent["rpt_max_depth_m"] = _mm.get("max_depth_m")
+                            _ent["rpt_reported_max_depth_m"] = _mm.get("reported_max_depth_m")
+                            _ent["hgl_max_source"] = "rpt_node_depth_summary"
+                # Synthèses .rpt complètes (Node Flooding Summary) : volume
+                # brut SWMM et instant du pic — source d'autorité, prioritaire
+                # sur node_results persisté (qui peut contenir l'ancienne
+                # estimation de volume).
+                if sim_data.get("rpt_content"):
+                    try:
+                        from src.domain.moteur_swmm.analyse_rapport import (
+                            analyser_rapport_swmm_impl,
+                        )
+                        _kpis_rpt = analyser_rapport_swmm_impl(
+                            rpt_text=sim_data["rpt_content"], meta={})
+                        for _mnid, _nr in (_kpis_rpt.get("node_results") or {}).items():
+                            if not isinstance(_nr, dict):
+                                continue
+                            if float(_nr.get("hours_flooded") or 0.0) <= 0.0 and _nr.get("status") != "flooded":
+                                continue
+                            _ent = node_hydraulics.get(_mnid)
+                            if _ent is None:
+                                _ent = node_hydraulics.get(_clean_node_id(_mnid))
+                            if isinstance(_ent, dict) and _ent.get("rpt_flood_max_m3s") is None:
+                                _ent["rpt_flood_max_m3s"] = _nr.get("peak_flood_flow_cms")
+                                _ent["rpt_flood_minute"] = _nr.get("flood_time_minute")
+                                _ent["rpt_flood_volume_m3"] = _nr.get("flood_volume_m3")
+                                _ent["flood_volume_estime"] = bool(_nr.get("flood_volume_estime", True))
+                                _ent["flooding_source"] = "rpt_node_flooding_summary"
+                    except Exception as e_flood:
+                        logger.warning("Synthèse flooding .rpt illisible: %s", e_flood)
+                # Repli : node_results persisté (volume possiblement estimé
+                # par une version antérieure → marqué non fiable).
+                for _mnid, _nr in sim_node_results.items():
+                    if not isinstance(_nr, dict):
+                        continue
+                    if float(_nr.get("hours_flooded") or 0.0) <= 0.0 and _nr.get("status") != "flooded":
+                        continue
+                    _ent = node_hydraulics.get(_mnid)
+                    if _ent is None:
+                        _nc = _clean_node_id(_mnid)
+                        _ent = node_hydraulics.get(_nc)
+                    if isinstance(_ent, dict) and _ent.get("rpt_flood_max_m3s") is None:
+                        _ent["rpt_flood_max_m3s"] = _nr.get("peak_flood_flow_cms")
+                        _ent["rpt_flood_minute"] = _nr.get("flood_time_minute")
+                        _ent["rpt_flood_volume_m3"] = _nr.get("flood_volume_m3")
+                        _ent["flood_volume_estime"] = bool(_nr.get("flood_volume_estime", True))
+                        _ent["flooding_source"] = "rpt_node_flooding_summary"
+            except Exception as e_lazy:
+                logger.warning("Enrichissement .rpt à la volée impossible: %s", e_lazy)
+
         def _hydrau_noeud(nid: str) -> Optional[Dict[str, Any]]:
             """Entrée node_hydraulics pour un nœud du graphe (clés = noms .out/INP)."""
             if nid in node_hydraulics:
@@ -1479,45 +1573,76 @@ def get_profil_en_long(
                     return v
             return None
 
-        def _head_reel(nid: str) -> Optional[float]:
-            """Cote hydraulique réelle SWMM pour le nœud (max ou instant)."""
+        def _head_reel(nid: str):
+            """(cote, source) — base='max' privilégie le maximum .rpt
+            (pas de routage, source d'autorité) ; base='instant' utilise
+            le .out à l'instant demandé. (None, 'indisponible') sinon."""
             nh = _hydrau_noeud(nid)
             if not nh:
-                return None
+                return None, "indisponible"
             if base == "instant":
                 pairs = nh.get("heads") or []
                 if not pairs:
-                    return nh.get("max_head_m")
+                    v = nh.get("max_head_m")
+                    return (float(v), "swmm_out_max_head") if v is not None else (None, "indisponible")
                 best = min(pairs, key=lambda p: abs(p[0] - (instant_minute or 0)))
-                return best[1]
-            return nh.get("max_head_m")
+                return float(best[1]), "swmm_out_instant"
+            rpt_h = nh.get("rpt_max_head_m")
+            if rpt_h is not None:
+                return float(rpt_h), "rpt_max_head"
+            v = nh.get("max_head_m")
+            return (float(v), "swmm_out_max_head") if v is not None else (None, "indisponible")
 
-        def _flood_reel(nid: str) -> float:
-            """Débit de débordement RÉEL au même référentiel temporel que la
-            cote : à l'instant demandé (base="instant") ou maximum global
-            (base="max", enveloppe — instants potentiellement différents)."""
+        def _flood_reel(nid: str):
+            """(débit, source) au même référentiel temporel que la cote.
+            base='max' : maximum .rpt (Node Flooding Summary) prioritaire ;
+            base='instant' : débordement au pas échantillonné le plus proche,
+            jamais le maximum global."""
             nh = _hydrau_noeud(nid)
             if not nh:
-                return 0.0
+                return 0.0, "indisponible"
             if base == "instant":
-                # Même pas échantillonné que la cote : on retient la minute
-                # la plus proche dans `heads` puis le débordement à CETTE
-                # minute (0 si aucun événement à ce pas). Un débordement à
-                # un autre moment n'est jamais imputé à l'instant demandé.
                 heads_pairs = nh.get("heads") or []
                 if not heads_pairs:
-                    return 0.0
+                    return 0.0, "out_report_step"
                 m_cible = min(heads_pairs,
                               key=lambda p: abs(p[0] - (instant_minute or 0)))[0]
                 for m, v in (nh.get("floods") or []):
                     if m == m_cible:
-                        return float(v)
-                return 0.0
-            return float(nh.get("flooding_max_m3s") or 0.0)
+                        return float(v), "swmm_out_instant"
+                return 0.0, "swmm_out_instant"
+            rpt_f = nh.get("rpt_flood_max_m3s")
+            if rpt_f is not None:
+                return float(rpt_f), "rpt_node_flooding_summary"
+            return float(nh.get("flooding_max_m3s") or 0.0), "out_report_step"
 
         hgl_source = ("swmm_out_max_head" if (sim_valide and node_hydraulics and base == "max")
                       else "swmm_out_instant" if (sim_valide and node_hydraulics and base == "instant")
                       else "indisponible")
+
+        # P0 — cotes de sommet de regard telles que définies par le modèle
+        # SWMM ([JUNCTIONS] : Name Elevation MaxDepth InitDepth SurDepth
+        # Aponded). Le sommet = radier + MaxDepth : ce n'est PAS le terrain
+        # naturel, c'est le plan de rupture du modèle.
+        inp_noeuds: Dict[str, Dict[str, float]] = {}
+        inp_content = sim_data.get("inp_content") if sim_valide else None
+        if inp_content:
+            _sec = None
+            for _line in str(inp_content).splitlines():
+                _s = _line.strip()
+                if _s.startswith("[") and _s.endswith("]"):
+                    _sec = _s.strip("[]").lower()
+                    continue
+                if _sec in ("junctions", "outfalls", "storage") and _s and not _s.startswith(";"):
+                    _p = _s.split()
+                    if len(_p) >= 3:
+                        try:
+                            inp_noeuds[_p[0]] = {
+                                "elevation": float(_p[1]),
+                                "maxdepth": float(_p[2]),
+                            }
+                        except (TypeError, ValueError):
+                            pass
 
         # Construire les séries du profil
         segments = []
@@ -1525,25 +1650,37 @@ def get_profil_en_long(
 
         for i, nid in enumerate(path_nodes):
             info = node_index.get(nid, {})
-            profondeur = info.get("profondeur", 2.0)
+            profondeur = info.get("profondeur")
             cotrad = info.get("cotrad")
-            cotetn = info.get("cotetn")
+            cotetn = info.get("cotetn")  # cote terrain vérifiée (ou None)
 
-            # Détermination de z_radier
+            # Détermination de z_radier — sources réelles uniquement :
+            # COTRAD (GPKG) → terrain vérifié − profondeur GPKG réelle →
+            # radier .out SWMM (node_elevs). AUCUNE valeur heuristique.
             if cotrad is not None:
                 z_rad = cotrad
-            elif cotetn is not None:
+            elif cotetn is not None and profondeur is not None:
                 z_rad = cotetn - profondeur
             elif nid in node_elevs:
                 z_rad = float(node_elevs[nid])
             else:
-                z_rad = 100.0 - (distance_cumulee * 0.01)
+                nc = _clean_node_id(nid)
+                z_rad = float(node_elevs.get(nc)) if nc in node_elevs else None
 
-            # Détermination de z_terrain
-            if cotetn is not None:
-                z_terrain = cotetn
-            else:
-                z_terrain = z_rad + profondeur
+            # z_terrain : uniquement une cote altimétrique vérifiée.
+            # Absente → None : aucune courbe « MNT » ne sera dessinée.
+            z_terrain = cotetn
+            terrain_reel = info.get("terrain_reel", False)
+            terrain_source = info.get("terrain_source", "absent")
+
+            # Sommet de regard SWMM = radier + MaxDepth (.inp) — plan de
+            # rupture du modèle, distinct du terrain naturel.
+            z_sommet = None
+            inp_n = inp_noeuds.get(nid) or inp_noeuds.get(_clean_node_id(nid) or "")
+            if inp_n and inp_n.get("maxdepth") is not None:
+                rad_src = z_rad if z_rad is not None else inp_n.get("elevation")
+                if rad_src is not None:
+                    z_sommet = rad_src + inp_n["maxdepth"]
 
             # Déterminer le diamètre de conduite local pour la génératrice supérieure
             diam_m = 0.6
@@ -1558,41 +1695,42 @@ def get_profil_en_long(
                 if e:
                     diam_m = float(e.get("diam_mm") or e.get("diametre_mm") or 600.0) / 1000.0
 
-            z_gen_sup = z_rad + diam_m
+            z_gen_sup = (z_rad + diam_m) if z_rad is not None else None
 
-            # LOT P0.2 — HGL = cote hydraulique RÉELLE du .out SWMM.
-            # Aucune reconstruction heuristique : si la cote n'est pas
-            # disponible, z_hgl reste None et hgl_reel=False.
-            hgl = _head_reel(nid)
+            # LOT P0 — HGL : maximum .rpt (base=max) ou valeur .out à
+            # l'instant demandé. Provenance conservée par nœud.
+            hgl, hgl_src = _head_reel(nid)
             hgl_reel = hgl is not None
             nh_entry = _hydrau_noeud(nid) or {}
-            # CONTRÔLE P0.2/A — débordement au MÊME référentiel temporel
-            # que la cote (instant exact ou enveloppe max documentée).
-            flooding_max = _flood_reel(nid)
+            simule = bool(nh_entry)
+            flooding_max, flood_src = _flood_reel(nid)
             flooding_global_max = float(nh_entry.get("flooding_max_m3s") or 0.0)
+            rpt_flood_vol = nh_entry.get("rpt_flood_volume_m3")
+            rpt_flood_min = nh_entry.get("rpt_flood_minute")
 
             node_sim = sim_node_results.get(nid, {})
             status_n = node_sim.get("status", "normal")
             if hgl is not None:
-                # CONTRÔLE P0.2 — distinction stricte :
-                #   debordement = débit de débordement RÉELLEMENT calculé par
-                #     SWMM (FLOODING_LOSSES > 0) ;
-                #   inondation = cote ≥ terrain naturel sans perte de surface
-                #     (eau stockée à la parcelle, ex. ALLOW_PONDING) ;
+                # CONTRÔLE P0 — distinction stricte :
+                #   debordement = perte de surface RÉELLE confirmée par SWMM
+                #     (FLOODING_LOSSES > 0, .rpt prioritaire sur .out) ;
+                #   inondation = cote ≥ terrain naturel VÉRIFIÉ sans perte ;
                 #   surcharge = mise en charge (cote > génératrice supérieure) ;
                 #   libre = écoulement non mis en charge.
+                # Sans terrain vérifié, aucune « inondation » ne peut être
+                # affirmée : la comparaison se fait sur la génératrice.
                 if flooding_max > 0.0:
                     hgl_regime = "debordement"
-                elif hgl >= z_terrain:
+                elif z_terrain is not None and hgl >= z_terrain:
                     hgl_regime = "inondation"
-                elif hgl > z_gen_sup:
+                elif z_gen_sup is not None and hgl > z_gen_sup:
                     hgl_regime = "surcharge"
                 else:
                     hgl_regime = "libre"
             else:
-                # Donnée .out absente : le statut RPT (donnée SWMM réelle)
-                # qualifie le régime, mais aucune cote n'est inventée.
-                if status_n == "flooded":
+                # Donnée hydraulique absente : le statut RPT (donnée SWMM
+                # réelle) qualifie le régime, mais aucune cote n'est inventée.
+                if status_n == "flooded" and base == "max":
                     hgl_regime = "debordement"
                 elif status_n == "surcharged":
                     hgl_regime = "surcharge"
@@ -1640,34 +1778,49 @@ def get_profil_en_long(
             # statut de la conduite : la cote .out fait foi. Le statut réel
             # de la conduite reste reporté dans conduit_sortant.
 
-            z_gs = z_rad + (conduit["diam_mm"] / 1000.0 if conduit else diam_m)
-            pression_m = round(max(0.0, hgl - z_gs), 2) if (hgl and hgl > z_gs) else 0.0
-            revanche_m = round(max(0.0, z_terrain - hgl), 2) if (hgl and hgl < z_terrain) else 0.0
+            z_gs = (z_rad + (conduit["diam_mm"] / 1000.0 if conduit else diam_m)) if z_rad is not None else None
+            pression_m = (round(max(0.0, hgl - z_gs), 2)
+                          if (hgl is not None and z_gs is not None and hgl > z_gs) else 0.0)
+            revanche_m = (round(max(0.0, z_terrain - hgl), 2)
+                          if (z_terrain is not None and hgl is not None and hgl < z_terrain)
+                          else (0.0 if (z_terrain is not None and hgl is not None) else None))
 
             # Cote du plan d'eau réel dans la conduite (Water Surface Profile - WSP)
             # Si en charge : la conduite est 100% pleine d'eau (z_eau = z_gs)
             # Si écoulement libre : z_eau = min(z_gs, max(z_rad, hgl))
-            if hgl is not None:
+            if hgl is not None and z_gs is not None and z_rad is not None:
                 z_eau_conduite = z_gs if hgl >= z_gs else max(z_rad, hgl)
-            else:
+            elif z_rad is not None:
                 z_eau_conduite = z_rad
+            else:
+                z_eau_conduite = None
 
             segments.append({
                 "node_id": nid,
                 "distance_m": round(distance_cumulee, 2),
-                "z_radier": round(z_rad, 3),
-                "z_terrain": round(z_terrain, 3),
-                "z_gen_superieure": round(z_gs, 3),
-                "z_eau_conduite": round(z_eau_conduite, 3),
+                "z_radier": round(z_rad, 3) if z_rad is not None else None,
+                "z_terrain": round(z_terrain, 3) if z_terrain is not None else None,
+                "z_sommet_regard": round(z_sommet, 3) if z_sommet is not None else None,
+                "terrain_reel": bool(terrain_reel),
+                "terrain_source": terrain_source,
+                "z_gen_superieure": round(z_gs, 3) if z_gs is not None else None,
+                "z_eau_conduite": round(z_eau_conduite, 3) if z_eau_conduite is not None else None,
                 "z_hgl": round(hgl, 3) if hgl is not None else None,
                 "hgl_reel": hgl_reel,
+                "hgl_source": hgl_src,
                 "hgl_regime": hgl_regime,
-                "atteint_terrain": bool(hgl is not None and hgl >= z_terrain),
+                "simule": simule,
+                "atteint_terrain": bool(z_terrain is not None and hgl is not None and hgl >= z_terrain),
+                "atteint_sommet": bool(z_sommet is not None and hgl is not None and hgl >= z_sommet - 1e-6),
                 "flooding_m3s": round(flooding_max, 6) if hgl_reel else None,
+                "flood_source": flood_src,
                 "flooding_max_m3s": round(flooding_global_max, 6) if hgl_reel else None,
+                "rpt_flood_volume_m3": rpt_flood_vol,
+                "flood_volume_estime": bool(nh_entry.get("flood_volume_estime", True)),
+                "flood_time_minute": rpt_flood_min,
                 "pression_m": pression_m,
                 "revanche_m": revanche_m,
-                "profondeur_m": round(profondeur, 2),
+                "profondeur_m": round(profondeur, 2) if profondeur is not None else None,
                 "node_status": node_sim.get("status", "normal") if node_sim else "normal",
                 "node_color": node_sim.get("color", "#10b981") if node_sim else "#10b981",
                 "conduit_sortant": conduit,
@@ -1679,9 +1832,13 @@ def get_profil_en_long(
         # Ajouter le dernier nœud (aval) sans conduit sortant
         # (il est déjà ajouté dans la boucle)
 
-        # Statistiques du profil
-        z_min = min(s["z_radier"] for s in segments)
-        z_max = max(s["z_terrain"] for s in segments)
+        # Statistiques du profil — uniquement sur les cotes réellement
+        # disponibles (aucune valeur nulle n'est comptée comme une altitude).
+        _z_rad_vals = [s["z_radier"] for s in segments if s.get("z_radier") is not None]
+        _z_ref_vals = ([s["z_terrain"] for s in segments if s.get("z_terrain") is not None]
+                       + [s["z_sommet_regard"] for s in segments if s.get("z_sommet_regard") is not None])
+        z_min = min(_z_rad_vals) if _z_rad_vals else 0.0
+        z_max = max(_z_ref_vals) if _z_ref_vals else (max(_z_rad_vals) if _z_rad_vals else 0.0)
         longueur_totale = distance_cumulee
         conduites_en_charge = sum(
             1 for s in segments
@@ -1692,20 +1849,87 @@ def get_profil_en_long(
         alerts = []
         for s in segments:
             cond = s.get("conduit_sortant")
-            pression = s.get("pression_m", 0.0)
+            pression = s.get("pression_m") or 0.0
             regime = s.get("hgl_regime", "libre")
+            flood_same = s.get("flooding_m3s") or 0.0
+            flood_global = s.get("flooding_max_m3s") or 0.0
+            z_hgl_s = s.get("z_hgl")
+            z_sommet_s = s.get("z_sommet_regard")
 
-            if regime in ("debordement", "inondation") or s["node_status"] == "flooded":
+            if regime == "debordement" or (base == "max" and s["node_status"] == "flooded"):
                 reco = "Rehaussement du tampon, création d'un bassin de rétention amont ou surcalibrage de la conduite aval."
                 if cond and cond.get("diam_mm"):
                     next_diam = int(cond["diam_mm"] * 1.35 // 100 * 100) or int(cond["diam_mm"] + 200)
                     reco = f"Préconisation : recalibrage conduite aval Ø{cond['diam_mm']:.0f} mm → Ø{next_diam} mm ou bassin tampon amont."
+                # Observations construites UNIQUEMENT sur des faits SWMM :
+                # jamais de « HGL ≥ Terrain » si la cote affichée est sous
+                # le terrain (ou si aucun terrain vérifié n'existe).
+                obs_parts = []
+                if flood_same > 0.0:
+                    obs_parts.append(f"Perte de surface SWMM : {flood_same:.3f} m³/s")
+                    _fv = s.get("rpt_flood_volume_m3")
+                    if _fv is not None and not s.get("flood_volume_estime", True):
+                        if _fv > 0:
+                            obs_parts.append(f"volume total débordé rapporté : {_fv:.2f} m³")
+                        else:
+                            obs_parts.append(
+                                "volume total débordé < 0,5 m³ (valeur arrondie par "
+                                "SWMM — volume exact non déterminable)")
+                    else:
+                        obs_parts.append(
+                            "volume total débordé non déterminable depuis le rapport")
+                    fm = s.get("flood_time_minute")
+                    if fm is not None:
+                        obs_parts.append(f"max vers {fm // 60:02d}:{fm % 60:02d}")
+                elif flood_global > 0.0:
+                    obs_parts.append(
+                        "Débordement confirmé par SWMM — pic non visible dans la "
+                        "série temporelle enregistrée (événement plus court que "
+                        "le pas de rapport).")
+                if z_hgl_s is not None:
+                    if z_sommet_s is not None:
+                        obs_parts.append(f"HGL max {z_hgl_s} m / sommet du regard {z_sommet_s} m")
+                        obs_parts.append(f"Écart HGL / sommet du regard : {z_hgl_s - z_sommet_s:+.3f} m")
+                    else:
+                        obs_parts.append(f"HGL max {z_hgl_s} m")
+                    if s.get("atteint_sommet"):
+                        obs_parts.append("la cote a atteint le sommet du regard")
+                    if s.get("atteint_terrain"):
+                        obs_parts.append(f"et dépasse le terrain naturel ({s['z_terrain']} m)")
+                if pression:
+                    _diam_ob = f" (Ø{cond['diam_mm']:.0f} mm)" if (cond and cond.get("diam_mm")) else ""
+                    obs_parts.append(
+                        "charge au-dessus de la génératrice supérieure de la "
+                        f"conduite sortante{_diam_ob} : +{pression} m")
+                if not obs_parts:
+                    obs_parts.append("Perte de surface confirmée par le rapport SWMM.")
                 alerts.append({
                     "type": "debordement",
                     "node": s["node_id"],
-                    "message": f"🔴 Regard {s['node_id']} en DÉBORDEMENT CRITIQUE (HGL ≥ Terrain)",
-                    "observations": f"Niveau d'eau atteignant le tampon (HGL {s['z_hgl']} m). Charge au-dessus voûte : +{pression} m.",
+                    "message": f"🔴 Regard {s['node_id']} : Débordement confirmé par SWMM (perte en surface)",
+                    "observations": ". ".join(obs_parts) + ".",
                     "recommandation": reco
+                })
+            elif base == "instant" and s["node_status"] == "flooded":
+                # base=instant : le statut flooded est un maximum GLOBAL —
+                # présenté comme alerte distincte, jamais comme un état
+                # observé à l'instant affiché.
+                fm = s.get("flood_time_minute")
+                when = f" vers {fm // 60:02d}:{fm % 60:02d}" if fm is not None else ""
+                alerts.append({
+                    "type": "info",
+                    "node": s["node_id"],
+                    "message": f"ℹ️ Regard {s['node_id']} : pic de débordement ailleurs dans la simulation{when} — non observé à l'instant affiché",
+                    "observations": f"Maximum global de perte de surface : {flood_global:.3f} m³/s (agrégé par SWMM, hors pas de rapport).",
+                    "recommandation": "Consulter le profil en mode enveloppe (maxima) pour la vision complète."
+                })
+            elif regime == "inondation":
+                alerts.append({
+                    "type": "inondation",
+                    "node": s["node_id"],
+                    "message": f"🟠 Regard {s['node_id']} : niveau ≥ terrain naturel (sans perte de surface mesurée)",
+                    "observations": f"HGL {z_hgl_s} m ≥ terrain {s['z_terrain']} m — mise en eau de surface ou stockage, à confirmer sur le MNT.",
+                    "recommandation": "Vérifier la capacité de stockage superficiel et le point bas du secteur."
                 })
             elif regime == "surcharge" or s["node_status"] == "surcharged" or (cond and cond.get("flow_ratio", 0) >= 1.0):
                 flow_txt = f" (Q/Qmax = {cond['flow_ratio']:.0%})" if cond and cond.get("flow_ratio") else ""
@@ -1725,6 +1949,15 @@ def get_profil_en_long(
                     "recommandation": "Surveiller lors d'épisodes orageux de période de retour supérieure à T10."
                 })
 
+        _hgl_max_srcs = {s.get("hgl_source") for s in segments if s.get("hgl_source")}
+        _a_rpt = "rpt_max_head" in _hgl_max_srcs
+        _a_out = "swmm_out_max_head" in _hgl_max_srcs
+        hgl_source_global = (
+            "swmm_rpt_max_head" if (base == "max" and _a_rpt and not _a_out)
+            else "swmm_rpt_max_head_partiel" if (base == "max" and _a_rpt and _a_out)
+            else hgl_source
+        )
+
         return {
             "status": "success",
             "node_amont": src,
@@ -1735,15 +1968,20 @@ def get_profil_en_long(
             "z_max": round(z_max, 3),
             "conduites_en_charge": conduites_en_charge,
             "simulation_active": bool(sim_valide),
-            "hgl_source": hgl_source,
+            "terrain_disponible": any(s.get("z_terrain") is not None for s in segments),
+            "hgl_source": hgl_source_global,
             "hgl_base": base,
             "hgl_base_label": (
-                "enveloppe des cotes maximales individuelles — instants "
-                "potentiellement differents par noeud ; la classification "
-                "(surcharge/inondation/debordement) porte sur ces memes "
-                "maxima individuels, pas sur un instant unique" if base == "max"
+                "enveloppe des cotes maximales individuelles — les maxima "
+                "proviennent du rapport SWMM (.rpt, pas de routage) quand "
+                "disponible, sinon des instants de rapport du .out ; les "
+                "maxima des differents regards peuvent survenir a des "
+                "instants differents ; la classification porte sur ces "
+                "memes maxima, pas sur un instant unique" if base == "max"
                 else "profil instantane a l'instant demande — cote, "
-                     "debordement et classification au meme pas de temps"),
+                     "debordement et classification au meme pas de temps ; "
+                     "les evenements de debordement detectes a d'autres "
+                     "instants sont signales separement"),
             "instant_minute": instant_minute,
             "segments": segments,
             "alertes": alerts,

@@ -226,7 +226,9 @@ def _sim_data_hgl(node_hydraulics, with_ts=True):
         "meta": {"cluster_id": 1, "cluster_nom": "Bassin test",
                  "bbox": [3.0, 36.0, 3.1, 36.1], "junctions_count": 5,
                  "conduits_count": 4},
-        "inp_content": "[TITLE]\nTest HGL\n",
+        "inp_content": ("[TITLE]\nTest HGL\n[JUNCTIONS]\n"
+                        "2674 0.0 2.0 0.0 0.0 0.0\n"
+                        "2672 0.0 2.0 0.0 0.0 0.0\n"),
     }
     if with_ts:
         data["timeseries"] = {"status": "SUCCESS", "steps": [],
@@ -324,7 +326,10 @@ def test_profil_hgl_instantane(ctx_profil_hgl):
 
 
 def test_profil_regime_surcharge_et_debordement(ctx_profil_hgl):
-    """Mise en charge / débordement déduits de la cote RÉELLE vs géométrie."""
+    """Mise en charge / débordement déduits de la cote RÉELLE vs géométrie.
+    P0 — le GPKG de référence ne contient aucune cote terrain vérifiée :
+    z_terrain=None, aucune courbe MNT n'est prétendue ; la référence haute
+    est le sommet de regard SWMM (radier + MaxDepth .inp)."""
     db, ctx = ctx_profil_hgl["db"], ctx_profil_hgl
     # D'abord sonder les cotes géométriques réelles du tronçon
     nh_probe = {"2674": _nh(105.0), "2672": _nh(104.0)}
@@ -335,13 +340,17 @@ def test_profil_regime_surcharge_et_debordement(ctx_profil_hgl):
         segs = {s["node_id"]: s for s in res_probe["segments"]}
         z_terrain = segs["2674"]["z_terrain"]
         z_gs = segs["2674"]["z_gen_superieure"]
+        z_sommet = segs["2674"]["z_sommet_regard"]
+        assert z_terrain is None           # aucun MNT vérifié dans le GPKG
+        assert res_probe["terrain_disponible"] is False
+        assert z_sommet is not None        # sommet SWMM = radier + MaxDepth
     finally:
         db.delete(sim_probe)
         db.commit()
 
-    # Mise en charge : head au-dessus de la génératrice sup mais sous le terrain
+    # Mise en charge : head au-dessus de la génératrice sup mais sous le sommet
     head_surcharge = z_gs + 0.3
-    assert head_surcharge < z_terrain
+    assert head_surcharge < z_sommet
     nh = {"2674": _nh(head_surcharge)}
     sim = _creer_simulation(db, ctx, _sim_data_hgl(nh), suffix="_surch")
     try:
@@ -351,27 +360,32 @@ def test_profil_regime_surcharge_et_debordement(ctx_profil_hgl):
         assert seg["hgl_regime"] == "surcharge"
         assert seg["z_hgl"] == pytest.approx(head_surcharge, abs=0.01)
         assert seg["pression_m"] > 0
+        assert not any(a["type"] == "debordement" for a in res["alertes"]
+                       if a["node"] == "2674")
     finally:
         db.delete(sim)
         db.commit()
 
-    # Niveau ≥ terrain SANS débit de débordement (ex. stockage surface) :
-    # inondation, PAS débordement — distinction CONTRÔLE P0.2.
-    nh = {"2674": _nh(z_terrain + 0.2)}
+    # Niveau ≥ sommet du regard SANS débit de débordement et SANS terrain
+    # vérifié : surcharge (mise en charge), JAMAIS « inondation » ni
+    # « débordement » — la cote terrain n'est pas connue.
+    nh = {"2674": _nh(z_sommet + 0.2)}
     sim = _creer_simulation(db, ctx, _sim_data_hgl(nh), suffix="_flood")
     try:
         res = get_profil_en_long(node_amont="2674", node_aval="2672",
                                  db=db, tenant=ctx["tenant"])
         seg = {s["node_id"]: s for s in res["segments"]}["2674"]
-        assert seg["hgl_regime"] == "inondation"
-        assert seg["atteint_terrain"] is True
+        assert seg["hgl_regime"] == "surcharge"
+        assert seg["atteint_sommet"] is True
+        assert seg["atteint_terrain"] is False
         assert seg["flooding_max_m3s"] == 0.0
+        assert not any(a["type"] == "debordement" for a in res["alertes"])
     finally:
         db.delete(sim)
         db.commit()
 
     # Débordement réel : FLOODING_LOSSES > 0 calculé par SWMM.
-    nh = {"2674": _nh(z_terrain + 0.2, flooding=0.12)}
+    nh = {"2674": _nh(z_sommet + 0.2, flooding=0.12)}
     sim = _creer_simulation(db, ctx, _sim_data_hgl(nh), suffix="_flood3")
     try:
         res = get_profil_en_long(node_amont="2674", node_aval="2672",
@@ -383,7 +397,7 @@ def test_profil_regime_surcharge_et_debordement(ctx_profil_hgl):
         db.delete(sim)
         db.commit()
 
-    # Débordement par pertes de surface même si head < terrain
+    # Débordement par pertes de surface même si head < sommet
     nh = {"2674": _nh(z_gs - 0.1, flooding=0.05)}
     sim = _creer_simulation(db, ctx, _sim_data_hgl(nh), suffix="_flood2")
     try:

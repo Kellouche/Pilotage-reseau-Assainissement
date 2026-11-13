@@ -240,6 +240,9 @@
                         <div style="font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">Hydrologie &amp; Écoulement :</div>
                         <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 2px;"><span style="display:inline-block; width:14px; height:10px; background:rgba(16,185,129,0.25); border:1px dashed #059669; border-radius:2px;"></span> Sous-Bassin Voronoï (ha)</div>
                         <div style="display: flex; align-items: center; gap: 7px;"><span style="color:#38bdf8; font-weight:bold; font-size:12px;">➤</span> Sens d'écoulement (Amont ➔ Aval)</div>
+
+                        <!-- LOT P1.5.3 — traçabilité des apports DWF injectés -->
+                        <div id="sim-legend-dwf-info" style="display:none; margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(52,211,153,0.3); font-size: 10.5px; color: #6ee7b7;"></div>
                     </div>
                 </div>
             `;

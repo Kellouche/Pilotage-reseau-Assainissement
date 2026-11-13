@@ -69,7 +69,10 @@ def test_profil_en_long_success(tenant_profil):
         assert "z_gen_superieure" in premier_segment
         assert "distance_m" in premier_segment
         assert premier_segment["distance_m"] == 0.0
-        assert premier_segment["z_terrain"] >= premier_segment["z_radier"]
+        # P0 — z_terrain n'est renseigné que si une cote altimétrique
+        # vérifiée existe ; sinon None (jamais de MNT fabriqué).
+        if premier_segment["z_terrain"] is not None and premier_segment["z_radier"] is not None:
+            assert premier_segment["z_terrain"] >= premier_segment["z_radier"]
 
         dernier_segment = res["segments"][-1]
         assert dernier_segment["distance_m"] == res["longueur_totale_m"]
