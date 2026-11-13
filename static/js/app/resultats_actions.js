@@ -73,6 +73,8 @@ window.reinitialiserAffichageSimulation = function() {
             // Masquer la carte de résultats et réinitialiser les KPIs
             const resCard = document.getElementById('sim-results-card');
             if (resCard) resCard.style.display = 'none';
+            const dwfBox = document.getElementById('sim-dwf-resultats-box');
+            if (dwfBox) { dwfBox.style.display = 'none'; dwfBox.innerHTML = ''; }
 
             const statusMsg = document.getElementById('sim-status-message');
             if (statusMsg) statusMsg.style.display = 'none';

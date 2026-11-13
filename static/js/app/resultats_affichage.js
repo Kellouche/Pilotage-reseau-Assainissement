@@ -476,6 +476,11 @@
             if (typeof window.mettreAJourIndicateursEtKpisSimulation === 'function') {
                 window.mettreAJourIndicateursEtKpisSimulation(data);
             }
+            // LOT P1.5.4 — bloc « Apports de temps sec (DWF) » dans la carte
+            // des résultats, alimenté par la provenance de CETTE simulation.
+            if (typeof window.afficherBlocResultatsDwf === 'function') {
+                window.afficherBlocResultatsDwf(data);
+            }
             window._dernierResultatSimulation = data;
             if (typeof activerActionsSimulation === 'function') {
                 activerActionsSimulation(true);
