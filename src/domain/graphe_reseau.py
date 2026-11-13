@@ -138,6 +138,20 @@ class ConstructeurGrapheReseau:
             geom = row.geometry if hasattr(row, 'geometry') else None
             diametre = row.get('diametre', row.get('diametre_mm', row.get('DIAMETRE', 300)))
             longueur = row.get('longueur', row.get('length', row.get('Longeur', 0.0)))
+            # Attributs GPKG NaN/inf : traités comme absents — jamais propagés
+            # au graphe (NaN est truthy et casserait les replis `or`/`<= 0`).
+            try:
+                _diam_f = float(diametre) if diametre else 300.0
+            except (TypeError, ValueError):
+                _diam_f = 300.0
+            diametre = _diam_f if math.isfinite(_diam_f) else 300.0
+            try:
+                _long_f = float(longueur)
+            except (TypeError, ValueError):
+                _long_f = 0.0
+            if not math.isfinite(_long_f):
+                _long_f = 0.0
+            longueur = _long_f
             type_conduite = str(row.get('type', row.get('nature', row.get('Fonction_1', 'gravitaire')))).lower()
 
             point_depart, point_arrivee = self._extremites(geom)
@@ -216,7 +230,9 @@ class ConstructeurGrapheReseau:
                 })
 
             if longueur <= 0 and geom and isinstance(geom, LineString):
-                longueur = geom.length
+                longueur = geom.length if math.isfinite(geom.length) else 0.0
+            if not math.isfinite(longueur):
+                longueur = 0.0
 
             pente = 0.001
             z_amont_final = G.nodes[u_reel].get('z_radier')

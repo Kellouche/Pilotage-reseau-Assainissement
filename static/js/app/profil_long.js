@@ -342,8 +342,8 @@ function chargerProfilLong(nodeAmont, nodeAval) {
     fetch(url)
         .then(response => {
             if (!response.ok) {
-                return response.json().then(err => {
-                    throw new Error(err.detail || `Erreur serveur (${response.status})`);
+                return response.json().catch(() => null).then(err => {
+                    throw new Error((err && err.detail) || `Erreur serveur (${response.status})`);
                 });
             }
             return response.json();

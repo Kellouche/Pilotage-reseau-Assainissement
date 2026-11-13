@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional, Any, Dict, Union, Tuple
 from pathlib import Path
 import logging
+import math
 import re
 import unicodedata
 
@@ -1666,6 +1667,8 @@ def get_profil_en_long(
             else:
                 nc = _clean_node_id(nid)
                 z_rad = float(node_elevs.get(nc)) if nc in node_elevs else None
+            if z_rad is not None and not math.isfinite(z_rad):
+                z_rad = None
 
             # z_terrain : uniquement une cote altimétrique vérifiée.
             # Absente → None : aucune courbe « MNT » ne sera dessinée.
@@ -1688,18 +1691,32 @@ def get_profil_en_long(
                 next_n = path_nodes[i + 1]
                 e = G.get_edge_data(nid, next_n) or G.get_edge_data(next_n, nid) or {}
                 if e:
-                    diam_m = float(e.get("diam_mm") or e.get("diametre_mm") or 600.0) / 1000.0
+                    try:
+                        _dm_f = float(e.get("diam_mm") or e.get("diametre_mm") or 600.0)
+                    except (TypeError, ValueError):
+                        _dm_f = 600.0
+                    if not math.isfinite(_dm_f):
+                        _dm_f = 600.0
+                    diam_m = _dm_f / 1000.0
             elif i > 0:
                 prev_n = path_nodes[i - 1]
                 e = G.get_edge_data(prev_n, nid) or G.get_edge_data(nid, prev_n) or {}
                 if e:
-                    diam_m = float(e.get("diam_mm") or e.get("diametre_mm") or 600.0) / 1000.0
+                    try:
+                        _dm_f = float(e.get("diam_mm") or e.get("diametre_mm") or 600.0)
+                    except (TypeError, ValueError):
+                        _dm_f = 600.0
+                    if not math.isfinite(_dm_f):
+                        _dm_f = 600.0
+                    diam_m = _dm_f / 1000.0
 
             z_gen_sup = (z_rad + diam_m) if z_rad is not None else None
 
             # LOT P0 — HGL : maximum .rpt (base=max) ou valeur .out à
             # l'instant demandé. Provenance conservée par nœud.
             hgl, hgl_src = _head_reel(nid)
+            if hgl is not None and not math.isfinite(hgl):
+                hgl, hgl_src = None, "indisponible"
             hgl_reel = hgl is not None
             nh_entry = _hydrau_noeud(nid) or {}
             simule = bool(nh_entry)
@@ -1744,8 +1761,18 @@ def get_profil_en_long(
                 edge_data = G.get_edge_data(nid, next_nid) or G.get_edge_data(next_nid, nid) or {}
                 if edge_data:
                     geom = edge_data.get("geometry")
-                    length = float(edge_data.get("length") or (geom.length if geom else 15.0))
-                    diam_mm = float(edge_data.get("diam_mm") or edge_data.get("diametre_mm") or 600.0)
+                    try:
+                        length = float(edge_data.get("length") or (geom.length if geom else 15.0))
+                    except (TypeError, ValueError):
+                        length = 15.0
+                    if not math.isfinite(length):
+                        length = float(geom.length) if (geom is not None and math.isfinite(geom.length)) else 15.0
+                    try:
+                        diam_mm = float(edge_data.get("diam_mm") or edge_data.get("diametre_mm") or 600.0)
+                    except (TypeError, ValueError):
+                        diam_mm = 600.0
+                    if not math.isfinite(diam_mm):
+                        diam_mm = 600.0
                     conduit = {
                         "cid": edge_data.get("cid") or edge_data.get("id") or f"C_{i+1}",
                         "length": round(length, 2),
