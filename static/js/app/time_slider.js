@@ -679,11 +679,17 @@ function _initTimeSliderDraggable() {
         origY = rect.top - pRect.top + (parent.scrollTop || 0);
         panel.classList.add('is-dragging');
 
+        // Bornage : le panneau reste entièrement visible dans le workspace.
+        const maxX = pRect.width - rect.width;
+        const maxY = pRect.height - rect.height;
+        const clampX = (v) => Math.min(Math.max(v, Math.min(0, maxX)), Math.max(0, maxX));
+        const clampY = (v) => Math.min(Math.max(v, Math.min(0, maxY)), Math.max(0, maxY));
+
         const onMouseMove = (ev) => {
             const dx = ev.clientX - startX;
             const dy = ev.clientY - startY;
-            panel.style.left = `${origX + dx}px`;
-            panel.style.top = `${origY + dy}px`;
+            panel.style.left = `${clampX(origX + dx)}px`;
+            panel.style.top = `${clampY(origY + dy)}px`;
             panel.style.right = 'auto';
             panel.style.bottom = 'auto';
             panel.style.transform = 'none';

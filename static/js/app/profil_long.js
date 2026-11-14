@@ -755,11 +755,18 @@ function _initProfilLongDraggable() {
         origW = panel.offsetWidth;
         panel.style.width = `${origW}px`;
 
+        // Bornage : le panneau ne doit jamais sortir du workspace
+        // (overflow:hidden rognait le bouton fermer hors limites).
+        const maxX = pRect.width - rect.width;
+        const maxY = pRect.height - rect.height;
+        const clampX = (v) => Math.min(Math.max(v, Math.min(0, maxX)), Math.max(0, maxX));
+        const clampY = (v) => Math.min(Math.max(v, Math.min(0, maxY)), Math.max(0, maxY));
+
         const onMouseMove = (ev) => {
             const dx = ev.clientX - startX;
             const dy = ev.clientY - startY;
-            panel.style.left = `${origX + dx}px`;
-            panel.style.top = `${origY + dy}px`;
+            panel.style.left = `${clampX(origX + dx)}px`;
+            panel.style.top = `${clampY(origY + dy)}px`;
             panel.style.right = 'auto';
             panel.style.bottom = 'auto';
         };
