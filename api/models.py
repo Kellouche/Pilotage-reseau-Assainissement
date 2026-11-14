@@ -230,6 +230,19 @@ class AuditLog(Base):
     details: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, index=True, nullable=False)
 
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "org_id": self.org_id,
+            "user_id": self.user_id,
+            "action": self.action,
+            "target_type": self.target_type,
+            "target_id": self.target_id,
+            "ip_address": self.ip_address,
+            "details": self.details or {},
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
 
 class UsageCounter(Base):
     """Compteurs d'utilisation mensuels pour le contrôle des quotas."""
@@ -274,6 +287,8 @@ class Project(Base):
 
     organization: Mapped["Organization"] = relationship("Organization", back_populates="projects")
     simulations: Mapped[List["Simulation"]] = relationship("Simulation", back_populates="project", cascade="all, delete-orphan")
+    apports_dwf: Mapped[List["ApportDwf"]] = relationship("ApportDwf", back_populates="project", cascade="all, delete-orphan")
+    apports_dwf_history: Mapped[List["ApportDwfHistory"]] = relationship("ApportDwfHistory", back_populates="project")
 
     __table_args__ = (
         UniqueConstraint("org_id", "slug", name="uq_project_org_slug"),
@@ -704,6 +719,9 @@ class ApportDwf(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, onupdate=_utc_now, nullable=False)
 
+    organization: Mapped["Organization"] = relationship("Organization")
+    project: Mapped["Project"] = relationship("Project", back_populates="apports_dwf")
+
     __table_args__ = (
         Index("ix_apports_dwf_org_project", "org_id", "project_id"),
         Index("ix_apports_dwf_project_node", "project_id", "node_id"),
@@ -730,3 +748,56 @@ class ApportDwf(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
+
+
+# ============================================================
+# 4. HISTORIQUE & CONFORMITÉ DES APPORTS DWF — LOT P6.1
+# ============================================================
+
+class ApportDwfHistory(Base):
+    """
+    LOT P6.1 — Historique d'audit et de traçabilité des mutations sur les apports DWF.
+    Table immuable (append-only) pour la conformité réglementaire et l'auditabilité.
+    Isolation multi-tenant stricte par org_id.
+    """
+    __tablename__ = "apports_dwf_history"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_gen_uuid)
+    # Protection anti-cascade stricte : un projet ou une organisation avec de l'historique
+    # ne peut être supprimé en cascade (intégrité référentielle RESTRICT).
+    org_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="RESTRICT"), index=True, nullable=False)
+    project_id: Mapped[str] = mapped_column(String(36), ForeignKey("projects.id", ondelete="RESTRICT"), index=True, nullable=False)
+    # L'identifiant de l'apport n'a pas de FK CASCADE afin de préserver l'historique
+    # même en cas de suppression de la ligne apports_dwf correspondante.
+    apport_id: Mapped[str] = mapped_column(String(36), index=True, nullable=False)
+    action: Mapped[str] = mapped_column(String(30), nullable=False)  # create, update, node_change, reconcile, activate, deactivate, delete, sim_exclusion
+    changed_fields: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    previous_state: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    new_state: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    changed_by_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, nullable=False, index=True)
+
+    organization: Mapped["Organization"] = relationship("Organization")
+    project: Mapped["Project"] = relationship("Project", back_populates="apports_dwf_history")
+    changed_by: Mapped[Optional["User"]] = relationship("User", foreign_keys=[changed_by_id])
+
+    __table_args__ = (
+        Index("ix_apports_dwf_hist_org_proj", "org_id", "project_id"),
+        Index("ix_apports_dwf_hist_apport_created", "apport_id", "created_at"),
+        Index("ix_apports_dwf_hist_org_created", "org_id", "created_at"),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "org_id": self.org_id,
+            "project_id": self.project_id,
+            "apport_id": self.apport_id,
+            "action": self.action,
+            "changed_fields": self.changed_fields,
+            "previous_state": self.previous_state,
+            "new_state": self.new_state,
+            "changed_by_id": self.changed_by_id,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+

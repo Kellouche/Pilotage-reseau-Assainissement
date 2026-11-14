@@ -21,7 +21,7 @@ from starlette.testclient import TestClient
 from api.main import app
 from api.database import SessionLocal, engine, Base
 from api.models import (
-    Organization, User, Membership, Project, ApportDwf, Cluster,
+    Organization, User, Membership, Project, ApportDwf, ApportDwfHistory, Cluster,
 )
 from api.core.auth import hash_password, create_access_token
 from api.services.apports_dwf_service import (
@@ -74,6 +74,7 @@ def ctx_p15(tmp_path):
             {"sub": user.id, "org_id": org.id, "role": "engineer"}),
     }
     yield ctx
+    db.query(ApportDwfHistory).filter(ApportDwfHistory.project_id == proj.id).delete()
     db.query(ApportDwf).filter(ApportDwf.project_id == proj.id).delete()
     db.delete(cluster)
     db.delete(proj)
@@ -252,12 +253,14 @@ def test_reconcilier_version_differencee(ctx_p15, tmp_path, monkeypatch):
     res3 = _get_reconcilier(client, tok, pid)
     assert res3["count"] == 0
 
-    # Nettoyage versionnage : le fixture supprime l'apport, on retire les
-    # versions et le rattachement pour ne pas polluer les autres tests.
+    # Nettoyage versionnage : détacher d'abord la FK gpkg_version_id du projet
+    # avant de supprimer les versions pour respecter l'intégrité référentielle
+    db.query(ApportDwfHistory).filter(ApportDwfHistory.project_id == pid).delete()
     db.query(ApportDwf).filter(ApportDwf.project_id == pid).delete()
     from api.models import GpkgVersion
-    db.query(GpkgVersion).filter(GpkgVersion.project_id == pid).delete()
     proj.gpkg_version_id = None
+    db.flush()
+    db.query(GpkgVersion).filter(GpkgVersion.project_id == pid).delete()
     db.commit()
 
 
@@ -294,6 +297,7 @@ def test_reconcilier_plusieurs_motifs_et_isolation(ctx_p15):
         assert "p15_a4" not in codes
         assert res["count"] == 1
     finally:
+        db.query(ApportDwfHistory).filter(ApportDwfHistory.project_id == proj2.id).delete()
         db.delete(a4)
         db.delete(proj2)
         db.delete(org2)

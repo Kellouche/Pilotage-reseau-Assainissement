@@ -21,7 +21,7 @@ from starlette.testclient import TestClient
 from api.main import app
 from api.database import SessionLocal, engine, Base
 from api.models import (
-    Organization, User, Membership, Project, ApportDwf,
+    Organization, User, Membership, Project, ApportDwf, ApportDwfHistory,
 )
 from api.core.auth import hash_password, create_access_token
 
@@ -88,6 +88,7 @@ def ctx_apports(tmp_path):
     }
     yield ctx
 
+    db.query(ApportDwfHistory).filter(ApportDwfHistory.org_id.in_([org_a.id, org_b.id])).delete()
     db.query(ApportDwf).filter(ApportDwf.org_id.in_([org_a.id, org_b.id])).delete()
     for obj in (proj_a, proj_b, mem_a, mem_b, user_a, user_b, org_a, org_b):
         db.delete(obj)
@@ -363,6 +364,7 @@ def test_migration_apports_dwf_sur_base_existante(tmp_path, monkeypatch):
     # et estampille alembic_version.
     with eng.begin() as conn:
         conn.execute(text("DROP TABLE apports_dwf"))
+        conn.execute(text("DROP TABLE IF EXISTS apports_dwf_history"))
         conn.execute(text(
             "CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"))
         conn.execute(text(

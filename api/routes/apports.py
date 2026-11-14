@@ -18,10 +18,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from api.database import get_db
-from api.models import ApportDwf, Project
+from api.models import ApportDwf, ApportDwfHistory, Project
 from api.core.security import TenantContext, get_tenant_context, require_role
 from api.schemas import (
     ApportDwfCreate, ApportDwfUpdate, ApportDwfResponse, ProfilDwfInfo,
+    ApportDwfHistoryResponse, ApportDwfHistoryPage,
+)
+from api.services.apports_dwf_history_service import (
+    enregistrer_historique_apport,
+    lister_historique_apport,
 )
 from api.services.simulation_service import (
     _resoudre_projet_pour_simulation,
@@ -314,6 +319,18 @@ def creer_apport(
     )
     _calculer_debit(apport)
     db.add(apport)
+    db.flush()
+    enregistrer_historique_apport(
+        db=db,
+        apport_id=apport.id,
+        org_id=tenant.org_id,
+        project_id=proj.id,
+        action="create",
+        changed_by_id=getattr(tenant.user, "id", None) if tenant.user else None,
+        changed_fields=None,
+        previous_state=None,
+        new_state=apport.to_dict(),
+    )
     db.commit()
     db.refresh(apport)
     return apport.to_dict()
@@ -329,6 +346,79 @@ def _calculer_debit(apport: ApportDwf) -> None:
         apport.debit_moyen_m3s = eh_vers_debit_m3s(
             apport.eh or 0.0, apport.debit_specifique_l_hab_j)
     # mode 'debit' : debit_moyen_m3s est porté par la saisie/validation
+
+
+# ---------------------------------------------------------------------------
+# Consultation de l'historique d'audit DWF (LOT P6.1)
+# ---------------------------------------------------------------------------
+
+@router.get("/history", response_model=ApportDwfHistoryPage)
+def lister_historique_projet(
+    project_id: Optional[str] = Query(None),
+    action: Optional[str] = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    tenant: TenantContext = Depends(require_role("viewer")),
+):
+    """
+    LOT P6.1 — Consulte l'historique d'audit des apports DWF (paginé).
+    Borné strictement à l'organisation du tenant, avec filtrage projet optionnel.
+    """
+    pid = None
+    if project_id:
+        proj = _resoudre_projet(db, tenant, project_id)
+        pid = proj.id
+
+    items, total = lister_historique_apport(
+        db=db,
+        org_id=tenant.org_id,
+        project_id=pid,
+        action=action,
+        skip=skip,
+        limit=limit,
+    )
+    return {
+        "items": [h.to_dict() for h in items],
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+    }
+
+
+@router.get("/{apport_id}/history", response_model=ApportDwfHistoryPage)
+def lister_historique_unitaire(
+    apport_id: str,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    tenant: TenantContext = Depends(require_role("viewer")),
+):
+    """
+    LOT P6.1 — Consulte l'historique d'audit d'un apport DWF spécifique.
+    Garantit un stealth 404 si l'apport n'appartient pas au tenant ou est introuvable.
+    Conserve la traçabilité complète même après suppression de l'apport.
+    """
+    apport = db.get(ApportDwf, apport_id)
+    if apport is not None and apport.org_id != tenant.org_id:
+        raise HTTPException(status_code=404, detail="Apport introuvable.")
+
+    items, total = lister_historique_apport(
+        db=db,
+        org_id=tenant.org_id,
+        apport_id=apport_id,
+        skip=skip,
+        limit=limit,
+    )
+    if apport is None and total == 0:
+        raise HTTPException(status_code=404, detail="Apport introuvable.")
+
+    return {
+        "items": [h.to_dict() for h in items],
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+    }
 
 
 @router.get("/{apport_id}", response_model=ApportDwfResponse)
@@ -351,10 +441,13 @@ def modifier_apport(
     """Mise à jour partielle d'un apport (champs fournis uniquement)."""
     apport = _apport_scoped(db, tenant, apport_id)
     proj = db.get(Project, apport.project_id)
+    previous_state = apport.to_dict()
 
     data = payload.model_dump(exclude_unset=True)
     nouveau_node = data.pop("node_id", None)
-    if nouveau_node is not None and proj is not None:
+    changement_noeud = False
+    if nouveau_node is not None and proj is not None and nouveau_node != apport.node_id:
+        changement_noeud = True
         # LOT P1.4 — changer de nœud est une REVALIDATION : le nœud est
         # vérifié sur la version courante et l'estampillage est renouvelé.
         # Les autres modifications (débit, profil, nature…) ne touchent
@@ -363,6 +456,9 @@ def modifier_apport(
             db, proj, nouveau_node)
         apport.gpkg_version_id = version_meta.get("version_id")
         apport.gpkg_sha256 = version_meta.get("sha256")
+    elif nouveau_node is not None and proj is not None and nouveau_node == apport.node_id:
+        # Nœud identique : validation éventuelle sans qualifier de node_change
+        pass
 
     # Cohérence mode : si le mode passe à 'eh' sans eh fourni, on conserve
     # l'eh existant ; si 'debit', on purge les champs eh.
@@ -384,6 +480,36 @@ def modifier_apport(
         apport.debit_specifique_l_hab_j = None
 
     _calculer_debit(apport)
+    db.flush()
+    new_state = apport.to_dict()
+
+    changed_fields = [
+        k for k, v in new_state.items()
+        if k not in ("updated_at",) and previous_state.get(k) != v
+    ]
+    if changed_fields:
+        # Qualification canonique de l'événement métier (P6.1)
+        if changement_noeud:
+            action = "node_change"
+        elif previous_state.get("actif") is False and new_state.get("actif") is True:
+            action = "activate"
+        elif previous_state.get("actif") is True and new_state.get("actif") is False:
+            action = "deactivate"
+        else:
+            action = "update"
+
+        enregistrer_historique_apport(
+            db=db,
+            apport_id=apport.id,
+            org_id=tenant.org_id,
+            project_id=apport.project_id,
+            action=action,
+            changed_by_id=getattr(tenant.user, "id", None) if tenant.user else None,
+            changed_fields=changed_fields,
+            previous_state=previous_state,
+            new_state=new_state,
+        )
+
     db.commit()
     db.refresh(apport)
     return apport.to_dict()
@@ -407,9 +533,27 @@ def revalider_apport(
     proj = db.get(Project, apport.project_id)
     if proj is None:
         raise HTTPException(status_code=404, detail="Projet introuvable.")
+    previous_state = apport.to_dict()
     _nid, version_meta = _valider_noeud_et_version(db, proj, apport.node_id)
     apport.gpkg_version_id = version_meta.get("version_id")
     apport.gpkg_sha256 = version_meta.get("sha256")
+    db.flush()
+    new_state = apport.to_dict()
+    changed_fields = [
+        k for k in ("gpkg_version_id", "gpkg_sha256")
+        if previous_state.get(k) != new_state.get(k)
+    ]
+    enregistrer_historique_apport(
+        db=db,
+        apport_id=apport.id,
+        org_id=tenant.org_id,
+        project_id=apport.project_id,
+        action="reconcile",
+        changed_by_id=getattr(tenant.user, "id", None) if tenant.user else None,
+        changed_fields=changed_fields or ["reconcile"],
+        previous_state=previous_state,
+        new_state=new_state,
+    )
     db.commit()
     db.refresh(apport)
     return apport.to_dict()
@@ -423,6 +567,18 @@ def supprimer_apport(
 ):
     """Suppression définitive d'un apport (aucune dépendance : INP non généré au P1.2)."""
     apport = _apport_scoped(db, tenant, apport_id)
+    previous_state = apport.to_dict()
+    enregistrer_historique_apport(
+        db=db,
+        apport_id=apport.id,
+        org_id=tenant.org_id,
+        project_id=apport.project_id,
+        action="delete",
+        changed_by_id=getattr(tenant.user, "id", None) if tenant.user else None,
+        changed_fields=None,
+        previous_state=previous_state,
+        new_state=None,
+    )
     db.delete(apport)
     db.commit()
     return None

@@ -299,13 +299,16 @@ class SyncAck(BaseModel):
 # ============================================================
 
 class AuditLogResponse(BaseModel):
-    """Entrée d'audit."""
-    id: int
-    table_name: str
-    record_id: int
-    operation: str
+    """Entrée d'audit sécurisée et conforme."""
+    id: str
+    org_id: str
     user_id: Optional[str] = None
-    timestamp: datetime
+    action: str
+    target_type: Optional[str] = None
+    target_id: Optional[str] = None
+    ip_address: Optional[str] = None
+    details: Optional[Dict[str, Any]] = None
+    created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -446,3 +449,28 @@ class ProfilDwfInfo(BaseModel):
     nb_facteurs: int
     moyenne_facteurs: float
     facteurs_168: List[float]
+
+
+class ApportDwfHistoryResponse(BaseModel):
+    """LOT P6.1 — Représentation d'une mutation historique d'apport DWF."""
+    id: str
+    org_id: str
+    project_id: str
+    apport_id: str
+    action: str
+    changed_fields: Optional[Any] = None
+    previous_state: Optional[Dict[str, Any]] = None
+    new_state: Optional[Dict[str, Any]] = None
+    changed_by_id: Optional[str] = None
+    created_at: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ApportDwfHistoryPage(BaseModel):
+    """LOT P6.1 — Page paginée de l'historique d'audit DWF."""
+    items: List[ApportDwfHistoryResponse]
+    total: int
+    skip: int
+    limit: int
+

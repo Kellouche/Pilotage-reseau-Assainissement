@@ -10,9 +10,21 @@ Objet : Gestionnaire de connexions PostgreSQL / PostGIS et SQLite local
 
 import os
 import sys
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, event
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 from config.settings import DATABASE_URL
+
+@event.listens_for(Engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    """
+    Active l'intégrité référentielle PRAGMA foreign_keys=ON pour SQLite.
+    Ne s'applique jamais aux connexions PostgreSQL.
+    """
+    if dbapi_connection.__class__.__module__.startswith("sqlite3"):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 _is_test = (
     "pytest" in sys.modules

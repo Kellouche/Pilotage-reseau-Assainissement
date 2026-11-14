@@ -20,7 +20,7 @@ from starlette.testclient import TestClient
 from api.main import app
 from api.database import SessionLocal, engine, Base
 from api.models import (
-    Organization, User, Membership, Project, ApportDwf, Cluster,
+    Organization, User, Membership, Project, ApportDwf, ApportDwfHistory, Cluster,
 )
 from api.core.auth import hash_password, create_access_token
 from api.services.apports_dwf_service import (
@@ -236,6 +236,7 @@ def ctx_p14(tmp_path):
             {"sub": user.id, "org_id": org.id, "role": "engineer"}),
     }
     yield ctx
+    db.query(ApportDwfHistory).filter(ApportDwfHistory.project_id == proj.id).delete()
     db.query(ApportDwf).filter(ApportDwf.project_id == proj.id).delete()
     db.delete(cluster)
     db.delete(proj)
