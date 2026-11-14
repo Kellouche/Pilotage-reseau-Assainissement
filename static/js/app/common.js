@@ -229,13 +229,6 @@
                         <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 3px;"><span style="display:inline-block; width:11px; height:11px; background:#f97316; border-radius:50%; border:2px solid #ffffff;"></span> Surcharge (dans cheminée)</div>
                         <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 8px;"><span style="display:inline-block; width:11px; height:11px; background:#ef4444; border-radius:50%; border:2px solid #ffffff;"></span> Débordement (au sol)</div>
 
-                        <!-- Ouvrages Spéciaux & Exutoires -->
-                        <div style="font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">Ouvrages &amp; Exutoires :</div>
-                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 2px;"><span style="display:inline-block; width:10px; height:10px; background:#06b6d4; border-radius:50%; border:1px solid #ffffff;"></span> Déversoir d'orage (DVO)</div>
-                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 2px;"><span style="display:inline-block; width:10px; height:10px; background:#a855f7; border-radius:50%; border:1px solid #ffffff;"></span> Trop-plein de réseau</div>
-                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 2px;"><span style="display:inline-block; width:10px; height:10px; background:#10b981; border-radius:50%; border:1px solid #ffffff;"></span> Bassin de rétention</div>
-                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 8px;"><span style="display:inline-block; width:10px; height:10px; background:#ef4444; border-radius:50%; border:1px solid #ffffff;"></span> Rejet direct (Oued)</div>
-
                         <!-- LOT P1.5.3 — traçabilité des apports DWF injectés -->
                         <div id="sim-legend-dwf-info" style="display:none; margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(52,211,153,0.3); font-size: 10.5px; color: #6ee7b7;"></div>
                     </div>
