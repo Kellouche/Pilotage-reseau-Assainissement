@@ -597,6 +597,7 @@ body {
     left: 280px; /* Aligné avec la sidebar d'ingénierie */
     right: 0;
     height: 310px;
+    overflow: hidden;
     background: rgba(15, 23, 42, 0.96);
     backdrop-filter: blur(12px);
     border-top: 2px solid #38bdf8;
@@ -615,15 +616,16 @@ body {
 }
 
 .profil-long-header {
-    height: 44px;
     min-height: 44px;
+    height: auto;
     background: rgba(30, 41, 59, 0.8);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    padding: 0 14px;
-    gap: 12px;
+    padding: 6px 14px;
+    gap: 8px 12px;
     cursor: grab;
 }
 
@@ -639,12 +641,25 @@ body {
     align-items: center;
     gap: 8px;
     white-space: nowrap;
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.profil-long-title > span:first-of-type {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
 }
 
 .profil-long-controls {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
+    justify-content: flex-end;
     gap: 8px;
+    flex: 0 1 auto;
+    min-width: 0;
 }
 
 .profil-node-select-box {
