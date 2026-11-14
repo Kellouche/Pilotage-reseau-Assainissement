@@ -616,6 +616,7 @@ body {
 }
 
 .profil-long-header {
+    position: relative;
     min-height: 44px;
     height: auto;
     background: rgba(30, 41, 59, 0.8);
@@ -624,7 +625,7 @@ body {
     flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    padding: 6px 14px;
+    padding: 6px 44px 6px 14px; /* marge droite réservée au bouton fermer */
     gap: 8px 12px;
     cursor: grab;
 }
@@ -751,6 +752,10 @@ body {
 }
 
 .btn-close-profil {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    z-index: 5;
     background: transparent;
     border: none;
     color: #94a3b8;
