@@ -870,7 +870,9 @@ def get_bassin_simulation(
                     cm = cd.get("meta") or {}
                     c_nom = str(cm.get("cluster_nom") or "").strip().lower()
                     c_id = str(cm.get("cluster_id") or "").strip().lower()
-                    if clean_cid in (c_nom, c_id) or (c_nom and clean_cid in c_nom) or (c_id and clean_cid == c_id):
+                    # Correspondance stricte : jamais de sous-chaîne —
+                    # « 1 » ne doit pas matcher « 234 » ou « 10 ».
+                    if clean_cid == c_nom or clean_cid == c_id:
                         matching_files.append(candidate)
                         break
                 except Exception:
@@ -881,6 +883,14 @@ def get_bassin_simulation(
             try:
                 with open(fpath, "r", encoding="utf-8") as f:
                     data = json.load(f)
+                # Garde anti-legacy : le nom de fichier peut contenir
+                # l'id en sous-chaîne ; meta.cluster_id du résultat
+                # doit corroborer le bassin demandé.
+                _meta_cid = str(
+                    (data.get("meta") or {}).get("cluster_id") or ""
+                ).strip().lower()
+                if _meta_cid and _meta_cid != clean_cid:
+                    continue
                 # 3D.6 — propriété déclarée vérifiée avant tout service
                 from api.services.simulation_service import _resultatdeclare_projet
                 if data and _est_simulation_valide(data) \

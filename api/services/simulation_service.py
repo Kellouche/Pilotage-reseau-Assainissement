@@ -1061,7 +1061,13 @@ def _simulation_correspond_a_bassin(sim: Any, cluster_id: Any = None,
     if isinstance(params, dict) and str(params.get("cluster_id", "")).strip().lower() == cible:
         return True
     nom = str(sim.name or "").lower()
-    return bool(nom and cible in nom)
+    # Correspondance stricte : le cluster_id doit être un segment entier
+    # du nom (« _<id>_ »), jamais une sous-chaîne — sinon « 4 » matcherait
+    # « _234_ » et « 1 »/« 0 » matcheraient « _10_ » (ex. bassin Ovoide).
+    if not (nom and cible):
+        return False
+    _nom_borne = "_" + nom.strip("_") + "_"
+    return f"_{cible}_" in _nom_borne
 
 
 def resoudre_simulation_courante(
@@ -1135,6 +1141,19 @@ def resoudre_simulation_courante(
         data = charger_resultat_simulation(sim)
         if not data or not est_simulation_valide(data):
             continue
+        # Garde anti-legacy : d'anciennes simulations portent un
+        # cluster_id placeholder (ex. 1 = réseau complet) dans leurs
+        # kpis alors que meta.cluster_id du résultat identifie le vrai
+        # bassin simulé. Quand un cluster_id est demandé, le meta du
+        # résultat doit corroborer l'identité — sinon le résultat d'un
+        # autre bassin serait servi (ex. bassin 1 → sim du bassin 234).
+        if cluster_id is not None:
+            _meta_cid = str(
+                (data.get("meta") or {}).get("cluster_id") or ""
+            ).strip().lower()
+            _cible_cid = str(cluster_id).strip().lower()
+            if _meta_cid and _meta_cid != _cible_cid:
+                continue
         ctx = ContexteSimulation(
             simulation=sim, project=proj, data=data,
             resolution="bassin" if (
