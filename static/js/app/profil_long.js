@@ -737,15 +737,23 @@ function _initProfilLongDraggable() {
     if (!panel || !handle || panel._draggableInitDone) return;
 
     panel._draggableInitDone = true;
-    let startX, startY, origX, origY;
+    let startX, startY, origX, origY, origW;
 
     handle.addEventListener('mousedown', (e) => {
         if (e.target.closest('button') || e.target.closest('input') || e.target.closest('.btn-close-profil')) return;
         e.preventDefault();
+        // Position VISUELLE réelle + largeur figée : le panneau est
+        // ancré left+right (largeur = dock) ; sans width explicite,
+        // right:auto provoquait un shrink-to-fit après le 1er drag.
+        const parent = panel.offsetParent || document.body;
+        const pRect = parent.getBoundingClientRect();
+        const rect = panel.getBoundingClientRect();
         startX = e.clientX;
         startY = e.clientY;
-        origX = panel.offsetLeft;
-        origY = panel.offsetTop;
+        origX = rect.left - pRect.left + (parent.scrollLeft || 0);
+        origY = rect.top - pRect.top + (parent.scrollTop || 0);
+        origW = panel.offsetWidth;
+        panel.style.width = `${origW}px`;
 
         const onMouseMove = (ev) => {
             const dx = ev.clientX - startX;

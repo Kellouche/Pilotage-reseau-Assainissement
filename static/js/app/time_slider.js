@@ -667,10 +667,17 @@ function _initTimeSliderDraggable() {
     handle.addEventListener('mousedown', (e) => {
         if (e.target.closest('button') || e.target.closest('.badge-pill')) return;
         e.preventDefault();
+        // Position VISUELLE réelle (le panneau est centré via
+        // left:50% + transform:translateX(-50%) : offsetLeft ne
+        // tient pas compte du transform et provoquait un saut).
+        const parent = panel.offsetParent || document.body;
+        const pRect = parent.getBoundingClientRect();
+        const rect = panel.getBoundingClientRect();
         startX = e.clientX;
         startY = e.clientY;
-        origX = panel.offsetLeft;
-        origY = panel.offsetTop;
+        origX = rect.left - pRect.left + (parent.scrollLeft || 0);
+        origY = rect.top - pRect.top + (parent.scrollTop || 0);
+        panel.classList.add('is-dragging');
 
         const onMouseMove = (ev) => {
             const dx = ev.clientX - startX;
@@ -685,6 +692,7 @@ function _initTimeSliderDraggable() {
         const onMouseUp = () => {
             document.removeEventListener('mousemove', onMouseMove);
             document.removeEventListener('mouseup', onMouseUp);
+            panel.classList.remove('is-dragging');
         };
 
         document.addEventListener('mousemove', onMouseMove);

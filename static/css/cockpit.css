@@ -876,7 +876,15 @@ body {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    /* Ne pas animer height/width : les variations de contenu
+       (badges, polices, KPI) provoquaient un redimensionnement
+       visible à l'ouverture. Seuls ombre et bordure transitent. */
+    transition: box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+                border-color 0.3s ease;
+}
+
+.time-slider-dock.is-dragging {
+    transition: none;
 }
 
 .time-slider-header {
