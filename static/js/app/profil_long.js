@@ -479,7 +479,7 @@ function afficherProfilLong(data) {
                     tension: 0.1
                 }] : []),
                 ...(aSommet ? [{
-                    label: 'Sommet de regard (SWMM MaxDepth)',
+                    label: 'Plan de surverse (seuil de débordement SWMM)',
                     data: sommetData,
                     borderColor: '#0d9488',
                     backgroundColor: 'transparent',
@@ -616,7 +616,12 @@ function afficherProfilLong(data) {
                     grid: { color: 'rgba(255, 255, 255, 0.06)' },
                     ticks: {
                         color: '#94a3b8',
-                        font: { size: 10, family: 'JetBrains Mono' }
+                        font: { size: 10, family: 'JetBrains Mono' },
+                        // Étiquettes inclinées (n° regard + distance cumulée
+                        // sur 2 lignes) pour éviter tout chevauchement.
+                        autoSkip: false,
+                        maxRotation: 90,
+                        minRotation: 45
                     },
                     title: {
                         display: true,

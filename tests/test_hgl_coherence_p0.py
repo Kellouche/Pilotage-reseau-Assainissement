@@ -326,14 +326,14 @@ def test_profil_debordement_rpt_out_zero(ctx_p0):
         assert al, "aucune alerte débordement émise"
         assert "Terrain" not in al[0]["message"]
         assert "terrain" not in al[0]["observations"].lower().replace(
-            "terrain naturel", "") or "sommet" in al[0]["observations"]
+            "terrain naturel", "") or "surverse" in al[0]["observations"]
         assert "0.067" in al[0]["observations"]
-        assert "sommet du regard" in al[0]["observations"]
+        assert "plan de surverse" in al[0]["observations"]
         # Libellés P0-finalisation : référence de charge explicite et
         # écart HGL/sommet distinct — jamais « charge au-dessus voûte ».
         assert "génératrice supérieure de la conduite sortante" in al[0]["observations"]
         assert "charge au-dessus voûte" not in al[0]["observations"]
-        assert "Écart HGL / sommet du regard :" in al[0]["observations"]
+        assert "Écart HGL / plan de surverse :" in al[0]["observations"]
     finally:
         db.delete(sim)
         db.commit()

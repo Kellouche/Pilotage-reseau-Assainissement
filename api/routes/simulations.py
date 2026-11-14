@@ -1986,12 +1986,12 @@ def get_profil_en_long(
                         "le pas de rapport).")
                 if z_hgl_s is not None:
                     if z_sommet_s is not None:
-                        obs_parts.append(f"HGL max {z_hgl_s} m / sommet du regard {z_sommet_s} m")
-                        obs_parts.append(f"Écart HGL / sommet du regard : {z_hgl_s - z_sommet_s:+.3f} m")
+                        obs_parts.append(f"HGL max {z_hgl_s} m / plan de surverse {z_sommet_s} m")
+                        obs_parts.append(f"Écart HGL / plan de surverse : {z_hgl_s - z_sommet_s:+.3f} m")
                     else:
                         obs_parts.append(f"HGL max {z_hgl_s} m")
                     if s.get("atteint_sommet"):
-                        obs_parts.append("la cote a atteint le sommet du regard")
+                        obs_parts.append("la cote a atteint le plan de surverse")
                     if s.get("atteint_terrain"):
                         obs_parts.append(f"et dépasse le terrain naturel ({s['z_terrain']} m)")
                 if pression:
