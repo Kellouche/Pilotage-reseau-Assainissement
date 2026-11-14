@@ -65,6 +65,40 @@ def _gpkg_demo_autorise() -> Optional[Path]:
     return None
 
 
+def _identite_bassin_du_cache(gpkg_path: Optional[Path], cluster_id: str) -> dict:
+    """
+    Résout l'identité métier stable d'un bassin depuis le cache de
+    sectorisation `<gpkg>.clusters_cache.json` : nom + exutoire_id +
+    bassin_ref. Les simulations sont enregistrées dans l'espace
+    exutoire_noeud/bassin_ref, alors que le dropdown envoie le
+    cluster_id positionnel — ce pont est indispensable pour retrouver
+    la bonne simulation (ex. cluster 87 « Cite 80 Logts » → exutoire 234).
+    """
+    if not gpkg_path or cluster_id is None:
+        return {}
+    cache = Path(gpkg_path).with_suffix(".clusters_cache.json")
+    if not cache.exists():
+        return {}
+    try:
+        import json as _json
+        data = _json.loads(cache.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    cible = str(cluster_id).strip().lower()
+    for f in (data.get("bassins_geojson") or {}).get("features", []):
+        p = f.get("properties") or {}
+        if p.get("type") != "bassin_urbain":
+            continue
+        ids = {str(p.get(k) or "").strip().lower()
+               for k in ("cluster_id", "id_bassin", "exutoire_id")}
+        if cible not in ids:
+            continue
+        ex = p.get("exutoire_id")
+        bref = p.get("bassin_ref") or (f"exutoire:{ex}" if ex else None)
+        return {"nom": p.get("nom"), "exutoire_id": ex, "bassin_ref": bref}
+    return {}
+
+
 # ============================================================
 # LANCEMENT & STATUT
 # ============================================================
@@ -789,13 +823,39 @@ def get_bassin_simulation(
 
     org_id = _org_id_requete(tenant)
 
+    # Identité métier stable du bassin demandé : les simulations sont
+    # enregistrées sous exutoire_noeud/bassin_ref (ex. « Cite 80 Logts »
+    # = cluster 87 mais exutoire 234). Sans ce pont, /bassin/87 ne
+    # retrouve jamais sa simulation et des anciennes sims à cluster_id
+    # recyclé peuvent être servies à tort.
+    identite_bassin = {}
+    _cid_txt = str(cluster_id).strip()
+    _ref_exutoire = _cid_txt.lower().startswith("exutoire:")
+    # « exutoire:<id> » est une référence métier : la clé de recherche
+    # dans le cache est le suffixe (exutoire_id ou cluster_id selon
+    # l'espace de la référence).
+    _cle_recherche = _cid_txt.split(":", 1)[1] if _ref_exutoire else cluster_id
+    try:
+        proj_identite = _resoudre_projet_pour_simulation(db, org_id, None)
+        gpkg_identite = _resoudre_gpkg_effectif_pour_projet(db, proj_identite)
+        identite_bassin = _identite_bassin_du_cache(gpkg_identite, _cle_recherche)
+    except Exception:
+        identite_bassin = {}
+    exutoire_demande = identite_bassin.get("exutoire_id") or (
+        _cle_recherche if _ref_exutoire else None)
+    bassin_ref_demande = identite_bassin.get("bassin_ref") or (
+        _cid_txt if _ref_exutoire else None)
+    nom_demande = identite_bassin.get("nom")
+
     # 1. Lookup DB-first via le service contextuel : simulation du
     #    projet/tenant correspondant au bassin, plus récente d'abord,
     #    identité = cluster_id/bassin_ref/exutoire_noeud (3D.3).
     ctx = None
     try:
         ctx = resoudre_simulation_courante(
-            db, org_id=org_id, cluster_id=cluster_id, resoudre_gpkg=True)
+            db, org_id=org_id, cluster_id=cluster_id,
+            exutoire_noeud=exutoire_demande, bassin_ref=bassin_ref_demande,
+            resoudre_gpkg=True, bassin_nom_attendu=nom_demande)
     except ProjetAmbigu as e:
         raise HTTPException(status_code=409, detail=str(e))
     except ContexteSimulationIntrouvable:
@@ -847,17 +907,30 @@ def get_bassin_simulation(
     if all_files:
         clean_cid = str(cluster_id).strip().lower()
 
+        # Identités acceptées : cluster_id demandé + exutoire/bassin_ref/nom
+        # résolus depuis le cache de sectorisation — les simulations sont
+        # enregistrées dans l'espace exutoire, pas dans celui du dropdown.
+        _cibles_ids = {clean_cid}
+        if exutoire_demande:
+            _cibles_ids.add(str(exutoire_demande).strip().lower())
+        if bassin_ref_demande:
+            _br = str(bassin_ref_demande).strip().lower()
+            _cibles_ids.add(_br.split(":", 1)[-1] if ":" in _br else _br)
+        _cibles_noms = set()
+        if nom_demande:
+            _cibles_noms.add(str(nom_demande).strip().lower())
+
         # Filtrage ultra-rapide par nom de fichier (évite la lecture inutile de gros fichiers JSON sur disque)
         matching_files = [
             f for f in all_files
-            if f"_cluster_{clean_cid}_" in f.name.lower() or f"_{clean_cid}_" in f.name.lower()
+            if any(f"_{cid}_" in f.name.lower() for cid in _cibles_ids if cid)
         ]
 
         # Si aucune correspondance directe sur le nom de fichier, tenter une correspondance par préfixe
         if not matching_files and clean_cid.isdigit():
             matching_files = [
                 f for f in all_files
-                if f"_cluster_{clean_cid}_" in f.name.lower() or f"_{clean_cid}_ouvrages_" in f.name.lower() or f"_{clean_cid}_rejets_" in f.name.lower()
+                if any(f"_{cid}_" in f.name.lower() for cid in _cibles_ids if cid and cid.isdigit())
             ]
 
         # Recherche de secours par inspection des métadonnées JSON internes (nom ou ID du bassin)
@@ -872,7 +945,8 @@ def get_bassin_simulation(
                     c_id = str(cm.get("cluster_id") or "").strip().lower()
                     # Correspondance stricte : jamais de sous-chaîne —
                     # « 1 » ne doit pas matcher « 234 » ou « 10 ».
-                    if clean_cid == c_nom or clean_cid == c_id:
+                    if (clean_cid == c_nom or c_id in _cibles_ids
+                            or c_nom in _cibles_noms):
                         matching_files.append(candidate)
                         break
                 except Exception:
@@ -885,11 +959,17 @@ def get_bassin_simulation(
                     data = json.load(f)
                 # Garde anti-legacy : le nom de fichier peut contenir
                 # l'id en sous-chaîne ; meta.cluster_id du résultat
-                # doit corroborer le bassin demandé.
-                _meta_cid = str(
-                    (data.get("meta") or {}).get("cluster_id") or ""
+                # doit corroborer le bassin demandé (cluster_id OU
+                # exutoire résolu) et, si connu, le nom du bassin.
+                _cm = (data.get("meta") or {})
+                _meta_cid = str(_cm.get("cluster_id") or "").strip().lower()
+                _meta_nom = str(
+                    _cm.get("cluster_nom") or _cm.get("bassin_nom") or ""
                 ).strip().lower()
-                if _meta_cid and _meta_cid != clean_cid:
+                _ok_id = (not _meta_cid) or (_meta_cid in _cibles_ids)
+                _ok_nom = (not _cibles_noms) or (not _meta_nom) \
+                    or (_meta_nom in _cibles_noms)
+                if not (_ok_id and _ok_nom):
                     continue
                 # 3D.6 — propriété déclarée vérifiée avant tout service
                 from api.services.simulation_service import _resultatdeclare_projet

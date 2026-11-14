@@ -132,11 +132,18 @@ def _nettoyer(db, orgs, projs, sims):
     pids = [p.id for p in projs]
     for s in sims:
         db.delete(s)
-    for p in projs:
-        db.delete(p)
+    # Flush : simulations.gpkg_version_id référence gpkg_versions —
+    # les sims doivent être supprimées avant les versions (FK SQLite).
+    db.flush()
     if pids:
+        # projects.gpkg_version_id référence aussi gpkg_versions :
+        # annuler le lien avant de supprimer les versions.
+        db.query(Project).filter(Project.id.in_(pids)).update(
+            {"gpkg_version_id": None}, synchronize_session=False)
         db.query(GpkgVersion).filter(GpkgVersion.project_id.in_(pids)).delete(
             synchronize_session=False)
+    for p in projs:
+        db.delete(p)
     for o in orgs:
         db.delete(o)
     db.commit()

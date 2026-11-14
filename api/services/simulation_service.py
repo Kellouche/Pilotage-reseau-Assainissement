@@ -1079,6 +1079,7 @@ def resoudre_simulation_courante(
     bassin_ref: Optional[str] = None,
     exutoire_noeud: Optional[str] = None,
     resoudre_gpkg: bool = True,
+    bassin_nom_attendu: Optional[str] = None,
 ) -> ContexteSimulation:
     """
     Étape 3D.1 — point d'entrée unique de résolution d'une simulation
@@ -1098,6 +1099,20 @@ def resoudre_simulation_courante(
     substitution silencieuse par une simulation d'un autre périmètre.
     """
     from api.models import Simulation
+
+    # Compatibilité : « cluster_id » peut être une référence métier
+    # « exutoire:<id> » (anciens appels /bassin/exutoire:NNN). La
+    # normaliser en bassin_ref/exutoire_noeud pour que les gardes
+    # d'identité comparent dans le bon espace.
+    if cluster_id is not None:
+        _cid_txt = str(cluster_id).strip()
+        if _cid_txt.lower().startswith("exutoire:"):
+            _suffixe = _cid_txt.split(":", 1)[1]
+            if bassin_ref is None:
+                bassin_ref = _cid_txt
+            if exutoire_noeud is None:
+                exutoire_noeud = _suffixe
+            cluster_id = None
 
     proj = _resoudre_projet_pour_simulation(db, org_id, project_id)
     org_effectif = org_id or proj.org_id
@@ -1144,15 +1159,41 @@ def resoudre_simulation_courante(
         # Garde anti-legacy : d'anciennes simulations portent un
         # cluster_id placeholder (ex. 1 = réseau complet) dans leurs
         # kpis alors que meta.cluster_id du résultat identifie le vrai
-        # bassin simulé. Quand un cluster_id est demandé, le meta du
-        # résultat doit corroborer l'identité — sinon le résultat d'un
-        # autre bassin serait servi (ex. bassin 1 → sim du bassin 234).
-        if cluster_id is not None:
-            _meta_cid = str(
-                (data.get("meta") or {}).get("cluster_id") or ""
+        # bassin simulé. Quand un bassin est demandé, le meta du résultat
+        # doit corroborer l'identité — sinon le résultat d'un autre
+        # bassin serait servi (ex. bassin 1 → sim du bassin 234).
+        # Les identités acceptées couvrent les DEUX espaces : cluster_id
+        # du dropdown et exutoire_noeud/bassin_ref (espace d'enregistrement
+        # des simulations). Le nom du bassin, quand il est connu, doit
+        # aussi correspondre : les cluster_id sont réattribués à chaque
+        # sectorisation et une ancienne sim peut porter un id recyclé.
+        if (cluster_id is not None or exutoire_noeud is not None
+                or bassin_ref is not None):
+            _meta = data.get("meta") or {}
+            _meta_cid = str(_meta.get("cluster_id") or "").strip().lower()
+            _cibles_cid = set()
+            for _x in (cluster_id, exutoire_noeud):
+                if _x is not None and str(_x).strip():
+                    _cibles_cid.add(str(_x).strip().lower())
+            if bassin_ref:
+                _br = str(bassin_ref).strip().lower()
+                _cibles_cid.add(_br.split(":", 1)[-1] if ":" in _br else _br)
+            _meta_nom = str(
+                _meta.get("cluster_nom") or _meta.get("bassin_nom") or ""
             ).strip().lower()
-            _cible_cid = str(cluster_id).strip().lower()
-            if _meta_cid and _meta_cid != _cible_cid:
+            _nom_att = str(bassin_nom_attendu or "").strip().lower()
+            # meta.cluster_id peut être dans l'un OU l'autre espace
+            # d'identifiants : on ne l'exige que pour une requête par
+            # cluster_id (espace dropdown). Pour une requête purement
+            # exutoire/bassin_ref, l'identité DB exacte fait foi et le
+            # nom reste le garde-fou.
+            _check_cid = cluster_id is not None
+            _identite_ok = (
+                (not _check_cid or not _meta_cid or not _cibles_cid
+                 or _meta_cid in _cibles_cid)
+                and (not _nom_att or not _meta_nom or _meta_nom == _nom_att)
+            )
+            if not _identite_ok:
                 continue
         ctx = ContexteSimulation(
             simulation=sim, project=proj, data=data,

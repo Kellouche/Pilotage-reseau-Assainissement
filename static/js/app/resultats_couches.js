@@ -315,27 +315,60 @@ window.addEventListener('DOMContentLoaded', initSaaSNavbar);
             if (bSec) bSec.style.display = 'block';
 
             const bSel = document.getElementById('bassin-select');
+            let valeurBassin = null;
             if (bSel && isTargeted) {
-                let found = false;
-                for (let opt of bSel.options) {
-                    if (opt.value === String(meta.cluster_id)) {
-                        found = true; break;
+                const cidMeta = String(meta.cluster_id);
+                // meta.cluster_id est dans l'espace exutoire (ex. 234) alors
+                // que le dropdown utilise le cluster_id positionnel (ex. 87).
+                // Retrouver l'option du dropdown via data-exutoire-id /
+                // data-bassin-ref / nom du bassin avant de créer un fantôme.
+                const nomMeta = String(meta.cluster_nom || meta.bassin_nom || '').trim().toLowerCase();
+                const cidMetaBas = cidMeta.toLowerCase();
+                // Priorité 1 : nom du bassin — discriminant fiable car les
+                // exutoire_id peuvent entrer en collision avec le
+                // cluster_id d'un autre bassin (ex. exutoire 4 = Bensouna
+                // alors que meta.cluster_id=4 = Rejet Lbatimat).
+                if (nomMeta) {
+                    for (let opt of bSel.options) {
+                        const txt = String(opt.textContent || '').trim().toLowerCase();
+                        // Frontière de mot : « rn 4 » ne doit pas matcher « rn 45 ».
+                        if (txt === nomMeta || txt.startsWith(nomMeta + ' ')
+                                || txt.startsWith(nomMeta + '(')) {
+                            valeurBassin = opt.value; break;
+                        }
                     }
                 }
-                if (!found) {
+                // Priorité 2 : cluster_id exact, puis exutoire/bassin_ref.
+                if (!valeurBassin) {
+                    for (let opt of bSel.options) {
+                        if (opt.value === cidMeta) { valeurBassin = opt.value; break; }
+                        const exId = String(opt.dataset.exutoireId || '').trim().toLowerCase();
+                        const bref = String(opt.dataset.bassinRef || '').trim().toLowerCase();
+                        if ((exId && exId === cidMetaBas)
+                                || (bref && bref === ('exutoire:' + cidMetaBas))) {
+                            valeurBassin = opt.value; break;
+                        }
+                    }
+                }
+                if (!valeurBassin) {
                     const newOpt = document.createElement('option');
-                    newOpt.value = String(meta.cluster_id);
+                    newOpt.value = cidMeta;
                     newOpt.textContent = `${meta.cluster_id}. ${meta.cluster_nom || 'Bassin ' + meta.cluster_id}`;
                     bSel.appendChild(newOpt);
+                    valeurBassin = cidMeta;
                 }
-                bSel.value = String(meta.cluster_id);
+                bSel.value = valeurBassin;
             }
 
             // Conserver une barre latérale sobre : afficher la fiche standard du bassin sans le cartouche lourd de simulation
             if (isTargeted) {
-                afficherInfoBassin(meta.cluster_id);
+                // Passer l'identité du dropdown (cluster_id positionnel) :
+                // highlightCluster/afficherInfoBassin comparent aux
+                // properties.cluster_id des couches cartographiques.
+                const cidAffichage = valeurBassin || meta.cluster_id;
+                afficherInfoBassin(cidAffichage);
                 if (typeof highlightCluster === 'function') {
-                    highlightCluster(meta.cluster_id, window._activeClusterLayer || (typeof couches !== 'undefined' ? couches.bassins : null));
+                    highlightCluster(cidAffichage, window._activeClusterLayer || (typeof couches !== 'undefined' ? couches.bassins : null));
                 }
             }
 
@@ -429,7 +462,17 @@ window.addEventListener('DOMContentLoaded', initSaaSNavbar);
             const updateBassinLayer = (layer) => {
                 const f = layer.feature;
                 if (!f || !f.properties) return;
-                if (f.properties.type === 'bassin_urbain' && String(f.properties.cluster_id) === String(meta.cluster_id)) {
+                if (f.properties.type !== 'bassin_urbain') return;
+                // meta.cluster_id est dans l'espace exutoire : le polygone
+                // doit aussi matcher via exutoire_id / bassin_ref.
+                const fp = f.properties;
+                const cidMeta = String(meta.cluster_id).toLowerCase();
+                const exF = String(fp.exutoire_id || '').trim().toLowerCase();
+                const brefF = String(fp.bassin_ref || '').trim().toLowerCase();
+                const matchBassin = String(fp.cluster_id) === String(meta.cluster_id)
+                    || (exF && exF === cidMeta)
+                    || (brefF && brefF === ('exutoire:' + cidMeta));
+                if (matchBassin) {
                     if (!layer._originalTooltip) {
                         const curTip = layer.getTooltip();
                         layer._originalTooltip = curTip ? curTip.getContent() : null;

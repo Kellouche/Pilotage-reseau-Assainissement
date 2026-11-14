@@ -78,7 +78,11 @@ def _projet(db, tmp_path, marqueur=""):
 def _nettoyer(db, ctx):
     pid = ctx["proj"].id
     oid = ctx["org"].id
+    # Ordre FK : simulations (réfèrent gpkg_versions), puis annulation du
+    # lien projects.gpkg_version_id, versions, projet, organisation.
     db.query(Simulation).filter(Simulation.project_id == pid).delete(synchronize_session=False)
+    db.query(Project).filter(Project.id == pid).update(
+        {"gpkg_version_id": None}, synchronize_session=False)
     db.query(GpkgVersion).filter(GpkgVersion.project_id == pid).delete(synchronize_session=False)
     db.query(Project).filter(Project.id == pid).delete(synchronize_session=False)
     db.query(Organization).filter(Organization.id == oid).delete(synchronize_session=False)
@@ -503,9 +507,11 @@ def test_e2e_http_latest_snapshot_v1_puis_reseau_v2(env_versions):
         assert comp["regards"] == 7 and comp["conduites"] == 1, (
             f"layers devrait refléter V2 (7/1), obtenu {comp}")
     finally:
-        # Nettoyage complet : sim → versions → projet → membership → user → org
+        # Nettoyage complet : sim → lien projet→version → versions → projet → membership → user → org
         if sim_ids:
             s.query(Simulation).filter(Simulation.id.in_(sim_ids)).delete(synchronize_session=False)
+        s.query(Project).filter(Project.id == proj_id).update(
+            {"gpkg_version_id": None}, synchronize_session=False)
         if version_ids:
             s.query(GpkgVersion).filter(GpkgVersion.id.in_(version_ids)).delete(synchronize_session=False)
         s.query(Project).filter(Project.id == proj_id).delete(synchronize_session=False)

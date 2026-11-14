@@ -78,9 +78,12 @@ def projet_avec_gpkg(db, tmp_path):
     db.add(proj)
     db.commit()
     yield {"org": org, "proj": proj, "gpkg": gpkg, "sfx": sfx}
-    # nettoyage
-    db.query(GpkgVersion).filter(GpkgVersion.project_id == proj.id).delete(synchronize_session=False)
+    # nettoyage — ordre FK : simulations puis lien projet→version,
+    # versions, projet, organisation.
     db.query(Simulation).filter(Simulation.project_id == proj.id).delete(synchronize_session=False)
+    db.query(Project).filter(Project.id == proj.id).update(
+        {"gpkg_version_id": None}, synchronize_session=False)
+    db.query(GpkgVersion).filter(GpkgVersion.project_id == proj.id).delete(synchronize_session=False)
     db.query(Project).filter(Project.id == proj.id).delete(synchronize_session=False)
     db.query(Organization).filter(Organization.id == org.id).delete(synchronize_session=False)
     db.commit()
@@ -184,8 +187,11 @@ def test_deux_projets_meme_contenu(db, tmp_path, env_versions):
         assert va.id != vb.id
         assert va.project_id != vb.project_id
     finally:
-        db.query(GpkgVersion).filter(GpkgVersion.project_id.in_([pa.id, pb.id])).delete(synchronize_session=False)
-        db.query(Project).filter(Project.id.in_([pa.id, pb.id])).delete(synchronize_session=False)
+        pids = [pa.id, pb.id]
+        db.query(Project).filter(Project.id.in_(pids)).update(
+            {"gpkg_version_id": None}, synchronize_session=False)
+        db.query(GpkgVersion).filter(GpkgVersion.project_id.in_(pids)).delete(synchronize_session=False)
+        db.query(Project).filter(Project.id.in_(pids)).delete(synchronize_session=False)
         db.query(Organization).filter(Organization.id == org.id).delete(synchronize_session=False)
         db.commit()
 
