@@ -593,9 +593,9 @@ function afficherProfilLong(data) {
                             const s = data.segments[item.dataIndex];
                             if (!s) return '';
                             if (_estDebordement(s)) {
-                                return `🔴 État : Débordement confirmé par SWMM (perte en surface)`;
+                                return `🔴 État : Débordement confirmé par SWMM (eau déversée en surface)`;
                             } else if (s.hgl_regime === 'inondation') {
-                                return `🟠 État : Niveau ≥ terrain naturel (sans perte mesurée)`;
+                                return `🟠 État : Niveau ≥ terrain naturel (sans débordement mesuré)`;
                             } else if (_estSurcharge(s)) {
                                 return `🟠 État : Conduite en surcharge`;
                             } else if (s.hgl_regime === 'inconnu' || s.z_hgl == null) {

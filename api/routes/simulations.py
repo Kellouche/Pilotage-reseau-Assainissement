@@ -1800,9 +1800,9 @@ def get_profil_en_long(
             status_n = node_sim.get("status", "normal")
             if hgl is not None:
                 # CONTRÔLE P0 — distinction stricte :
-                #   debordement = perte de surface RÉELLE confirmée par SWMM
+                #   debordement = flooding RÉEL confirmé par SWMM
                 #     (FLOODING_LOSSES > 0, .rpt prioritaire sur .out) ;
-                #   inondation = cote ≥ terrain naturel VÉRIFIÉ sans perte ;
+                #   inondation = cote ≥ terrain naturel VÉRIFIÉ sans débordement ;
                 #   surcharge = mise en charge (cote > génératrice supérieure) ;
                 #   libre = écoulement non mis en charge.
                 # Sans terrain vérifié, aucune « inondation » ne peut être
@@ -1964,7 +1964,7 @@ def get_profil_en_long(
                 # le terrain (ou si aucun terrain vérifié n'existe).
                 obs_parts = []
                 if flood_same > 0.0:
-                    obs_parts.append(f"Perte de surface SWMM : {flood_same:.3f} m³/s")
+                    obs_parts.append(f"Débordement SWMM : {flood_same:.3f} m³/s")
                     _fv = s.get("rpt_flood_volume_m3")
                     if _fv is not None and not s.get("flood_volume_estime", True):
                         if _fv > 0:
@@ -2000,11 +2000,11 @@ def get_profil_en_long(
                         "charge au-dessus de la génératrice supérieure de la "
                         f"conduite sortante{_diam_ob} : +{pression} m")
                 if not obs_parts:
-                    obs_parts.append("Perte de surface confirmée par le rapport SWMM.")
+                    obs_parts.append("Débordement confirmé par le rapport SWMM.")
                 alerts.append({
                     "type": "debordement",
                     "node": s["node_id"],
-                    "message": f"🔴 Regard {s['node_id']} : Débordement confirmé par SWMM (perte en surface)",
+                    "message": f"🔴 Regard {s['node_id']} : Débordement confirmé par SWMM (eau déversée en surface)",
                     "observations": ". ".join(obs_parts) + ".",
                     "recommandation": reco
                 })
@@ -2018,14 +2018,14 @@ def get_profil_en_long(
                     "type": "info",
                     "node": s["node_id"],
                     "message": f"ℹ️ Regard {s['node_id']} : pic de débordement ailleurs dans la simulation{when} — non observé à l'instant affiché",
-                    "observations": f"Maximum global de perte de surface : {flood_global:.3f} m³/s (agrégé par SWMM, hors pas de rapport).",
+                    "observations": f"Maximum global de débordement : {flood_global:.3f} m³/s (agrégé par SWMM, hors pas de rapport).",
                     "recommandation": "Consulter le profil en mode enveloppe (maxima) pour la vision complète."
                 })
             elif regime == "inondation":
                 alerts.append({
                     "type": "inondation",
                     "node": s["node_id"],
-                    "message": f"🟠 Regard {s['node_id']} : niveau ≥ terrain naturel (sans perte de surface mesurée)",
+                    "message": f"🟠 Regard {s['node_id']} : niveau ≥ terrain naturel (sans débordement mesuré)",
                     "observations": f"HGL {z_hgl_s} m ≥ terrain {s['z_terrain']} m — mise en eau de surface ou stockage, à confirmer sur le MNT.",
                     "recommandation": "Vérifier la capacité de stockage superficiel et le point bas du secteur."
                 })
