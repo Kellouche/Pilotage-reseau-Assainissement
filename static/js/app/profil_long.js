@@ -336,6 +336,8 @@ function rafraichirProfilLong() {
  */
 function chargerProfilLong(nodeAmont, nodeAval) {
     const panel = document.getElementById('panel-profil-long');
+    const overlay = document.getElementById('profil-loading-overlay');
+    if (overlay) overlay.style.display = 'flex';
 
     const url = `/api/v1/simulations/profil-en-long?node_amont=${encodeURIComponent(nodeAmont)}&node_aval=${encodeURIComponent(nodeAval)}`;
 
@@ -349,6 +351,7 @@ function chargerProfilLong(nodeAmont, nodeAval) {
             return response.json();
         })
         .then(data => {
+            if (overlay) overlay.style.display = 'none';
             window.profilLongState.lastData = data;
             if (panel) panel.style.display = 'flex';
             // Initialiser le déplacement du panneau (draggable)
@@ -358,6 +361,7 @@ function chargerProfilLong(nodeAmont, nodeAval) {
             afficherProfilLong(data);
         })
         .catch(err => {
+            if (overlay) overlay.style.display = 'none';
             console.error("Erreur profil en long:", err);
             if (panel) panel.style.display = 'none';
             const msg = (err && err.message) ? err.message : '';

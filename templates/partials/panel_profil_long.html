@@ -8,6 +8,25 @@ Objet : Panneau rétractable du profil en long hydraulique interactif (Phase 6.A
 ================================================================================
 -->
 
+<!-- Overlay de verrouillage pendant la génération du profil en long -->
+<div id="profil-loading-overlay" style="display: none; position: fixed; inset: 0; z-index: 999998; background: rgba(15, 23, 42, 0.82); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); align-items: center; justify-content: center; flex-direction: column; color: #f8fafc; pointer-events: all; user-select: none;">
+    <div style="background: linear-gradient(145deg, rgba(30, 41, 59, 0.98), rgba(15, 23, 42, 0.98)); border: 1.5px solid rgba(56, 189, 248, 0.4); border-radius: 18px; padding: 28px 38px; max-width: 440px; width: 90%; text-align: center; box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.7), 0 0 30px rgba(56, 189, 248, 0.2);">
+        <div style="width: 64px; height: 64px; margin: 0 auto 16px; border-radius: 50%; background: linear-gradient(135deg, #0284c7, #0369a1); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 20px rgba(56, 189, 248, 0.55);">
+            <i class="fas fa-chart-line fa-2x" style="color: #ffffff;"></i>
+        </div>
+        <h3 style="font-size: 1.15rem; font-weight: 800; color: #f8fafc; margin-bottom: 6px; letter-spacing: -0.3px;">
+            Création du profil en long
+        </h3>
+        <p style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 14px; line-height: 1.4;">
+            Calcul du chemin hydraulique, résolution des cotes et tracé de la ligne de charge (HGL)
+        </p>
+        <div style="font-size: 0.82rem; color: #cbd5e1; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px;">
+            <i class="fas fa-circle-notch fa-spin" style="color: #38bdf8;"></i>
+            <span>Veuillez patienter, l'interface est verrouillée...</span>
+        </div>
+    </div>
+</div>
+
 <div id="panel-profil-long" class="profil-long-container" style="display: none;">
     <!-- En-tête du panneau (poignée de déplacement) -->
     <div class="profil-long-header" id="profil-long-drag-handle">
