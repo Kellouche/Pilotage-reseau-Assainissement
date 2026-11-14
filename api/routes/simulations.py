@@ -1467,6 +1467,77 @@ def get_profil_en_long(
                                "Vérifiez que les deux regards appartiennent au même réseau connecté."
                     )
 
+        # Couverture du chemin : la « dernière » simulation completed peut
+        # être un cluster sectorisé qui ne couvre pas le chemin demandé
+        # (ses cotes nodales node_hydraulics/node_elevs sont limitées aux
+        # nœuds simulés). On retient alors la plus récente simulation
+        # autorisée du même projet/org dont les cotes interceptent le
+        # chemin — jamais de substitution inter-tenant.
+        def _sim_couvre_chemin(d: Dict[str, Any]) -> int:
+            """Nombre de nœuds du chemin couverts par les cotes d'une simulation."""
+            if not d or not _est_simulation_valide(d):
+                return 0
+            _ts = d.get("timeseries") or {}
+            _nh = _ts.get("node_hydraulics") or d.get("node_hydraulics") or {}
+            _ev = (d.get("meta") or {}).get("node_elevs") or {}
+            _cles = set()
+            for _k in list(_nh.keys()) + [str(_k) for _k in _ev.keys()]:
+                _cles.add(str(_k))
+                _cn = _clean_node_id(_k)
+                if _cn:
+                    _cles.add(_cn)
+            return sum(
+                1 for _n in path_nodes
+                if str(_n) in _cles or (_clean_node_id(_n) or "") in _cles)
+
+        if proj is not None and _sim_couvre_chemin(sim_data) == 0:
+            try:
+                from api.models import Simulation
+                from api.services.simulation_service import (
+                    charger_resultat_simulation,
+                    _ref_pour_simulation,
+                )
+                _id_deja = (ctx.simulation.id
+                            if (ctx is not None and ctx.simulation is not None)
+                            else None)
+                _q = db.query(Simulation).filter(
+                    Simulation.project_id == proj.id,
+                    Simulation.status == "completed")
+                if org_id:
+                    _q = _q.filter(Simulation.org_id == org_id)
+                _meilleure = None
+                _meilleure_couv = 0
+                for _sim in _q.order_by(
+                        Simulation.created_at.desc(),
+                        Simulation.id.desc()).limit(150).all():
+                    try:
+                        if _id_deja is not None and _sim.id == _id_deja:
+                            continue
+                        if not _sim.results_s3_key and _ref_pour_simulation(_sim) is None:
+                            continue
+                        _d = charger_resultat_simulation(_sim)
+                        if not _d or not _est_simulation_valide(_d):
+                            continue
+                        _c = _sim_couvre_chemin(_d)
+                        if _c > _meilleure_couv:
+                            _meilleure_couv = _c
+                            _meilleure = _d
+                            if _c >= len(path_nodes):
+                                break
+                    except Exception as e_sim:
+                        logger.debug("Simulation %s illisible pour couverture: %s",
+                                     getattr(_sim, "id", "?"), e_sim)
+                        continue
+                if _meilleure is not None:
+                    logger.info(
+                        "Profil en long : simulation « dernière » sans couverture "
+                        "du chemin → repli sur une simulation autorisée "
+                        "couvrant %s/%s nœuds.",
+                        _meilleure_couv, len(path_nodes))
+                    sim_data = _meilleure
+            except Exception as e_cov:
+                logger.warning("Recherche simulation couvrante impossible: %s", e_cov)
+
         # Récupérer les élévations nodales depuis la simulation ou le MNT
         node_elevs: Dict[str, float] = {}
         sim_node_results: Dict[str, Any] = {}
