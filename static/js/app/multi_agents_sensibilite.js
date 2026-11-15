@@ -34,7 +34,7 @@
                     bEl.style.background = 'rgba(16, 185, 129, 0.25)';
                     bEl.style.color = '#34d399';
                 }
-                alert(`✅ Choix validé avec succès !\nLe buffer de ${bufferM} mètres est maintenant enregistré comme configuration de référence pour ce projet.`);
+                window.dialogueNotifier({ message: `✅ Choix validé avec succès !\nLe buffer de ${bufferM} mètres est maintenant enregistré comme configuration de référence pour ce projet.`, type: 'succes' });
             })
             .catch(e => {
                 console.error("Erreur validation buffer:", e);

@@ -38,7 +38,7 @@ function toggleTimeSlider(forceState) {
 
     // Vérifier si le bouton est désactivé (pas de simulation)
     if (btn && btn.disabled) {
-        alert("Aucune simulation disponible pour ce réseau. Veuillez d'abord lancer une simulation SWMM 5.2.");
+        window.dialogueAlerte("Aucune simulation disponible pour ce réseau. Veuillez d'abord lancer une simulation SWMM 5.2.", 'info');
         return;
     }
 
@@ -105,7 +105,7 @@ function toggleTimeSlider(forceState) {
                       Object.keys(window._dernierResultatSimulation.conduit_results).length > 0);
 
     if (!hasSim) {
-        alert("Lancer une simulation pour activer l'animation temporelle de l'onde de crue.");
+        window.dialogueAlerte("Lancer une simulation pour activer l'animation temporelle de l'onde de crue.", 'info');
         return;
     }
 
@@ -258,7 +258,7 @@ async function chargerDonneesTimeSlider() {
         return true;
     } catch (err) {
         console.error("Erreur chargement séries temporelles:", err);
-        alert(`Impossible d'initialiser l'animation temporelle :\n${err.message}`);
+        window.dialogueAlerte(`Impossible d'initialiser l'animation temporelle :\n${err.message}`, 'erreur');
         return false;
     }
 }

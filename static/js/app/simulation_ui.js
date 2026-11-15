@@ -589,7 +589,7 @@ window.dessinerRaccordementsOrphelinsSurCarte = function() {
             const txtEl = document.getElementById('sim-bms-telegramme-texte');
             const texte = (txtEl && txtEl.value) ? txtEl.value.trim() : '';
             if (!texte) {
-                alert("Veuillez coller le texte officiel du bulletin météorologique spécial (ONM).");
+                window.dialogueAlerte("Veuillez coller le texte officiel du bulletin météorologique spécial (ONM).", 'info');
                 return;
             }
 

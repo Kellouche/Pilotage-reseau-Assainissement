@@ -160,7 +160,7 @@
                 montrerModalProjet(false);
                 chargerDonneesInitiales();
             } catch (err) {
-                alert('Erreur : ' + err.message);
+                window.dialogueAlerte('Erreur : ' + err.message, 'erreur');
                 montrerChargement(false);
             }
         };
@@ -174,7 +174,16 @@
         };
 
         window.reinitialiserProjetVierge = async function() {
-            if (!confirm('Voulez-vous réinitialiser votre projet et vider le réseau affiché ?')) return;
+            const _okReset = window.dialogueConfirmer
+                ? await window.dialogueConfirmer({
+                    titre: 'Réinitialisation du projet',
+                    message: 'Voulez-vous réinitialiser votre projet et vider le réseau affiché ?',
+                    type: 'danger',
+                    libelleValider: 'Réinitialiser',
+                    libelleIgnorer: 'Annuler',
+                })
+                : confirm('Voulez-vous réinitialiser votre projet et vider le réseau affiché ?');
+            if (!_okReset) return;
             montrerChargement(true);
             try {
                 const token = localStorage.getItem('swmm_access_token');
@@ -187,7 +196,7 @@
                 montrerModalProjet(false);
                 chargerDonneesInitiales();
             } catch (err) {
-                alert('Erreur : ' + err.message);
+                window.dialogueAlerte('Erreur : ' + err.message, 'erreur');
                 montrerChargement(false);
             }
         };
@@ -197,7 +206,7 @@
             if (!file) return;
             const ext = file.name.split('.').pop().toLowerCase();
             if (ext !== 'gpkg' && ext !== 'inp') {
-                alert("Format non supporté. Veuillez sélectionner un fichier .inp (EPA SWMM) ou .gpkg (GeoPackage).");
+                window.dialogueAlerte("Format non supporté. Veuillez sélectionner un fichier .inp (EPA SWMM) ou .gpkg (GeoPackage).", 'erreur');
                 return;
             }
             montrerChargement(true, `Chargement et analyse du réseau : ${file.name}...`);
@@ -219,7 +228,7 @@
                 montrerModalProjet(false);
                 chargerDonneesInitiales();
             } catch (err) {
-                alert('Erreur téléversement : ' + err.message);
+                window.dialogueAlerte('Erreur téléversement : ' + err.message, 'erreur');
                 montrerChargement(false);
             } finally {
                 if (event.target) event.target.value = '';
@@ -360,14 +369,14 @@
                 if (typeof afficherNotification === 'function') {
                     afficherNotification(`Échec du téléchargement du modèle : ${e.message}`, "error", 6000);
                 } else {
-                    alert(`Échec du téléchargement du modèle : ${e.message}`);
+                    window.dialogueAlerte(`Échec du téléchargement du modèle : ${e.message}`, 'erreur');
                 }
             }
         };
 
         window.afficherDerniersResultats = function() {
             if (!window._dernierResultatSimulation) {
-                alert("Aucun résultat de simulation disponible pour ce réseau. Veuillez d'abord lancer une simulation.");
+                window.dialogueAlerte("Aucun résultat de simulation disponible pour ce réseau. Veuillez d'abord lancer une simulation.", 'info');
                 return;
             }
             afficherResultatsSimulation(window._dernierResultatSimulation);
@@ -376,7 +385,7 @@
 
         window.ouvrirModalInterpretation = function() {
             if (!window._dernierResultatSimulation) {
-                alert("Aucun résultat de simulation disponible pour l'interprétation. Veuillez d'abord exécuter une simulation.");
+                window.dialogueAlerte("Aucun résultat de simulation disponible pour l'interprétation. Veuillez d'abord exécuter une simulation.", 'info');
                 return;
             }
             const m = document.getElementById('modal-interpretation');

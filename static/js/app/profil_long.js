@@ -43,7 +43,7 @@ function toggleProfilLongMode() {
                           Object.keys(window._dernierResultatSimulation.conduit_results).length > 0);
 
         if (!hasSim) {
-            alert("Lancer une simulation pour avoir un profil en long");
+            window.dialogueAlerte("Lancer une simulation pour avoir un profil en long", 'info');
             if (panel) panel.style.display = 'none';
             return;
         }
@@ -323,7 +323,7 @@ function rafraichirProfilLong() {
     const b = inpB ? inpB.value.trim() : (window.profilLongState.nodeAval || '');
 
     if (!a || !b) {
-        alert("Veuillez saisir ou sélectionner un regard amont et un regard aval.");
+        window.dialogueAlerte("Veuillez saisir ou sélectionner un regard amont et un regard aval.", 'info');
         return;
     }
 
@@ -369,9 +369,9 @@ function chargerProfilLong(nodeAmont, nodeAval) {
             if (panel) panel.style.display = 'none';
             const msg = (err && err.message) ? err.message : '';
             if (msg.includes("Simulation non trouvée") || msg.includes("non trouvée") || msg.includes("404")) {
-                alert("Lancer une simulation pour avoir un profil en long");
+                window.dialogueAlerte("Lancer une simulation pour avoir un profil en long", 'info');
             } else {
-                alert(`Impossible de générer le profil en long :\n${msg}`);
+                window.dialogueAlerte(`Impossible de générer le profil en long :\n${msg}`, 'erreur');
             }
             annulerSelectionProfil();
         });
@@ -791,7 +791,7 @@ function _nettoyerMarqueursProfil() {
 function exporterProfilImage() {
     const chart = window.profilLongState.chartInstance;
     if (!chart) {
-        alert("Aucun profil actif à exporter.");
+        window.dialogueAlerte("Aucun profil actif à exporter.", 'info');
         return;
     }
     const a = document.createElement('a');

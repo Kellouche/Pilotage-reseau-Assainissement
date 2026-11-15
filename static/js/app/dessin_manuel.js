@@ -90,7 +90,7 @@
                     console.log("[Editor] Fermeture par clic droit");
                     finaliserPolygone();
                 } else {
-                    alert("Tracez au moins 3 points avant de terminer.");
+                    window.dialogueAlerte("Tracez au moins 3 points avant de terminer.", 'info');
                 }
             }
         });
@@ -279,7 +279,7 @@
             })
             .then(r => r.json())
             .then(res => {
-                alert("Bassin manuel enregistré avec succès !");
+                window.dialogueNotifier({ message: "Bassin manuel enregistré avec succès !", type: 'succes' });
                 desactiverModeEdition();
                 // Recharger les données pour voir le nouveau bassin
                 if (typeof window.lancerPartitionnementBassins === 'function') {
@@ -288,7 +288,7 @@
             })
             .catch(err => {
                 console.error(err);
-                alert("Erreur lors de la sauvegarde.");
+                window.dialogueAlerte("Erreur lors de la sauvegarde.", 'erreur');
             });
         };
 
@@ -297,19 +297,30 @@
             const sel = document.getElementById('bassin-select');
             const cid = sel.value;
             if (!cid || !cid.startsWith('M_')) {
-                alert("Veuillez sélectionner un bassin manuel (marqué [MANUEL]) pour le supprimer.");
+                window.dialogueAlerte("Veuillez sélectionner un bassin manuel (marqué [MANUEL]) pour le supprimer.", 'info');
                 return;
             }
-            
-            if (!confirm("Voulez-vous vraiment supprimer ce bassin manuel ?")) return;
 
+            const _supprimerBassin = () => {
             fetch(`/api/v1/manual-basin/${cid}`, { method: 'DELETE' })
                 .then(r => r.json())
                 .then(res => {
-                    alert("Bassin supprimé.");
+                    window.dialogueNotifier({ message: "Bassin supprimé.", type: 'succes' });
                     // Recharger les clusters
                     if (typeof window.lancerPartitionnementBassins === 'function') {
                         window.lancerPartitionnementBassins(null, null, true, true);
                     }
                 });
+            };
+            if (window.dialogueConfirmer) {
+                window.dialogueConfirmer({
+                    titre: 'Suppression du bassin manuel',
+                    message: 'Voulez-vous vraiment supprimer ce bassin manuel ?',
+                    type: 'danger',
+                    libelleValider: 'Supprimer',
+                    libelleIgnorer: 'Annuler',
+                }).then(ok => { if (ok) _supprimerBassin(); });
+            } else if (confirm("Voulez-vous vraiment supprimer ce bassin manuel ?")) {
+                _supprimerBassin();
+            }
         };

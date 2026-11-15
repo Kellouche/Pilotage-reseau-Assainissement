@@ -15,7 +15,7 @@
             try {
                 const simData = window._dernierResultatSimulation;
                 if (!simData) {
-                    alert("Aucun résultat de simulation active à imprimer. Veuillez d'abord exécuter une simulation SWMM 5.2.");
+                    window.dialogueAlerte("Aucun résultat de simulation active à imprimer. Veuillez d'abord exécuter une simulation SWMM 5.2.", 'info');
                     return;
                 }
 
@@ -317,7 +317,7 @@
 
             const printWin = window.open('', '_blank');
             if (!printWin) {
-                alert("Veuillez autoriser l'ouverture des fenêtres pop-up dans votre navigateur pour générer le rapport PDF.");
+                window.dialogueAlerte("Veuillez autoriser l'ouverture des fenêtres pop-up dans votre navigateur pour générer le rapport PDF.", 'info');
                 return;
             }
 
@@ -334,7 +334,7 @@
             }, 350);
         } catch (err) {
             console.error("Erreur génération rapport diagnostic:", err);
-            alert("Impossible de générer le rapport d'expertise :\n" + (err && err.message ? err.message : err));
+            window.dialogueAlerte("Impossible de générer le rapport d'expertise :\n" + (err && err.message ? err.message : err), 'erreur');
         }
     };
 
@@ -344,7 +344,7 @@
         window.telechargerRapportDiagnosticPDF = async function() {
             const simData = window._dernierResultatSimulation;
             if (!simData) {
-                alert("Aucun résultat de simulation active. Veuillez d'abord exécuter une simulation SWMM 5.2.");
+                window.dialogueAlerte("Aucun résultat de simulation active. Veuillez d'abord exécuter une simulation SWMM 5.2.", 'info');
                 return;
             }
 
@@ -409,7 +409,7 @@
                 setTimeout(() => URL.revokeObjectURL(objUrl), 10000);
             } catch (err) {
                 console.error("Erreur génération rapport PDF:", err);
-                alert("Impossible de générer le rapport d'expertise :\n" + (err && err.message ? err.message : err));
+                window.dialogueAlerte("Impossible de générer le rapport d'expertise :\n" + (err && err.message ? err.message : err), 'erreur');
             } finally {
                 clearInterval(chronoInterval);
                 if (overlay) overlay.style.display = 'none';

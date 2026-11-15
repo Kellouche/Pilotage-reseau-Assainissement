@@ -252,7 +252,8 @@
         }
         if (!cidStr) cidStr = String(window._bassinModalPour || '');
         if (!cidStr) {
-            alert('Sélectionnez d’abord un bassin versant sur la carte ou dans la liste.');
+            if (window.dialogueAlerte) window.dialogueAlerte('Sélectionnez d’abord un bassin versant sur la carte ou dans la liste.');
+            else alert('Sélectionnez d’abord un bassin versant sur la carte ou dans la liste.');
             return;
         }
         window.ouvrirModalSimulationsBassin(cidStr, false);
@@ -450,8 +451,7 @@
         const sim = _trouverSimulation(simId);
         if (!sim) return;
         const label = sim.name || sim.id;
-        if (!confirm(`Supprimer définitivement « ${label} » ?\n\nCette action retire la simulation, ses résultats et ses artefacts (INP/RPT).`)) return;
-
+        const _confirmerPuisSupprimer = () => {
         const token = localStorage.getItem('swmm_access_token');
         const headers = {};
         if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -474,7 +474,23 @@
                 }
                 _rendreListeSimulations();
             })
-            .catch(err => alert(`Suppression impossible : ${err.message}`));
+            .catch(err => {
+                if (window.dialogueAlerte) window.dialogueAlerte(`Suppression impossible : ${err.message}`, 'erreur');
+                else alert(`Suppression impossible : ${err.message}`);
+            });
+        };
+
+        if (window.dialogueConfirmer) {
+            window.dialogueConfirmer({
+                titre: 'Suppression de la simulation',
+                message: `Supprimer définitivement « ${label} » ?\n\nCette action retire la simulation, ses résultats calculés et ses artefacts (modèle .inp, rapport .rpt). Elle est irréversible.`,
+                type: 'danger',
+                libelleValider: 'Supprimer',
+                libelleIgnorer: 'Annuler',
+            }).then(ok => { if (ok) _confirmerPuisSupprimer(); });
+        } else if (confirm(`Supprimer définitivement « ${label} » ?\n\nCette action retire la simulation, ses résultats et ses artefacts (INP/RPT).`)) {
+            _confirmerPuisSupprimer();
+        }
     };
 
     // Fermeture par clic sur le fond et touche Échap

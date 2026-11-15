@@ -425,7 +425,16 @@ window.basculerActifDwf = async function(id, actif) {
 
 window.supprimerApportDwf = async function(id, nodeId) {
     if (!DWF.peutEcrire) return;
-    if (!confirm(`Supprimer définitivement l'apport DWF du nœud « ${nodeId} » ?\nCette action est irréversible.`)) return;
+    const _ok = window.dialogueConfirmer
+        ? await window.dialogueConfirmer({
+            titre: 'Suppression de l’apport DWF',
+            message: `Supprimer définitivement l'apport DWF du nœud « ${nodeId} » ?\nCette action est irréversible.`,
+            type: 'danger',
+            libelleValider: 'Supprimer',
+            libelleIgnorer: 'Annuler',
+        })
+        : confirm(`Supprimer définitivement l'apport DWF du nœud « ${nodeId} » ?\nCette action est irréversible.`);
+    if (!_ok) return;
     try {
         DWF.statut('Suppression…', 'info');
         await dwfFetch(`/api/v1/apports/${encodeURIComponent(id)}`, { method: 'DELETE' });

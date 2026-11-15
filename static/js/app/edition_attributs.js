@@ -338,15 +338,15 @@
                 });
 
                 if (response.ok) {
-                    alert('Modifications enregistrées');
+                    window.dialogueNotifier({ message: 'Modifications enregistrées', type: 'succes' });
                     document.getElementById('edit-modal').style.display = 'none';
                     location.reload();
                 } else {
-                    alert('Erreur lors de la sauvegarde');
+                    window.dialogueAlerte('Erreur lors de la sauvegarde', 'erreur');
                 }
             } catch (error) {
                 console.error('Erreur:', error);
-                alert('Erreur réseau');
+                window.dialogueAlerte('Erreur réseau', 'erreur');
             }
         }
 

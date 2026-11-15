@@ -32,7 +32,7 @@
 
         const btn = document.getElementById('btn-hyeto-hydro');
         if (btn && btn.disabled) {
-            alert("Aucune simulation disponible pour ce réseau. Veuillez d'abord lancer une simulation SWMM 5.2.");
+            window.dialogueAlerte("Aucune simulation disponible pour ce réseau. Veuillez d'abord lancer une simulation SWMM 5.2.", 'info');
             return;
         }
 
@@ -83,7 +83,7 @@
         }
 
         if (!tsData || !tsData.steps || tsData.steps.length === 0) {
-            alert("Aucune donnée temporelle disponible pour cette simulation.\nVeuillez d'abord exécuter une simulation SWMM 5.2 sous pluie dynamique.");
+            window.dialogueAlerte("Aucune donnée temporelle disponible pour cette simulation.\nVeuillez d'abord exécuter une simulation SWMM 5.2 sous pluie dynamique.", 'info');
             return;
         }
 
