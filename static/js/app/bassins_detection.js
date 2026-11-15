@@ -39,8 +39,26 @@
             const longStr = longM !== null ? ` (${longM} m)` : '';
 
             // Vérifier si ce bassin est actuellement simulé (dans simData ou window._dernierResultatSimulation)
-            const activeSim = simData || (window._dernierResultatSimulation && window._dernierResultatSimulation.meta && String(window._dernierResultatSimulation.meta.cluster_id) === String(cid) ? window._dernierResultatSimulation : null);
-            const isSimulated = !!(activeSim && activeSim.meta && String(activeSim.meta.cluster_id) === String(cid));
+            // meta.cluster_id est dans l'espace EXUTOIRE alors que p.cluster_id est
+            // l'id positionnel du dropdown : la correspondance doit couvrir les trois
+            // identités (cluster_id, exutoire_id, bassin_ref) + le nom du bassin,
+            // comme le fait le matchBassin de resultats_couches.js.
+            const _correspondAExutoireSimule = (s) => {
+                const m = s && s.meta;
+                if (!m) return false;
+                const cidMeta = String(m.cluster_id !== undefined && m.cluster_id !== null ? m.cluster_id : (m.exutoire_noeud || '')).trim().toLowerCase();
+                const exP = String(p.exutoire_id || '').trim().toLowerCase();
+                const brefP = String(p.bassin_ref || '').trim().toLowerCase();
+                const nomP = String(p.nom || p.nom_exutoire || '').trim().toLowerCase();
+                const nomM = String(m.cluster_nom || m.bassin_nom || '').trim().toLowerCase();
+                if (cidMeta && (String(cid).toLowerCase() === cidMeta
+                        || (exP && exP === cidMeta)
+                        || (brefP && brefP === ('exutoire:' + cidMeta)))) return true;
+                if (nomP && nomM && nomP === nomM) return true;
+                return false;
+            };
+            const activeSim = simData || (window._dernierResultatSimulation && _correspondAExutoireSimule(window._dernierResultatSimulation) ? window._dernierResultatSimulation : null);
+            const isSimulated = !!(activeSim && _correspondAExutoireSimule(activeSim));
 
             let html = `
                 <div style="font-family: inherit; font-size: 12px; min-width: 220px; color: #f8fafc; padding: 2px; line-height: 1.45;">
