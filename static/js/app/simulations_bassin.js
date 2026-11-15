@@ -88,6 +88,26 @@
         if (modal) modal.style.display = 'none';
     };
 
+    /**
+     * Bouton toolbar : rouvre l'historique des simulations pour le bassin
+     * courant (sélectionné, sinon dernier bassin consulté / simulé).
+     */
+    window.ouvrirModalSimulationsBassinDepuisToolbar = function () {
+        let cidStr = '';
+        const bSel = document.getElementById('bassin-select');
+        if (bSel && bSel.value) cidStr = String(bSel.value);
+        if (!cidStr && window._dernierResultatSimulation && window._dernierResultatSimulation.meta) {
+            const _m = window._dernierResultatSimulation.meta;
+            cidStr = String(_m.cluster_id !== undefined && _m.cluster_id !== null ? _m.cluster_id : '');
+        }
+        if (!cidStr) cidStr = String(window._bassinModalPour || '');
+        if (!cidStr) {
+            alert('Sélectionnez d’abord un bassin versant sur la carte ou dans la liste.');
+            return;
+        }
+        window.ouvrirModalSimulationsBassin(cidStr, false);
+    };
+
     function _rendreListeSimulations() {
         const corps = document.getElementById('sim-hist-corps');
         const pied = document.getElementById('sim-hist-pied');
