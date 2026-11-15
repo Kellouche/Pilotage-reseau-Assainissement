@@ -631,19 +631,18 @@
             }
 
             // Palette hydraulique identique à l'enveloppe de criticité statique :
-            // teintes bien distinctes (vert/cyan/bleu/violet), le rouge est
-            // réservé au débordement effectif des regards.
-            let col = '#10b981'; // < 50% Sain (Vert)
+            // bleu → vert → jaune → rouge selon la charge instantanée.
+            let col = '#3b82f6'; // < 50% Normal (Bleu)
             let weight = 3.5;
 
             if (linkRatio >= 1.0) {
-                col = '#8b5cf6'; // Violet : Surcharge / mise en charge (≥ 100%)
+                col = '#ef4444'; // Rouge : Surcharge / mise en charge (≥ 100%)
                 weight = 6.0;
             } else if (linkRatio >= 0.8) {
-                col = '#3b82f6'; // Bleu : Critique (80% - 100%)
+                col = '#eab308'; // Jaune : Critique (80% - 100%)
                 weight = 5.0;
             } else if (linkRatio >= 0.5) {
-                col = '#06b6d4'; // Cyan : Modéré (50% - 80%)
+                col = '#22c55e'; // Vert : Modéré (50% - 80%)
                 weight = 4.2;
             }
 

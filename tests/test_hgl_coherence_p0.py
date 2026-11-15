@@ -124,11 +124,11 @@ def test_parse_flooding_temps_et_volume():
 
 
 def test_couleurs_surcharge_vs_debordement():
-    """Surcharge de conduite = violet ; flooded = rouge. Le rouge ne
-    qualifie plus la simple mise en charge."""
+    """Surcharge de conduite = rouge vif ; flooded = rouge brique. Les deux
+    rouge restent techniquement distincts (#ef4444 vs #dc2626)."""
     kpis = analyser_rapport_swmm_impl(rpt_text=RPT_SYNTHETIQUE, meta={})
     assert kpis["conduit_results"]["C1"]["status"] == "surcharge"
-    assert kpis["conduit_results"]["C1"]["color"] == "#8b5cf6"
+    assert kpis["conduit_results"]["C1"]["color"] == "#ef4444"
     assert kpis["node_results"]["7018"]["color"] == "#dc2626"
 
 

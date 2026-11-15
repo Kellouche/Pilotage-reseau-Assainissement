@@ -37,18 +37,17 @@
             }
 
             // P0 — couleur dérivée du STATUT sémantique (stable entre les
-            // versions de résultats persistés) : palette à teintes bien
-            // distinctes — normal = vert, modérée = cyan, critique = bleu,
-            // surcharge = violet. Le rouge est réservé au débordement
-            // réel (regards flooded).
+            // versions de résultats persistés) : palette bleu → vert →
+            // jaune → rouge selon la charge. Le débordement réel des
+            // regards garde son rouge brique #dc2626 distinct.
             const _couleurConduite = function(r) {
                 const parStatut = {
-                    surcharge: '#8b5cf6',
-                    critique: '#3b82f6',
-                    moderee: '#06b6d4',
-                    normal: '#10b981'
+                    surcharge: '#ef4444',
+                    critique: '#eab308',
+                    moderee: '#22c55e',
+                    normal: '#3b82f6'
                 };
-                return parStatut[r && r.status] || (r && r.color) || '#10b981';
+                return parStatut[r && r.status] || (r && r.color) || '#3b82f6';
             };
 
             // Réactiver les boutons d'animation et d'analyse hydrologique si une simulation est disponible
