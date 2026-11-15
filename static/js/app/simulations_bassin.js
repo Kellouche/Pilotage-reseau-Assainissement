@@ -94,13 +94,61 @@
      * des résultats) ; sinon on ouvre directement la modale de simulation.
      * Sans bassin sélectionné, comportement historique inchangé.
      */
-    window.ouvrirSimulationOuHistorique = function () {
-        let cidStr = '';
+    /**
+     * Résout le bassin « courant » pour l'action Simuler :
+     *  1. #bassin-select (sélection explicite)
+     *  2. _selectedClusterId (dernier clic sur la carte)
+     *  3. _dernierResultatSimulation.meta (dernier bassin affiché —
+     *     survit au rechargement de page via /simulations/latest)
+     * Retourne { historyId, optionValue } : historyId pour l'endpoint
+     * (accepte cluster_id dropdown OU exutoire), optionValue = valeur
+     * de l'option #bassin-select correspondante (null si introuvable).
+     */
+    function _resoudreBassinPourSimulation() {
         const bSel = document.getElementById('bassin-select');
-        if (bSel && bSel.value) cidStr = String(bSel.value);
-        if (!cidStr) {
-            try { if (typeof _selectedClusterId !== 'undefined' && _selectedClusterId !== null) cidStr = String(_selectedClusterId); } catch (_) {}
+        if (bSel && bSel.value) {
+            return { historyId: String(bSel.value), optionValue: String(bSel.value) };
         }
+        try {
+            if (typeof _selectedClusterId !== 'undefined' && _selectedClusterId !== null && _selectedClusterId !== '') {
+                return { historyId: String(_selectedClusterId), optionValue: String(_selectedClusterId) };
+            }
+        } catch (_) {}
+
+        const meta = window._dernierResultatSimulation && window._dernierResultatSimulation.meta;
+        if (meta) {
+            const cidMeta = String(meta.cluster_id !== undefined && meta.cluster_id !== null ? meta.cluster_id : '').trim();
+            const cidMetaBas = cidMeta.toLowerCase();
+            const nomMeta = String(meta.cluster_nom || meta.bassin_nom || '').trim().toLowerCase();
+            if (bSel && cidMeta) {
+                let trouve = null;
+                for (const opt of bSel.options) {
+                    if (!opt.value) continue;
+                    if (String(opt.value) === cidMeta) { trouve = opt.value; break; }
+                    const exId = String(opt.dataset.exutoireId || '').trim().toLowerCase();
+                    const bref = String(opt.dataset.bassinRef || '').trim().toLowerCase();
+                    if ((exId && exId === cidMetaBas) || (bref && bref === ('exutoire:' + cidMetaBas))) {
+                        trouve = opt.value; break;
+                    }
+                }
+                if (!trouve && nomMeta) {
+                    for (const opt of bSel.options) {
+                        const txt = String(opt.textContent || '').trim().toLowerCase();
+                        if (txt === nomMeta || txt.startsWith(nomMeta + ' ') || txt.startsWith(nomMeta + '(')) {
+                            trouve = opt.value; break;
+                        }
+                    }
+                }
+                if (trouve) return { historyId: trouve, optionValue: trouve };
+            }
+            if (cidMeta) return { historyId: cidMeta, optionValue: null };
+        }
+        return { historyId: '', optionValue: null };
+    }
+
+    window.ouvrirSimulationOuHistorique = function () {
+        const res = _resoudreBassinPourSimulation();
+        const cidStr = res.historyId;
         if (!cidStr) {
             if (typeof window.ouvrirModalSimulation === 'function') window.ouvrirModalSimulation();
             return;
@@ -112,15 +160,37 @@
             .then(d => {
                 const sims = (d && d.simulations) || [];
                 if (sims.length > 0) {
-                    window.ouvrirModalSimulationsBassin(cidStr, false);
-                } else if (typeof window.ouvrirModalSimulation === 'function') {
-                    window.ouvrirModalSimulation();
+                    // Afficher le titre avec le nom du bassin résolu
+                    window.ouvrirModalSimulationsBassin(res.optionValue || cidStr, false);
+                } else {
+                    _preselectionnerBassinPourModal(res.optionValue);
+                    if (typeof window.ouvrirModalSimulation === 'function') {
+                        window.ouvrirModalSimulation();
+                    }
                 }
             })
             .catch(() => {
+                _preselectionnerBassinPourModal(res.optionValue);
                 if (typeof window.ouvrirModalSimulation === 'function') window.ouvrirModalSimulation();
             });
     };
+
+    /**
+     * Pré-sélectionne le bassin dans #bassin-select / _selectedClusterId
+     * avant d'ouvrir la modale de simulation (évite le 1er bassin de la
+     * liste quand aucune sélection n'a été faite après un rechargement).
+     */
+    function _preselectionnerBassinPourModal(optionValue) {
+        if (!optionValue) return;
+        const bSel = document.getElementById('bassin-select');
+        if (bSel) {
+            for (const opt of bSel.options) {
+                if (String(opt.value) === String(optionValue)) { bSel.value = optionValue; break; }
+            }
+        }
+        try { if (typeof _selectedClusterId !== 'undefined') _selectedClusterId = optionValue; } catch (_) {}
+        window._selectedClusterId = optionValue;
+    }
 
     /**
      * Bouton « Nouvelle simulation » de la modale historique : ferme
@@ -128,24 +198,40 @@
      * pré-sélectionné. Le backend déduplique : des paramètres identiques
      * à une simulation existante restituent ses résultats sans recalcul.
      */
+    /**
+     * Retrouve la valeur d'option #bassin-select correspondant à un id
+     * (espace dropdown, exutoire_id, bassin_ref ou nom du bassin).
+     */
+    function _trouverOptionBassin(cidStr) {
+        const bSel = document.getElementById('bassin-select');
+        if (!bSel || !cidStr) return null;
+        const cidBas = String(cidStr).trim().toLowerCase();
+        const nomCherche = String((window._bassinNoms && window._bassinNoms[cidStr]) || '').trim().toLowerCase();
+        for (const opt of bSel.options) {
+            if (!opt.value) continue;
+            if (String(opt.value) === String(cidStr)) return opt.value;
+            const exId = String(opt.dataset.exutoireId || '').trim().toLowerCase();
+            const bref = String(opt.dataset.bassinRef || '').trim().toLowerCase();
+            if ((exId && exId === cidBas) || (bref && bref === ('exutoire:' + cidBas))) return opt.value;
+        }
+        if (nomCherche) {
+            for (const opt of bSel.options) {
+                const txt = String(opt.textContent || '').trim().toLowerCase();
+                if (txt === nomCherche || txt.startsWith(nomCherche + ' ') || txt.startsWith(nomCherche + '(')) return opt.value;
+            }
+        }
+        return null;
+    }
+
     window.nouvelleSimulationDepuisHistorique = function () {
         const cidStr = String(window._historiqueBassin.clusterId || '');
         window.fermerModalSimulationsBassin();
-        if (cidStr) {
+        const optionValue = _trouverOptionBassin(cidStr);
+        if (optionValue) {
             const bSel = document.getElementById('bassin-select');
-            let optionConnue = false;
-            if (bSel) {
-                for (const opt of bSel.options) {
-                    if (String(opt.value) === cidStr) { optionConnue = true; break; }
-                }
-                // Ne retenir que si l'option existe : l'id historique peut être
-                // dans l'espace exutoire (fallback toolbar) sans option dropdown.
-                if (optionConnue) bSel.value = cidStr;
-            }
-            if (optionConnue) {
-                try { if (typeof _selectedClusterId !== 'undefined') _selectedClusterId = cidStr; } catch (_) {}
-                window._selectedClusterId = cidStr;
-            }
+            if (bSel) bSel.value = optionValue;
+            try { if (typeof _selectedClusterId !== 'undefined') _selectedClusterId = optionValue; } catch (_) {}
+            window._selectedClusterId = optionValue;
         }
         if (typeof window.ouvrirModalSimulation === 'function') {
             window.ouvrirModalSimulation(true);
