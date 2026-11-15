@@ -2146,10 +2146,17 @@ def get_profil_en_long(
             else hgl_source
         )
 
+        # Fiabilité du modèle de la simulation sous-jacente (agent
+        # garde-fou hydraulicien) : le profil affiche un avertissement
+        # quand le modèle est dégradé.
+        _gf_prof = ((sim_data.get("agents_expertise") or {}).get("controle_modele_hydraulique") or {}) if sim_data else {}
+
         return {
             "status": "success",
             "node_amont": src,
             "node_aval": dst,
+            "fiabilite_modele": _gf_prof.get("fiabilite_modele"),
+            "modelisation_anomalies": _gf_prof.get("anomalies") or [],
             "longueur_totale_m": round(longueur_totale, 2),
             "nb_troncons": len(path_nodes) - 1,
             "z_min": round(z_min, 3),
@@ -2185,6 +2192,17 @@ def get_profil_en_long(
 # ============================================================
 # ANIMATION TEMPORELLE & TIME SLIDER (Phase 6.B)
 # ============================================================
+
+def _injecter_fiabilite_timeseries(ts_out: Dict[str, Any], sim_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Ajoute le verdict du garde-fou hydraulicien aux séries temporelles
+    pour que le time slider affiche l'avertissement de fiabilité."""
+    if isinstance(ts_out, dict) and isinstance(sim_data, dict):
+        _gf = (sim_data.get("agents_expertise") or {}).get("controle_modele_hydraulique") or {}
+        if _gf:
+            ts_out["fiabilite_modele"] = _gf.get("fiabilite_modele")
+            ts_out["modelisation_anomalies"] = _gf.get("anomalies") or []
+    return ts_out
+
 
 @router.get("/timeseries")
 def get_simulation_timeseries(
@@ -2247,7 +2265,7 @@ def get_simulation_timeseries(
         ts = sim_data.get("timeseries")
         if ts and ts.get("status") == "SUCCESS":
             from src.domain.moteur_swmm.timeseries_extractor import enrichir_timeseries_pluie
-            return enrichir_timeseries_pluie(ts, sim_data)
+            return _injecter_fiabilite_timeseries(enrichir_timeseries_pluie(ts, sim_data), sim_data)
 
         # Génération à la volée si l'INP est disponible
         inp_content = sim_data.get("inp_content")
@@ -2263,7 +2281,7 @@ def get_simulation_timeseries(
                     if ctx is not None and ctx.simulation is not None:
                         from api.services.simulation_service import persister_resultat_simulation
                         persister_resultat_simulation(ctx.simulation, sim_data)
-                    return ts_gen
+                    return _injecter_fiabilite_timeseries(ts_gen, sim_data)
             except Exception as e_calc:
                 logger.warning("Erreur calcul à la volée timeseries: %s", e_calc)
 

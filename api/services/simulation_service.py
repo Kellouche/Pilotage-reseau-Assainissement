@@ -362,6 +362,9 @@ def sauvegarder_simulation(
 
     # 2. Enregistrement en base de données SQLAlchemy
     try:
+        # Fiabilité du modèle évaluée par l'agent garde-fou hydraulicien :
+        # exposée dans summary_kpis pour les badges de la liste des simulations.
+        _gf = ((resultat.get("agents_expertise") or {}).get("controle_modele_hydraulique") or {})
         kpis_summary = {
             "param_hash": param_hash,
             "cluster_id": cluster_id,
@@ -371,6 +374,8 @@ def sauvegarder_simulation(
             "routing_continuity_error_pct": resultat.get("routing_continuity_error_pct"),
             "flooded_nodes_count": resultat.get("flooded_nodes_count", 0),
             "provenance": resultat.get("provenance"),
+            "fiabilite_modele": _gf.get("fiabilite_modele"),
+            "fiabilite_anomalies": _gf.get("nb_anomalies", 0),
             "cached_at": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -744,6 +749,10 @@ def construire_reponse_simulation(resultat: Dict[str, Any], cached: bool = False
         },
         "buffer_sensitivity": resultat.get("buffer_sensitivity", {}),
         "agents_expertise": resultat.get("agents_expertise", {}),
+        # Raccourci de fiabilité du modèle (agent garde-fou hydraulicien)
+        "fiabilite_modele": (
+            ((resultat.get("agents_expertise") or {}).get("controle_modele_hydraulique") or {}).get("fiabilite_modele")
+        ),
         "node_results": resultat.get("node_results", {}),
         "conduit_results": resultat.get("conduit_results", {}),
         "download_inp_url": "/api/v1/simulations/download/inp",

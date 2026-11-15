@@ -9,6 +9,97 @@
  */
 
 // ==========================================
+        // FIABILITÉ DU MODÈLE (agent garde-fou hydraulicien)
+        // ==========================================
+        const _FIABILITE_META = {
+            'SAIN':       { label: 'Modèle sain',      icon: '🟢', color: '#34d399', bg: 'rgba(52,211,153,0.15)',  border: 'rgba(52,211,153,0.45)' },
+            'A_VERIFIER': { label: 'À vérifier',      icon: '🟠', color: '#fbbf24', bg: 'rgba(251,191,36,0.15)',  border: 'rgba(251,191,36,0.45)' },
+            'DEGRADE':    { label: 'Modèle dégradé',  icon: '🔴', color: '#f87171', bg: 'rgba(248,113,113,0.15)', border: 'rgba(248,113,113,0.45)' },
+        };
+
+        // Extrait le verdict du garde-fou depuis une réponse simulation
+        // (forme complète /bassin|/run, liste /simulations ou cache).
+        window._fiabiliteDepuisSimulation = function(sim) {
+            if (!sim) return null;
+            if (sim.fiabilite_modele) return sim.fiabilite_modele;
+            const rs = sim.result_summary || sim.summary_kpis || {};
+            if (rs.fiabilite_modele) return rs.fiabilite_modele;
+            const ae = sim.agents_expertise || {};
+            const gf = ae.controle_modele_hydraulique || {};
+            return gf.fiabilite_modele || null;
+        };
+
+        window._anomaliesDepuisSimulation = function(sim) {
+            if (!sim) return [];
+            const ae = sim.agents_expertise || {};
+            const gf = ae.controle_modele_hydraulique || {};
+            return gf.anomalies || [];
+        };
+
+        // Met à jour le badge de fiabilité de la pilule topbar.
+        function _majBadgeFiabiliteTopbar(verdict, anomalies) {
+            const el = document.getElementById('topbar-bassin-fiabilite');
+            if (!el) return;
+            const meta = _FIABILITE_META[verdict];
+            if (!meta) { el.style.display = 'none'; return; }
+            el.style.display = 'inline-block';
+            el.textContent = `${meta.icon} ${meta.label}`;
+            el.style.color = meta.color;
+            el.style.background = meta.bg;
+            el.style.borderColor = meta.border;
+            const msgs = (anomalies || []).map(a => `• [${a.severite || '?'}] ${a.message || a.code || ''}`).join('\n');
+            el.title = msgs
+                ? `Fiabilité du modèle : ${verdict}\n${msgs}`
+                : `Fiabilité du modèle : ${verdict} (agent garde-fou hydraulicien)`;
+        }
+
+        // Charge une fois la liste des simulations pour connaître la
+        // fiabilité de chaque bassin, puis décore le sélecteur.
+        let _fiabiliteChargee = false;
+        function _chargerFiabiliteParBassin() {
+            if (_fiabiliteChargee) { _decorerOptionsFiabilite(); return; }
+            _fiabiliteChargee = true;
+            const token = localStorage.getItem('swmm_access_token');
+            const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+            fetch('/api/v1/simulations?limit=200', { headers, credentials: 'include' })
+                .then(r => r.ok ? r.json() : [])
+                .then(list => {
+                    window._fiabiliteParBassin = {};
+                    (Array.isArray(list) ? list : []).forEach(s => {
+                        if (!s || s.status !== 'completed') return;
+                        const cid = s.cluster_id !== undefined && s.cluster_id !== null ? String(s.cluster_id) : null;
+                        if (!cid) return;
+                        const verdict = window._fiabiliteDepuisSimulation(s);
+                        if (!verdict) return;
+                        // Conserver la simulation la plus récente par bassin
+                        const prev = window._fiabiliteParBassin[cid];
+                        const tNew = s.completed_at || s.created_at || '';
+                        const tOld = prev ? (prev.completed_at || prev.created_at || '') : '';
+                        if (!prev || tNew >= tOld) window._fiabiliteParBassin[cid] = s;
+                    });
+                    _decorerOptionsFiabilite();
+                })
+                .catch(() => {});
+        }
+
+        // Préfixe les options du sélecteur de bassins d'une pastille
+        // colorée selon la fiabilité de la dernière simulation.
+        function _decorerOptionsFiabilite() {
+            const map = window._fiabiliteParBassin || {};
+            const sel = document.getElementById('bassin-select');
+            if (!sel) return;
+            Array.from(sel.options).forEach(opt => {
+                if (!opt.value) return;
+                if (opt.dataset.labelBase === undefined) opt.dataset.labelBase = opt.textContent;
+                const sim = map[String(opt.value)];
+                const verdict = sim ? window._fiabiliteDepuisSimulation(sim) : null;
+                const meta = verdict ? _FIABILITE_META[verdict] : null;
+                opt.textContent = meta ? `${meta.icon} ${opt.dataset.labelBase}` : opt.dataset.labelBase;
+            });
+        }
+        window._decorerOptionsFiabilite = _decorerOptionsFiabilite;
+
+        // ==========================================
         // SYNCHRONISATION INDICATEUR BASSIN / BASSINS EN COURS
         // ==========================================
         window.mettreAJourIndicateurBassin = function(clusterId, state = {}) {
@@ -16,7 +107,9 @@
             const topIcon = document.getElementById('topbar-bassin-icon');
             const topText = document.getElementById('topbar-bassin-text');
             const topBadge = document.getElementById('topbar-bassin-badge');
+            const topFiab = document.getElementById('topbar-bassin-fiabilite');
             const topReset = document.getElementById('topbar-bassin-reset-btn');
+            if (topFiab) topFiab.style.display = 'none';
 
             const cidStr = (clusterId !== null && clusterId !== undefined && clusterId !== '') ? String(clusterId) : null;
             const totalBassins = (window._clustersData && window._clustersData.clusters_crees) || (window._bassinNoms ? Object.keys(window._bassinNoms).length : 77) || 77;
@@ -82,6 +175,25 @@
                     topBadge.style.background = qDerive > 0 ? 'rgba(6, 182, 212, 0.2)' : 'rgba(16, 185, 129, 0.2)';
                     topBadge.style.color = qDerive > 0 ? '#06b6d4' : '#34d399';
                 }
+                // Badge de fiabilité du modèle (agent garde-fou hydraulicien)
+                let _simFiab = simActive;
+                if (!_fiabiliteDepuisSimulation(_simFiab) && cidStr) {
+                    _simFiab = (window._simulationsCache && (window._simulationsCache[cidStr] || (window._bassinNoms && window._simulationsCache[window._bassinNoms[cidStr]]))) || null;
+                    // Repli sur la dernière simulation seulement si elle
+                    // correspond bien à ce bassin (éviter un verdict étranger).
+                    if (!_simFiab && window._dernierResultatSimulation && window._dernierResultatSimulation.meta) {
+                        const _lm = window._dernierResultatSimulation.meta;
+                        const _lmId = String(_lm.cluster_id !== undefined && _lm.cluster_id !== null ? _lm.cluster_id : '');
+                        const _lmNom = String(_lm.bassin_nom || _lm.cluster_nom || '');
+                        if (_lmId === cidStr || _lmNom === cidStr || (window._bassinNoms && window._bassinNoms[cidStr] === _lmNom)) {
+                            _simFiab = window._dernierResultatSimulation;
+                        }
+                    }
+                }
+                _majBadgeFiabiliteTopbar(
+                    window._fiabiliteDepuisSimulation(_simFiab),
+                    window._anomaliesDepuisSimulation(_simFiab)
+                );
                 if (topReset) topReset.style.display = 'inline-block';
                 return;
             }
@@ -250,6 +362,7 @@
                         if (!window._simulationsCache) window._simulationsCache = {};
                         window._simulationsCache[cidStr] = d;
                         if (nomBassin) window._simulationsCache[nomBassin] = d;
+                        if (window._fiabiliteParBassin) window._fiabiliteParBassin[cidStr] = d;
                         window._dernierResultatSimulation = d;
                         afficherResultatsSimulation(d);
                         if (leg) {
@@ -527,6 +640,10 @@
                     } catch(e) {}
                 });
             }
+
+            // Badges de fiabilité : charger la liste des simulations
+            // (une seule fois) pour préfixer les bassins simulés.
+            _chargerFiabiliteParBassin();
             window._bassinBounds = _bassinBounds;
             window._bassinNoms = _bassinNoms;
 

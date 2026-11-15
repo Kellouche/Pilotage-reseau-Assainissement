@@ -401,6 +401,27 @@ function afficherProfilLong(data) {
         bSurcharges.style.display = data.conduites_en_charge > 0 ? 'inline-block' : 'none';
     }
 
+    // 1b. Bandeau fiabilité du modèle sous-jacent (garde-fou hydraulicien)
+    const _fiabBanner = document.getElementById('profil-fiabilite-banner');
+    const _fiabTexte = document.getElementById('profil-fiabilite-texte');
+    if (_fiabBanner && _fiabTexte) {
+        const _verdict = data.fiabilite_modele;
+        const _anomalies = data.modelisation_anomalies || [];
+        const _meta = {
+            'A_VERIFIER': { icon: 'fas fa-shield-alt', label: 'à vérifier', color: '#fbbf24', bg: 'rgba(251,191,36,0.12)' },
+            'DEGRADE':    { icon: 'fas fa-shield-alt', label: 'dégradé',    color: '#f87171', bg: 'rgba(248,113,113,0.12)' },
+        }[_verdict];
+        if (_meta) {
+            _fiabBanner.style.display = 'flex';
+            _fiabBanner.style.color = _meta.color;
+            _fiabBanner.style.background = _meta.bg;
+            _fiabBanner.innerHTML = `<i class="${_meta.icon}"></i><span>Profil basé sur un modèle à fiabilité ${_meta.label} — ${_anomalies.length} anomalie(s) détectée(s) par le garde-fou hydraulicien</span>`;
+            _fiabBanner.title = _anomalies.map(a => `• ${a.message || a.code || ''}`).join('\n');
+        } else {
+            _fiabBanner.style.display = 'none';
+        }
+    }
+
     // 2. Alertes et recommandations
     const alertContainer = document.getElementById('profil-alertes-container');
     const alertList = document.getElementById('profil-alertes-list');

@@ -179,6 +179,37 @@ function toggleTimeSlider(forceState) {
 }
 
 /**
+ * Affiche le bandeau de fiabilité du modèle sous-jacent quand le
+ * garde-fou hydraulicien a rendu un verdict autre que SAIN.
+ */
+function _appliquerBandeauFiabilite(data) {
+    const banner = document.getElementById('ts-fiabilite-banner');
+    const texte = document.getElementById('ts-fiabilite-texte');
+    if (!banner || !texte) return;
+
+    let verdict = data && data.fiabilite_modele;
+    let anomalies = (data && data.modelisation_anomalies) || [];
+    if (!verdict && window._dernierResultatSimulation) {
+        const gf = ((window._dernierResultatSimulation.agents_expertise || {}).controle_modele_hydraulique) || {};
+        verdict = gf.fiabilite_modele;
+        anomalies = gf.anomalies || anomalies;
+    }
+    const meta = {
+        'A_VERIFIER': { label: 'à vérifier', color: '#fbbf24', bg: 'rgba(251,191,36,0.12)' },
+        'DEGRADE':    { label: 'dégradé',    color: '#f87171', bg: 'rgba(248,113,113,0.12)' },
+    }[verdict];
+    if (meta) {
+        banner.style.display = 'flex';
+        banner.style.color = meta.color;
+        banner.style.background = meta.bg;
+        texte.textContent = `Animation basée sur un modèle à fiabilité ${meta.label} — ${anomalies.length} anomalie(s) détectée(s) par le garde-fou hydraulicien`;
+        banner.title = anomalies.map(a => `• ${a.message || a.code || ''}`).join('\n');
+    } else {
+        banner.style.display = 'none';
+    }
+}
+
+/**
  * Récupère les données temporelles depuis l'API ou le cache mémoire
  */
 async function chargerDonneesTimeSlider() {
@@ -191,6 +222,7 @@ async function chargerDonneesTimeSlider() {
         window._dernierResultatSimulation.timeseries.steps &&
         window._dernierResultatSimulation.timeseries.steps.length > 0) {
         state.data = window._dernierResultatSimulation.timeseries;
+        _appliquerBandeauFiabilite(state.data);
         return true;
     }
 
@@ -219,6 +251,7 @@ async function chargerDonneesTimeSlider() {
             throw new Error("Aucun pas temporel disponible dans la simulation.");
         }
         state.data = data;
+        _appliquerBandeauFiabilite(data);
         if (window._dernierResultatSimulation) {
             window._dernierResultatSimulation.timeseries = data;
         }

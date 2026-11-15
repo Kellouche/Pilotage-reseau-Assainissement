@@ -913,6 +913,15 @@ window.dessinerRaccordementsOrphelinsSurCarte = function() {
                 }
                 window._dernierResultatSimulation = data;
 
+                // Rafraîchir la fiabilité du bassin dans le sélecteur
+                if (window._fiabiliteParBassin && clusterId) {
+                    const _cidF = String(data && data.meta && data.meta.cluster_id !== undefined && data.meta.cluster_id !== null ? data.meta.cluster_id : clusterId);
+                    window._fiabiliteParBassin[_cidF] = data;
+                }
+                if (typeof window._decorerOptionsFiabilite === 'function') {
+                    window._decorerOptionsFiabilite();
+                }
+
                 // Actualiser le bandeau d'alerte BMS dans la modale
                 const bmsBanner = document.getElementById('sim-bms-alert-banner');
                 const bmsInfo = (data && data.meta && data.meta.bms_info) || (data && data.kpis && data.kpis.bms_info);
