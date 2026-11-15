@@ -121,6 +121,32 @@ def _resoudre_altimetrie_noeuds(
     except Exception:
         lengths_dict = {}
 
+    if not lengths_dict:
+        # Exutoire hors graphe (ouvrage spécial non raccordé comme nœud de
+        # conduit) : repli multi-sources depuis toutes les extrémités
+        # terminales (sinks) du sous-réseau, au lieu du fallback constant
+        # qui produisait un réseau parfaitement plat.
+        try:
+            _amonts: Set[str] = set()
+            _avals: Set[str] = set()
+            for _, pipe in canalisations.iterrows():
+                _u = _clean_node_id(pipe.get("ID_AMONT"))
+                _d = _clean_node_id(pipe.get("ID_AVAL"))
+                if _u:
+                    _amonts.add(_u)
+                if _d:
+                    _avals.add(_d)
+            _sinks = [s for s in (_avals - _amonts) if G.has_node(s)]
+            for _s in _sinks:
+                try:
+                    for _n, _dist in nx.single_source_dijkstra_path_length(G, source=_s, weight="weight").items():
+                        if _n not in lengths_dict or _dist < lengths_dict[_n]:
+                            lengths_dict[_n] = _dist
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
     for idx, r in regards.iterrows():
         nid = _clean_node_id(r.get("Code"), fallback=f"REG_{idx+1}")
         if nid == outfall_code:
@@ -136,6 +162,14 @@ def _resoudre_altimetrie_noeuds(
             else:
                 dist = 100.0
             elevations[nid] = round(outfall_z + (dist * pente_fraction), 3)
+
+    # Couverture des nœuds-topologie absents des regards (extrémités de
+    # conduites) : même propagation altimétrique, sinon ils retombaient
+    # sur la cote par défaut et créaient des plateaux artificiels.
+    for _nid in G.nodes:
+        if _nid and _nid != outfall_code and _nid not in elevations:
+            _dist_g = lengths_dict.get(_nid, 100.0)
+            elevations[_nid] = round(outfall_z + (_dist_g * pente_fraction), 3)
 
     elevations[outfall_code] = outfall_z
     return elevations, f"Pente moyenne utilisateur ({pente_moyenne_pct}%)"

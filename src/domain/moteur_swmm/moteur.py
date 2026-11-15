@@ -229,6 +229,10 @@ class MoteurSWMM:
             logger.warning(f"Erreur analyse sensibilité buffer: {e_sens}")
             kpis["buffer_sensitivity"] = {}
 
+        # Contenus bruts disponibles pour les agents (garde-fou lit le .inp)
+        kpis["inp_content"] = inp_content
+        kpis["rpt_content"] = rpt_text
+
         # 2. Exécution de l'équipe multi-agents d'expertise pour interpréter les résultats
         try:
             from src.domain.agents_expertise import orchestrer_equipe_agents
@@ -239,9 +243,6 @@ class MoteurSWMM:
         except Exception as e_agents:
             logger.warning(f"Erreur équipe multi-agents: {e_agents}")
             kpis["agents_expertise"] = {}
-
-        kpis["inp_content"] = inp_content
-        kpis["rpt_content"] = rpt_text
         kpis["provenance"] = construire_provenance_simulation(
             inp_content=inp_content,
             rpt_text=rpt_text,

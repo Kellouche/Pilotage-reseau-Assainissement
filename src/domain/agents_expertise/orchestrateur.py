@@ -17,19 +17,30 @@ from .agent3_gdo import AgentHydrologieDurable
 from .agent4_risques import AgentGestionRisques
 from .agent5_finance import AgentFinancierEtVariantes
 from .agent6_synthese import AgentSyntheseExecutive
+from .agent_hydraulicien_garde_fou import AgentHydraulicienGardeFou
 
 def orchestrer_equipe_agents(
     sim_result: Dict[str, Any],
     canalisations_gdf: Optional[gpd.GeoDataFrame] = None
 ) -> Dict[str, Any]:
     """
-    Exécute la chaîne complète des 6 agents d'expertise et retourne le diagnostic
-    interconnecté et structuré.
+    Exécute la chaîne complète des agents d'expertise et retourne le diagnostic
+    interconnecté et structuré. L'agent garde-fou hydraulicien s'exécute en
+    premier : il contrôle la qualité du modèle .inp avant toute interprétation.
     """
     kpis = sim_result.get("kpis", {})
     conduit_results = sim_result.get("conduit_results", {})
     node_results = sim_result.get("node_results", {})
     meta = sim_result.get("meta", {})
+
+    # 0. Agent Garde-fou hydraulicien : contrôle qualité du modèle
+    agent_gf = AgentHydraulicienGardeFou()
+    garde_fou = agent_gf.analyser(
+        sim_result=sim_result,
+        node_results=node_results,
+        conduit_results=conduit_results,
+        meta=meta,
+    )
 
     # 1. Agent Diagnosticien
     agent_diag = AgentDiagnosticCausal()
@@ -56,8 +67,28 @@ def orchestrer_equipe_agents(
     agent_exec = AgentSyntheseExecutive()
     synthese = agent_exec.generer_note(kpis, meta, diag, gc, lid, risk, finance)
 
+    # Injection des alertes de modélisation dans la synthèse : un diagnostic
+    # bâti sur un modèle dégradé ne doit jamais être présenté comme fiable.
+    _anomalies_crit = [a for a in garde_fou.get("anomalies", [])
+                       if a.get("severite") in ("critique", "majeure")]
+    if _anomalies_crit:
+        _codes = ", ".join(sorted({a.get("code", "?") for a in _anomalies_crit}))
+        synthese["alertes_modelisation"] = {
+            "fiabilite_modele": garde_fou.get("fiabilite_modele"),
+            "anomalies": _anomalies_crit,
+        }
+        synthese["note_technique"] = (
+            f"⚠ ALERTE MODÉLISATION ({garde_fou.get('fiabilite_modele')}) — "
+            f"anomalies détectées par le garde-fou hydraulicien : {_codes}. "
+            "Les résultats ci-dessous sont à interpréter avec prudence.\n\n"
+            + synthese.get("note_technique", "")
+        )
+        if garde_fou.get("fiabilite_modele") == "DEGRADE":
+            synthese["verdict"] = "MODÈLE DÉGRADÉ — RÉSULTATS NON FIABLES"
+
     return {
         "status": "success",
+        "controle_modele_hydraulique": garde_fou,
         "diagnostic_causal": diag,
         "prescriptions_genie_civil": gc,
         "solutions_hydrologie_durable": lid,

@@ -15,6 +15,7 @@ from .agent3_gdo import AgentHydrologieDurable
 from .agent4_risques import AgentGestionRisques
 from .agent5_finance import AgentFinancierEtVariantes
 from .agent6_synthese import AgentSyntheseExecutive
+from .agent_hydraulicien_garde_fou import AgentHydraulicienGardeFou
 from .orchestrateur import orchestrer_equipe_agents
 
 __all__ = [
@@ -27,5 +28,6 @@ __all__ = [
     "AgentGestionRisques",
     "AgentFinancierEtVariantes",
     "AgentSyntheseExecutive",
+    "AgentHydraulicienGardeFou",
     "orchestrer_equipe_agents",
 ]

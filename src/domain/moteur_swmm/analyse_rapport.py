@@ -139,23 +139,35 @@ def analyser_rapport_swmm_impl(rpt_text: str, meta: Dict[str, Any]) -> Dict[str,
             kpis["total_outflow_m3"] = round(float(m_outflow.group(1)) * 1000.0, 1)
 
     # 5. Débit de pointe à l'exutoire (Outfall Loading Summary)
+    #    Priorité à l'exutoire principal du modèle ; les exutoires
+    #    frontières (OUT_BND_*) et les ouvrages orphelins ne sont jamais
+    #    retenus comme « pic à l'exutoire ».
     if "Outfall Loading Summary" in rpt_text:
         m_out = re.search(r"Outfall Loading Summary.*?\n\s*-+\s*\n(.*?)(?:\n\s*\n|[A-Z][a-z]+ [A-Z]|\Z)", rpt_text, re.DOTALL)
         outfall_lines = m_out.group(1).strip().splitlines() if m_out else rpt_text.split("Outfall Loading Summary")[1].split("\n\n")[0].splitlines()
+        _lignes_exutoire = []
         for line in outfall_lines:
             parts = line.split()
             if len(parts) >= 4 and not parts[0].startswith("-") and parts[0] not in ("Outfall", "System", "Node"):
-                node_name = parts[0]
-                target_out = meta.get("outfall_code")
-                target_junc = meta.get("junction_outfall_code")
-                if (not target_out) or (target_out == node_name) or (target_junc == node_name) or ("OUT_" in node_name) or (kpis["peak_outflow_m3s"] == 0.0):
-                    try:
-                        kpis["peak_outflow_m3s"] = float(parts[3])
-                    except Exception:
-                        try:
-                            kpis["peak_outflow_m3s"] = float(parts[2])
-                        except Exception:
-                            pass
+                _lignes_exutoire.append((parts[0], parts))
+        _cibles = {str(meta.get("outfall_code") or ""), str(meta.get("junction_outfall_code") or "")}
+        _principal = [lp for nm, lp in _lignes_exutoire if nm in _cibles]
+        if not _principal:
+            # Repli : exutoire principal = OUT_* hors frontières/orphelins
+            _principal = [lp for nm, lp in _lignes_exutoire
+                          if nm.startswith("OUT_") and "OUT_BND_" not in nm and "OUT_orph_" not in nm]
+        if not _principal:
+            _principal = [lp for nm, lp in _lignes_exutoire if "OUT_" in nm]
+        if not _principal and _lignes_exutoire:
+            _principal = [_lignes_exutoire[0][1]]
+        for parts in _principal[:1]:
+            try:
+                kpis["peak_outflow_m3s"] = float(parts[3])
+            except Exception:
+                try:
+                    kpis["peak_outflow_m3s"] = float(parts[2])
+                except Exception:
+                    pass
 
     # 6. Surcharge des regards (Node Surcharge Summary)
     if "Node Surcharge Summary" in rpt_text:

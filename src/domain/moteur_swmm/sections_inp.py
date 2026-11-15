@@ -164,12 +164,13 @@ def generer_lignes_sections_inp(
         lines.extend(swmm_sec[sec_name])
         lines.append("")
 
-    node_elevs, source_alt = _resoudre_altimetrie_noeuds(regards, canalisations, rejets, outfall_code, pente_moyenne_pct)
-    outfall_elev = node_elevs.get(outfall_code, 100.0)
-
-    inlet_conduits = [c for _, c in canalisations.iterrows() if _clean_node_id(c.get("ID_AVAL")) == outfall_code]
-    inlet_count = len(inlet_conduits)
-
+    # ── Résolution de l'exutoire physique du modèle ──────────────────────
+    # Le cluster_id peut désigner un ouvrage spécial (déversoir d'orage,
+    # rejet) qui n'est pas une extrémité de conduit : dans ce cas la
+    # propagation altimétrique depuis l'exutoire est impossible et
+    # produirait un réseau plat (tous radier à la même cote). On résout
+    # alors le nœud d'exutoire réel = le sink du sous-réseau le plus
+    # proche de l'ouvrage demandé (choix déterministe).
     conduit_nodes = set()
     upstream_nodes = set()
     downstream_nodes = set()
@@ -182,11 +183,59 @@ def generer_lignes_sections_inp(
             conduit_nodes.add(d)
             downstream_nodes.add(d)
 
-    if inlet_count == 0 and len(canalisations) > 0:
-        sinks = downstream_nodes - upstream_nodes
-        if sinks:
-            outfall_code = list(sinks)[0]
-            inlet_conduits = [c for _, c in canalisations.iterrows() if _clean_node_id(c.get("ID_AVAL")) == outfall_code]
+    outfall_demande = outfall_code
+    noeuds_conduits = upstream_nodes | downstream_nodes
+    sinks_disponibles = downstream_nodes - upstream_nodes
+
+    coord_noeuds: Dict[str, Tuple[float, float]] = {}
+    for _, r in regards.iterrows():
+        _nid = _clean_node_id(r.get("Code"))
+        if _nid and hasattr(r, "geometry") and r.geometry is not None and not r.geometry.is_empty:
+            try:
+                coord_noeuds[_nid] = (float(r.geometry.x), float(r.geometry.y))
+            except Exception:
+                pass
+
+    pt_exutoire_demande = None
+    if target_ex_id and exutoires_map:
+        _ex_info = exutoires_map.get(target_ex_id) or {}
+        _geom = _ex_info.get("geometry")
+        if _geom is not None and not getattr(_geom, "is_empty", True):
+            try:
+                pt_exutoire_demande = (float(_geom.x), float(_geom.y))
+            except Exception:
+                pt_exutoire_demande = None
+        if pt_exutoire_demande is None and _ex_info.get("x") is not None and _ex_info.get("y") is not None:
+            try:
+                pt_exutoire_demande = (float(_ex_info["x"]), float(_ex_info["y"]))
+            except Exception:
+                pt_exutoire_demande = None
+
+    def _cle_sans_exutoire(nid: str):
+        """Tri déterministe : proximité à l'ouvrage demandé puis nom."""
+        if pt_exutoire_demande is not None and nid in coord_noeuds:
+            dx = coord_noeuds[nid][0] - pt_exutoire_demande[0]
+            dy = coord_noeuds[nid][1] - pt_exutoire_demande[1]
+            return (dx * dx + dy * dy, nid)
+        return (float("inf"), nid)
+
+    inlet_conduits = [c for _, c in canalisations.iterrows() if _clean_node_id(c.get("ID_AVAL")) == outfall_code]
+    resolution_exutoire = "directe"
+    if (outfall_code not in noeuds_conduits or len(inlet_conduits) == 0) and sinks_disponibles:
+        outfall_code = min(sinks_disponibles, key=_cle_sans_exutoire)
+        inlet_conduits = [c for _, c in canalisations.iterrows() if _clean_node_id(c.get("ID_AVAL")) == outfall_code]
+        resolution_exutoire = ("sink_proche_ouvrage" if outfall_demande != outfall_code
+                               else "sink_sans_entree")
+
+    # Sinks restants = frontières du sous-réseau tronqué : chacun reçoit
+    # un exutoire libre dédié pour ne pas produire d'inondation artificielle.
+    sinks_frontiere = sorted(
+        (sinks_disponibles - {outfall_code}) - {""},
+        key=lambda n: (n.isdigit() is False, n)
+    )
+
+    node_elevs, source_alt = _resoudre_altimetrie_noeuds(regards, canalisations, rejets, outfall_code, pente_moyenne_pct)
+    outfall_elev = node_elevs.get(outfall_code, 100.0)
 
     creer_exutoire_dedie = True
     actual_outfall_name = f"OUT_{outfall_code}"
@@ -266,6 +315,29 @@ def generer_lignes_sections_inp(
             z_out_orph = round(z_reg - 0.20, 3)
             lines.append(f"{out_orph_name:<16} {z_out_orph:<10.3f} FREE                        NO")
             racc_orph_valides.append((ro, out_orph_name, reg_id, z_out_orph, ouv_id, ro_idx + 1))
+
+    # Exutoires frontières : chaque sink résiduel du sous-réseau tronqué
+    # déverse librement vers un exutoire dédié — sinon ce nœud, privé de
+    # toute issue, produit une inondation artificielle garantie.
+    reg_ids_orphelins = {item[2] for item in racc_orph_valides}
+    exutoires_frontiere_info = []
+    for _sink in sinks_frontiere:
+        if _sink in reg_ids_orphelins:
+            continue
+        _z_sink = node_elevs.get(_sink, 100.0)
+        _out_bnd = f"OUT_BND_{_sink}"
+        if _out_bnd in seen_outfall_names:
+            _out_bnd = f"OUT_BND_{_sink}_{len(exutoires_frontiere_info) + 1}"
+        seen_outfall_names.add(_out_bnd)
+        _z_out_bnd = round(_z_sink - 0.05, 3)
+        lines.append(f"{_out_bnd:<16} {_z_out_bnd:<10.3f} FREE                        NO")
+        _inlets_sink = [c for _, c in canalisations.iterrows()
+                        if _clean_node_id(c.get("ID_AVAL")) == _sink]
+        _d_sink_mm = max([float(c.get("DIAMETRE", 600)) for c in _inlets_sink] or [600.0])
+        exutoires_frontiere_info.append({
+            "node": _sink, "outfall": _out_bnd,
+            "elev_node": _z_sink, "diam_mm": _d_sink_mm,
+        })
     lines.append("")
 
     lines.append("[CONDUITS]")
@@ -323,6 +395,20 @@ def generer_lignes_sections_inp(
             "diam_mm": dn_orph_mm,
             "material": "Béton armé 135A",
             "nom_voie": f"Raccordement opportuniste ({nom_o})"
+        }
+
+    for _bnd in exutoires_frontiere_info:
+        _cid_bnd = f"C_BND_{_bnd['node']}"
+        _d_bnd_m = max(0.3, _bnd["diam_mm"] / 1000.0)
+        conduit_lines.append(f"{_cid_bnd:<16} {_bnd['node']:<16} {_bnd['outfall']:<16} 5.00       0.0130     0.000      0.000      0.000      0.000")
+        xsec_lines.append(f"{_cid_bnd:<16} CIRCULAR     {_d_bnd_m:<16.3f} 0.000      0.000      0.000      1")
+        conduit_endpoints[_cid_bnd] = {
+            "u": _bnd["node"],
+            "d": _bnd["outfall"],
+            "length": 5.0,
+            "diam_mm": _bnd["diam_mm"],
+            "material": "Frontière de sous-réseau",
+            "nom_voie": "Exutoire frontière (tronçon coupé)"
         }
 
     lines.extend(conduit_lines)
@@ -434,6 +520,21 @@ def generer_lignes_sections_inp(
                 pt_orph = (100.0, 100.0)
             lines.append(f"{out_orph_name:<16} {pt_orph[0]:<18.3f} {pt_orph[1]:<18.3f}")
             coords_traitees.add(out_orph_name)
+
+    for _bnd in exutoires_frontiere_info:
+        _out_bnd = _bnd["outfall"]
+        if _out_bnd not in coords_traitees:
+            _pt = coord_noeuds.get(_bnd["node"])
+            if _pt is not None:
+                _pt = (float(_pt[0]) + 5.0, float(_pt[1]) + 5.0)
+            if _pt is None and _bnd["node"] in noeuds_regards:
+                _g = noeuds_regards[_bnd["node"]].geometry
+                _pt = (float(_g.x) + 5.0, float(_g.y) + 5.0)
+            if _pt is None and coords_traitees:
+                _pt = (100.0, 100.0)
+            if _pt is not None:
+                lines.append(f"{_out_bnd:<16} {float(_pt[0]):<18.3f} {float(_pt[1]):<18.3f}")
+                coords_traitees.add(_out_bnd)
     lines.append("")
 
     lines.append("[POLYGONS]")
@@ -497,6 +598,9 @@ def generer_lignes_sections_inp(
         "conduits_count": len(canalisations),
         "outfall_code": actual_outfall_name,
         "junction_outfall_code": outfall_code,
+        "outfall_demande": outfall_demande,
+        "resolution_exutoire": resolution_exutoire,
+        "exutoires_frontiere": [b["node"] for b in exutoires_frontiere_info],
         "total_area_ha": round(float(sb_gdf["area_ha"].sum()), 2) if not sb_gdf.empty else 0.0,
         "surface_totale_ha": round(float(sb_gdf["area_ha"].sum()), 2) if not sb_gdf.empty else 0.0,
         "surface_urbaine_ha": getattr(sb_gdf, 'attrs', {}).get("total_urbaine_ha", round(float(sb_gdf["area_ha"].sum()), 2) if not sb_gdf.empty else 0.0),
