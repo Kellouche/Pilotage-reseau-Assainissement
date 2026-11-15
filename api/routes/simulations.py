@@ -992,6 +992,74 @@ def get_bassin_simulation(
     return {"status": "none", "message": f"Aucune simulation enregistrée pour le bassin {cluster_id}."}
 
 
+@router.get("/bassin/{cluster_id}/historique")
+def list_bassin_simulations_historique(
+    cluster_id: str,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    tenant: TenantContext = Depends(get_tenant_context),
+):
+    """
+    Liste les simulations enregistrées pour un bassin versant donné
+    (historique complet, plus récentes d'abord). Utilisé par la modale
+    de gestion des simulations du bassin (exécuter / modifier / supprimer).
+    """
+    from api.services.simulation_service import _resoudre_projet_pour_simulation
+
+    org_id = _org_id_requete(tenant)
+
+    # Identité métier du bassin : mêmes règles que /bassin/{cluster_id}
+    identite_bassin = {}
+    _cid_txt = str(cluster_id).strip()
+    _ref_exutoire = _cid_txt.lower().startswith("exutoire:")
+    _cle_recherche = _cid_txt.split(":", 1)[1] if _ref_exutoire else cluster_id
+    proj = None
+    try:
+        proj = _resoudre_projet_pour_simulation(db, org_id, None)
+        gpkg_identite = _resoudre_gpkg_effectif_pour_projet(db, proj)
+        identite_bassin = _identite_bassin_du_cache(gpkg_identite, _cle_recherche)
+    except Exception:
+        identite_bassin = {}
+        proj = None
+
+    exutoire_demande = identite_bassin.get("exutoire_id") or (
+        _cle_recherche if _ref_exutoire else None)
+    bassin_ref_demande = identite_bassin.get("bassin_ref") or (
+        _cid_txt if _ref_exutoire else None)
+    nom_demande = identite_bassin.get("nom")
+
+    cibles = {str(cluster_id), str(_cle_recherche)}
+    for _v in (exutoire_demande, bassin_ref_demande, nom_demande):
+        if _v:
+            cibles.add(str(_v))
+
+    sims = crud.get_simulations(
+        db=db, skip=0, limit=500, org_id=org_id,
+        project_id=(proj.id if proj is not None else None))
+
+    resultats = []
+    for s in sims:
+        sk = s.summary_kpis or {}
+        cid_sim = str(sk.get("cluster_id") or "")
+        ok = (
+            (cid_sim and cid_sim in cibles)
+            or (s.bassin_ref and str(s.bassin_ref) in cibles)
+            or (s.exutoire_noeud and str(s.exutoire_noeud) in cibles)
+            or (nom_demande and s.name and nom_demande in s.name)
+        )
+        if ok:
+            resultats.append(s.to_dict())
+            if len(resultats) >= limit:
+                break
+
+    return {
+        "status": "success",
+        "cluster_id": cluster_id,
+        "nb_simulations": len(resultats),
+        "simulations": resultats,
+    }
+
+
 @router.post("/validate-buffer")
 def validate_simulation_buffer(
     payload: ValidateBufferRequest,
@@ -2411,17 +2479,23 @@ def cancel_simulation(
     db: Session = Depends(get_db),
     tenant: TenantContext = Depends(get_tenant_context),
 ):
-    """Annule une simulation en attente (pending/running)."""
+    """
+    - pending/running : annule la simulation (statut 'cancelled') ;
+    - statut final (completed/failed/cancelled) : suppression définitive
+      de la simulation et de ses artefacts (cache disque + ResultStore).
+    """
+    from api.services.simulation_service import supprimer_simulation
+
     sim = crud.get_simulation(db, simulation_id, org_id=_org_id_requete(tenant))
     if not sim:
         raise HTTPException(status_code=404, detail="Simulation non trouvée")
 
-    if sim.status.lower() not in ["pending", "running"]:
-        raise HTTPException(status_code=400, detail="Impossible d'annuler: statut final")
+    if sim.status.lower() in ["pending", "running"]:
+        sim.status = "cancelled"
+        db.commit()
+        return None
 
-    sim.status = "cancelled"
-    db.commit()
-
+    supprimer_simulation(sim, db)
     return None
 
 

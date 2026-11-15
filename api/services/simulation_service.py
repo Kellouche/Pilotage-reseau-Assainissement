@@ -431,6 +431,47 @@ def sauvegarder_simulation(
     return cache_file
 
 
+def supprimer_simulation(simulation: Any, db: Session) -> Dict[str, Any]:
+    """
+    Supprime définitivement une simulation : ligne DB, fichier cache
+    disque et artefacts ResultStore (result.json / model.inp / report.rpt).
+
+    Retourne un dictionnaire de statut. La suppression DB est la seule
+    étape bloquante : un échec des artefacts est consigné mais n'empêche
+    pas le retrait de la ligne (cohérence avec la persistance tolérante).
+    """
+    statut: Dict[str, Any] = {"db": False, "cache": False, "artefacts": 0}
+
+    # 1. Artefacts permanents ResultStore (partitionnés par org/projet/sim)
+    try:
+        from api.services.result_store import ResultRef, ResultStore, ResultStoreError
+        ref = ResultRef.depuis_simulation(simulation)
+        store = ResultStore()
+        n = store.store.delete_prefix(ResultStore.prefixe(ref))
+        statut["artefacts"] = int(n or 0)
+    except Exception as e:
+        logger.warning("Suppression artefacts ResultStore impossible (sim %s): %s",
+                       getattr(simulation, "id", "?"), e)
+
+    # 2. Fichier cache disque (results_s3_key = chemin local du cache)
+    try:
+        cle = getattr(simulation, "results_s3_key", None)
+        if cle:
+            p = Path(str(cle))
+            if p.is_file():
+                p.unlink()
+                statut["cache"] = True
+    except Exception as e:
+        logger.warning("Suppression cache disque impossible (sim %s): %s",
+                       getattr(simulation, "id", "?"), e)
+
+    # 3. Ligne DB (dernière étape : si elle échoue, tout est rollback)
+    db.delete(simulation)
+    db.commit()
+    statut["db"] = True
+    return statut
+
+
 def _persister_resultats_store(simulation: Any, resultat: Dict[str, Any]) -> Dict[str, Any]:
     """
     Étape 3C.3 — dépose les artefacts permanents d'une simulation via

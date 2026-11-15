@@ -171,9 +171,27 @@
                 if (topIcon) topIcon.innerHTML = '<i class="fas fa-check-circle" style="color: #34d399;"></i>';
                 if (topText) topText.innerHTML = `Bassin simulé : <span style="color: #34d399; font-weight: 700;">${nom}</span>`;
                 if (topBadge) {
-                    topBadge.innerText = qDerive > 0 ? `Soulagement : ${tauxDeriveStr}% (${qDeriveStr} m³/s)` : `Soulagement : 0,0% (${qGenereStr} m³/s)`;
-                    topBadge.style.background = qDerive > 0 ? 'rgba(6, 182, 212, 0.2)' : 'rgba(16, 185, 129, 0.2)';
-                    topBadge.style.color = qDerive > 0 ? '#06b6d4' : '#34d399';
+                    // Période de retour de la simulation (T = 2/10/50/100 ans,
+                    // scénario BMS ou libellé de scénario en repli).
+                    const _tRetour = kp.pluvio_periode_retour || m.pluvio_periode_retour;
+                    const _scenNom = kp.pluvio_scenario_nom || m.pluvio_scenario_nom;
+                    let _badgeTxt = _tRetour || _scenNom || '';
+                    if (!_badgeTxt) {
+                        const _params = (simActive.result_summary && simActive.result_summary.parameters)
+                            || (simActive.summary_kpis && simActive.summary_kpis.parameters)
+                            || (kp.parameters) || {};
+                        const _sk = _params.scenario_key || '';
+                        const _scenMap = {
+                            'pluie_biennale': 'T = 2 ans', 'pluie_decennale': 'T = 10 ans',
+                            'pluie_cinquantennale': 'T = 50 ans', 'pluie_centennale': 'T = 100 ans',
+                            'pluie_orage_2h': 'Orage 2 h', 'bms_onm': 'BMS ONM'
+                        };
+                        _badgeTxt = _scenMap[_sk] || (_sk ? _sk.replace(/_/g, ' ') : 'Simulation');
+                    }
+                    topBadge.innerText = _badgeTxt;
+                    topBadge.title = _scenNom ? `Scénario : ${_scenNom}` : '';
+                    topBadge.style.background = 'rgba(56, 189, 248, 0.18)';
+                    topBadge.style.color = '#38bdf8';
                 }
                 // Badge de fiabilité du modèle (agent garde-fou hydraulicien)
                 let _simFiab = simActive;
@@ -346,6 +364,10 @@
                 if (typeof window.mettreAJourIndicateurBassin === 'function') {
                     window.mettreAJourIndicateurBassin(cidStr, cached);
                 }
+                // Ouvrir l'historique des simulations du bassin (auto, 1×/bassin)
+                if (typeof window.ouvrirModalSimulationsBassin === 'function') {
+                    window.ouvrirModalSimulationsBassin(cidStr, true);
+                }
                 return;
             }
 
@@ -375,6 +397,10 @@
                         }
                         if (typeof window.mettreAJourIndicateurBassin === 'function') {
                             window.mettreAJourIndicateurBassin(cidStr, d);
+                        }
+                        // Ouvrir l'historique des simulations du bassin (auto, 1×/bassin)
+                        if (typeof window.ouvrirModalSimulationsBassin === 'function') {
+                            window.ouvrirModalSimulationsBassin(cidStr, true);
                         }
                     } else {
                         // Aucun calcul sauvegardé pour ce bassin : nettoyer les résultats précédents
