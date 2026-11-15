@@ -72,6 +72,7 @@ function toggleProfilLongMode() {
         // Si le panneau est fermé, l'ouvrir s'il y a déjà des données
         if (panel && panel.style.display === 'none' && state.lastData) {
             panel.style.display = 'flex';
+            _centrerPanelProfil();
             // Initialiser le déplacement du panneau (draggable)
             if (typeof _initProfilLongDraggable === 'function') {
                 _initProfilLongDraggable();
@@ -359,6 +360,8 @@ function chargerProfilLong(nodeAmont, nodeAval) {
                 _initProfilLongDraggable();
             }
             afficherProfilLong(data);
+            // Centrer une fois la hauteur finale connue (graduations Y)
+            _centrerPanelProfil();
         })
         .catch(err => {
             if (overlay) overlay.style.display = 'none';
@@ -779,6 +782,34 @@ function exporterProfilImage() {
 }
 
 /**
+ * Centre le panneau du profil en long au milieu du workspace.
+ * Ne s'applique qu'une fois : dès que l'utilisateur le déplace
+ * manuellement (_userPositionned), sa position est conservée.
+ */
+function _centrerPanelProfil() {
+    const panel = document.getElementById('panel-profil-long');
+    if (!panel || panel._userPositionned) return;
+    const parent = panel.offsetParent || document.body;
+    const pRect = parent.getBoundingClientRect();
+    if (!pRect.width || !pRect.height) return;
+
+    const w = Math.max(320, Math.min(1240, pRect.width - 40));
+    // La hauteur est fixée par le rendu (graduations Y) ; on la
+    // borne à l'espace disponible pour ne jamais déborder.
+    let h = panel.offsetHeight || 420;
+    const hMax = pRect.height - 16;
+    if (h > hMax) {
+        h = hMax;
+        panel.style.height = `${h}px`;
+    }
+    panel.style.width = `${w}px`;
+    panel.style.left = `${Math.max(8, (pRect.width - w) / 2)}px`;
+    panel.style.top = `${Math.max(8, (pRect.height - h) / 2)}px`;
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+}
+
+/**
  * Initialise le déplacement à la souris (Draggable) du panneau Profil en long
  */
 function _initProfilLongDraggable() {
@@ -813,6 +844,7 @@ function _initProfilLongDraggable() {
         const clampY = (v) => Math.min(Math.max(v, Math.min(0, maxY)), Math.max(0, maxY));
 
         const onMouseMove = (ev) => {
+            panel._userPositionned = true;
             const dx = ev.clientX - startX;
             const dy = ev.clientY - startY;
             panel.style.left = `${clampX(origX + dx)}px`;
