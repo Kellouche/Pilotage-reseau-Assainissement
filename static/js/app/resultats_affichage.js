@@ -37,14 +37,15 @@
             }
 
             // P0 — couleur dérivée du STATUT sémantique (stable entre les
-            // versions de résultats persistés) : surcharge = orange,
-            // critique = ambre, modérée = jaune, normale = vert.
-            // Le rouge est réservé au débordement réel (regards flooded).
+            // versions de résultats persistés) : palette à teintes bien
+            // distinctes — normal = vert, modérée = cyan, critique = bleu,
+            // surcharge = violet. Le rouge est réservé au débordement
+            // réel (regards flooded).
             const _couleurConduite = function(r) {
                 const parStatut = {
-                    surcharge: '#f97316',
-                    critique: '#f59e0b',
-                    moderee: '#eab308',
+                    surcharge: '#8b5cf6',
+                    critique: '#3b82f6',
+                    moderee: '#06b6d4',
                     normal: '#10b981'
                 };
                 return parStatut[r && r.status] || (r && r.color) || '#10b981';

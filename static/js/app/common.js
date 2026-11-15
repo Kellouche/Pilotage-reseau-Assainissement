@@ -220,9 +220,9 @@
                         <!-- Taux de charge conduites -->
                         <div style="font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">Charge Conduites (Q / Qmax) :</div>
                         <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 2px;"><span style="display:inline-block; width:14px; height:4px; background:#10b981; border-radius:2px;"></span> &lt; 50% (Sain / Libre)</div>
-                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 2px;"><span style="display:inline-block; width:14px; height:4px; background:#eab308; border-radius:2px;"></span> 50 - 80% (Modéré)</div>
-                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 2px;"><span style="display:inline-block; width:14px; height:4px; background:#f59e0b; border-radius:2px;"></span> 80 - 100% (Critique)</div>
-                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 8px;"><span style="display:inline-block; width:14px; height:4px; background:#f97316; border-radius:2px;"></span> ≥ 100% (Surcharge / sous pression)</div>
+                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 2px;"><span style="display:inline-block; width:14px; height:4px; background:#06b6d4; border-radius:2px;"></span> 50 - 80% (Modéré)</div>
+                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 2px;"><span style="display:inline-block; width:14px; height:4px; background:#3b82f6; border-radius:2px;"></span> 80 - 100% (Critique)</div>
+                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 8px;"><span style="display:inline-block; width:14px; height:4px; background:#8b5cf6; border-radius:2px;"></span> ≥ 100% (Surcharge / sous pression)</div>
 
                         <!-- Comportement des Regards -->
                         <div style="font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">Regards de Visite :</div>

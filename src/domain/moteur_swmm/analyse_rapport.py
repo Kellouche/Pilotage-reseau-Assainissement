@@ -260,15 +260,15 @@ def analyser_rapport_swmm_impl(rpt_text: str, meta: Dict[str, Any]) -> Dict[str,
 
                     if q_ratio >= 1.0 or d_ratio >= 1.0:
                         c_status = "surcharge"
-                        color = "#f97316"
+                        color = "#8b5cf6"
                         label = "Surcharge (> 100%)"
                     elif q_ratio >= 0.8 or d_ratio >= 0.8:
                         c_status = "critique"
-                        color = "#f59e0b"
+                        color = "#3b82f6"
                         label = "Critique (80-100%)"
                     elif q_ratio >= 0.5 or d_ratio >= 0.5:
                         c_status = "moderee"
-                        color = "#eab308"
+                        color = "#06b6d4"
                         label = "Modéré (50-80%)"
                     else:
                         c_status = "normal"

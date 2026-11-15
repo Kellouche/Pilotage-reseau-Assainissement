@@ -436,19 +436,19 @@ function _appliquerCouleursConduites(activeLinks) {
         }
 
         // Palette hydraulique identique à l'enveloppe de criticité statique :
-        // le rouge est réservé au débordement effectif des regards, une
-        // conduite ≥ 100 % est en surcharge (orange), pas en inondation.
+        // teintes bien distinctes (vert/cyan/bleu/violet), le rouge est
+        // réservé au débordement effectif des regards.
         let col = '#10b981'; // < 50% Sain (Vert)
         let weight = 3.5;
 
         if (linkRatio >= 1.0) {
-            col = '#f97316'; // Orange : Surcharge / mise en charge (≥ 100%)
+            col = '#8b5cf6'; // Violet : Surcharge / mise en charge (≥ 100%)
             weight = 6.0;
         } else if (linkRatio >= 0.8) {
-            col = '#f59e0b'; // Ambre : Critique (80% - 100%)
+            col = '#3b82f6'; // Bleu : Critique (80% - 100%)
             weight = 5.0;
         } else if (linkRatio >= 0.5) {
-            col = '#eab308'; // Jaune : Modéré (50% - 80%)
+            col = '#06b6d4'; // Cyan : Modéré (50% - 80%)
             weight = 4.2;
         }
 
