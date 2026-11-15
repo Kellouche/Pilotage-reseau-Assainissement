@@ -391,6 +391,9 @@ window.basculeSidebarIngenierie = function() {
     setTimeout(() => {
         try { if (window.carte && window.carte.invalidateSize) window.carte.invalidateSize(true); } catch (e) {}
         try { document.dispatchEvent(new Event('resize')); } catch (e) {}
+        // Recentrer le panneau d'évolution hydraulique si l'utilisateur
+        // ne l'a pas positionné manuellement
+        try { if (window.recentrerTimeSliderSiNecessaire) window.recentrerTimeSliderSiNecessaire(); } catch (e) {}
     }, 300);
 };
 

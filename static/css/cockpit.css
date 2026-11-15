@@ -936,6 +936,15 @@ body {
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    /* Hauteur figée : les glyphes ▶ / ⏸ (polices de fallback) ne doivent
+       pas modifier la hauteur de l'en-tête du panneau lors de la lecture */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 20px;
+    box-sizing: border-box;
+    white-space: nowrap;
+    line-height: 1;
 }
 
 .badge-ts.badge-info {
@@ -963,6 +972,7 @@ body {
     background: rgba(255, 255, 255, 0.04);
     padding: 2px 8px;
     border-radius: 6px;
+    white-space: nowrap;
 }
 
 .ts-kpi-pill b {
@@ -1345,12 +1355,26 @@ body {
     font-size: 0.72rem;
     color: #94a3b8;
     gap: 16px;
+    flex-wrap: nowrap;
+    overflow: hidden;
+    flex-shrink: 0;
 }
 
 .hyeto-legend-item {
     display: flex;
     align-items: center;
     gap: 6px;
+    min-width: 0;
+    flex: 0 1 auto;
+    overflow: hidden;
+}
+
+/* Éviter que l'indicateur de temps (qui s'allonge pendant la lecture)
+   ne passe à la ligne et ne réduise la hauteur du graphique */
+.hyeto-legend-item > span:not(.legend-swatch) {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .legend-swatch {

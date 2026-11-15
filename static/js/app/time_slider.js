@@ -29,6 +29,50 @@ function _getCarteTS() {
 }
 
 /**
+ * Centre le panneau en haut de la zone carte disponible.
+ * #app-workspace englobe toute la largeur (sidebar incluse) : left:50%
+ * du CSS centrait le panneau sur le viewport entier, décalé de moitié
+ * de la largeur de la sidebar. On se réfère donc au rect de #map,
+ * qui exclut sidebar et toolbar.
+ */
+function _positionnerTimeSliderCentrer() {
+    const panel = document.getElementById('panel-time-slider');
+    const ws = document.getElementById('app-workspace');
+    const map = document.getElementById('map');
+    if (!panel || !ws) return;
+
+    const ref = map || ws;
+    const refRect = ref.getBoundingClientRect();
+    const wsRect = ws.getBoundingClientRect();
+    const w = panel.offsetWidth || 880;
+    const h = panel.offsetHeight || 120;
+
+    let left = (refRect.left - wsRect.left) + (refRect.width - w) / 2;
+    let top = (refRect.top - wsRect.top) + 16;
+
+    // Bornage : le panneau reste entièrement visible dans le workspace
+    left = Math.max(8, Math.min(left, wsRect.width - w - 8));
+    top = Math.max(8, Math.min(top, wsRect.height - h - 8));
+
+    panel.style.left = `${Math.round(left)}px`;
+    panel.style.top = `${Math.round(top)}px`;
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+    panel.style.transform = 'none';
+}
+
+/**
+ * Recentrage automatique après pli/dépli de la sidebar.
+ * Sans effet si l'utilisateur a déjà positionné le panneau à la main.
+ */
+window.recentrerTimeSliderSiNecessaire = function() {
+    const panel = document.getElementById('panel-time-slider');
+    if (!panel || panel.style.display === 'none') return;
+    if (panel.dataset.userMoved === '1') return;
+    _positionnerTimeSliderCentrer();
+};
+
+/**
  * Bascule l'affichage du contrôleur Time Slider
  */
 function toggleTimeSlider(forceState) {
@@ -116,6 +160,12 @@ function toggleTimeSlider(forceState) {
         state.active = true;
         if (panel) panel.style.display = 'flex';
         if (btn) btn.classList.add('active');
+
+        // Position : centrée en haut de la zone carte, sauf si
+        // l'utilisateur a déjà déplacé le panneau manuellement
+        if (panel && panel.dataset.userMoved !== '1') {
+            _positionnerTimeSliderCentrer();
+        }
 
         // Sauvegarder l'état de la légende avant de la cacher
         const leg = document.getElementById('sim-floating-legend');
@@ -708,6 +758,8 @@ function _initTimeSliderDraggable() {
     handle.addEventListener('mousedown', (e) => {
         if (e.target.closest('button') || e.target.closest('.badge-pill')) return;
         e.preventDefault();
+        // L'utilisateur prend la main : on fige la position automatique
+        panel.dataset.userMoved = '1';
         // Position VISUELLE réelle (le panneau est centré via
         // left:50% + transform:translateX(-50%) : offsetLeft ne
         // tient pas compte du transform et provoquait un saut).
