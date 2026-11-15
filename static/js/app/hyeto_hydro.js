@@ -630,18 +630,20 @@
                 linkRatio = activeLinks[p.cid];
             }
 
-            // Palette hydraulique fixe et nette selon le taux de charge instantané
-            let col = '#10b981'; // < 50% Sain (Vert/Cyan)
+            // Palette hydraulique identique à l'enveloppe de criticité statique :
+            // le rouge est réservé au débordement effectif des regards, une
+            // conduite ≥ 100 % est en surcharge (orange), pas en inondation.
+            let col = '#10b981'; // < 50% Sain (Vert)
             let weight = 3.5;
 
             if (linkRatio >= 1.0) {
-                col = '#dc2626'; // Rouge brique : Surcharge complète / sous pression
+                col = '#f97316'; // Orange : Surcharge / mise en charge (≥ 100%)
                 weight = 6.0;
             } else if (linkRatio >= 0.8) {
-                col = '#f97316'; // Orange vif : En charge (> 80%)
+                col = '#f59e0b'; // Ambre : Critique (80% - 100%)
                 weight = 5.0;
             } else if (linkRatio >= 0.5) {
-                col = '#f59e0b'; // Jaune ambré : Modéré (50% - 80%)
+                col = '#eab308'; // Jaune : Modéré (50% - 80%)
                 weight = 4.2;
             }
 
@@ -690,10 +692,10 @@
                     layer.setTooltipContent(`⚠️ <b>Regard ${nid}</b> : DÉBORDEMENT ACTIF AU SOL`);
                 }
             } else {
-                // Regard sous contrôle (Bleu cyan discret)
+                // Regard sous contrôle (Bleu identique à la vue statique)
                 layer.setStyle({
                     radius: 4.5,
-                    fillColor: '#38bdf8',
+                    fillColor: '#0284c7',
                     color: '#0f172a',
                     weight: 1.0,
                     fillOpacity: 0.8

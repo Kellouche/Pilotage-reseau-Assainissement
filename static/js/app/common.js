@@ -220,14 +220,14 @@
                         <!-- Taux de charge conduites -->
                         <div style="font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">Charge Conduites (Q / Qmax) :</div>
                         <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 2px;"><span style="display:inline-block; width:14px; height:4px; background:#10b981; border-radius:2px;"></span> &lt; 50% (Sain / Libre)</div>
-                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 2px;"><span style="display:inline-block; width:14px; height:4px; background:#facc15; border-radius:2px;"></span> 50 - 80% (Modéré)</div>
-                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 2px;"><span style="display:inline-block; width:14px; height:4px; background:#f97316; border-radius:2px;"></span> 80 - 100% (Critique)</div>
-                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 8px;"><span style="display:inline-block; width:14px; height:4px; background:#ef4444; border-radius:2px;"></span> &gt; 100% (Sous pression)</div>
+                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 2px;"><span style="display:inline-block; width:14px; height:4px; background:#eab308; border-radius:2px;"></span> 50 - 80% (Modéré)</div>
+                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 2px;"><span style="display:inline-block; width:14px; height:4px; background:#f59e0b; border-radius:2px;"></span> 80 - 100% (Critique)</div>
+                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 8px;"><span style="display:inline-block; width:14px; height:4px; background:#f97316; border-radius:2px;"></span> ≥ 100% (Surcharge / sous pression)</div>
 
                         <!-- Comportement des Regards -->
                         <div style="font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">Regards de Visite :</div>
-                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 3px;"><span style="display:inline-block; width:11px; height:11px; background:#f97316; border-radius:50%; border:2px solid #ffffff;"></span> Surcharge (dans cheminée)</div>
-                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 8px;"><span style="display:inline-block; width:11px; height:11px; background:#ef4444; border-radius:50%; border:2px solid #ffffff;"></span> Débordement (au sol)</div>
+                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 3px;"><span style="display:inline-block; width:11px; height:11px; background:#ea580c; border-radius:50%; border:2px solid #ffffff;"></span> Surcharge (dans la cheminée)</div>
+                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 8px;"><span style="display:inline-block; width:11px; height:11px; background:#dc2626; border-radius:50%; border:2px solid #ffffff;"></span> Débordement (eau déversée au sol)</div>
 
                         <!-- LOT P1.5.3 — traçabilité des apports DWF injectés -->
                         <div id="sim-legend-dwf-info" style="display:none; margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(52,211,153,0.3); font-size: 10.5px; color: #6ee7b7;"></div>
