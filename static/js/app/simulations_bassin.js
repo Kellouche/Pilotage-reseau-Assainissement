@@ -89,6 +89,70 @@
     };
 
     /**
+     * Action « Simuler » du menu Actions : si le bassin choisi possède déjà
+     * des simulations, on ouvre d'abord l'historique (affichage instantané
+     * des résultats) ; sinon on ouvre directement la modale de simulation.
+     * Sans bassin sélectionné, comportement historique inchangé.
+     */
+    window.ouvrirSimulationOuHistorique = function () {
+        let cidStr = '';
+        const bSel = document.getElementById('bassin-select');
+        if (bSel && bSel.value) cidStr = String(bSel.value);
+        if (!cidStr) {
+            try { if (typeof _selectedClusterId !== 'undefined' && _selectedClusterId !== null) cidStr = String(_selectedClusterId); } catch (_) {}
+        }
+        if (!cidStr) {
+            if (typeof window.ouvrirModalSimulation === 'function') window.ouvrirModalSimulation();
+            return;
+        }
+        const token = localStorage.getItem('swmm_access_token');
+        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+        fetch(`/api/v1/simulations/bassin/${encodeURIComponent(cidStr)}/historique`, { headers, credentials: 'include' })
+            .then(r => r.ok ? r.json() : Promise.reject(new Error(`Erreur ${r.status}`)))
+            .then(d => {
+                const sims = (d && d.simulations) || [];
+                if (sims.length > 0) {
+                    window.ouvrirModalSimulationsBassin(cidStr, false);
+                } else if (typeof window.ouvrirModalSimulation === 'function') {
+                    window.ouvrirModalSimulation();
+                }
+            })
+            .catch(() => {
+                if (typeof window.ouvrirModalSimulation === 'function') window.ouvrirModalSimulation();
+            });
+    };
+
+    /**
+     * Bouton « Nouvelle simulation » de la modale historique : ferme
+     * l'historique et ouvre la modale de simulation avec le bassin
+     * pré-sélectionné. Le backend déduplique : des paramètres identiques
+     * à une simulation existante restituent ses résultats sans recalcul.
+     */
+    window.nouvelleSimulationDepuisHistorique = function () {
+        const cidStr = String(window._historiqueBassin.clusterId || '');
+        window.fermerModalSimulationsBassin();
+        if (cidStr) {
+            const bSel = document.getElementById('bassin-select');
+            let optionConnue = false;
+            if (bSel) {
+                for (const opt of bSel.options) {
+                    if (String(opt.value) === cidStr) { optionConnue = true; break; }
+                }
+                // Ne retenir que si l'option existe : l'id historique peut être
+                // dans l'espace exutoire (fallback toolbar) sans option dropdown.
+                if (optionConnue) bSel.value = cidStr;
+            }
+            if (optionConnue) {
+                try { if (typeof _selectedClusterId !== 'undefined') _selectedClusterId = cidStr; } catch (_) {}
+                window._selectedClusterId = cidStr;
+            }
+        }
+        if (typeof window.ouvrirModalSimulation === 'function') {
+            window.ouvrirModalSimulation(true);
+        }
+    };
+
+    /**
      * Bouton toolbar : rouvre l'historique des simulations pour le bassin
      * courant (sélectionné, sinon dernier bassin consulté / simulé).
      */

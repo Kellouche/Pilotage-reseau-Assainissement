@@ -281,6 +281,7 @@ from api.services.simulation_service import (
     get_cache_simulation_file as _get_cache_simulation_file,
     est_simulation_valide as _est_simulation_valide,
     charger_cache_simulation as _charger_cache_simulation,
+    charger_resultat_simulation as _charger_resultat_simulation,
     sauvegarder_simulation as _sauvegarder_simulation,
     charger_derniere_simulation_disque_ou_db as _charger_derniere_simulation_disque_ou_db,
     iter_fichiers_cache_simulation as _iter_fichiers_cache_simulation,
@@ -666,6 +667,46 @@ def run_native_swmm_simulation(
             cached_resultat["project_name"] = project_name or gpkg_path.stem
             logger.info("Simulation SWMM restaurée depuis la sauvegarde (cluster %s, hash %s)", cluster_id_effectif, param_hash)
             return _construire_reponse_simulation(cached_resultat, cached=True)
+
+    # 3bis. Déduplication métier : le fichier cache peut avoir été purgé
+    # alors qu'une simulation 'completed' identique existe en base
+    # (result.json / ResultStore). La même empreinte param_hash pour le
+    # même cluster effectif = mêmes entrures → restituer le résultat
+    # persisté au lieu de recalculer et de créer un doublon d'historique.
+    # Le param_hash inclut payload.cluster_id (souvent None) et non le
+    # cluster résolu : le match exige donc AUSSI summary_kpis.cluster_id
+    # (= cluster_id_effectif) et respecte bassin_ref/exutoire_noeud pour
+    # les bassins réattribués après une nouvelle sectorisation.
+    if proj is not None and not payload.force_recalculate and cluster_id_effectif is not None:
+        try:
+            from api.models import Simulation as _SimDedup
+            _cands = (db.query(_SimDedup)
+                      .filter(_SimDedup.project_id == proj.id,
+                              _SimDedup.status == "completed")
+                      .order_by(_SimDedup.created_at.desc(), _SimDedup.id.desc())
+                      .limit(80).all())
+            for _s in _cands:
+                _k = _s.summary_kpis or {}
+                if _k.get("param_hash") != param_hash:
+                    continue
+                if str(_k.get("cluster_id")) != str(cluster_id_effectif):
+                    continue
+                if (bassin_ref_persiste and _s.bassin_ref
+                        and str(_s.bassin_ref) != str(bassin_ref_persiste)):
+                    continue
+                if (exutoire_persiste and _s.exutoire_noeud
+                        and str(_s.exutoire_noeud) != str(exutoire_persiste)):
+                    continue
+                _data = _charger_resultat_simulation(_s)
+                if _data and _est_simulation_valide(_data):
+                    _data["source_gpkg"] = str(gpkg_path.resolve())
+                    _data["project_name"] = project_name or gpkg_path.stem
+                    logger.info(
+                        "Simulation existante réutilisée (hash %s, sim %s) — aucun recalcul",
+                        param_hash, _s.id)
+                    return _construire_reponse_simulation(_data, cached=True)
+        except Exception as _dedup_err:
+            logger.warning("Déduplication param_hash impossible : %s", _dedup_err)
 
     # 4. Exécution via le service métier : scénario BMS + MoteurSWMM (PySWMM) + correction pic
     try:
