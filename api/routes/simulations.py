@@ -2370,6 +2370,47 @@ def get_simulation_timeseries(
 # ROUTES PARAMÉTRÉES /{simulation_id} (Placées à la fin)
 # ============================================================
 
+@router.get("/{simulation_id}/resultat")
+def get_simulation_resultat(
+    simulation_id: str,
+    db: Session = Depends(get_db),
+    tenant: TenantContext = Depends(get_tenant_context),
+):
+    """
+    Retourne le résultat COMPLET sauvegardé d'une simulation précise
+    (result.json / cache), pour affichage instantané sur la carte —
+    aucun recalcul SWMM, aucune nouvelle simulation créée.
+    """
+    org_id = _org_id_requete(tenant)
+    ctx = None
+    try:
+        ctx = resoudre_simulation_courante(
+            db, org_id=org_id, simulation_id=simulation_id,
+            resoudre_gpkg=True)
+    except (ContexteSimulationIntrouvable, ProjetAmbigu):
+        ctx = None
+    except Exception:
+        # La résolution GPKG peut échouer sans que le résultat soit perdu
+        try:
+            ctx = resoudre_simulation_courante(
+                db, org_id=org_id, simulation_id=simulation_id,
+                resoudre_gpkg=False)
+        except Exception:
+            ctx = None
+
+    if ctx is None or not ctx.data or not _est_simulation_valide(ctx.data):
+        raise HTTPException(
+            status_code=404,
+            detail="Résultat de simulation introuvable ou invalide pour ce contexte.")
+
+    data = ctx.data
+    if ctx.gpkg_path is not None and ctx.gpkg_path.exists():
+        data["source_gpkg"] = str(ctx.gpkg_path.resolve())
+    if ctx.project is not None and getattr(ctx.project, "name", None):
+        data["project_name"] = ctx.project.name
+    return _construire_reponse_simulation(data, cached=True)
+
+
 @router.get("/{simulation_id}", response_model=schemas.SimulationResponse)
 def get_simulation(
     simulation_id: str,

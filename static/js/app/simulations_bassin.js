@@ -140,8 +140,8 @@
                 ? `<span title="Fiabilité du modèle : ${_esc(verdict)}" style="font-size:0.68rem;background:${fiab.bg};color:${fiab.color};border:1px solid ${fiab.border};padding:1px 7px;border-radius:9999px;font-weight:700;">${fiab.icon} ${fiab.label}</span>`
                 : '';
             const actions = s.status === 'completed' ? `
-                <button onclick="executerSimulationHistorique('${_esc(s.id)}')" title="Relancer à l'identique (mêmes paramètres)" style="padding:5px 10px;background:linear-gradient(135deg,#0284c7,#0369a1);border:none;color:#fff;border-radius:7px;font-size:0.76rem;font-weight:700;cursor:pointer;">
-                    <i class="fas fa-play"></i> Exécuter
+                <button onclick="executerSimulationHistorique('${_esc(s.id)}')" title="Afficher les résultats sauvegardés (instantané, sans recalcul)" style="padding:5px 10px;background:linear-gradient(135deg,#0284c7,#0369a1);border:none;color:#fff;border-radius:7px;font-size:0.76rem;font-weight:700;cursor:pointer;">
+                    <i class="fas fa-eye"></i> Afficher
                 </button>
                 <button onclick="modifierSimulationHistorique('${_esc(s.id)}')" title="Ouvrir la modale de simulation pré-remplie" style="padding:5px 10px;background:rgba(56,189,248,0.12);border:1px solid rgba(56,189,248,0.4);color:#38bdf8;border-radius:7px;font-size:0.76rem;font-weight:700;cursor:pointer;">
                     <i class="fas fa-pen"></i> Modifier
@@ -179,62 +179,34 @@
     }
 
     /**
-     * Exécute la simulation à l'identique : mêmes paramètres persistés,
-     * force_recalculate pour obtenir un vrai recalcul SWMM.
+     * Affiche les résultats sauvegardés de la simulation (result.json
+     * persisté) : instantané, sans recalcul SWMM et sans créer de
+     * doublon dans l'historique.
      */
     window.executerSimulationHistorique = function (simId) {
         const sim = _trouverSimulation(simId);
         const cidStr = window._historiqueBassin.clusterId;
         if (!sim || !cidStr) return;
-        const p = _paramsDe(sim);
         const corps = document.getElementById('sim-hist-corps');
-
-        const payload = {
-            scenario_key: p.scenario_key || sim.scenario_pluie || 'pluie_decennale',
-            duree_heures: p.duree_heures != null ? p.duree_heures : (sim.duree_heures || null),
-            pas_routage_sec: p.pas_routage_sec || 5,
-            pente_moyenne_pct: p.pente_moyenne_pct != null ? p.pente_moyenne_pct : 1.0,
-            buffer_m: p.buffer_m != null ? p.buffer_m : 35.0,
-            valider_raccordement: p.valider_raccordement !== false,
-            typologie_sol: p.typologie_sol || 'habitat_mixte',
-            imperv_pct: p.imperv_pct != null ? p.imperv_pct : null,
-            intensite_max_mmh: p.intensite_max_mmh != null ? p.intensite_max_mmh : null,
-            station_id: p.station_id || 'chlef_anrh_siege',
-            bms_mode: !!p.bms_mode,
-            bms_vigilance: p.bms_vigilance || 'orange',
-            bms_cumul_mm: p.bms_cumul_mm != null ? p.bms_cumul_mm : 30.0,
-            bms_heure_debut: p.bms_heure_debut || '07:00',
-            bms_heure_fin: p.bms_heure_fin || '21:00',
-            bms_profil: p.bms_profil || 'cloche',
-            dwf_actif: p.dwf_actif,
-            cluster_id: cidStr,
-            bassin_ref: p.bassin_ref || null,
-            force_recalculate: true,
-        };
-        if (Array.isArray(p.raccordements_orphelins) && p.raccordements_orphelins.length) {
-            payload.raccordements_orphelins = p.raccordements_orphelins.map(x =>
-                typeof x === 'string' ? { id: x } : x);
-        }
 
         if (corps) {
             corps.innerHTML = `<div style="text-align:center;color:#94a3b8;padding:40px;">
                 <i class="fas fa-circle-notch fa-spin fa-2x mb-3" style="color:#38bdf8;"></i>
-                <p><b>Exécution SWMM 5.2 en cours…</b><br><small>Résolution Saint-Venant à l'identique des paramètres d'origine</small></p>
+                <p><b>Chargement des résultats sauvegardés…</b><br><small>Affichage instantané — aucun recalcul</small></p>
             </div>`;
         }
 
         const token = localStorage.getItem('swmm_access_token');
-        const headers = { 'Content-Type': 'application/json' };
+        const headers = {};
         if (token) headers['Authorization'] = `Bearer ${token}`;
 
-        fetch('/api/v1/simulations/run', {
-            method: 'POST', headers, credentials: 'include',
-            body: JSON.stringify(payload),
+        fetch(`/api/v1/simulations/${encodeURIComponent(simId)}/resultat`, {
+            headers, credentials: 'include',
         })
             .then(r => r.json().then(d => ({ ok: r.ok, d })))
             .then(({ ok, d }) => {
                 if (!ok || !d || d.status !== 'success') {
-                    const msg = (d && (d.detail || d.message)) || 'Échec de la simulation';
+                    const msg = (d && (d.detail || d.message)) || 'Résultat indisponible';
                     throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
                 }
                 // Appliquer le résultat comme un run standard
@@ -253,14 +225,12 @@
                     window.mettreAJourIndicateurBassin(cidStr, d);
                 }
                 window.fermerModalSimulationsBassin();
-                // Recharger l'historique au prochain accès
-                window._historiqueBassin = { clusterId: null, sims: [] };
             })
             .catch(err => {
                 if (corps) {
                     corps.innerHTML = `<div style="text-align:center;color:#f87171;padding:30px;">
                         <i class="fas fa-exclamation-triangle fa-2x mb-3"></i>
-                        <p>Échec de l'exécution : ${_esc(err.message)}</p>
+                        <p>Impossible d'afficher les résultats : ${_esc(err.message)}</p>
                         <button onclick="_rendreListeSimulations()" style="margin-top:10px;padding:6px 14px;background:rgba(56,189,248,0.15);border:1px solid rgba(56,189,248,0.4);color:#38bdf8;border-radius:8px;cursor:pointer;">Retour à la liste</button>
                     </div>`;
                 }
