@@ -51,6 +51,16 @@ def detecter_ouvrages_orphelins_proches(
 
     cache_path = gpkg_p.with_suffix(".clusters_cache.json")
     if not cache_path.exists():
+        # Repli versionné (étape 3B) : data/.gpkg_cache/<sha256>.clusters_cache.json
+        # — le sidecar historique peut avoir été purgé lors d'un ré-import.
+        try:
+            from api.services.gpkg_versions import GPKG_CACHE_DIR, sha256_fichier
+            vc = Path(GPKG_CACHE_DIR) / f"{sha256_fichier(gpkg_p)}.clusters_cache.json"
+            if vc.exists():
+                cache_path = vc
+        except Exception:
+            pass
+    if not cache_path.exists():
         # Recherche fallback dans uploads/ si le fichier gpkg provient de la racine ou d'un projet uploadé
         cands = list(Path("uploads").glob(f"**/*{gpkg_p.stem}*.clusters_cache.json"))
         if not cands:

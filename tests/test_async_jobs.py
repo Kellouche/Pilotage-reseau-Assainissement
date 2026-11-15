@@ -28,8 +28,11 @@ from workers.tasks.mnt_tasks import run_mnt_extraction_task
 @pytest.fixture(scope="module", autouse=True)
 def init_db_schema():
     """Garantit que le schéma complet existe dans la base de test."""
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
+    with engine.connect() as conn:
+        conn.exec_driver_sql("PRAGMA foreign_keys=OFF")
+        Base.metadata.drop_all(bind=conn)
+        Base.metadata.create_all(bind=conn)
+        conn.exec_driver_sql("PRAGMA foreign_keys=ON")
 
 
 @pytest.fixture

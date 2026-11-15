@@ -98,11 +98,12 @@ def _fichier_resultat(tmp_path, data):
     return f
 
 
-def _audit_une(db, sim):
+def _audit_une(db, sim, projets=_MANQUANT, orgs=_MANQUANT):
     store = audit._StoreLectureSeule(LocalStore(root_dir=Path("x")))
-    projets = {str(env_proj.id): env_proj for env_proj in
-               db.query(Project).all()}
-    orgs = {str(o.id): o for o in db.query(Organization).all()}
+    if projets is _MANQUANT:
+        projets = {str(p.id): p for p in db.query(Project).all()}
+    if orgs is _MANQUANT:
+        orgs = {str(o.id): o for o in db.query(Organization).all()}
     return audit.auditer_simulation(sim, db, store, projets, orgs)
 
 
@@ -153,8 +154,11 @@ def test_classe_C_identite_incomplete(db, env, tmp_path):
 def test_classe_C_projet_absent(db, env, tmp_path):
     data = _result_json(env["proj"], env["org"])
     f = _fichier_resultat(tmp_path, data)
-    sim = _sim(db, env, cle=str(f), projet="proj_inexistant")
-    r = _audit_une(db, sim)
+    # FK projects.id enforcee : on simule la reference orpheline via
+    # l'index projets (dictionnaire) exclu de l'audit, pas via une ligne
+    # violant la contrainte.
+    sim = _sim(db, env, cle=str(f))
+    r = _audit_une(db, sim, projets={})
     assert r["classe"] == "C"
     assert "reference_fk_absente" in r["motifs"]
 

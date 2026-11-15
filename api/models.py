@@ -255,6 +255,10 @@ class UsageCounter(Base):
     value: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, onupdate=_utc_now, nullable=False)
 
+    # Relationship explicite : sans elle, l'unit-of-work SQLAlchemy ignore la
+    # FK de colonne et peut insérer avant organizations (violation FK).
+    organization: Mapped["Organization"] = relationship("Organization")
+
     __table_args__ = (
         UniqueConstraint("org_id", "period", "metric", name="uq_usage_counter_org_period_metric"),
     )
@@ -276,7 +280,12 @@ class Project(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     source_gpkg_key: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)  # Clé S3 du GeoPackage
     source_dem_key: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)   # Clé S3 du MNT raster
-    gpkg_version_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("gpkg_versions.id"), nullable=True)  # Version GPKG courante (étape 3B)
+    # Pointeur souple vers gpkg_versions : PAS de ForeignKey ici — le cycle
+    # projects <-> gpkg_versions (gpkg_versions.project_id -> projects.id)
+    # rend le tri topologique SQLAlchemy impossible et produit des INSERT
+    # dans le désordre (violation FK). L'intégrité est garantie côté service
+    # et par les FK composites PostgreSQL (migration b2c3d4e5f6a7).
+    gpkg_version_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)  # Version GPKG courante (étape 3B)
     nodes_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     pipes_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     outfalls_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -327,6 +336,8 @@ class Regard(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now, nullable=False)
 
     cluster: Mapped[Optional["Cluster"]] = relationship("Cluster", back_populates="regards")
+    project: Mapped[Optional["Project"]] = relationship("Project", foreign_keys=[network_id])
+    organization: Mapped[Optional["Organization"]] = relationship("Organization", foreign_keys=[org_id])
 
     __table_args__ = (
         Index("ix_regards_org_code", "org_id", "code"),
@@ -377,6 +388,8 @@ class Conduite(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now, nullable=False)
 
     cluster: Mapped[Optional["Cluster"]] = relationship("Cluster", back_populates="conduites")
+    project: Mapped[Optional["Project"]] = relationship("Project", foreign_keys=[network_id])
+    organization: Mapped[Optional["Organization"]] = relationship("Organization", foreign_keys=[org_id])
 
     __table_args__ = (
         Index("ix_conduites_org_amont_aval", "org_id", "id_amont", "id_aval"),
@@ -425,6 +438,8 @@ class Rejet(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now, nullable=False)
 
     cluster: Mapped[Optional["Cluster"]] = relationship("Cluster", back_populates="rejets")
+    project: Mapped[Optional["Project"]] = relationship("Project", foreign_keys=[network_id])
+    organization: Mapped[Optional["Organization"]] = relationship("Organization", foreign_keys=[org_id])
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -468,6 +483,8 @@ class Cluster(Base):
     regards: Mapped[List["Regard"]] = relationship("Regard", back_populates="cluster")
     conduites: Mapped[List["Conduite"]] = relationship("Conduite", back_populates="cluster")
     rejets: Mapped[List["Rejet"]] = relationship("Rejet", back_populates="cluster")
+    project: Mapped[Optional["Project"]] = relationship("Project", foreign_keys=[network_id])
+    organization: Mapped[Optional["Organization"]] = relationship("Organization", foreign_keys=[org_id])
 
     __table_args__ = (
         Index("uq_cluster_network_bassin_ref", "network_id", "bassin_ref", unique=True),
@@ -519,6 +536,7 @@ class Simulation(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, nullable=False)
 
     project: Mapped[Optional["Project"]] = relationship("Project", back_populates="simulations")
+    gpkg_version: Mapped[Optional["GpkgVersion"]] = relationship("GpkgVersion", foreign_keys=[gpkg_version_id])
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -573,6 +591,9 @@ class GpkgVersion(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, nullable=False)
     created_by_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
 
+    project: Mapped["Project"] = relationship("Project", foreign_keys=[project_id])
+    organization: Mapped["Organization"] = relationship("Organization", foreign_keys=[org_id])
+
     __table_args__ = (
         # Idempotence : même contenu pour un même projet = même version
         UniqueConstraint("project_id", "sha256", name="uq_gpkgver_project_sha"),
@@ -609,6 +630,9 @@ class Inspection(Base):
     device_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     last_modified: Mapped[datetime] = mapped_column(DateTime, default=_utc_now, onupdate=_utc_now, nullable=False)
+
+    project: Mapped[Optional["Project"]] = relationship("Project", foreign_keys=[network_id])
+    organization: Mapped[Optional["Organization"]] = relationship("Organization", foreign_keys=[org_id])
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -650,6 +674,9 @@ class Incident(Base):
     device_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     last_modified: Mapped[datetime] = mapped_column(DateTime, default=_utc_now, onupdate=_utc_now, nullable=False)
+
+    project: Mapped[Optional["Project"]] = relationship("Project", foreign_keys=[network_id])
+    organization: Mapped[Optional["Organization"]] = relationship("Organization", foreign_keys=[org_id])
 
     @property
     def date_creation(self) -> datetime:
@@ -721,6 +748,7 @@ class ApportDwf(Base):
 
     organization: Mapped["Organization"] = relationship("Organization")
     project: Mapped["Project"] = relationship("Project", back_populates="apports_dwf")
+    gpkg_version: Mapped[Optional["GpkgVersion"]] = relationship("GpkgVersion", foreign_keys=[gpkg_version_id])
 
     __table_args__ = (
         Index("ix_apports_dwf_org_project", "org_id", "project_id"),
