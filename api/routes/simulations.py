@@ -2201,13 +2201,42 @@ def get_simulation_timeseries(
     """
     org_id = _org_id_requete(tenant)
 
-    # Simulation autorisée : filtre bassin si fourni, sinon dernière du projet
+    # Simulation autorisée : filtre bassin si fourni, sinon dernière du projet.
+    # Le cluster_id du dropdown est positionnel alors que les simulations
+    # sont enregistrées sous exutoire_noeud/bassin_ref : résoudre la même
+    # identité métier que /bassin/{id} sinon les séries d'un autre bassin
+    # seraient servies (link_id sans correspondance → carte toute verte).
+    filtres = {}
+    if cluster_id is not None:
+        filtres["cluster_id"] = cluster_id
+        try:
+            _cid_txt = str(cluster_id).strip()
+            _ref_ex = _cid_txt.lower().startswith("exutoire:")
+            _cle = _cid_txt.split(":", 1)[1] if _ref_ex else cluster_id
+            proj_id = _resoudre_projet_pour_simulation(db, org_id, None)
+            gpkg_id = _resoudre_gpkg_effectif_pour_projet(db, proj_id)
+            ident = _identite_bassin_du_cache(gpkg_id, _cle)
+            _exo = ident.get("exutoire_id") or (_cle if _ref_ex else None)
+            _bref = ident.get("bassin_ref") or (_cid_txt if _ref_ex else None)
+            if _exo:
+                filtres["exutoire_noeud"] = _exo
+            if _bref:
+                filtres["bassin_ref"] = _bref
+            if ident.get("nom"):
+                filtres["bassin_nom_attendu"] = ident["nom"]
+        except Exception:
+            pass
+
     ctx = None
     sim_data: Dict[str, Any] = {}
-    for filtres in (({"cluster_id": cluster_id} if cluster_id is not None else {}), {}):
+    # Repli « dernière simulation » UNIQUEMENT sans filtre bassin : avec un
+    # cluster_id demandé, servir les séries d'un autre bassin produirait
+    # des link_id sans correspondance (carte entièrement verte).
+    _essais = [filtres] if cluster_id is not None else [filtres, {}]
+    for f in _essais:
         try:
             ctx = resoudre_simulation_courante(
-                db, org_id=org_id, resoudre_gpkg=False, **filtres)
+                db, org_id=org_id, resoudre_gpkg=False, **f)
             sim_data = ctx.data or {}
             break
         except (ContexteSimulationIntrouvable, ProjetAmbigu):

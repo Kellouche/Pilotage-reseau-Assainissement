@@ -63,7 +63,11 @@
 
         if (besoinRechargementPluie) {
             try {
-                const resp = await fetch(`/api/v1/simulations/timeseries?_t=${Date.now()}`);
+                // Filtrer par le bassin affiché (sinon séries d'un autre bassin)
+                const _bSel = document.getElementById('bassin-select');
+                const _cidBassin = (_bSel && _bSel.value) ? _bSel.value : '';
+                const _qs = _cidBassin ? `cluster_id=${encodeURIComponent(_cidBassin)}&` : '';
+                const resp = await fetch(`/api/v1/simulations/timeseries?${_qs}_t=${Date.now()}`);
                 if (resp.ok) {
                     const json = await resp.json();
                     if (json && json.steps && json.steps.length > 0) {

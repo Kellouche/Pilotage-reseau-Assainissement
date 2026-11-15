@@ -202,7 +202,14 @@ async function chargerDonneesTimeSlider() {
     }
 
     try {
-        const resp = await fetch('/api/v1/simulations/timeseries');
+        // Filtrer par le bassin affiché : sans cluster_id, l'API renvoie
+        // les séries de la dernière simulation du projet — dont les
+        // link_id ne correspondent pas aux conduites affichées
+        // (toute la carte resterait verte).
+        const _bSel = document.getElementById('bassin-select');
+        const _cidBassin = (_bSel && _bSel.value) ? _bSel.value : '';
+        const _qs = _cidBassin ? `?cluster_id=${encodeURIComponent(_cidBassin)}` : '';
+        const resp = await fetch('/api/v1/simulations/timeseries' + _qs);
         if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));
             throw new Error(err.detail || `Erreur serveur (${resp.status})`);
