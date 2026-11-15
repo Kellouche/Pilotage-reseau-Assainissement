@@ -455,11 +455,10 @@ function afficherProfilLong(data) {
     const ctx = document.getElementById('canvas-profil-long');
     if (!ctx) return;
 
-    // ── Axe des cotes : pas fixe adaptatif à l'amplitude du profil ──────
-    // Graduations rondes et constantes par profil pour une lecture fiable :
-    //   amplitude ≤ 2 m  → pas 0,10 m
-    //   amplitude ≤ 5 m  → pas 0,25 m
-    //   amplitude >  5 m → pas 0,50 m
+    // ── Axe des cotes : pas rond fixe adaptatif à l'amplitude ──────────
+    // Graduations entières et constantes par profil (ex. 100, 102, 104 m)
+    // pour une lecture fiable : le pas est le plus petit palier rond
+    // donnant au plus ~10 intervalles.
     const _toutesCotes = [];
     for (const _d of [terrainData, sommetData, genSupData, radierData, eauConduiteData, hglData]) {
         for (const _p of _d) {
@@ -475,14 +474,19 @@ function afficherProfilLong(data) {
         _yMin = 0; _yMax = 1;
     }
     const _amplitude = _yMax - _yMin;
-    const _pasCote = _amplitude <= 2 ? 0.10 : (_amplitude <= 5 ? 0.25 : 0.50);
+    const _pasCandidats = [0.1, 0.2, 0.25, 0.5, 1, 2, 5, 10, 20, 50];
+    let _pasCote = _pasCandidats[_pasCandidats.length - 1];
+    for (const _p of _pasCandidats) {
+        if (_amplitude / _p <= 10) { _pasCote = _p; break; }
+    }
     const _nbGraduations = Math.ceil(_amplitude / _pasCote) + 1;
     // Hauteur du graphique dimensionnée sur le nombre de graduations
-    // (~15 px par palier), bornée pour ne pas masquer la carte.
-    const _hauteurChart = Math.min(560, Math.max(200, _nbGraduations * 15));
+    // (~24 px par palier + marge pour les étiquettes X), bornée
+    // pour ne pas masquer la carte.
+    const _hauteurChart = Math.min(540, Math.max(260, _nbGraduations * 24 + 40));
     const _panelProfil = document.getElementById('panel-profil-long');
     if (_panelProfil) {
-        _panelProfil.style.height = `${Math.min(720, _hauteurChart + 110)}px`;
+        _panelProfil.style.height = `${Math.min(700, _hauteurChart + 110)}px`;
     }
 
     if (window.profilLongState.chartInstance) {
@@ -647,12 +651,14 @@ function afficherProfilLong(data) {
                     grid: { color: 'rgba(255, 255, 255, 0.06)' },
                     ticks: {
                         color: '#94a3b8',
-                        font: { size: 10, family: 'JetBrains Mono' },
-                        // Étiquettes inclinées (n° regard + distance cumulée
-                        // sur 2 lignes) pour éviter tout chevauchement.
-                        autoSkip: false,
-                        maxRotation: 90,
-                        minRotation: 45
+                        font: { size: 9, family: 'JetBrains Mono' },
+                        // Étiquettes horizontales sur deux lignes
+                        // (n° regard / distance cumulée) ; autoSkip
+                        // masque les labels qui se chevaucheraient.
+                        autoSkip: true,
+                        maxRotation: 0,
+                        minRotation: 0,
+                        padding: 2
                     },
                     title: {
                         display: true,
