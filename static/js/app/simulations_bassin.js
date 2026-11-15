@@ -481,9 +481,11 @@
         };
 
         if (window.dialogueConfirmer) {
+            const _dt = sim.completed_at || sim.created_at || '';
+            const _dateStr = _dt ? new Date(_dt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
             window.dialogueConfirmer({
-                titre: 'Suppression de la simulation',
-                message: `Supprimer définitivement « ${label} » ?\n\nCette action retire la simulation, ses résultats calculés et ses artefacts (modèle .inp, rapport .rpt). Elle est irréversible.`,
+                titre: `Suppression — ${_scenarioLabel(sim)}`,
+                message: `Supprimer définitivement cette simulation${_dateStr ? ` du ${_dateStr}` : ''} ?\n\nCette action retire les résultats calculés et les artefacts associés (modèle .inp, rapport .rpt). Elle est irréversible.`,
                 type: 'danger',
                 libelleValider: 'Supprimer',
                 libelleIgnorer: 'Annuler',
