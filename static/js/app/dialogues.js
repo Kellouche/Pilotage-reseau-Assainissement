@@ -81,8 +81,10 @@
         const type = _TYPES[opts.type] || _TYPES.confirmation;
         const modal = _construireModal();
 
-        modal.querySelector('.dlg-icone').className = 'dlg-icone fas ' + type.icon;
-        modal.querySelector('.dlg-icone').style.cssText = `width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;background:${type.bg};color:${type.color};border:1px solid ${type.bordure};`;
+        // Icône strictement exclusive : une seule classe fa-* sur le <i>
+        const iconeEl = modal.querySelector('.dlg-icone');
+        iconeEl.style.cssText = `width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;background:${type.bg};color:${type.color};border:1px solid ${type.bordure};`;
+        iconeEl.innerHTML = `<i class="fas ${type.icon}"></i>`;
         modal.querySelector('.dlg-titre').textContent = opts.titre || type.defaut;
         modal.querySelector('.dlg-message').textContent = opts.message || '';
 
