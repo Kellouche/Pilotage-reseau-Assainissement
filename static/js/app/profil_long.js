@@ -420,7 +420,8 @@ function afficherProfilLong(data) {
     _surlignerCheminCarte(data.segments);
 
     // 4. Préparer les données pour Chart.js
-    const labels = data.segments.map(s => `${s.node_id}\n(${s.distance_m}m)`);
+    // Étiquettes X sur deux lignes : ligne 1 = n° regard, ligne 2 = distance cumulée
+    const labels = data.segments.map(s => `${s.node_id}\n${Math.round(s.distance_m)} m`);
     const aTerrain = data.segments.some(s => s.z_terrain != null);
     const aSommet = data.segments.some(s => s.z_sommet_regard != null);
     const terrainData = data.segments.map(s => ({ x: s.distance_m, y: s.z_terrain }));
@@ -453,6 +454,36 @@ function afficherProfilLong(data) {
 
     const ctx = document.getElementById('canvas-profil-long');
     if (!ctx) return;
+
+    // ── Axe des cotes : pas fixe adaptatif à l'amplitude du profil ──────
+    // Graduations rondes et constantes par profil pour une lecture fiable :
+    //   amplitude ≤ 2 m  → pas 0,10 m
+    //   amplitude ≤ 5 m  → pas 0,25 m
+    //   amplitude >  5 m → pas 0,50 m
+    const _toutesCotes = [];
+    for (const _d of [terrainData, sommetData, genSupData, radierData, eauConduiteData, hglData]) {
+        for (const _p of _d) {
+            if (_p && _p.y != null && isFinite(_p.y)) _toutesCotes.push(_p.y);
+        }
+    }
+    let _yMin = Infinity, _yMax = -Infinity;
+    for (const _y of _toutesCotes) {
+        if (_y < _yMin) _yMin = _y;
+        if (_y > _yMax) _yMax = _y;
+    }
+    if (!isFinite(_yMin) || !isFinite(_yMax) || _yMax <= _yMin) {
+        _yMin = 0; _yMax = 1;
+    }
+    const _amplitude = _yMax - _yMin;
+    const _pasCote = _amplitude <= 2 ? 0.10 : (_amplitude <= 5 ? 0.25 : 0.50);
+    const _nbGraduations = Math.ceil(_amplitude / _pasCote) + 1;
+    // Hauteur du graphique dimensionnée sur le nombre de graduations
+    // (~15 px par palier), bornée pour ne pas masquer la carte.
+    const _hauteurChart = Math.min(560, Math.max(200, _nbGraduations * 15));
+    const _panelProfil = document.getElementById('panel-profil-long');
+    if (_panelProfil) {
+        _panelProfil.style.height = `${Math.min(720, _hauteurChart + 110)}px`;
+    }
 
     if (window.profilLongState.chartInstance) {
         window.profilLongState.chartInstance.destroy();
@@ -632,9 +663,13 @@ function afficherProfilLong(data) {
                 },
                 y: {
                     grid: { color: 'rgba(255, 255, 255, 0.08)' },
+                    min: Math.floor(_yMin / _pasCote) * _pasCote,
+                    max: Math.ceil(_yMax / _pasCote) * _pasCote,
                     ticks: {
                         color: '#94a3b8',
-                        font: { size: 10, family: 'JetBrains Mono' }
+                        font: { size: 10, family: 'JetBrains Mono' },
+                        stepSize: _pasCote,
+                        autoSkip: false
                     },
                     title: {
                         display: true,
