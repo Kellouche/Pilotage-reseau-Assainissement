@@ -353,7 +353,15 @@
         fetch(`/api/v1/simulations/${encodeURIComponent(simId)}/resultat`, {
             headers, credentials: 'include',
         })
-            .then(r => r.json().then(d => ({ ok: r.ok, d })))
+            .then(r => {
+                if (r.status === 404) {
+                    throw new Error('Résultat introuvable : cette simulation a peut-être été supprimée ou ses données ne sont plus disponibles.');
+                }
+                if (r.status === 401 || r.status === 403) {
+                    throw new Error('Session expirée : reconnectez-vous pour afficher les résultats.');
+                }
+                return r.json().then(d => ({ ok: r.ok, d }));
+            })
             .then(({ ok, d }) => {
                 if (!ok || !d || d.status !== 'success') {
                     const msg = (d && (d.detail || d.message)) || 'Résultat indisponible';
