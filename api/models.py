@@ -834,3 +834,60 @@ class ApportDwfHistory(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
+
+
+# ============================================================
+# 5. COUCHES SIG « SATELLITE » — SHP.md (indépendance totale)
+# ============================================================
+
+class ProjectAuxLayer(Base):
+    """
+    Couche SIG satellite rattachée à un projet (SHP.md).
+
+    INDÉPENDANCE TOTALE : jamais fusionnée dans le GPKG projet, jamais
+    lue par le pipeline SWMM/.inp, jamais source d'écriture dans les
+    tables réseau. Sert à la superposition cartographique et aux outils
+    d'aide à la décision (altimétrie, BV officiels, métrologie…).
+    Suppression = retrait complet et sans trace (fichiers + ligne).
+    """
+    __tablename__ = "project_aux_layers"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_gen_uuid)
+    org_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), index=True, nullable=False)
+    project_id: Mapped[str] = mapped_column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), index=True, nullable=False)
+    type: Mapped[str] = mapped_column(String(40), nullable=False)  # altimetrie_points, bv_officiel, metrologie, autre…
+    nom: Mapped[str] = mapped_column(String(255), nullable=False)
+    fichier_source: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    storage_key: Mapped[str] = mapped_column(String(512), nullable=False)  # clé ArtifactStore du GPKG mono-couche
+    crs_source: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    geom_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    emprise: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)  # bbox EPSG:4326
+    nb_features: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    attributs: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
+    colonne_z: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # altimetrie_points : champ d'altitude
+    statut: Mapped[str] = mapped_column(String(30), default="ok", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, nullable=False)
+
+    organization: Mapped["Organization"] = relationship("Organization")
+    project: Mapped["Project"] = relationship("Project")
+
+    __table_args__ = (
+        Index("ix_aux_layers_org_proj", "org_id", "project_id"),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "project_id": self.project_id,
+            "type": self.type,
+            "nom": self.nom,
+            "fichier_source": self.fichier_source,
+            "crs_source": self.crs_source,
+            "geom_type": self.geom_type,
+            "emprise": self.emprise,
+            "nb_features": self.nb_features,
+            "attributs": self.attributs,
+            "colonne_z": self.colonne_z,
+            "statut": self.statut,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }

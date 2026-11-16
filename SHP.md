@@ -1,0 +1,134 @@
+# Couches SIG « Satellite » — Spécification d'architecture
+
+> Statut : **plan validé, en attente de démarrage P0**
+> Date : 2026-11-16
+> Portée : ajout de données SIG externes (shapefiles, MNT, topographie) à un projet, **sans aucun couplage avec le GeoPackage projet ni le moteur hydraulique**.
+
+---
+
+## 1. Principe fondateur : INDÉPENDANCE TOTALE
+
+Une couche satellite est une **source de consultation et d'aide à la décision**. Elle n'est jamais une entrée du calcul SWMM.
+
+Garanties d'indépendance (non négociables) :
+
+| Garantie | Mise en œuvre |
+|---|---|
+| **Aucune écriture dans le GPKG projet** | Les `.shp` sont convertis en GPKG mono-couche stockés dans un répertoire dédié `data/aux_layers/` — le fichier projet n'est jamais rouvert en écriture |
+| **Aucune écriture dans les tables réseau** | `Canalisation`, `Regard`, `Simulation` ne sont jamais modifiées par une couche satellite. Les apports d'analyse (suspects d'inversion, candidats de connexion) sont des **propositions** qui transitent par le module `/corrections` existant, avec validation utilisateur explicite |
+| **Aucun impact sur le `.inp` SWMM** | Le pipeline de génération (`src/domain/`) ne lit jamais les couches satellite. L'invariance hydraulique (Golden Dataset / Golden Master) est préservée par construction |
+| **Versionnement séparé** | Une couche satellite n'entre pas dans le SHA-256 du GPKG projet : ajouter/retirer un satellite ne crée **pas** de nouvelle `gpkg_version` et ne rattache/détache aucune simulation |
+| **Isolation multi-tenant** | `org_id` + `project_id` sur chaque ligne et chaque requête ; **stealth 404** sur toute ressource d'une autre organisation |
+| **Reversibilité** | `DELETE` d'une couche satellite = suppression de ses fichiers + sa ligne DB. Le projet revient à l'état initial sans trace |
+
+---
+
+## 2. Modèle de données
+
+### Table `project_aux_layers`
+
+| Colonne | Type | Rôle |
+|---|---|---|
+| `id` | UUID | Identifiant de la couche satellite |
+| `org_id` | str | Isolation tenant (indexé) |
+| `project_id` | str | Projet rattaché |
+| `type` | str | `altimetrie_points`, `bv_officiel`, `metrologie`, `mnt_*`, `autre` |
+| `nom` | str | Nom affiché (ex. « Topographie Chlef — 84k points ») |
+| `fichier_source` | str | Nom du fichier uploadé (traçabilité) |
+| `chemin_stockage` | str | Chemin du GPKG mono-couche dérivé |
+| `crs_source` | str | CRS d'origine (ex. `EPSG:32631`) |
+| `geom_type` | str | `Point`, `Polygon`, `MultiPolygon`… |
+| `emprise` | JSON | Bbox `[minx, miny, maxx, maxy]` en EPSG:4326 |
+| `nb_features` | int | Nombre d'entités |
+| `attributs` | JSON | Liste des champs (pour mapping éventuel) |
+| `statut` | str | `ok`, `erreur_import`, `desactivee` |
+| `created_at` | datetime | Horodatage |
+
+### Stockage physique
+
+```
+data/
+  aux_layers/
+    {project_id}/
+      {layer_id}/
+        source/            # fichier(s) uploadé(s) brut(s), archive
+        layer.gpkg         # GPKG mono-couche normalisé (CRS 4326)
+        derive/            # produits dérivés (grille topo, index…)
+```
+
+**Conversion à l'upload** : tout format d'entrée (`.shp` + sidecars, `.gpkg`, `.geojson`) → un **GPKG mono-couche** via geopandas/pyogrio. Un seul format interne à gérer, relecture triviale, pas de dépendance aux sidecars `.shx/.dbf/.prj`.
+
+**CRS** : normalisation EPSG:4326 à l'import (le pipeline carte travaille en 4326/WGS84). Le `crs_source` est conservé pour traçabilité.
+
+---
+
+## 3. API — routeur dédié `aux_layers.py`
+
+| Endpoint | Rôle |
+|---|---|
+| `POST /api/v1/projets/{id}/aux-layers` | Upload **piloté par l'utilisateur** (`multipart`) : l'utilisateur choisit explicitement le fichier **et** le `type` de couche (`altimetrie_points`, `bv_officiel`, `metrologie`…). Aucun import automatique — validation taille/type, conversion, insertion DB |
+| `GET /api/v1/projets/{id}/aux-layers` | Liste des couches satellite du projet |
+| `GET /api/v1/projets/{id}/aux-layers/{lid}` | Détail + échantillon d'attributs |
+| `GET /api/v1/projets/{id}/aux-layers/{lid}/geojson?bounds=minx,miny,maxx,maxy` | Flux cartographique borné — **obligatoire pour les grosses couches** (même contrat que `/layers`) |
+| `GET /api/v1/projets/{id}/aux-layers/{lid}/elevation?lng=&lat=` | *(altimétrie uniquement)* cote terrain estimée + distance au point topo + confiance |
+| `DELETE /api/v1/projets/{id}/aux-layers/{lid}` | Suppression complète (fichiers + ligne) |
+
+Règles : `org_id` vérifié sur le projet **et** sur la couche à chaque appel ; stealth 404 si mismatch ; limites de taille et de nombre de features à l'upload ; parsing dans un répertoire temporaire isolé.
+
+---
+
+## 4. Service altimétrie (`aux_altimetrie_service.py`)
+
+Premier type de couche : `altimetrie_points` (cas d'usage : `TOPO CHLEF.shp`, 84 302 points cotés, EPSG:32631).
+
+À l'import :
+- Chargement `(x, y, z)` → index `scipy.spatial.cKDTree`
+- **Grille interpolée** pré-calculée sur l'emprise du réseau projet (~20–50 m), interpolation IDW/RBF → stockée dans `derive/grid.*`
+- Cache invalidé uniquement à la ré-import de la couche
+
+Requêtes :
+- `elevation(lng, lat)` → `{z_estime, distance_point_plus_proche, confiance}` où `confiance` décroît avec la distance (topo dense : médiane ~5,6 m ; bords de zone : >50 m → confiance faible, **affichée partout où le chiffre apparaît**)
+- `gradient(lng, lat)` → pente terrain locale (base des détections d'inversion)
+
+---
+
+## 5. Réserve scientifique — à afficher dans l'UI
+
+> La cote topo est la **cote du terrain**, pas le **fond de regard** (l'égout est enterré, ~1–3 m).
+
+Conséquences appliquées partout :
+- Jamais de comparaison absolue `z_topo` ↔ radier SWMM
+- Usage réservé aux **différences** : pente terrain entre deux points, cohérence amont/aval, détection d'inversions flagrantes, **classement** des candidats de connexion
+- La profondeur d'égout, quand elle est nécessaire, est une **hypothèse fournie par l'utilisateur** (fourchette paramétrable), jamais un fait déduit du topo
+
+---
+
+## 6. Les 4 objectifs — feuille de route
+
+| # | Objectif | Phase | Mécanisme |
+|---|---|---|---|
+| 1 | **Superposition des données** | P0 | Couche « Altimétrie » dans le panneau couches (points bornés) + **sonde altimétrique** : clic carte → cote estimée + confiance |
+| 2 | **Correction des sens d'écoulement** | P1 | Gradient topo aux extrémités de chaque conduite vs `prof_fe_am/av` et pentes constatées (`_observed_slope` existe déjà dans `corrections.py`) → file de conduites à inversion suspectée → proposition dans `/corrections/hybride`, **validation utilisateur requise** |
+| 3 | **Connexion des orphelins** | P2 | Pour chaque regard orphelin : k-plus-proches nœuds/conduites + Δz topo + pente requise → candidats classés avec justification altimétrique → snap **proposé**, jamais automatique (règle existante respectée) |
+| 4 | **Correction des profils en long** | P3 | Enrichissement de `profile/{fid}` (existant) : surface topo sous le profil, fond estimé = terrain − profondeur type paramétrable, détection de ruptures de pente |
+
+---
+
+## 7. Phasage
+
+- **P0 — Import & superposition** : table, endpoints, conversion GPKG, couche carte + sonde. *Premier satellite : TOPO CHLEF (84k points), importé uniquement sur action explicite de l'utilisateur (choix du fichier + du type de couche — aucun import automatique).*
+- **P1 — Suspects écoulement** : gradients topo → liste d'inversions → pont vers `/corrections`.
+- **P2 — Orphelins** : scoring altimétrique des candidats de connexion.
+- **P3 — Profils en long** : profil terrain/radier superposé dans `profile/{fid}`.
+- **P4+ — Autres satellites** : `BV.shp` (validation sectorisation vs BV officiels), `Points de métrologie.shp` (calage), MNT raster si disponible.
+
+Chaque phase = suite pytest complète + `node --check` JS + commit/push conventionnel (AGENTS.md).
+
+---
+
+## 8. Ce que ce document exclut explicitement
+
+- Fusion des satellites dans le GPKG projet (rejetée : couplage de versionnement, risque de pollution des couches lues par mot-clé)
+- Modification automatique du réseau (regards, conduites, exutoires) — proposition uniquement
+- Support raster MNT (GeoTIFF) — phase ultérieure si un MNT officiel est obtenu ; les points cotés suffisent pour P0–P3
+- Toute écriture dans `src/domain/` ou les équations SWMM
