@@ -123,9 +123,12 @@
             const btn = document.getElementById('detect-cluster-btn');
             const statusDiv = document.getElementById('cluster-status');
             
-            // Afficher l'overlay uniquement si demandé explicitement
+            // Afficher l'overlay uniquement si demandé explicitement.
+            // Timeout long : la sectorisation d'un grand réseau peut
+            // durer plusieurs minutes — le défaut de 25 s masquerait
+            // l'overlay en plein calcul et débloquerait l'interface.
             if (afficherOverlay) {
-                montrerChargement(true, messageOverlay || 'Analyse topologique et partitionnement des bassins versants...');
+                montrerChargement(true, messageOverlay || 'Analyse topologique et partitionnement des bassins versants...', 15 * 60 * 1000);
             }
             if (btn) {
                 btn.disabled = true;
@@ -464,12 +467,17 @@
                     } else {
                         if (statusDiv) statusDiv.textContent = 'Aucun bassin détecté';
                         window._partitioningCallbacks = [];
+                        // Les callbacks ne sont pas exécutés : sans ce
+                        // déblocage, l'overlay de chargement projet
+                        // resterait figé indéfiniment.
+                        montrerChargement(false);
                     }
                 })
                 .catch(error => {
                     console.error('Erreur partitionnement bassins:', error);
                     if (statusDiv) statusDiv.textContent = 'Erreur lors de la détection des bassins';
                     window._partitioningCallbacks = [];
+                    montrerChargement(false);
                 })
                 .finally(() => {
                     window._isPartitioningInProgress = false;

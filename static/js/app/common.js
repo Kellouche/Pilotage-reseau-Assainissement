@@ -259,8 +259,11 @@
             if (legEl) L.DomEvent.disableClickPropagation(legEl);
         }, 500);
 
-        // Fonction pour afficher/masquer l'overlay de chargement avec timeout de sécurité
-        function montrerChargement(afficher, message = 'Chargement des données...') {
+        // Fonction pour afficher/masquer l'overlay de chargement avec timeout de sécurité.
+        // timeoutMs : durée avant masquage automatique en cas de blocage
+        // (25 s par défaut ; le chargement projet/sectorisation passe une
+        // durée longue — l'overlay doit rester jusqu'à la fin réelle).
+        function montrerChargement(afficher, message = 'Chargement des données...', timeoutMs = 25000) {
             const overlay = document.getElementById('loading-overlay');
             if (!overlay) return;
             const txtEl = document.getElementById('loading-overlay-text');
@@ -273,7 +276,7 @@
                         overlay.style.display = 'none';
                         console.warn('Timeout de sécurité : overlay de chargement masqué automatiquement.');
                     }
-                }, 25000);
+                }, timeoutMs);
             } else {
                 if (window._loadingSafetyTimer) clearTimeout(window._loadingSafetyTimer);
                 overlay.style.display = 'none';
@@ -282,6 +285,16 @@
                 }
             }
         }
+
+        // Met à jour uniquement le message de l'overlay visible, sans
+        // réarmer le minuteur de sécurité ni changer la visibilité.
+        window.majMessageChargement = function(message) {
+            const txtEl = document.getElementById('loading-overlay-text');
+            const overlay = document.getElementById('loading-overlay');
+            if (txtEl && overlay && overlay.style.display === 'flex' && message) {
+                txtEl.textContent = message;
+            }
+        };
 
         // Restauration instantanée depuis le cache mémoire du navigateur (bfcache) sans recharger
         window.addEventListener('pageshow', (event) => {

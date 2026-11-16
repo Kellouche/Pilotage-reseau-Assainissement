@@ -148,7 +148,7 @@
         };
 
         window.chargerJeuDeDonnees = async function(datasetId) {
-            montrerChargement(true);
+            montrerChargement(true, 'Chargement du jeu de données…', 15 * 60 * 1000);
             try {
                 const token = localStorage.getItem('swmm_access_token');
                 const headers = { 'Content-Type': 'application/json' };
@@ -184,7 +184,7 @@
                 })
                 : confirm('Voulez-vous réinitialiser votre projet et vider le réseau affiché ?');
             if (!_okReset) return;
-            montrerChargement(true);
+            montrerChargement(true, 'Réinitialisation du projet…', 15 * 60 * 1000);
             try {
                 const token = localStorage.getItem('swmm_access_token');
                 const headers = { 'Content-Type': 'application/json' };
@@ -209,7 +209,7 @@
                 window.dialogueAlerte("Format non supporté. Veuillez sélectionner un fichier .inp (EPA SWMM) ou .gpkg (GeoPackage).", 'erreur');
                 return;
             }
-            montrerChargement(true, `Chargement et analyse du réseau : ${file.name}...`);
+            montrerChargement(true, `Chargement et analyse du réseau : ${file.name}…`, 15 * 60 * 1000);
             try {
                 const formData = new FormData();
                 formData.append('file', file);

@@ -226,7 +226,7 @@ window.reinitialiserAffichageSimulation = function() {
             if (!isSectorise) {
                 if (window._isPartitioningInProgress) {
                     console.log("[Simulation] Partitionnement des bassins déjà en cours, attente du tracé...");
-                    montrerChargement(true, 'Règle hydraulique : Partitionnement et tracé des bassins en cours...');
+                    montrerChargement(true, 'Règle hydraulique : Partitionnement et tracé des bassins en cours...', 15 * 60 * 1000);
                     if (!window._partitioningCallbacks) window._partitioningCallbacks = [];
                     window._partitioningCallbacks.push(function() {
                         montrerChargement(false);

@@ -9,8 +9,9 @@
  */
 
 function chargerDonneesInitiales() {
-            // Montrer l'overlay de chargement
-            montrerChargement(true);
+            // Montrer l'overlay de chargement bloquant : il reste affiché
+            // jusqu'à la fin réelle de la sectorisation (failsafe 15 min).
+            montrerChargement(true, 'Chargement du projet et du réseau…', 15 * 60 * 1000);
 
             // === NETTOYAGE : sauvegarder l'état du réseau courant et tout vider ===
             const reseauActuel = (window._rawNetworkData && window._rawNetworkData.project_name)
@@ -323,16 +324,30 @@ function chargerDonneesInitiales() {
                     }
                     
                     // 1. Charger immédiatement la sectorisation Voronoï
+                    if (window.majMessageChargement) {
+                        window.majMessageChargement('Génération du maillage de sous-bassins (Voronoï)…');
+                    }
                     if (typeof chargerEtAfficherSousBassins === 'function') {
                         chargerEtAfficherSousBassins();
                     }
 
                     // 2. Partitionnement et tracé automatique immédiat des bassins versants (Exutoires)
+                    if (window.majMessageChargement) {
+                        window.majMessageChargement('Analyse topologique et sectorisation des bassins versants…');
+                    }
                     if (typeof window.lancerPartitionnementBassins === 'function') {
                         window.lancerPartitionnementBassins(function(clusterData) {
                             // 3. Charger et restituer la dernière simulation une fois les bassins tracés
+                            if (window.majMessageChargement) {
+                                window.majMessageChargement('Restauration de la dernière simulation…');
+                            }
                             if (typeof chargerDerniereSimulation === 'function') {
                                 chargerDerniereSimulation();
+                            }
+                            // Met à jour le badge « N BV » avec le nombre
+                            // réel de bassins sectorisés (fini le « -- »).
+                            if (typeof window.mettreAJourIndicateurBassin === 'function') {
+                                window.mettreAJourIndicateurBassin(null, {});
                             }
                             montrerChargement(false);
                             // Vérifier si une simulation est restaurée et réactiver les boutons si nécessaire

@@ -112,7 +112,7 @@
             if (topFiab) topFiab.style.display = 'none';
 
             const cidStr = (clusterId !== null && clusterId !== undefined && clusterId !== '') ? String(clusterId) : null;
-            const totalBassins = (window._clustersData && window._clustersData.clusters_crees) || (window._bassinNoms ? Object.keys(window._bassinNoms).length : 77) || 77;
+            const totalBassins = (window._clustersData && window._clustersData.clusters_crees) || (window._bassinNoms ? Object.keys(window._bassinNoms).length : '--') || '--';
 
             // État 1 : Simulation en cours
             if (state.status === 'simulating') {
@@ -128,9 +128,15 @@
                 return;
             }
 
-            // Détection automatique si le bassin possède une simulation active ou mise en cache
+            // Détection automatique si le bassin possède une simulation active ou mise en cache.
+            // Les payloads persistés (/bassin/{id}, /resultat, historique)
+            // portent status='success' et les débits dans .kpis — on les
+            // accepte aussi, sinon une sim affichée serait étiquetée
+            // « (non simulé) » à tort.
             let simActive = null;
-            if (state.status === 'simulated' && (state.q_genere_m3s !== undefined || state.peak_flow !== undefined || state.q_exutoire_m3s !== undefined)) {
+            const _flows = (state && state.kpis) ? state.kpis : state;
+            const _aDebits = !!(_flows && (_flows.q_genere_m3s !== undefined || _flows.peak_flow !== undefined || _flows.q_exutoire_m3s !== undefined));
+            if (_aDebits && (state.status === 'simulated' || state.status === 'success' || state.conduit_results)) {
                 simActive = state;
             } else if (cidStr) {
                 const lastSim = window._dernierResultatSimulation;
@@ -169,7 +175,7 @@
                 const tauxExutoireStr = window.formaterNombre(tauxExutoire, 1);
 
                 if (topIcon) topIcon.innerHTML = '<i class="fas fa-check-circle" style="color: #34d399;"></i>';
-                if (topText) topText.innerHTML = `Bassin simulé : <span style="color: #34d399; font-weight: 700;">${nom}</span>`;
+                if (topText) topText.innerHTML = `Bassin : <span style="color: #34d399; font-weight: 700;">${nom}</span>`;
                 if (topBadge) {
                     // Période de retour de la simulation (T = 2/10/50/100 ans,
                     // scénario BMS ou libellé de scénario en repli).
@@ -186,9 +192,9 @@
                             'pluie_cinquantennale': 'T = 50 ans', 'pluie_centennale': 'T = 100 ans',
                             'pluie_orage_2h': 'Orage 2 h', 'bms_onm': 'BMS ONM'
                         };
-                        _badgeTxt = _scenMap[_sk] || (_sk ? _sk.replace(/_/g, ' ') : 'Simulation');
+                        _badgeTxt = _scenMap[_sk] || (_sk ? _sk.replace(/_/g, ' ') : '');
                     }
-                    topBadge.innerText = _badgeTxt;
+                    topBadge.innerText = _badgeTxt ? `Simulation ${_badgeTxt}` : 'Simulation';
                     topBadge.title = _scenNom ? `Scénario : ${_scenNom}` : '';
                     topBadge.style.background = 'rgba(56, 189, 248, 0.18)';
                     topBadge.style.color = '#38bdf8';
@@ -219,7 +225,7 @@
             // État 3 : Aucun bassin individuel sélectionné (Mode Réseau Global)
             if (!cidStr) {
                 if (topIcon) topIcon.innerHTML = '<i class="fas fa-network-wired" style="color: #38bdf8;"></i>';
-                if (topText) topText.innerHTML = `Bassins en cours : <span style="color: #38bdf8; font-weight: 700;">Tous les bassins</span>`;
+                if (topText) topText.innerHTML = `Bassins : <span style="color: #38bdf8; font-weight: 700;">Tous les bassins</span>`;
                 if (topBadge) {
                     topBadge.innerText = `${totalBassins} BV`;
                     topBadge.style.background = 'rgba(56, 189, 248, 0.15)';
@@ -280,7 +286,7 @@
             }
 
             if (topIcon) topIcon.innerHTML = `<i class="fas fa-draw-polygon" style="color: ${bColor};"></i>`;
-            if (topText) topText.innerHTML = `Bassin en cours : <span style="color: #cbd5e1; font-size: 0.74rem; background: rgba(148, 163, 184, 0.18); border: 1px solid rgba(148, 163, 184, 0.35); padding: 1px 6px; border-radius: 4px; margin-right: 6px; font-weight: 700; letter-spacing: 0.2px;">(non simulé)</span><span style="color: #f8fafc; font-weight: 700;">${nom}</span>`;
+            if (topText) topText.innerHTML = `Bassin : <span style="color: #f8fafc; font-weight: 700;">${nom}</span> <span style="color: #94a3b8; font-size: 0.72rem; font-weight: 600;">(non simulé)</span>`;
             if (topBadge) {
                 topBadge.innerText = surfHa || (nbRegards ? `${nbRegards} • ${nbConduites}` : `ID ${cidStr}`);
                 topBadge.style.background = 'rgba(56, 189, 248, 0.15)';
