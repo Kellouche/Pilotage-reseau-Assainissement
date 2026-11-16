@@ -263,6 +263,44 @@ def test_endpoint_timeseries_filtres_identite_stable():
         db.close()
 
 
+def test_identite_bassin_du_cache_espaces_identifiants():
+    """Régression collision « 12 » : un exutoire_id numérique ne doit JAMAIS
+    être matché par un cluster_id positionnel (et inversement). Sinon le
+    dropdown « cluster 12 » résolvait le bassin dont l'exutoire est « 12 »
+    → historique vide + timeseries 404 (cas réel Rempois Chorfa /
+    Nouvelle ville hassania)."""
+    from api.routes.simulations import _identite_bassin_du_cache
+
+    cache = {
+        "bassins_geojson": {"features": [
+            {"properties": {"type": "bassin_urbain", "cluster_id": 1,
+                            "id_bassin": 1, "exutoire_id": 12,
+                            "nom": "Nouvelle ville hassania",
+                            "bassin_ref": "exutoire:12"}},
+            {"properties": {"type": "bassin_urbain", "cluster_id": 12,
+                            "id_bassin": 12, "exutoire_id": "8_rejets_346731",
+                            "nom": "Rempois chorfa",
+                            "bassin_ref": "exutoire:8_rejets_346731"}},
+        ]}
+    }
+    with tempfile.TemporaryDirectory() as td:
+        gpkg = Path(td) / "reseau.gpkg"
+        gpkg.write_bytes(b"fake")
+        # with_suffix remplace « .gpkg » → « reseau.clusters_cache.json »
+        Path(td, "reseau.clusters_cache.json").write_text(
+            json.dumps(cache), encoding="utf-8")
+
+        # cluster_id positionnel → match cluster_id/id_bassin uniquement
+        assert _identite_bassin_du_cache(gpkg, "12")["nom"] == "Rempois chorfa"
+        assert _identite_bassin_du_cache(gpkg, "1")["nom"] == "Nouvelle ville hassania"
+        # préfixe exutoire → espace exutoire
+        assert _identite_bassin_du_cache(gpkg, "exutoire:12")["nom"] == "Nouvelle ville hassania"
+        assert _identite_bassin_du_cache(gpkg, "exutoire:8_rejets_346731")["nom"] == "Rempois chorfa"
+        # identifiant stable nu → repli exutoire_id / bassin_ref
+        assert _identite_bassin_du_cache(gpkg, "8_rejets_346731")["nom"] == "Rempois chorfa"
+        assert _identite_bassin_du_cache(gpkg, "exutoire:inconnu") == {}
+
+
 def test_construire_reponse_simulation_timeseries_uniquement_cached():
     """Après « Afficher » (mode cached), la réponse doit embarquer les séries
     temporelles persistées pour que le time-slider anime la simulation

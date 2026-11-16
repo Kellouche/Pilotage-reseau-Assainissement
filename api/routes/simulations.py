@@ -84,18 +84,51 @@ def _identite_bassin_du_cache(gpkg_path: Optional[Path], cluster_id: str) -> dic
         data = _json.loads(cache.read_text(encoding="utf-8"))
     except Exception:
         return {}
-    cible = str(cluster_id).strip().lower()
-    for f in (data.get("bassins_geojson") or {}).get("features", []):
-        p = f.get("properties") or {}
-        if p.get("type") != "bassin_urbain":
-            continue
-        ids = {str(p.get(k) or "").strip().lower()
-               for k in ("cluster_id", "id_bassin", "exutoire_id")}
-        if cible not in ids:
-            continue
+    cible = str(cluster_id).strip()
+    cible_low = cible.lower()
+    prefixed = cible_low.startswith("exutoire:")
+    cle = cible.split(":", 1)[1] if prefixed else cible
+    cle_low = cle.lower()
+
+    features = [
+        f for f in (data.get("bassins_geojson") or {}).get("features", [])
+        if (f.get("properties") or {}).get("type") == "bassin_urbain"
+    ]
+
+    def _ident(p: dict) -> dict:
         ex = p.get("exutoire_id")
         bref = p.get("bassin_ref") or (f"exutoire:{ex}" if ex else None)
         return {"nom": p.get("nom"), "exutoire_id": ex, "bassin_ref": bref}
+
+    # EQUIVALENCE DES ESPACES D'IDENTIFIANTS — critique :
+    #   - « exutoire:… »           → référence métier exutoire (bassin_ref / exutoire_id)
+    #   - cluster_id positionnel   → UNIQUEMENT cluster_id / id_bassin du geojson.
+    #     Les exutoire_id ne doivent JAMAIS être comparés à un cluster_id
+    #     positionnel : les exutoire_id numériques (ex. « 12 ») entrent en
+    #     collision avec les positions (ex. cluster 12 = autre bassin).
+    #   - identifiant stable nu    → repli exutoire_id / bassin_ref
+    #     (ex. meta.cluster_id « 8_rejets_346731 » envoyé par un client).
+    if prefixed:
+        for f in features:
+            p = f.get("properties") or {}
+            bref = str(p.get("bassin_ref") or "").strip().lower()
+            ex = str(p.get("exutoire_id") or "").strip().lower()
+            if (bref and bref == cible_low) or (ex and ex == cle_low):
+                return _ident(p)
+        return {}
+
+    for f in features:
+        p = f.get("properties") or {}
+        if (str(p.get("cluster_id") or "").strip() == cle
+                or str(p.get("id_bassin") or "").strip() == cle):
+            return _ident(p)
+
+    for f in features:
+        p = f.get("properties") or {}
+        ex = str(p.get("exutoire_id") or "").strip().lower()
+        bref = str(p.get("bassin_ref") or "").strip().lower()
+        if (ex and ex == cle_low) or (bref and bref == cle_low):
+            return _ident(p)
     return {}
 
 
@@ -881,7 +914,10 @@ def get_bassin_simulation(
     try:
         proj_identite = _resoudre_projet_pour_simulation(db, org_id, None)
         gpkg_identite = _resoudre_gpkg_effectif_pour_projet(db, proj_identite)
-        identite_bassin = _identite_bassin_du_cache(gpkg_identite, _cle_recherche)
+        # _cid_txt conserve le préfixe « exutoire: » : la fonction de cache
+        # distingue l'espace exutoire de l'espace positionnel — un suffixe
+        # numérique seul (« 12 ») est ambigu entre les deux.
+        identite_bassin = _identite_bassin_du_cache(gpkg_identite, _cid_txt)
     except Exception:
         identite_bassin = {}
     exutoire_demande = identite_bassin.get("exutoire_id") or (
@@ -1060,7 +1096,7 @@ def list_bassin_simulations_historique(
     try:
         proj = _resoudre_projet_pour_simulation(db, org_id, None)
         gpkg_identite = _resoudre_gpkg_effectif_pour_projet(db, proj)
-        identite_bassin = _identite_bassin_du_cache(gpkg_identite, _cle_recherche)
+        identite_bassin = _identite_bassin_du_cache(gpkg_identite, _cid_txt)
     except Exception as _e_ident_hist:
         logger.warning("[historique] Identité bassin non résolue pour cluster_id=%s : %s", cluster_id, _e_ident_hist)
         identite_bassin = {}
@@ -2376,7 +2412,9 @@ def get_simulation_timeseries(
             _cle = _cid_txt.split(":", 1)[1] if _ref_ex else cluster_id
             proj_id = _resoudre_projet_pour_simulation(db, org_id, None)
             gpkg_id = _resoudre_gpkg_effectif_pour_projet(db, proj_id)
-            ident = _identite_bassin_du_cache(gpkg_id, _cle) if _cle is not None else {}
+            # _cid_txt conserve « exutoire: » : la fonction de cache
+            # distingue les espaces exutoire / positionnel.
+            ident = _identite_bassin_du_cache(gpkg_id, _cid_txt) if _cid_txt else {}
             _exo = ident.get("exutoire_id") or (_cle if _ref_ex else None)
             _bref = ident.get("bassin_ref") or (_cid_txt if _ref_ex else None)
             if _exo and "exutoire_noeud" not in filtres:
