@@ -131,6 +131,16 @@ async def upload_aux_layer(
                     couche.statut = "ok"
                     db.commit()
                     resultat["grille_altimetrie"] = meta_grille
+                    # Artefact dérivé : cote terrain + pente par regard (SHP.md §7)
+                    try:
+                        rt = alt.calculer_regards_terrain(
+                            db=db, org_id=tenant_ctx.org_id, project_id=project_id,
+                            layer_id=couche.id, storage_key=couche.storage_key,
+                        )
+                        resultat["regards_terrain"] = rt
+                    except Exception as e:
+                        logger.warning("Artefact regards_terrain non calculé (%s) : %s", couche.id, e)
+                        resultat["regards_terrain"] = {"statut": "erreur", "detail": str(e)}
                 except Exception as e:
                     logger.warning("Grille altimétrique non construite (%s) : %s", couche.id, e)
                     couche.statut = "sans_altitude"
@@ -256,3 +266,70 @@ def get_aux_layer_elevation(
         logger.exception("Erreur elevation couche %s", layer_id)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                             detail=f"Erreur calcul altimétrique : {e}")
+
+
+# ---------------------------------------------------------------------------
+# Artefact dérivé : cote terrain + pente par regard (SHP.md §7)
+# ---------------------------------------------------------------------------
+
+@router.get("/projets/{project_id}/aux-layers/{layer_id}/regards-terrain")
+def get_regards_terrain(
+    project_id: str,
+    layer_id: str,
+    tenant_ctx: TenantContext = Depends(get_tenant_context),
+    db: Session = Depends(get_db),
+):
+    """
+    Artefact pré-calculé : pour chaque regard du GPKG projet → coords,
+    cote terrain IDW, distance topo, confiance, pente et azimut.
+    `perime` signale un réseau modifié depuis le calcul (meta.gpkg_sha256).
+    """
+    couche = _couche(db, tenant_ctx, project_id, layer_id)
+    if couche.type != "altimetrie_points":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="Artefact altimétrique réservé aux couches 'altimetrie_points'.")
+
+    from api.services import aux_altimetrie_service as alt
+    artefact = alt.charger_regards_terrain(tenant_ctx.org_id, project_id, couche.id)
+    if artefact is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="Aucun artefact regards_terrain : importez une couche altimétrique "
+                                   "ou lancez le recalcul.")
+
+    sha_courant = alt.sha_gpkg_projet(db, tenant_ctx.org_id, project_id)
+    meta = artefact.get("meta", {})
+    perime = bool(sha_courant and meta.get("gpkg_sha256") and sha_courant != meta.get("gpkg_sha256"))
+    return {
+        "statut": "ok",
+        "meta": {**meta, "gpkg_sha256_courant": sha_courant, "perime": perime},
+        "regards": artefact.get("regards", {}),
+    }
+
+
+@router.post("/projets/{project_id}/aux-layers/{layer_id}/regards-terrain/recalculer")
+def recalculer_regards_terrain(
+    project_id: str,
+    layer_id: str,
+    tenant_ctx: TenantContext = Depends(get_tenant_context),
+    db: Session = Depends(get_db),
+):
+    """Recalcule l'artefact à la demande (action explicite — jamais automatique)."""
+    couche = _couche(db, tenant_ctx, project_id, layer_id)
+    if couche.type != "altimetrie_points" or couche.statut != "ok":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="Recalcul impossible : couche altimétrique sans altitude exploitable.")
+
+    from api.services import aux_altimetrie_service as alt
+    try:
+        res = alt.calculer_regards_terrain(
+            db=db, org_id=tenant_ctx.org_id, project_id=project_id,
+            layer_id=couche.id, storage_key=couche.storage_key,
+        )
+    except Exception as e:
+        logger.exception("Erreur recalcul regards_terrain %s", layer_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail=f"Erreur recalcul : {e}")
+    if res.get("statut") != "ok":
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail=res.get("raison", "Recalcul impossible."))
+    return {"statut": "ok", "resultat": res}

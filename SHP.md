@@ -114,7 +114,29 @@ Conséquences appliquées partout :
 
 ---
 
-## 7. Phasage
+## 7. Artefact dérivé `regards_terrain.json` (décision actée)
+
+Pour les couches `altimetrie_points`, un artefact pré-calculé est produit à
+l'import **et** à chaque nouvelle `gpkg_version` réseau :
+
+- **Contenu** : pour chaque regard du GPKG projet → `lng, lat, z_terrain_m,
+  distance_topo_m, confiance, pente_terrain_pct, azimut_pente_deg`
+  (z IDW + gradient de la grille échantillonné au point)
+- **Stockage** : `derive/regards_terrain.json` via ArtifactStore, clé
+  `{org}/{projet}/gis/aux_layers/{layer_id}/…` — jamais dans le GPKG projet
+- **Estampillage** : `meta.gpkg_sha256` = empreinte de la version réseau
+  au moment du calcul → l'endpoint signale `perime: true` si le réseau a
+  changé (recalcul sur action explicite, jamais silencieux)
+- **Usages** (P1→P3) : sens d'écoulement (Δz terrain amont/aval),
+  contre-pentes, classement des candidats orphelins, profils en long
+- **Limites rappelées** : cote terrain ≠ fond de regard ; usages limités
+  aux différences ; `confiance` propagée partout
+- **Collision de codes** : les rares codes dupliqués dans le SIG (13/10 538)
+  sont comptés dans `meta.codes_en_doublon` — la clé reste le code métier
+
+---
+
+## 8. Phasage
 
 - **P0 — Import & superposition** : table, endpoints, conversion GPKG, couche carte + sonde. *Premier satellite : TOPO CHLEF (84k points), importé uniquement sur action explicite de l'utilisateur (choix du fichier + du type de couche — aucun import automatique).*
 - **P1 — Suspects écoulement** : gradients topo → liste d'inversions → pont vers `/corrections`.
@@ -126,7 +148,7 @@ Chaque phase = suite pytest complète + `node --check` JS + commit/push conventi
 
 ---
 
-## 8. Ce que ce document exclut explicitement
+## 9. Ce que ce document exclut explicitement
 
 - Fusion des satellites dans le GPKG projet (rejetée : couplage de versionnement, risque de pollution des couches lues par mot-clé)
 - Modification automatique du réseau (regards, conduites, exutoires) — proposition uniquement

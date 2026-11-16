@@ -384,6 +384,122 @@ def test_endpoint_stealth_404(db, org_projet, tmp_path):
         db.commit()
 
 
+# ---------------------------------------------------------------------------
+# Tests artefact dérivé : cote terrain + pente par regard (SHP.md §7)
+# ---------------------------------------------------------------------------
+
+def _gpkg_regards(tmp_path, coords_ll, codes):
+    """Petit GPKG avec couche 'Regards_…' (code + points WGS84)."""
+    g = gpd.GeoDataFrame(
+        {"Code": codes, "NOM": [f"R{i}" for i in range(len(codes))]},
+        geometry=[Point(lo, la) for lo, la in coords_ll],
+        crs="EPSG:4326",
+    )
+    f = tmp_path / "reseau_test.gpkg"
+    g.to_file(f, driver="GPKG", layer="Regards_test")
+    return f
+
+
+def test_regards_terrain_artefact(db, org_projet, tmp_path):
+    """L'artefact produit z_terrain + pente + azimut pour chaque regard du GPKG projet."""
+    # Regarder positions = sous-ensemble des points topo (dans l'emprise)
+    topo = _topo_gdf(n=1500, spread=1200.0)
+    coords = [(p.x, p.y) for p in topo.geometry.iloc[::100]]  # ~15 regards
+    codes = [str(700 + i) for i in range(len(coords))]
+    gpkg_regards = _gpkg_regards(tmp_path, coords, codes)
+
+    # Rattacher le GPKG au projet
+    proj = db.query(Project).filter(Project.id == org_projet["proj"].id).first()
+    proj.source_gpkg_key = str(gpkg_regards)
+    db.commit()
+
+    # Import topo + grille
+    f = tmp_path / "topo.gpkg"
+    _ecrire_fichier(topo, f, "gpkg")
+    res = svc.importer_couche_aux(
+        db=db, org_id=org_projet["org"].id, project_id=org_projet["proj"].id,
+        type_couche="altimetrie_points", nom="Topo",
+        fichier_path=f, fichier_nom="topo.gpkg", colonne_z="Field4",
+    )
+    couche = db.query(ProjectAuxLayer).filter(ProjectAuxLayer.id == res["id"]).first()
+    meta = alt.construire_grille_altimetrie(
+        org_id=org_projet["org"].id, project_id=org_projet["proj"].id,
+        layer_id=couche.id, storage_key=couche.storage_key, colonne_z="Field4",
+    )
+    assert meta["nb_points"] == 1500
+
+    rt = alt.calculer_regards_terrain(
+        db=db, org_id=org_projet["org"].id, project_id=org_projet["proj"].id,
+        layer_id=couche.id, storage_key=couche.storage_key,
+    )
+    assert rt["statut"] == "ok"
+    assert rt["nb_regards"] == len(coords)
+
+    artefact = alt.charger_regards_terrain(org_projet["org"].id, org_projet["proj"].id, couche.id)
+    assert artefact is not None
+    assert artefact["meta"]["gpkg_sha256"]
+    r0 = artefact["regards"]["700"]
+    assert r0["z_terrain_m"] is not None
+    assert 90 < r0["z_terrain_m"] < 110
+    assert r0["confiance"] in ("haute", "moyenne")
+    assert r0["pente_terrain_pct"] is not None
+    assert 0 <= r0["azimut_pente_deg"] < 360
+
+
+def test_regards_terrain_sans_gpkg(db, org_projet, tmp_path):
+    """Projet sans GPKG → artefact 'ignore' honnête, pas d'erreur."""
+    res = _importer_topo(db, org_projet, tmp_path, n=100, spread=800.0)
+    couche = db.query(ProjectAuxLayer).filter(ProjectAuxLayer.id == res["id"]).first()
+    alt.construire_grille_altimetrie(
+        org_id=org_projet["org"].id, project_id=org_projet["proj"].id,
+        layer_id=couche.id, storage_key=couche.storage_key, colonne_z="Field4",
+    )
+    rt = alt.calculer_regards_terrain(
+        db=db, org_id=org_projet["org"].id, project_id=org_projet["proj"].id,
+        layer_id=couche.id, storage_key=couche.storage_key,
+    )
+    assert rt["statut"] == "ignore"
+
+
+def test_endpoint_regards_terrain(db, org_projet, tmp_path):
+    """GET /regards-terrain → artefact + flag perime ; POST recalculer → ok."""
+    client = TestClient(app)
+    pid = org_projet["proj"].id
+    tok = org_projet["token"]
+
+    topo = _topo_gdf(n=800, spread=1000.0)
+    coords = [(p.x, p.y) for p in topo.geometry.iloc[::80]]
+    codes = [str(800 + i) for i in range(len(coords))]
+    gpkg_regards = _gpkg_regards(tmp_path, coords, codes)
+    proj = db.query(Project).filter(Project.id == pid).first()
+    proj.source_gpkg_key = str(gpkg_regards)
+    db.commit()
+
+    f = tmp_path / "topo.gpkg"
+    _ecrire_fichier(topo, f, "gpkg")
+    with open(f, "rb") as fh:
+        r = client.post(f"/api/v1/projets/{pid}/aux-layers",
+                        files={"file": ("topo.gpkg", fh, "application/octet-stream")},
+                        data={"type": "altimetrie_points", "colonne_z": "Field4"},
+                        headers=_h(tok))
+    assert r.status_code == 200, r.text
+    layer_id = r.json()["couche"]["id"]
+
+    # GET artefact (calculé à l'import)
+    r = client.get(f"/api/v1/projets/{pid}/aux-layers/{layer_id}/regards-terrain", headers=_h(tok))
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert j["meta"]["nb_regards"] == len(coords)
+    assert "perime" in j["meta"]
+    assert j["regards"]["800"]["z_terrain_m"] is not None
+
+    # POST recalculer
+    r = client.post(f"/api/v1/projets/{pid}/aux-layers/{layer_id}/regards-terrain/recalculer",
+                    headers=_h(tok))
+    assert r.status_code == 200, r.text
+    assert r.json()["resultat"]["nb_regards"] == len(coords)
+
+
 def test_endpoint_sans_altitude_colonne_z(db, org_projet, tmp_path):
     """Sans colonne_z ni auto-détection → statut sans_altitude, endpoints elevation → 422."""
     client = TestClient(app)
