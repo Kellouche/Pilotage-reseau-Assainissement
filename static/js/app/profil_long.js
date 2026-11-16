@@ -447,8 +447,13 @@ function afficherProfilLong(data) {
     // Étiquettes X sur deux lignes : ligne 1 = n° regard, ligne 2 = distance cumulée
     const labels = data.segments.map(s => `${s.node_id}\n${Math.round(s.distance_m)} m`);
     const aTerrain = data.segments.some(s => s.z_terrain != null);
+    // P3 — terrain interpolé satellite (IDW topo) : affichage seul,
+    // distinct du terrain vérifié (z_terrain) pour ne jamais être
+    // confondu avec une cote altimétrique réelle.
+    const aTerrainInterp = data.segments.some(s => s.z_terrain_interp != null);
     const aSommet = data.segments.some(s => s.z_sommet_regard != null);
     const terrainData = data.segments.map(s => ({ x: s.distance_m, y: s.z_terrain }));
+    const terrainInterpData = data.segments.map(s => ({ x: s.distance_m, y: s.z_terrain_interp }));
     const sommetData = data.segments.map(s => ({ x: s.distance_m, y: s.z_sommet_regard }));
     const genSupData = data.segments.map(s => ({ x: s.distance_m, y: s.z_gen_superieure }));
     const radierData = data.segments.map(s => ({ x: s.distance_m, y: s.z_radier }));
@@ -484,7 +489,7 @@ function afficherProfilLong(data) {
     // pour une lecture fiable : le pas est le plus petit palier rond
     // donnant au plus ~10 intervalles.
     const _toutesCotes = [];
-    for (const _d of [terrainData, sommetData, genSupData, radierData, eauConduiteData, hglData]) {
+    for (const _d of [terrainData, terrainInterpData, sommetData, genSupData, radierData, eauConduiteData, hglData]) {
         for (const _p of _d) {
             if (_p && _p.y != null && isFinite(_p.y)) _toutesCotes.push(_p.y);
         }
@@ -534,6 +539,17 @@ function afficherProfilLong(data) {
                     borderWidth: 2.2,
                     pointRadius: 4.5,
                     pointBackgroundColor: '#10b981',
+                    fill: false,
+                    tension: 0.1
+                }] : []),
+                ...(aTerrainInterp ? [{
+                    label: 'Terrain interpolé IDW (topo — approximatif, ≠ fond de regard)',
+                    data: terrainInterpData,
+                    borderColor: '#38bdf8',
+                    backgroundColor: 'transparent',
+                    borderWidth: 1.8,
+                    borderDash: [6, 4],
+                    pointRadius: 0,
                     fill: false,
                     tension: 0.1
                 }] : []),

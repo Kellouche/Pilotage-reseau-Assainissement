@@ -1619,7 +1619,18 @@ def _charger_topo_pour_profil(gpkg_path: Path) -> Dict[str, Any]:
             "node_index": entree["node_index"],
             "G": entree["G"].copy(),
             "canalisations": entree["canalisations"],
+            "gpkg_sha": entree.get("gpkg_sha"),
         }
+
+    import hashlib
+    try:
+        _h = hashlib.sha256()
+        with open(gpkg_path, "rb") as _fh:
+            for _bloc in iter(lambda: _fh.read(1 << 20), b""):
+                _h.update(_bloc)
+        gpkg_sha = _h.hexdigest()
+    except OSError:
+        gpkg_sha = None
 
     import geopandas as gpd
     from src.domain.graphe_reseau import construire_graphe
@@ -1640,9 +1651,61 @@ def _charger_topo_pour_profil(gpkg_path: Path) -> Dict[str, Any]:
             "node_index": node_index,
             "G": G,
             "canalisations": canalisations,
+            "gpkg_sha": gpkg_sha,
         }
 
-    return {"node_index": node_index, "G": G.copy(), "canalisations": canalisations}
+    return {
+        "node_index": node_index,
+        "G": G.copy(),
+        "canalisations": canalisations,
+        "gpkg_sha": gpkg_sha,
+    }
+
+
+def _terrain_aux_pour_profil(db, org_id: str, proj, topo: Dict[str, Any]):
+    """
+    P3 (SHP.md §7) — localise l'artefact `regards_terrain` de la couche
+    altimétrie satellite active pour ce projet.
+
+    Retourne None si : pas de projet, pas de couche altimétrie OK, ou si
+    l'artefact est estampillé sur une AUTRE version du GPKG réseau
+    (meta.gpkg_sha256 ≠ sha du GPKG du profil) — jamais de terrain
+    interpolé servi pour un réseau périmé.
+    """
+    if proj is None or not (topo or {}).get("gpkg_sha"):
+        return None
+    try:
+        from api.models import ProjectAuxLayer
+        from api.services import aux_altimetrie_service as alt
+
+        couches = (
+            db.query(ProjectAuxLayer)
+            .filter(
+                ProjectAuxLayer.project_id == proj.id,
+                ProjectAuxLayer.org_id == org_id,
+                ProjectAuxLayer.type == "altimetrie_points",
+                ProjectAuxLayer.statut == "ok",
+            )
+            .order_by(ProjectAuxLayer.created_at.desc())
+            .limit(3)
+            .all()
+        )
+        for c in couches:
+            art = alt.charger_regards_terrain(org_id, proj.id, c.id)
+            if not art:
+                continue
+            meta = art.get("meta") or {}
+            if meta.get("gpkg_sha256") != topo["gpkg_sha"]:
+                logger.info(
+                    "Profil : artefact regards_terrain de la couche %s périmé "
+                    "(sha %s ≠ GPKG %s) — ignoré.",
+                    c.id, str(meta.get("gpkg_sha256"))[:12], topo["gpkg_sha"][:12],
+                )
+                continue
+            return {"layer": c, "artefact": art, "meta": meta}
+    except Exception as e:
+        logger.warning("Profil : recherche terrain satellite impossible : %s", e)
+    return None
 
 
 @router.get("/profil-en-long")
@@ -1750,6 +1813,14 @@ def get_profil_en_long(
         node_index = _topo["node_index"]
         canalisations = _topo["canalisations"]
         G = _topo["G"]
+
+        # P3 (SHP.md §7) — terrain interpolé satellite (couche altimétrie
+        # IDW) : sert UNIQUEMENT à l'affichage du profil (z_terrain_interp).
+        # Jamais injecté dans z_terrain : la classification hydraulique
+        # (inondation/revanche/atteint_terrain) reste réservée aux cotes
+        # altimétriques vérifiées du GPKG.
+        terrain_aux = _terrain_aux_pour_profil(db, org_id, proj, _topo)
+        terrain_par_code = ((terrain_aux or {}).get("artefact") or {}).get("regards") or {}
 
         if len(G.edges) == 0:
             for idx, c in canalisations.iterrows():
@@ -2093,6 +2164,17 @@ def get_profil_en_long(
             terrain_reel = info.get("terrain_reel", False)
             terrain_source = info.get("terrain_source", "absent")
 
+            # P3 — terrain interpolé satellite (affichage seul)
+            z_terrain_interp = None
+            terrain_confiance = None
+            if terrain_par_code:
+                _rk = (terrain_par_code.get(nid)
+                       or terrain_par_code.get(_clean_node_id(nid) or "")
+                       or terrain_par_code.get(str(nid)))
+                if _rk and _rk.get("z_terrain_m") is not None:
+                    z_terrain_interp = float(_rk["z_terrain_m"])
+                    terrain_confiance = _rk.get("confiance")
+
             # Sommet de regard SWMM = radier + MaxDepth (.inp) — plan de
             # rupture du modèle, distinct du terrain naturel.
             z_sommet = None
@@ -2244,6 +2326,8 @@ def get_profil_en_long(
                 "distance_m": round(distance_cumulee, 2),
                 "z_radier": round(z_rad, 3) if z_rad is not None else None,
                 "z_terrain": round(z_terrain, 3) if z_terrain is not None else None,
+                "z_terrain_interp": round(z_terrain_interp, 3) if z_terrain_interp is not None else None,
+                "terrain_confiance": terrain_confiance,
                 "z_sommet_regard": round(z_sommet, 3) if z_sommet is not None else None,
                 "terrain_reel": bool(terrain_reel),
                 "terrain_source": terrain_source,
@@ -2420,6 +2504,18 @@ def get_profil_en_long(
             "conduites_en_charge": conduites_en_charge,
             "simulation_active": bool(sim_valide),
             "terrain_disponible": any(s.get("z_terrain") is not None for s in segments),
+            "terrain_interpole": ({
+                "disponible": True,
+                "source": "topo_idw",
+                "layer_id": terrain_aux["layer"].id,
+                "layer_nom": terrain_aux["layer"].nom,
+                "resolution_m": (terrain_aux.get("meta") or {}).get("resolution_m"),
+                "nb_regards_couverts": sum(
+                    1 for s in segments if s.get("z_terrain_interp") is not None),
+                "nb_regards": len(segments),
+                "avertissement": "Terrain interpolé (IDW sur points cotés) — "
+                                 "cote du terrain, pas le fond de regard.",
+            } if terrain_aux else {"disponible": False}),
             "hgl_source": hgl_source_global,
             "hgl_base": base,
             "hgl_base_label": (

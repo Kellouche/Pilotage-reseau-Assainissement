@@ -129,6 +129,14 @@ l'import **et** à chaque nouvelle `gpkg_version` réseau :
   changé (recalcul sur action explicite, jamais silencieux)
 - **Usages** (P1→P3) : sens d'écoulement (Δz terrain amont/aval),
   contre-pentes, classement des candidats orphelins, profils en long
+- **P3 — consommation profil en long** (implémenté) : `profil-en-long`
+  expose `z_terrain_interp` + `terrain_confiance` par segment et le bloc
+  `terrain_interpole` en en-tête, **uniquement si** `meta.gpkg_sha256`
+  correspond au SHA-256 du GPKG du profil (artefact périmé → ignoré).
+  Le terrain interpolé n'alimente JAMAIS `z_terrain` : la classification
+  hydraulique (inondation, revanche, atteint_terrain) reste réservée aux
+  cotes altimétriques vérifiées du GPKG. Côté graphique, courbe distincte
+  en pointillés « Terrain interpolé IDW (≈, ≠ fond de regard) ».
 - **Limites rappelées** : cote terrain ≠ fond de regard ; usages limités
   aux différences ; `confiance` propagée partout
 - **Collision de codes** : les rares codes dupliqués dans le SIG (13/10 538)

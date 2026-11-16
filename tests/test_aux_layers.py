@@ -552,3 +552,42 @@ def test_endpoint_sans_altitude_colonne_z(db, org_projet, tmp_path):
     r = client.get(f"/api/v1/projets/{pid}/aux-layers/{couche['id']}/elevation?lng=1.3&lat=36.17",
                    headers=_h(tok))
     assert r.status_code == 422
+
+
+def test_terrain_aux_pour_profil(db, org_projet):
+    """P3 — l'artefact regards_terrain n'est servi au profil que si son
+    estampillage gpkg_sha256 correspond au GPKG actif (jamais périmé)."""
+    import json as _json
+    from api.routes.simulations import _terrain_aux_pour_profil
+    from api.services.aux_layers_service import cle_couche_aux, _store
+    from api.models import ProjectAuxLayer
+
+    oid, pid = org_projet["org"].id, org_projet["proj"].id
+    couche = ProjectAuxLayer(
+        org_id=oid, project_id=pid, type="altimetrie_points",
+        nom="topo test", storage_key="cle-test", statut="ok",
+        colonne_z="Field4", nb_features=10,
+    )
+    db.add(couche)
+    db.commit()
+
+    art = {
+        "meta": {"gpkg_sha256": "sha_test_123", "resolution_m": 30.0},
+        "regards": {"123": {"z_terrain_m": 100.5, "confiance": "haute"}},
+    }
+    _store().put_bytes(
+        cle_couche_aux(oid, pid, couche.id, "derive/regards_terrain.json"),
+        _json.dumps(art).encode("utf-8"),
+    )
+
+    # SHA correspondant → artefact retourné
+    res = _terrain_aux_pour_profil(db, oid, org_projet["proj"], {"gpkg_sha": "sha_test_123"})
+    assert res is not None
+    assert res["artefact"]["regards"]["123"]["z_terrain_m"] == 100.5
+
+    # SHA différent → artefact périmé ignoré
+    assert _terrain_aux_pour_profil(db, oid, org_projet["proj"], {"gpkg_sha": "autre_sha"}) is None
+    # Pas de sha → pas de lookup
+    assert _terrain_aux_pour_profil(db, oid, org_projet["proj"], {}) is None
+    # Projet None → pas de lookup
+    assert _terrain_aux_pour_profil(db, oid, None, {"gpkg_sha": "sha_test_123"}) is None
