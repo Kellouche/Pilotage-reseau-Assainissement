@@ -34,9 +34,39 @@ def _resoudre_altimetrie_noeuds(
        calcule les cotes par propagation topologique amont-aval depuis l'exutoire.
     3. Sinon, lève une exception bloquante pour empêcher une simulation avec pente nulle.
     """
-    alt_candidates = ["PROFRADI", "COTTN", "COORDZ", "Z", "cote_tampon", "cote_radier"]
+    # Colonnes à VRAIE sémantique altimétrique uniquement.
+    # Les colonnes de PROFONDEUR (PROFRADI, Profondeur, HFERMSOL…) sont des
+    # profondeurs de regard, JAMAIS des altitudes : les accepter comme cotes
+    # produisait des radier à 1-4 m et des plateaux de sentinelle 100.0.
+    _COLS_COTE_DIRECTE = {"COORDZ", "Z", "COTRAD", "cote_radier", "ALTITUDE", "ALTI"}
+    _COLS_COTE_TERRAIN = {"COTETN", "COTTN", "TN", "cote_tampon"}
+    _COLS_PROFONDEUR = {
+        "PROFRADI", "PROFONDEUR", "HFERMSOL", "PROF", "PROFDERAD",
+        "PROF_DEROG", "PROFDER", "DIMENSION",
+    }
+    alt_candidates = sorted(
+        (set(_COLS_COTE_DIRECTE) | set(_COLS_COTE_TERRAIN)) & set(regards.columns),
+        key=lambda c: (c not in _COLS_COTE_TERRAIN, regards.columns.get_loc(c)),
+    )
+
+    # Garde-fou sémantique automatique : une colonne candidate qui duplique
+    # les valeurs de « Profondeur » est une profondeur, pas une altitude.
+    def _est_profondeur_deguisee(col: str) -> bool:
+        if "Profondeur" not in regards.columns and "PROFONDEUR" not in regards.columns:
+            return False
+        pcol = "Profondeur" if "Profondeur" in regards.columns else "PROFONDEUR"
+        a = pd.to_numeric(regards[col], errors="coerce")
+        b = pd.to_numeric(regards[pcol], errors="coerce")
+        both = pd.concat([a, b], axis=1).dropna()
+        if len(both) < 5:
+            return False
+        return float((both.iloc[:, 0] - both.iloc[:, 1]).abs().mean()) < 0.01
+
     col_trouvee = None
     for c in alt_candidates:
+        if c in _COLS_PROFONDEUR or _est_profondeur_deguisee(c):
+            logger.warning("Colonne altimétrique rejetée (sémantique profondeur) : %s", c)
+            continue
         if c in regards.columns:
             non_nulls = pd.to_numeric(regards[c], errors="coerce").dropna()
             if len(non_nulls) >= len(regards) * 0.5:
@@ -50,7 +80,7 @@ def _resoudre_altimetrie_noeuds(
         for idx, r in regards.iterrows():
             nid = _clean_node_id(r.get("Code"), fallback=f"REG_{idx+1}")
             val = float(r[col_trouvee]) if pd.notna(r[col_trouvee]) else 100.0
-            if col_trouvee in ("COTTN", "cote_tampon"):
+            if col_trouvee in _COLS_COTE_TERRAIN:
                 prof = float(r["Profondeur"]) if ("Profondeur" in r and pd.notna(r["Profondeur"]) and r["Profondeur"] > 0) else 2.0
                 elevations[nid] = round(val - prof, 3)
             else:
@@ -61,11 +91,11 @@ def _resoudre_altimetrie_noeuds(
             for idx, rj in rejets.iterrows():
                 r_id = _clean_node_id(rj.get("Code") or rj.get("CODE") or rj.get("id") or rj.get("NOM"), fallback=f"REJ_{idx+1}")
                 val = None
-                for ac in [col_trouvee, "PROFRADI", "COTTN", "COORDZ", "Z", "COTETN"]:
+                for ac in [col_trouvee, "COTTN", "COORDZ", "Z", "COTETN", "COTRAD"]:
                     if ac and ac in rj and pd.notna(rj[ac]):
                         try:
                             val = float(rj[ac])
-                            if ac in ("COTTN", "cote_tampon", "COTETN"):
+                            if ac in _COLS_COTE_TERRAIN or ac == "COTETN":
                                 prof = float(rj.get("Profondeur", 2.0)) if ("Profondeur" in rj and pd.notna(rj["Profondeur"]) and rj["Profondeur"] > 0) else 2.0
                                 val = val - prof
                             break

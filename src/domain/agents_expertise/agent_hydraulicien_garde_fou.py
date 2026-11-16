@@ -50,7 +50,8 @@ class AgentHydraulicienGardeFou:
         meta = meta if meta is not None else (sim_result.get("meta") or {})
 
         sections = self._parser_sections(inp_content)
-        junctions = self._lire_junctions(sections.get("junctions", []))
+        junctions_details = self._lire_junctions_details(sections.get("junctions", []))
+        junctions = {n: d["elev"] for n, d in junctions_details.items()}
         outfalls = self._lire_outfalls(sections.get("outfalls", []))
         conduits = self._lire_conduits(sections.get("conduits", []))
 
@@ -197,6 +198,61 @@ class AgentHydraulicienGardeFou:
                             "pente_moyenne_pct": meta.get("pente_moyenne_pct")},
             })
 
+        # ── 8. Altitude confondue avec la profondeur du regard ──────────
+        # Ligne [JUNCTIONS] : Name Elevation MaxDepth … Si Elevation ==
+        # MaxDepth pour une forte part des nœuds, la « cote radier » est en
+        # réalité la profondeur (cas PROFRADI/Profondeur repris comme
+        # altitude). Détection purement données .inp, sans GPKG.
+        _nb_elev_eq_prof = 0
+        for _det in junctions_details.values():
+            _md = _det.get("maxdepth")
+            if _md is not None and abs(_det["elev"] - _md) < 0.05:
+                _nb_elev_eq_prof += 1
+        if junctions_details:
+            _taux_elev_prof = _nb_elev_eq_prof / len(junctions_details)
+            indicateurs["part_elevation_egale_maxdepth_pct"] = round(_taux_elev_prof * 100.0, 1)
+            if _taux_elev_prof >= 0.30:
+                anomalies.append({
+                    "code": "ALTIMETRIE_CONFONDUE_PROFONDEUR",
+                    "severite": "critique",
+                    "message": (
+                        f"{_nb_elev_eq_prof}/{len(junctions_details)} nœuds "
+                        f"({_taux_elev_prof*100:.0f} %) ont une cote radier "
+                        "strictement égale à leur profondeur : le modèle utilise "
+                        "des profondeurs de regard comme altitudes — topographie "
+                        "et résultats hydrauliques non fiables."
+                    ),
+                    "details": {
+                        "noeuds_concernes": _nb_elev_eq_prof,
+                        "source_altimetrique": meta.get("source_altimetrique"),
+                    },
+                })
+                recommandations.append(
+                    "Le GPKG ne fournit pas d'altimétrie exploitable : relancer "
+                    "la simulation avec une pente moyenne explicite pour activer "
+                    "la propagation topologique, ou corriger les cotes sources."
+                )
+
+        # ── 9. Sentinelle de défaut (cote = 100.0 codée en dur) ─────────
+        # Quand la source altimétrique est partielle, les nœuds sans valeur
+        # retombent sur 100.0 : une fraction élevée de ce plateau trahit des
+        # cotes manquantes silencieuses.
+        _nb_sent = sum(1 for v in junctions.values() if abs(v - 100.0) < 0.01)
+        if junctions:
+            _taux_sent = _nb_sent / len(junctions)
+            indicateurs["part_cote_100_defaut_pct"] = round(_taux_sent * 100.0, 1)
+            if _taux_sent >= 0.20:
+                anomalies.append({
+                    "code": "SENTINELLE_COTE_DEFAUT",
+                    "severite": "majeure",
+                    "message": (
+                        f"{_nb_sent}/{len(junctions)} nœuds ({_taux_sent*100:.0f} %) "
+                        "partagent la cote sentinelle 100.0 m : leurs altitudes "
+                        "n'ont pas été résolues et ont été fixées par défaut."
+                    ),
+                    "details": {"noeuds_a_100m": _nb_sent},
+                })
+
         # ── Verdict de fiabilité ─────────────────────────────────────────
         _critiques = [a for a in anomalies if a["severite"] == "critique"]
         _majeures = [a for a in anomalies if a["severite"] == "majeure"]
@@ -238,7 +294,15 @@ class AgentHydraulicienGardeFou:
 
     @staticmethod
     def _lire_junctions(lignes: List[str]) -> Dict[str, float]:
-        out = {}
+        return {n: d["elev"] for n, d in
+                AgentHydraulicienGardeFou._lire_junctions_details(lignes).items()}
+
+    @staticmethod
+    def _lire_junctions_details(lignes: List[str]) -> Dict[str, Dict[str, float]]:
+        """Parse [JUNCTIONS] : Name Elevation MaxDepth InitDepth SurDepth Aponded.
+        Retourne {nom: {"elev":…, "maxdepth":…}} — maxdepth est indispensable
+        pour détecter qu'une « altitude » est en réalité une profondeur."""
+        out: Dict[str, Dict[str, float]] = {}
         for l in lignes:
             s = l.strip()
             if not s or s.startswith(";"):
@@ -246,7 +310,10 @@ class AgentHydraulicienGardeFou:
             p = s.split()
             if len(p) >= 2:
                 try:
-                    out[p[0]] = float(p[1])
+                    out[p[0]] = {
+                        "elev": float(p[1]),
+                        "maxdepth": float(p[2]) if len(p) >= 3 else None,
+                    }
                 except (TypeError, ValueError):
                     continue
         return out
