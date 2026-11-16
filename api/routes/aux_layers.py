@@ -379,3 +379,30 @@ def apercu_injection_altimetrie(
         logger.exception("Erreur aperçu altimétrie couche %s", layer_id)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                             detail=f"Erreur aperçu altimétrique : {e}")
+
+
+@router.get("/projets/{project_id}/aux-layers/{layer_id}/suspects-ecoulement")
+def suspects_ecoulement(
+    project_id: str,
+    layer_id: str,
+    tenant_ctx: TenantContext = Depends(get_tenant_context),
+    db: Session = Depends(get_db),
+):
+    """
+    P1 (SHP.md §8) — file de revue des conduites dont le sens d'écoulement
+    supposé est suspect au regard du terrain (relèvement le long du flux,
+    radier estimé, azimut de plus forte descente opposé au cap).
+    Lecture seule : aucune correction n'est appliquée automatiquement.
+    """
+    _couche(db, tenant_ctx, project_id, layer_id)
+
+    from api.services import aux_altimetrie_service as alt
+    try:
+        return alt.analyser_ecoulement_projet(
+            db=db, org_id=tenant_ctx.org_id,
+            project_id=project_id, layer_id=layer_id,
+        )
+    except Exception as e:
+        logger.exception("Erreur analyse écoulement couche %s", layer_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail=f"Erreur analyse écoulement : {e}")

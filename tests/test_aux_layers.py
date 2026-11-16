@@ -654,3 +654,71 @@ def test_endpoint_apercu_inp_absent(db, org_projet):
     # Couche d'un autre org → stealth 404
     r2 = client.get(f"/api/v1/projets/{pid}/aux-layers/{couche.id}/apercu-inp")
     assert r2.status_code in (401, 404)
+
+
+def test_analyser_ecoulement_terrain():
+    """P1 — file de revue : terrain qui monte le long du flux = suspect,
+    conduit cohérent ignoré, sévérité et motifs corrects."""
+    import geopandas as gpd
+    from shapely.geometry import LineString, Point
+    from api.services.aux_altimetrie_service import analyser_ecoulement_terrain
+
+    # A(0,0) → B(0.001,0) : ~111 m vers l'Est ; C(0.002,0) plus loin
+    regards = gpd.GeoDataFrame(
+        {"Code": ["A", "B", "C"], "Profondeur": [2.0, 2.0, 2.0]},
+        geometry=[Point(0, 0), Point(0.001, 0), Point(0.002, 0)],
+        crs="EPSG:4326",
+    )
+    canas = gpd.GeoDataFrame(
+        {"ID_AMONT": ["A", "B"], "ID_AVAL": ["B", "C"], "Longeur": [100.0, 100.0]},
+        geometry=[LineString([(0, 0), (0.001, 0)]),
+                  LineString([(0.001, 0), (0.002, 0)])],
+        crs="EPSG:4326",
+    )
+    artefact = {
+        "meta": {"gpkg_sha256": "x", "resolution_m": 30.0},
+        "regards": {
+            # A→B : terrain descend (100→99) = cohérent ; B→C : monte (99→100.5)
+            "A": {"z_terrain_m": 100.0, "confiance": "haute",
+                  "pente_terrain_pct": 1.0, "azimut_pente_deg": 90.0},
+            "B": {"z_terrain_m": 99.0, "confiance": "haute",
+                  "pente_terrain_pct": 1.5, "azimut_pente_deg": 270.0},
+            "C": {"z_terrain_m": 100.5, "confiance": "haute",
+                  "pente_terrain_pct": 1.0, "azimut_pente_deg": 90.0},
+        },
+    }
+    res = analyser_ecoulement_terrain(regards, canas, artefact)
+
+    assert res["statut"] == "ok"
+    assert res["nb_conduites_analysées"] == 2
+    assert res["nb_suspects"] == 1
+    s = res["suspects"][0]
+    assert s["amont"] == "B" and s["aval"] == "C"
+    assert s["ecart_terrain_m"] == 1.5
+    # 1.5 m / 100 m = 1.5 % > 1 % → fort ; + radier + azimut → score élevé
+    assert s["severite"] in ("fort", "moyen")
+    assert any("monte" in m for m in s["motifs"])
+
+
+def test_endpoint_suspects_ecoulement_absent(db, org_projet):
+    """Sans artefact, l'endpoint répond 'absent' proprement."""
+    client = TestClient(app)
+    pid = org_projet["proj"].id
+    tok = org_projet["token"]
+
+    couche = ProjectAuxLayer(
+        org_id=org_projet["org"].id, project_id=pid,
+        type="altimetrie_points", nom="topo sans artefact 2",
+        storage_key="cle-test2", statut="ok", colonne_z="Field4",
+    )
+    db.add(couche)
+    db.commit()
+
+    r = client.get(f"/api/v1/projets/{pid}/aux-layers/{couche.id}/suspects-ecoulement",
+                   headers=_h(tok))
+    assert r.status_code == 200
+    assert r.json()["statut"] == "absent"
+
+    # Couche d'un autre org → stealth 404
+    r2 = client.get(f"/api/v1/projets/{pid}/aux-layers/{couche.id}/suspects-ecoulement")
+    assert r2.status_code in (401, 404)

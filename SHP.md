@@ -172,7 +172,16 @@ confiance ; statistiques couverture, **inversions amont/aval** détectées.
 ## 8. Phasage
 
 - **P0 — Import & superposition** : table, endpoints, conversion GPKG, couche carte + sonde. *Premier satellite : TOPO CHLEF (84k points), importé uniquement sur action explicite de l'utilisateur (choix du fichier + du type de couche — aucun import automatique).*
-- **P1 — Suspects écoulement** : gradients topo → liste d'inversions → pont vers `/corrections`.
+- **P1 — Suspects écoulement** (endpoint implémenté) :
+  `GET .../aux-layers/{lid}/suspects-ecoulement` — 3 signaux par conduite
+  (relèvement terrain le long du flux, radier estimé, azimut de plus forte
+  descente opposé au cap si pente locale ≥ 1 %) → score + motifs +
+  sévérité (fort/moyen/faible), top 300. **File de revue uniquement** —
+  aucune correction automatique ; recoupement avec `/corrections` requis.
+  Seuils : forte inversion > 1 %, moyenne > 0,3 % du long de la conduite.
+  Live : 10 136 conduites → 2 002 suspects (624 forts) — les écarts
+  extrêmes (>50 m) signalent plutôt des erreurs de connectivité/codes
+  que des simples sens inversés.
 - **P2 — Orphelins** : scoring altimétrique des candidats de connexion.
 - **P3 — Profils en long** : profil terrain/radier superposé dans `profile/{fid}`.
 - **P4+ — Autres satellites** : `BV.shp` (validation sectorisation vs BV officiels), `Points de métrologie.shp` (calage), MNT raster si disponible.
