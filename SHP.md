@@ -56,7 +56,7 @@ data/
         derive/            # produits dérivés (grille topo, index…)
 ```
 
-**Conversion à l'upload** : tout format d'entrée (`.shp` + sidecars, `.gpkg`, `.geojson`) → un **GPKG mono-couche** via geopandas/pyogrio. Un seul format interne à gérer, relecture triviale, pas de dépendance aux sidecars `.shx/.dbf/.prj`.
+**Formats d'entrée** : **shapefile = format nominal** — le `.shp` est envoyé **avec tous ses sidecars** (`.shx .dbf .prj .cpg`) en sélection multi-fichiers, ou via un `.zip` contenant le jeu complet. Un `.shp` sans sidecars est **refusé** avec message explicite. Formats secondaires acceptés : `.gpkg`, `.geojson/.json`. Tout est converti en **GPKG mono-couche** via geopandas/pyogrio : un seul format interne à gérer, relecture triviale, pas de dépendance aux sidecars après import.
 
 **CRS** : normalisation EPSG:4326 à l'import (le pipeline carte travaille en 4326/WGS84). Le `crs_source` est conservé pour traçabilité.
 

@@ -12,9 +12,10 @@ explicitement — aucun import automatique.
 """
 
 import logging
+import shutil
 import tempfile
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
@@ -54,10 +55,21 @@ def _couche(db: Session, tenant_ctx: TenantContext, project_id: str, layer_id: s
     return couche
 
 
+def _choisir_fichier_principal(dossier: Path) -> Path:
+    """Choisit le fichier SIG principal parmi les uploads (shp > gpkg > geojson > zip)."""
+    for ext in (".shp", ".gpkg", ".geojson", ".json", ".zip"):
+        trouves = sorted(dossier.glob(f"*{ext}"))
+        if trouves:
+            return trouves[0]
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Aucun fichier SIG exploitable dans l'envoi "
+                               "(.shp/.gpkg/.geojson/.zip attendu).")
+
+
 @router.post("/projets/{project_id}/aux-layers")
 async def upload_aux_layer(
     project_id: str,
-    file: UploadFile = File(...),
+    files: List[UploadFile] = File(...),
     type: str = Form(...),
     nom: Optional[str] = Form(None),
     colonne_z: Optional[str] = Form(None),
@@ -67,7 +79,8 @@ async def upload_aux_layer(
     """
     Import d'une couche SIG satellite — action explicite de l'utilisateur.
 
-    - `file` : .gpkg, .geojson ou .zip (jeu .shp complet + sidecars)
+    - `files` : un ou plusieurs fichiers — .shp AVEC ses sidecars
+      (.shx/.dbf/.prj/.cpg), ou .gpkg, .geojson, ou .zip (jeu .shp complet)
     - `type` : altimetrie_points | bv_officiel | metrologie | autre
     - `colonne_z` : (altimetrie_points) nom du champ d'altitude si non
       auto-détectable (ex. Field4 pour TOPO CHLEF)
@@ -79,23 +92,31 @@ async def upload_aux_layer(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Type invalide. Attendu : {sorted(svc.TYPES_VALIDES)}",
         )
+    if not files:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="Aucun fichier fourni.")
 
-    suffixe = Path(file.filename or "").suffix.lower()
-    if suffixe not in svc.EXTENSIONS_ACCEPTEES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Format non supporté. Attendu : .gpkg, .geojson ou .zip "
-                   "(un .shp seul est refusé : sidecars requis).",
-        )
+    # Écriture des uploads dans un dossier temporaire en conservant les noms
+    # d'origine (indispensable : les sidecars .shx/.dbf/.prj doivent partager
+    # le basename du .shp).
+    tmp_dir = Path(tempfile.mkdtemp(prefix="aux_upload_"))
+    try:
+        taille_totale = 0
+        for uf in files:
+            nom_base = Path(uf.filename or "upload").name  # anti path-traversal
+            cible = tmp_dir / nom_base
+            contenu = await uf.read()
+            taille_totale += len(contenu)
+            if taille_totale > svc.TAILLE_MAX_OCTETS:
+                raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                                    detail="Envoi trop volumineux (limite 200 Mo).")
+            cible.write_bytes(contenu)
 
-    # Écriture temporaire du fichier uploadé
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffixe, prefix="aux_upload_") as tmp:
-        contenu = await file.read()
-        if len(contenu) > svc.TAILLE_MAX_OCTETS:
-            raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                                detail="Fichier trop volumineux (limite 200 Mo).")
-        tmp.write(contenu)
-        tmp_path = Path(tmp.name)
+        tmp_path = _choisir_fichier_principal(tmp_dir)
+        fichier_nom = tmp_path.name
+    except Exception:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise
 
     try:
         try:
@@ -104,9 +125,9 @@ async def upload_aux_layer(
                 org_id=tenant_ctx.org_id,
                 project_id=project_id,
                 type_couche=type,
-                nom=nom or (file.filename or "couche"),
+                nom=nom or fichier_nom,
                 fichier_path=tmp_path,
-                fichier_nom=file.filename or "couche",
+                fichier_nom=fichier_nom,
                 colonne_z=colonne_z,
             )
         except ValueError as e:
@@ -155,10 +176,7 @@ async def upload_aux_layer(
         return {"statut": "ok", "couche": resultat}
 
     finally:
-        try:
-            tmp_path.unlink(missing_ok=True)
-        except Exception:
-            pass
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 @router.get("/projets/{project_id}/aux-layers")

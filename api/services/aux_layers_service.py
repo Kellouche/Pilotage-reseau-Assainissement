@@ -7,8 +7,9 @@ Indépendance totale : ces couches ne sont JAMAIS fusionnées dans le GPKG
 projet, jamais lues par le pipeline SWMM/.inp, jamais sources d'écriture
 dans les tables réseau (Canalisation, Regard, Simulation).
 
-Formats d'entrée acceptés : .gpkg, .geojson/.json, .zip (contenant un jeu
-.shp + sidecars). Un .shp seul est refusé (sidecars requis).
+Formats d'entrée acceptés : .shp (avec ses sidecars .shx/.dbf/.prj/.cpg
+présents dans le même dossier), .gpkg, .geojson/.json, .zip (contenant un
+jeu .shp complet). Un .shp sans sidecars est refusé.
 Sortie interne : GPKG mono-couche stocké via ArtifactStore (clé
 org/projet/gis/aux_layers/{layer_id}/layer.gpkg).
 ================================================================================
@@ -37,7 +38,8 @@ TYPES_VALIDES = {
     "autre",
 }
 
-EXTENSIONS_ACCEPTEES = {".gpkg", ".geojson", ".json", ".zip"}
+EXTENSIONS_ACCEPTEES = {".gpkg", ".geojson", ".json", ".zip", ".shp"}
+SIDECARS_SHP_REQUIS = (".shx", ".dbf")
 TAILLE_MAX_OCTETS = 200 * 1024 * 1024  # 200 Mo
 NB_FEATURES_MAX_SANS_BOUNDS = 20000
 
@@ -155,10 +157,18 @@ def importer_couche_aux(
     suffixe = fichier_path.suffix.lower()
     if suffixe not in EXTENSIONS_ACCEPTEES:
         raise ValueError(
-            f"Format non supporté ({suffixe}). Formats acceptés : .gpkg, .geojson, .zip "
-            "(un .shp seul est refusé : ses sidecars .shx/.dbf/.prj sont requis — "
-            "compressez le jeu complet en .zip)."
+            f"Format non supporté ({suffixe}). Formats acceptés : .shp (avec "
+            "sidecars), .gpkg, .geojson ou .zip."
         )
+    if suffixe == ".shp":
+        manquants = [s for s in SIDECARS_SHP_REQUIS
+                     if not fichier_path.with_suffix(s).exists()]
+        if manquants:
+            raise ValueError(
+                "Shapefile incomplet : sidecars manquants "
+                f"({', '.join(manquants)}). Sélectionnez le .shp avec tous ses "
+                "sidecars (.shx .dbf .prj .cpg) ou compressez-les en .zip."
+            )
     if fichier_path.stat().st_size > TAILLE_MAX_OCTETS:
         raise ValueError("Fichier trop volumineux (limite 200 Mo).")
 

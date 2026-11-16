@@ -154,11 +154,16 @@ def test_import_zip_shp(db, org_projet, tmp_path):
 
 
 def test_import_shp_seul_refuse(db, org_projet, tmp_path):
-    """Un .shp sans sidecars est refusé (EXTENSIONS n'inclut pas .shp)."""
+    """Un .shp sans sidecars est refusé (validation explicite)."""
     gdf = _topo_gdf(n=5)
     f = tmp_path / "topo.shp"
     _ecrire_fichier(gdf, f, "shp")
-    with pytest.raises(ValueError, match="non supporté"):
+    # Supprime les sidecars pour simuler un .shp isolé
+    for ext in (".shx", ".dbf", ".prj", ".cpg"):
+        p = f.with_suffix(ext)
+        if p.exists():
+            p.unlink()
+    with pytest.raises(ValueError, match="incomplet"):
         svc.importer_couche_aux(
             db=db, org_id=org_projet["org"].id, project_id=org_projet["proj"].id,
             type_couche="autre", nom="x", fichier_path=f, fichier_nom="topo.shp",
@@ -289,7 +294,7 @@ def test_endpoint_upload_liste_geojson_elevation(db, org_projet, tmp_path):
     with open(f, "rb") as fh:
         r = client.post(
             f"/api/v1/projets/{pid}/aux-layers",
-            files={"file": ("topo.gpkg", fh, "application/octet-stream")},
+            files=[("files", ("topo.gpkg", fh, "application/octet-stream"))],
             data={"type": "altimetrie_points", "colonne_z": "Field4"},
             headers=_h(tok),
         )
@@ -338,18 +343,44 @@ def test_endpoint_type_invalide_et_shp_seul(db, org_projet, tmp_path):
     _ecrire_fichier(gdf, f, "gpkg")
     with open(f, "rb") as fh:
         r = client.post(f"/api/v1/projets/{pid}/aux-layers",
-                        files={"file": ("t.gpkg", fh, "application/octet-stream")},
+                        files=[("files", ("t.gpkg", fh, "application/octet-stream"))],
                         data={"type": "inconnu"}, headers=_h(tok))
     assert r.status_code == 400
 
-    # .shp seul → 400
+    # .shp SANS sidecars → 400
     f2 = tmp_path / "t.shp"
     _ecrire_fichier(gdf, f2, "shp")
     with open(f2, "rb") as fh:
         r = client.post(f"/api/v1/projets/{pid}/aux-layers",
-                        files={"file": ("t.shp", fh, "application/octet-stream")},
+                        files=[("files", ("t.shp", fh, "application/octet-stream"))],
                         data={"type": "autre"}, headers=_h(tok))
     assert r.status_code == 400
+
+
+def test_endpoint_upload_shp_multi_fichiers(db, org_projet, tmp_path):
+    """Un .shp + ses sidecars envoyés ensemble (multi-fichiers) doit être accepté."""
+    client = TestClient(app)
+    pid = org_projet["proj"].id
+    tok = org_projet["token"]
+
+    gdf = _topo_gdf(n=20, spread=500.0)
+    shp_dir = tmp_path / "jeu_shp"
+    shp_dir.mkdir()
+    _ecrire_fichier(gdf, shp_dir / "topo.shp", "shp")
+
+    fichiers = []
+    for p in sorted(shp_dir.iterdir()):
+        fichiers.append(("files", (p.name, open(p, "rb"), "application/octet-stream")))
+    try:
+        r = client.post(f"/api/v1/projets/{pid}/aux-layers",
+                        files=fichiers,
+                        data={"type": "metrologie", "nom": "Shp direct"},
+                        headers=_h(tok))
+    finally:
+        for _, (_, fh, _) in fichiers:
+            fh.close()
+    assert r.status_code == 200, r.text
+    assert r.json()["couche"]["nb_features"] == 20
 
 
 def test_endpoint_stealth_404(db, org_projet, tmp_path):
@@ -479,7 +510,7 @@ def test_endpoint_regards_terrain(db, org_projet, tmp_path):
     _ecrire_fichier(topo, f, "gpkg")
     with open(f, "rb") as fh:
         r = client.post(f"/api/v1/projets/{pid}/aux-layers",
-                        files={"file": ("topo.gpkg", fh, "application/octet-stream")},
+                        files=[("files", ("topo.gpkg", fh, "application/octet-stream"))],
                         data={"type": "altimetrie_points", "colonne_z": "Field4"},
                         headers=_h(tok))
     assert r.status_code == 200, r.text
@@ -512,7 +543,7 @@ def test_endpoint_sans_altitude_colonne_z(db, org_projet, tmp_path):
     _ecrire_fichier(gdf, f, "geojson")
     with open(f, "rb") as fh:
         r = client.post(f"/api/v1/projets/{pid}/aux-layers",
-                        files={"file": ("topo.geojson", fh, "application/geo+json")},
+                        files=[("files", ("topo.geojson", fh, "application/geo+json"))],
                         data={"type": "altimetrie_points"}, headers=_h(tok))
     assert r.status_code == 200, r.text
     couche = r.json()["couche"]

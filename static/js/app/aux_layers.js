@@ -307,11 +307,11 @@
         const fileEl = document.getElementById('aux-file');
         const statutEl = document.getElementById('aux-upload-statut');
         const btn = document.getElementById('btn-aux-upload');
-        if (!fileEl || !fileEl.files || !fileEl.files[0]) {
+        if (!fileEl || !fileEl.files || !fileEl.files.length) {
             statutEl.style.display = 'block';
             statutEl.style.background = 'rgba(248,113,113,0.12)';
             statutEl.style.color = '#fca5a5';
-            statutEl.textContent = 'Sélectionnez un fichier (.gpkg, .geojson ou .zip).';
+            statutEl.textContent = 'Sélectionnez un fichier (.shp + sidecars, .gpkg, .geojson ou .zip).';
             return;
         }
         const pid = await resoudreProjectId();
@@ -324,7 +324,8 @@
         }
 
         const fd = new FormData();
-        fd.append('file', fileEl.files[0]);
+        // Shapefile : tous les fichiers sélectionnés (shp + sidecars) sous 'files'
+        Array.from(fileEl.files).forEach(f => fd.append('files', f));
         fd.append('type', document.getElementById('aux-type').value);
         const nom = document.getElementById('aux-nom').value.trim();
         if (nom) fd.append('nom', nom);

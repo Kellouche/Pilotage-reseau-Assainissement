@@ -33,10 +33,12 @@ Objet : Modale d'import d'une couche SIG « satellite » (SHP.md) — action
                     <label style="font-size: 0.78rem; color: #cbd5e1; display: block; margin-bottom: 6px; font-weight: 600;">
                         <i class="fas fa-file-upload me-1"></i> Fichier
                     </label>
-                    <input type="file" id="aux-file" accept=".gpkg,.geojson,.json,.zip"
+                    <input type="file" id="aux-file" multiple accept=".shp,.shx,.dbf,.prj,.cpg,.gpkg,.geojson,.json,.zip"
                            style="width: 100%; font-size: 0.8rem; padding: 8px; background: #0f172a; color: #f8fafc; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px;">
                     <div style="font-size: 0.7rem; color: #64748b; margin-top: 4px;">
-                        .gpkg, .geojson ou .zip (pour un .shp : compressez le jeu complet .shp/.shx/.dbf/.prj/.cpg en .zip — un .shp seul est refusé). Limite 200 Mo.
+                        <b>Shapefile</b> : sélectionnez le <code>.shp</code> <b>avec tous ses sidecars</b>
+                        (<code>.shx .dbf .prj .cpg</code>) — ou un <code>.zip</code> contenant le jeu complet.
+                        Formats aussi acceptés : .gpkg, .geojson. Limite 200 Mo.
                     </div>
                 </div>
 
