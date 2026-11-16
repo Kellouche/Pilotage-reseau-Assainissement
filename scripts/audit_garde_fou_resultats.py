@@ -95,7 +95,10 @@ def main() -> int:
         stats["charges"] += 1
 
         try:
-            gf = agent.analyser(data)
+            # Config garde-fou du projet propriétaire (sinon défauts)
+            _proj = getattr(sim, "project", None)
+            _cfg = getattr(_proj, "garde_fou_config", None)
+            gf = agent.analyser(data, config=_cfg)
         except Exception as e:
             logger.warning("Garde-fou en échec %s : %s", sid, e)
             stats["erreurs"] += 1

@@ -713,7 +713,9 @@ def run_native_swmm_simulation(
         params_exec = payload.model_dump()
         params_exec["cluster_id"] = cluster_id_effectif
         params_exec["apports_dwf"] = apports_dwf
-        resultat = _executer_moteur_swmm(gpkg_path, params_exec, execution_mode="sync")
+        resultat = _executer_moteur_swmm(
+            gpkg_path, params_exec, execution_mode="sync",
+            garde_fou_config=getattr(proj, "garde_fou_config", None))
         resultat["source_gpkg"] = str(gpkg_path.resolve())
         resultat["project_name"] = project_name or gpkg_path.stem
         resultat["param_hash"] = param_hash

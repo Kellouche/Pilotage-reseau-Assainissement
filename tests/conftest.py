@@ -41,6 +41,8 @@ def setup_test_database():
             # LOT P1.4 — estampillage GPKG des apports DWF
             "ALTER TABLE apports_dwf ADD COLUMN gpkg_version_id VARCHAR(36)",
             "ALTER TABLE apports_dwf ADD COLUMN gpkg_sha256 VARCHAR(64)",
+            # Paramétrage garde-fou par projet (JSON nullable)
+            "ALTER TABLE projects ADD COLUMN garde_fou_config JSON",
             # LOT P6.1 — historique métier des apports DWF
             "CREATE TABLE IF NOT EXISTS apports_dwf_history (id VARCHAR(36) PRIMARY KEY, org_id VARCHAR(36) NOT NULL, project_id VARCHAR(36) NOT NULL, apport_id VARCHAR(36) NOT NULL, action VARCHAR(30) NOT NULL, changed_fields JSON, previous_state JSON, new_state JSON, changed_by_id VARCHAR(36), created_at DATETIME NOT NULL)",
             "CREATE INDEX IF NOT EXISTS ix_apports_dwf_hist_org_proj ON apports_dwf_history (org_id, project_id)",

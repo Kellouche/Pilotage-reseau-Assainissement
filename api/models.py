@@ -290,6 +290,9 @@ class Project(Base):
     pipes_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     outfalls_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Paramétrage du garde-fou hydraulicien (seuils, preset, profil réseau)
+    # — politique d'acceptation propre au projet, nullable = défauts.
+    garde_fou_config: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     created_by_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, onupdate=_utc_now, nullable=False)

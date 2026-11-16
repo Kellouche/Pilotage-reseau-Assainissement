@@ -688,6 +688,7 @@ def executer_moteur_swmm(
     gpkg_path: Path,
     params: Dict[str, Any],
     execution_mode: str = "sync",
+    garde_fou_config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Point d'entrée métier unique : prépare le scénario (BMS) puis exécute
@@ -719,6 +720,7 @@ def executer_moteur_swmm(
         scenario_personnalise=scenario_bms_dict,
         apports_dwf=params.get("apports_dwf"),
         execution_mode=execution_mode,
+        garde_fou_config=garde_fou_config,
     )
 
     return corriger_pic_depuis_timeseries(resultat)
@@ -1547,7 +1549,8 @@ def executer_en_async(
     debut = datetime.now(timezone.utc)
     try:
         resultat = executer_moteur_swmm(
-            gpkg_path, params_exec, execution_mode="celery")
+            gpkg_path, params_exec, execution_mode="celery",
+            garde_fou_config=getattr(proj, "garde_fou_config", None))
     except Exception:
         sim.status = "failed"
         db.commit()

@@ -1,0 +1,74 @@
+<!--
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Objet : Modale de paramétrage du garde-fou hydraulicien (Agent 0) par projet
+================================================================================
+-->
+
+    <!-- Modal Paramétrage Garde-fou hydraulicien -->
+    <div id="modal-garde-fou" onclick="if(event.target === this) fermerModalGardeFou();" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(6px); z-index: 3100; align-items: center; justify-content: center;">
+        <div style="background: #1e293b; color: #f8fafc; border-radius: 16px; width: 94%; max-width: 860px; max-height: 92vh; display: flex; flex-direction: column; border: 1px solid rgba(255, 255, 255, 0.15); box-shadow: 0 25px 50px rgba(0, 0, 0, 0.6); overflow: hidden;">
+
+            <!-- ===== En-tête ===== -->
+            <div style="background: #0f172a; padding: 16px 24px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="width: 38px; height: 38px; border-radius: 10px; background: linear-gradient(135deg, #7c3aed, #5b21b6); display: flex; align-items: center; justify-content: center; font-size: 18px; color: white;">
+                        <i class="fas fa-shield-alt"></i>
+                    </div>
+                    <div>
+                        <h5 style="margin: 0; font-weight: 700; font-size: 1.05rem;">Contrôle qualité du modèle — Paramètres</h5>
+                        <small style="color: #94a3b8;" id="gf-projet-nom">—</small>
+                    </div>
+                </div>
+                <button onclick="fermerModalGardeFou()" style="background: transparent; border: none; color: #94a3b8; font-size: 24px; cursor: pointer; line-height: 1;">&times;</button>
+            </div>
+
+            <!-- ===== Corps ===== -->
+            <div style="padding: 20px 24px; overflow-y: auto; flex: 1;">
+
+                <div id="gf-statut" style="margin-bottom: 16px; font-size: 0.82rem; color: #94a3b8;"></div>
+                <div id="gf-note-lecture-seule" style="display:none; margin-bottom: 14px; background: rgba(148,163,184,0.08); border: 1px solid rgba(148,163,184,0.3); border-radius: 8px; padding: 8px 12px; font-size: 0.78rem; color: #94a3b8;">
+                    <i class="fas fa-eye me-1"></i> Profil en lecture seule : la modification des seuils et le ré-audit sont réservés aux ingénieurs.
+                </div>
+
+                <!-- Préréglage -->
+                <div style="margin-bottom: 18px;">
+                    <div class="gf-section-titre"><i class="fas fa-sliders-h"></i> Préréglage</div>
+                    <div id="gf-presets" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px;"></div>
+                </div>
+
+                <!-- Profil réseau -->
+                <div style="margin-bottom: 18px;">
+                    <div class="gf-section-titre"><i class="fas fa-project-diagram"></i> Profil du réseau <small style="color:#64748b; font-weight:400;">(suggestions — modifiables ensuite)</small></div>
+                    <div id="gf-profils" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px;"></div>
+                </div>
+
+                <!-- Contrôles actifs -->
+                <div style="margin-bottom: 18px;">
+                    <div class="gf-section-titre"><i class="fas fa-tasks"></i> Contrôles actifs</div>
+                    <div id="gf-checks" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 6px 16px;"></div>
+                </div>
+
+                <!-- Seuils -->
+                <div>
+                    <div class="gf-section-titre"><i class="fas fa-balance-scale"></i> Seuils d'acceptation</div>
+                    <div id="gf-seuils"></div>
+                </div>
+
+            </div>
+
+            <!-- ===== Pied ===== -->
+            <div style="background: #0f172a; padding: 14px 24px; border-top: 1px solid rgba(255, 255, 255, 0.1); display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <button id="gf-btn-reaudit" onclick="reauditGardeFou()" style="background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.4); color: #fbbf24; padding: 8px 14px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 7px;">
+                    <i class="fas fa-history"></i> Ré-appliquer à l'historique
+                </button>
+                <div style="display: flex; gap: 10px;">
+                    <button onclick="fermerModalGardeFou()" style="background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #cbd5e1; padding: 8px 16px; border-radius: 8px; font-size: 0.82rem; font-weight: 600; cursor: pointer;">Fermer</button>
+                    <button id="gf-btn-enregistrer" onclick="enregistrerConfigGardeFou()" style="background: linear-gradient(135deg, #7c3aed, #5b21b6); border: none; color: white; padding: 8px 18px; border-radius: 8px; font-size: 0.82rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 7px; box-shadow: 0 4px 12px rgba(124, 58, 237, 0.35);">
+                        <i class="fas fa-save"></i> Enregistrer
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>

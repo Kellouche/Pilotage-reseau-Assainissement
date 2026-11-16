@@ -154,6 +154,8 @@ def init_db():
             # LOT P1.4 — estampillage GPKG des apports DWF (migration douce)
             "ALTER TABLE apports_dwf ADD COLUMN gpkg_version_id VARCHAR(36)",
             "ALTER TABLE apports_dwf ADD COLUMN gpkg_sha256 VARCHAR(64)",
+            # Paramétrage garde-fou par projet (JSON nullable)
+            "ALTER TABLE projects ADD COLUMN garde_fou_config JSON",
         ):
             try:
                 conn.execute(text(ddl))

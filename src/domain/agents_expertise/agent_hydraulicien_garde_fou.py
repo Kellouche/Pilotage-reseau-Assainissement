@@ -28,9 +28,44 @@ class AgentHydraulicienGardeFou:
 
     SEUIL_RESEAU_PLAT = 0.90      # ≥90 % des radier identiques → réseau plat
     SEUIL_PENTE_NULLE_M = 0.005   # |Δz| < 5 mm sur une conduites → pente nulle
+    SEUIL_PENTE_NULLE_LONGUEUR_M = 10.0
     SEUIL_RATIO_ABERRANT = 50.0   # Q/Qmax > 50 → probable défaut de données
     SEUIL_CONTINUITE_PCT = 5.0    # Erreur de continuité > 5 % → bilan douteux
     SEUIL_INONDATION_ARTIFICIELLE = 0.80  # ≥80 % des nœuds inondés
+    SEUIL_ALTIMETRIE_CONFONDUE = 0.30  # ≥30 % des cotes = profondeurs
+    SEUIL_SENTINELLE = 0.20       # ≥20 % des cotes à la valeur sentinelle
+    SENTINELLE_VALEUR_M = 100.0   # Valeur par défaut codée en dur du résolveur
+
+    @staticmethod
+    def _resoudre_config(config: Optional[Dict[str, Any]],
+                         meta: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """
+        Résout la configuration effective : paramètre explicite prioritaire,
+        sinon `meta["garde_fou_config"]` (injectée par le moteur depuis le
+        paramétrage projet). None = seuils par défaut de la classe.
+        """
+        brut = config if isinstance(config, dict) else None
+        if brut is None and isinstance(meta, dict):
+            brut = meta.get("garde_fou_config")
+        if not isinstance(brut, dict) or not brut:
+            return None
+        from api.services.garde_fou_service import config_effective
+        return config_effective(brut)
+
+    @staticmethod
+    def _seuil(cfg: Optional[Dict[str, Any]], cle: str, defaut: float) -> float:
+        if cfg:
+            try:
+                return float((cfg.get("seuils") or {}).get(cle, defaut))
+            except (TypeError, ValueError):
+                pass
+        return float(defaut)
+
+    @staticmethod
+    def _check_actif(cfg: Optional[Dict[str, Any]], code: str) -> bool:
+        if cfg:
+            return bool((cfg.get("checks_actives") or {}).get(code, True))
+        return True
 
     def analyser(
         self,
@@ -38,6 +73,7 @@ class AgentHydraulicienGardeFou:
         node_results: Optional[Dict[str, Any]] = None,
         conduit_results: Optional[Dict[str, Any]] = None,
         meta: Optional[Dict[str, Any]] = None,
+        config: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         anomalies: List[Dict[str, Any]] = []
         recommandations: List[str] = []
@@ -48,6 +84,7 @@ class AgentHydraulicienGardeFou:
         node_results = node_results if node_results is not None else (sim_result.get("node_results") or {})
         conduit_results = conduit_results if conduit_results is not None else (sim_result.get("conduit_results") or {})
         meta = meta if meta is not None else (sim_result.get("meta") or {})
+        cfg = self._resoudre_config(config, meta)
 
         sections = self._parser_sections(inp_content)
         junctions_details = self._lire_junctions_details(sections.get("junctions", []))
@@ -63,13 +100,13 @@ class AgentHydraulicienGardeFou:
         }
 
         # ── 1. Réseau plat : altimétrie synthétique dégradée ─────────────
-        if len(junctions) >= 10:
+        if self._check_actif(cfg, "RESEAU_PLAT") and len(junctions) >= 10:
             _comptage = Counter(round(v, 3) for v in junctions.values())
             _modal_elev, _modal_n = _comptage.most_common(1)[0]
             _part = _modal_n / len(junctions)
             indicateurs["elevation_modale"] = _modal_elev
             indicateurs["part_elevation_modale_pct"] = round(_part * 100.0, 1)
-            if _part >= self.SEUIL_RESEAU_PLAT:
+            if _part >= self._seuil(cfg, "reseau_plat_pct", self.SEUIL_RESEAU_PLAT):
                 anomalies.append({
                     "code": "RESEAU_PLAT",
                     "severite": "critique",
@@ -90,7 +127,8 @@ class AgentHydraulicienGardeFou:
                 )
 
         # ── 2. Nœuds sans exutoire : inondation artificielle garantie ────
-        _noeuds_sans_issue = self._detecter_noeuds_sans_issue(junctions, outfalls, conduits)
+        _noeuds_sans_issue = (self._detecter_noeuds_sans_issue(junctions, outfalls, conduits)
+                              if self._check_actif(cfg, "NOEUD_SANS_EXUTOIRE") else [])
         indicateurs["nb_noeuds_sans_exutoire"] = len(_noeuds_sans_issue)
         if _noeuds_sans_issue:
             anomalies.append({
@@ -109,7 +147,12 @@ class AgentHydraulicienGardeFou:
             )
 
         # ── 3. Conduites à pente nulle ────────────────────────────────────
-        _pentes_nulles = self._detecter_pentes_nulles(conduits, junctions)
+        _pentes_nulles = (self._detecter_pentes_nulles(
+            conduits, junctions,
+            seuil_m=self._seuil(cfg, "pente_nulle_m", self.SEUIL_PENTE_NULLE_M),
+            longueur_min_m=self._seuil(cfg, "pente_nulle_longueur_m",
+                                       self.SEUIL_PENTE_NULLE_LONGUEUR_M))
+            if self._check_actif(cfg, "PENTE_NULLE") else [])
         indicateurs["nb_conduites_pente_nulle"] = len(_pentes_nulles)
         if _pentes_nulles:
             _pct = len(_pentes_nulles) / max(len(conduits), 1) * 100.0
@@ -124,27 +167,30 @@ class AgentHydraulicienGardeFou:
             })
 
         # ── 4. Bilan de masse (continuité de routage) ─────────────────────
-        _continuite = self._lire_continuite_rpt(sim_result.get("rpt_content") or "")
-        _kpis_cont = [abs(float(kpis.get(k) or 0.0))
-                      for k in ("routing_continuity_error_pct", "runoff_continuity_error_pct")]
-        if _kpis_cont:
-            _continuite = max([v for v in _kpis_cont if v > 0] or [0.0]) or _continuite
+        _seuil_cont = self._seuil(cfg, "continuite_pct", self.SEUIL_CONTINUITE_PCT)
+        _continuite = (self._lire_continuite_rpt(sim_result.get("rpt_content") or "")
+                       if self._check_actif(cfg, "BILAN_MASSE_DEGRADE") else None)
+        if self._check_actif(cfg, "BILAN_MASSE_DEGRADE"):
+            _kpis_cont = [abs(float(kpis.get(k) or 0.0))
+                          for k in ("routing_continuity_error_pct", "runoff_continuity_error_pct")]
+            if _kpis_cont:
+                _continuite = max([v for v in _kpis_cont if v > 0] or [0.0]) or _continuite
         if _continuite is not None:
             indicateurs["continuite_erreur_pct_max"] = _continuite
-            if abs(_continuite) > self.SEUIL_CONTINUITE_PCT:
+            if abs(_continuite) > _seuil_cont:
                 anomalies.append({
                     "code": "BILAN_MASSE_DEGRADE",
                     "severite": "majeure",
                     "message": (
                         f"Erreur de continuité maximale du routage : {abs(_continuite):.2f} % "
-                        f"(seuil {self.SEUIL_CONTINUITE_PCT} %) — les volumes routés ne "
+                        f"(seuil {_seuil_cont:g} %) — les volumes routés ne "
                         "sont pas strictement conservés."
                     ),
                     "details": {"continuity_error_pct": _continuite},
                 })
 
         # ── 5. Inondation généralisée suspecte ───────────────────────────
-        _nb_noeuds = len(node_results)
+        _nb_noeuds = len(node_results) if self._check_actif(cfg, "INONDATION_GENERALISEE") else 0
         _nb_inondes = sum(
             1 for n in node_results.values()
             if isinstance(n, dict) and (n.get("status") == "flooded" or float(n.get("hours_flooded") or 0) > 0)
@@ -152,7 +198,7 @@ class AgentHydraulicienGardeFou:
         if _nb_noeuds:
             _taux_inond = _nb_inondes / _nb_noeuds
             indicateurs["taux_noeuds_inondes_pct"] = round(_taux_inond * 100.0, 1)
-            if _taux_inond >= self.SEUIL_INONDATION_ARTIFICIELLE:
+            if _taux_inond >= self._seuil(cfg, "inondation_pct", self.SEUIL_INONDATION_ARTIFICIELLE):
                 _plat = any(a["code"] == "RESEAU_PLAT" for a in anomalies)
                 anomalies.append({
                     "code": "INONDATION_GENERALISEE",
@@ -169,9 +215,10 @@ class AgentHydraulicienGardeFou:
         # ── 6. Ratios hydrauliques aberrants (qualité des données) ────────
         _ratios = [float(c.get("flow_ratio") or 0.0) for c in conduit_results.values()
                    if isinstance(c, dict)]
-        _ratio_max = max(_ratios) if _ratios else 0.0
+        _seuil_ratio = self._seuil(cfg, "ratio_aberrant", self.SEUIL_RATIO_ABERRANT)
+        _ratio_max = (max(_ratios) if _ratios else 0.0) if self._check_actif(cfg, "RATIO_HYDRAULIQUE_ABERRANT") else 0.0
         indicateurs["flow_ratio_max"] = round(_ratio_max, 2)
-        if _ratio_max > self.SEUIL_RATIO_ABERRANT:
+        if _ratio_max > _seuil_ratio:
             anomalies.append({
                 "code": "RATIO_HYDRAULIQUE_ABERRANT",
                 "severite": "mineure",
@@ -185,7 +232,8 @@ class AgentHydraulicienGardeFou:
 
         # ── 7. Altimétrie synthétique : transparence sur la provenance ───
         _src_alt = str(meta.get("source_altimetrique") or "")
-        if "Pente moyenne" in _src_alt or "utilisateur" in _src_alt.lower():
+        if (self._check_actif(cfg, "ALTIMETRIE_SYNTHETIQUE")
+                and ("Pente moyenne" in _src_alt or "utilisateur" in _src_alt.lower())):
             anomalies.append({
                 "code": "ALTIMETRIE_SYNTHETIQUE",
                 "severite": "info",
@@ -211,7 +259,10 @@ class AgentHydraulicienGardeFou:
         if junctions_details:
             _taux_elev_prof = _nb_elev_eq_prof / len(junctions_details)
             indicateurs["part_elevation_egale_maxdepth_pct"] = round(_taux_elev_prof * 100.0, 1)
-            if _taux_elev_prof >= 0.30:
+            _seuil_conf = self._seuil(cfg, "altimetrie_confondue_pct",
+                                      self.SEUIL_ALTIMETRIE_CONFONDUE)
+            if (_taux_elev_prof >= _seuil_conf
+                    and self._check_actif(cfg, "ALTIMETRIE_CONFONDUE_PROFONDEUR")):
                 anomalies.append({
                     "code": "ALTIMETRIE_CONFONDUE_PROFONDEUR",
                     "severite": "critique",
@@ -237,20 +288,22 @@ class AgentHydraulicienGardeFou:
         # Quand la source altimétrique est partielle, les nœuds sans valeur
         # retombent sur 100.0 : une fraction élevée de ce plateau trahit des
         # cotes manquantes silencieuses.
-        _nb_sent = sum(1 for v in junctions.values() if abs(v - 100.0) < 0.01)
-        if junctions:
+        _seuil_sent = self._seuil(cfg, "sentinelle_valeur_m", self.SENTINELLE_VALEUR_M)
+        _nb_sent = sum(1 for v in junctions.values() if abs(v - _seuil_sent) < 0.01)
+        if junctions and self._check_actif(cfg, "SENTINELLE_COTE_DEFAUT"):
             _taux_sent = _nb_sent / len(junctions)
             indicateurs["part_cote_100_defaut_pct"] = round(_taux_sent * 100.0, 1)
-            if _taux_sent >= 0.20:
+            if _taux_sent >= self._seuil(cfg, "sentinelle_pct", self.SEUIL_SENTINELLE):
                 anomalies.append({
                     "code": "SENTINELLE_COTE_DEFAUT",
                     "severite": "majeure",
                     "message": (
                         f"{_nb_sent}/{len(junctions)} nœuds ({_taux_sent*100:.0f} %) "
-                        "partagent la cote sentinelle 100.0 m : leurs altitudes "
-                        "n'ont pas été résolues et ont été fixées par défaut."
+                        f"partagent la cote sentinelle {_seuil_sent:g} m : leurs "
+                        "altitudes n'ont pas été résolues et ont été fixées par défaut."
                     ),
-                    "details": {"noeuds_a_100m": _nb_sent},
+                    "details": {"noeuds_sentinelle": _nb_sent,
+                                "valeur_sentinelle_m": _seuil_sent},
                 })
 
         # ── Verdict de fiabilité ─────────────────────────────────────────
@@ -268,6 +321,14 @@ class AgentHydraulicienGardeFou:
                 "Ne pas utiliser ce diagnostic hydraulique comme référence "
                 "d'ingénierie sans correction des anomalies ci-dessus.")
 
+        _config_trace = None
+        if cfg:
+            _config_trace = {
+                "preset": cfg.get("preset"),
+                "profil_reseau": cfg.get("profil_reseau"),
+                "source": cfg.get("source"),
+                "seuils": cfg.get("seuils"),
+            }
         return {
             "agent": "Agent 0 : Garde-fou hydraulicien (contrôle qualité modèle)",
             "fiabilite_modele": fiabilite,
@@ -275,6 +336,7 @@ class AgentHydraulicienGardeFou:
             "anomalies": anomalies,
             "indicateurs_modele": indicateurs,
             "recommandations": recommandations,
+            "config_garde_fou": _config_trace,
         }
 
     # ── Parsing minimal des sections .inp ────────────────────────────────
@@ -355,14 +417,16 @@ class AgentHydraulicienGardeFou:
         return sorted(n for n in _candidats if n not in outfalls)
 
     @staticmethod
-    def _detecter_pentes_nulles(conduits, junctions) -> List[str]:
+    def _detecter_pentes_nulles(conduits, junctions,
+                                seuil_m: float = 0.005,
+                                longueur_min_m: float = 10.0) -> List[str]:
         out = []
         for c in conduits:
             z_u = junctions.get(c["amont"])
             z_d = junctions.get(c["aval"])
             if z_u is None or z_d is None:
                 continue
-            if c["longueur"] > 10.0 and abs(z_u - z_d) < AgentHydraulicienGardeFou.SEUIL_PENTE_NULLE_M:
+            if c["longueur"] > longueur_min_m and abs(z_u - z_d) < seuil_m:
                 out.append(c["nom"])
         return out
 

@@ -172,6 +172,7 @@ class MoteurSWMM:
         scenario_personnalise: Optional[Dict[str, Any]] = None,
         apports_dwf: Optional[List[Dict[str, Any]]] = None,
         execution_mode: str = "sync",
+        garde_fou_config: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Exécute la simulation complète avec pyswmm et extrait les KPIs hydrauliques.
@@ -204,6 +205,11 @@ class MoteurSWMM:
             scenario_personnalise=scenario_personnalise,
             apports_dwf=apports_dwf,
         )
+
+        # Paramétrage garde-fou du projet : propagé dans meta pour que
+        # l'agent 0 l'applique (et le trace dans son verdict).
+        if isinstance(garde_fou_config, dict) and garde_fou_config:
+            meta["garde_fou_config"] = garde_fou_config
 
         rpt_text, _, timeseries = executer_solver_swmm(inp_content, return_timeseries=True)
         kpis = self._analyser_rapport_swmm(rpt_text, meta)

@@ -189,8 +189,10 @@ def _spy_moteur(monkeypatch, resultat=None, erreur=None):
     """Espionne executer_moteur_swmm (frontière moteur) et prouve les appels réels."""
     appels = []
 
-    def fake(gpkg_path, params, execution_mode="sync"):
-        appels.append({"gpkg_path": gpkg_path, "params": dict(params), "execution_mode": execution_mode})
+    def fake(gpkg_path, params, execution_mode="sync", garde_fou_config=None):
+        appels.append({"gpkg_path": gpkg_path, "params": dict(params),
+                       "execution_mode": execution_mode,
+                       "garde_fou_config": garde_fou_config})
         if erreur is not None:
             raise erreur
         return dict(resultat if resultat is not None else _resultat_moteur_fake())
