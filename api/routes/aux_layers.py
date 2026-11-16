@@ -351,3 +351,31 @@ def recalculer_regards_terrain(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                             detail=res.get("raison", "Recalcul impossible."))
     return {"statut": "ok", "resultat": res}
+
+
+@router.get("/projets/{project_id}/aux-layers/{layer_id}/apercu-inp")
+def apercu_injection_altimetrie(
+    project_id: str,
+    layer_id: str,
+    tenant_ctx: TenantContext = Depends(get_tenant_context),
+    db: Session = Depends(get_db),
+):
+    """
+    Aperçu « terrain → radier » (SHP.md §7, option C) : pour chaque regard,
+    z_terrain IDW − profondeur (réelle ou médiane réseau flaggée) =
+    z_radier_terrain estimé. Statistiques de couverture (seuil 95 %),
+    inversions amont/aval détectées. AUCUNE écriture : prévisualisation
+    avant tout usage dans un .inp.
+    """
+    _couche(db, tenant_ctx, project_id, layer_id)
+
+    from api.services import aux_altimetrie_service as alt
+    try:
+        return alt.apercu_elevations_terrain(
+            db=db, org_id=tenant_ctx.org_id,
+            project_id=project_id, layer_id=layer_id,
+        )
+    except Exception as e:
+        logger.exception("Erreur aperçu altimétrie couche %s", layer_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail=f"Erreur aperçu altimétrique : {e}")

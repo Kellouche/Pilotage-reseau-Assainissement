@@ -137,6 +137,31 @@ l'import **et** à chaque nouvelle `gpkg_version` réseau :
   hydraulique (inondation, revanche, atteint_terrain) reste réservée aux
   cotes altimétriques vérifiées du GPKG. Côté graphique, courbe distincte
   en pointillés « Terrain interpolé IDW (≈, ≠ fond de regard) ».
+
+### 7bis. Option C — injection terrain → radier `.inp` (à valider)
+
+Objectif : remplacer le datum synthétique (`100 m + distance × pente`)
+par des cotes radier réelles estimées `z_terrain_IDW − profondeur`.
+
+**Aperçu obligatoire avant tout usage** :
+`GET /api/v1/projets/{id}/aux-layers/{lid}/apercu-inp` → par regard
+`z_terrain_m`, `profondeur_m` (+`profondeur_estimee`), `z_radier_terrain_m`,
+confiance ; statistiques couverture, **inversions amont/aval** détectées.
+
+**Règles actées** :
+- Profondeur manquante → **médiane du réseau calculée** (jamais de défaut
+  aveugle), flag `profondeur_estimee` propagé jusqu'au profil (symbole
+  distinct sur les regards concernés)
+- Couverture ≥ **95 %** des nœuds avec terrain sinon refus explicite —
+  jamais de mixte de datums dans un même `.inp`
+- Exutoire traité comme les autres nœuds (position dans le GPKG → IDW)
+- Artefact périmé (sha ≠ GPKG courant) → refus, recalcul requis
+- Le `.inp` portera une note de provenance (couche, résolution, sha)
+- **Constat live** : 1 951 inversions amont/aval détectées à l'aperçu —
+  le bruit IDW (±1–2 m) dépasse la pente locale sur terrain plat ;
+  l'injection devra donc s'appuyer sur le garde-fou de pente/monotonie
+  existant et remonter les contre-pentes à l'utilisateur, jamais les
+  lisser silencieusement
 - **Limites rappelées** : cote terrain ≠ fond de regard ; usages limités
   aux différences ; `confiance` propagée partout
 - **Collision de codes** : les rares codes dupliqués dans le SIG (13/10 538)

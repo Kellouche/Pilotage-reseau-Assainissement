@@ -591,3 +591,66 @@ def test_terrain_aux_pour_profil(db, org_projet):
     assert _terrain_aux_pour_profil(db, oid, org_projet["proj"], {}) is None
     # Projet None → pas de lookup
     assert _terrain_aux_pour_profil(db, oid, None, {"gpkg_sha": "sha_test_123"}) is None
+
+
+def test_calculer_apercu_terrain(db, org_projet):
+    """Calcul pur de l'aperçu terrain→radier : médiane profondeur, flags,
+    inversions amont/aval, seuil 95 %."""
+    import geopandas as gpd
+    from shapely.geometry import Point
+    from api.services.aux_altimetrie_service import calculer_apercu_terrain
+
+    regards = gpd.GeoDataFrame(
+        {"Code": ["A", "B", "C"], "Profondeur": [2.0, None, 3.0]},
+        geometry=[Point(0, 0), Point(1, 0), Point(2, 0)], crs="EPSG:4326",
+    )
+    canas = gpd.GeoDataFrame(
+        {"ID_AMONT": ["A", "B"], "ID_AVAL": ["B", "C"]},
+        geometry=[Point(0, 0), Point(1, 0)], crs="EPSG:4326",
+    )
+    artefact = {
+        "meta": {"gpkg_sha256": "x", "resolution_m": 30.0},
+        "regards": {
+            "A": {"z_terrain_m": 100.0, "confiance": "haute"},
+            "B": {"z_terrain_m": 99.0, "confiance": "haute"},
+            "C": {"z_terrain_m": 100.0, "confiance": "haute"},
+        },
+    }
+    res = calculer_apercu_terrain(regards, canas, artefact)
+
+    # Médiane des profondeurs réelles {2.0, 3.0} = 2.5
+    assert res["profondeur"]["mediane_reseau_m"] == 2.5
+    assert res["profondeur"]["nb_estimees"] == 1
+    # B sans profondeur → médiane 2.5, flaggé
+    assert res["par_regard"]["B"]["profondeur_estimee"] is True
+    assert res["par_regard"]["B"]["profondeur_m"] == 2.5
+    assert res["par_regard"]["B"]["z_radier_terrain_m"] == 96.5
+    # A→B : 98 > 96.5 OK ; B→C : 96.5 <= 97.0 → inversion
+    assert res["inversions_amont_aval"]["nb"] == 1
+    assert res["inversions_amont_aval"]["echantillon"][0]["amont"] == "B"
+    assert res["couverture"]["pct"] == 100.0
+    assert res["eligible_injection_95"] is True
+
+
+def test_endpoint_apercu_inp_absent(db, org_projet):
+    """Sans artefact regards_terrain, l'aperçu répond 'absent' (pas de crash)."""
+    client = TestClient(app)
+    pid = org_projet["proj"].id
+    tok = org_projet["token"]
+
+    couche = ProjectAuxLayer(
+        org_id=org_projet["org"].id, project_id=pid,
+        type="altimetrie_points", nom="topo sans artefact",
+        storage_key="cle-test", statut="ok", colonne_z="Field4",
+    )
+    db.add(couche)
+    db.commit()
+
+    r = client.get(f"/api/v1/projets/{pid}/aux-layers/{couche.id}/apercu-inp",
+                   headers=_h(tok))
+    assert r.status_code == 200
+    assert r.json()["statut"] == "absent"
+
+    # Couche d'un autre org → stealth 404
+    r2 = client.get(f"/api/v1/projets/{pid}/aux-layers/{couche.id}/apercu-inp")
+    assert r2.status_code in (401, 404)
