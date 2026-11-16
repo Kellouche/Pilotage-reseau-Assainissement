@@ -798,3 +798,51 @@ def test_endpoint_raccordements_orphelins_absent(db, org_projet):
 
     r2 = client.get(f"/api/v1/projets/{pid}/aux-layers/{couche.id}/raccordements-orphelins")
     assert r2.status_code in (401, 404)
+
+
+def test_resoudre_altimetrie_noeuds_mode_terrain():
+    """Option C — elevations_terrain : cotes injectées, nœud non couvert
+    estimé par voisinage (jamais de repli datum 100 m), provenance tracée."""
+    import geopandas as gpd
+    from shapely.geometry import LineString, Point
+    from src.domain.moteur_swmm.assainissement_topologique import (
+        _resoudre_altimetrie_noeuds,
+    )
+
+    regards = gpd.GeoDataFrame(
+        {"Code": ["A", "B", "C"], "Profondeur": [2.0, 2.0, 2.0]},
+        geometry=[Point(0, 0), Point(100, 0), Point(200, 0)],
+        crs="EPSG:32631",
+    )
+    canas = gpd.GeoDataFrame(
+        {"ID_AMANT": ["A", "B"], "ID_AVAL": ["B", "C"], "Longeur": [100.0, 100.0]},
+        geometry=[LineString([(0, 0), (100, 0)]), LineString([(100, 0), (200, 0)])],
+        crs="EPSG:32631",
+    )
+    elevations_terrain = {"A": 105.0, "B": 103.5}  # C non couvert
+    meta = {"layer_nom": "Topographie Chlef", "resolution_m": 29.94,
+            "gpkg_sha256": "abcdef1234567890"}
+
+    elevs, src = _resoudre_altimetrie_noeuds(
+        regards, canas, None, "C", pente_moyenne_pct=1.0,
+        elevations_terrain=elevations_terrain, altimetrie_meta=meta)
+
+    assert elevs["A"] == 105.0
+    assert elevs["B"] == 103.5
+    # C non couvert → estimé par le voisin le plus proche (B, 100 m)
+    assert elevs["C"] == 103.5
+    assert "Terrain IDW" in src
+    assert "Topographie Chlef" in src
+    # Toutes les cotes sont dans le datum terrain — aucune valeur ~100 m
+    # du datum synthétique (sauf coïncidence)
+    assert all(100.0 < v < 200.0 for v in elevs.values())
+
+
+def test_resoudre_elevations_terrain_pour_simulation_absent(db, org_projet):
+    """Option C — sans couche altimétrie, le résolveur répond 'absent'."""
+    from api.services.aux_altimetrie_service import (
+        resoudre_elevations_terrain_pour_simulation,
+    )
+    res = resoudre_elevations_terrain_pour_simulation(
+        db, org_projet["org"].id, org_projet["proj"].id)
+    assert res["statut"] in ("absent", "ignore")

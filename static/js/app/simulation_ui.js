@@ -824,9 +824,14 @@ window.dessinerRaccordementsOrphelinsSurCarte = function() {
             const chkDwf = document.getElementById('sim-chk-dwf-actif');
             const dwfActif = (chkDwf && !chkDwf.disabled) ? chkDwf.checked : null;
 
+            // Option C (SHP.md §7bis) — altimétrie terrain : opt-in explicite.
+            const chkAlt = document.getElementById('sim-chk-altimetrie-terrain');
+            const altimetrieTerrain = chkAlt ? chkAlt.checked : false;
+
             const payloadBody = {
                 scenario_key: isBms ? 'bms_alerte' : scen,
                 dwf_actif: dwfActif,
+                altimetrie_terrain: altimetrieTerrain,
                 duree_heures: duree,
                 pas_routage_sec: pasRoutage,
                 pente_moyenne_pct: penteVal,

@@ -352,6 +352,20 @@ Objet : Modale de paramétrage de pluie, stations ANRH et déclenchement SWMM 5.
                     </small>
                 </div>
 
+                <!-- Option C — Altimétrie terrain (SHP.md §7bis) -->
+                <div style="background: rgba(16,185,129,0.07); border: 1px solid rgba(16,185,129,0.3); border-radius: 10px; padding: 10px 14px; margin-bottom: 16px;">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.82rem; color: #e2e8f0;">
+                        <input type="checkbox" id="sim-chk-altimetrie-terrain" style="width: 16px; height: 16px; accent-color: #10b981;">
+                        <span><b>Altimétrie terrain</b> — cotes radier estimées depuis la topo IDW (couche satellite)</span>
+                    </label>
+                    <small style="color: #94a3b8; font-size: 0.7rem; display: block; margin-top: 6px; margin-left: 26px; line-height: 1.45;">
+                        <i class="fas fa-mountain me-1" style="color: #10b981;"></i>
+                        Remplace le repère synthétique (100 m + pente) par <b>z_terrain − profondeur</b>.
+                        Profondeurs manquantes → médiane réseau (signalée). Couverture ≥ 95 % exigée,
+                        sinon refus explicite. <b>Estimation — ≠ mesures radier.</b> Laisse décoché pour le comportement standard.
+                    </small>
+                </div>
+
                 <!-- Paramètres en grille -->
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px;">
                     <div>

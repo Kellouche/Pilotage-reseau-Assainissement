@@ -44,7 +44,9 @@ def generer_lignes_sections_inp(
     cluster_id: Optional[Union[int, str]],
     bassin_nom: Optional[str],
     buf_actuel: float,
-    apports_dwf: Optional[List[Dict[str, Any]]] = None
+    apports_dwf: Optional[List[Dict[str, Any]]] = None,
+    elevations_terrain: Optional[Dict[str, float]] = None,
+    altimetrie_meta: Optional[Dict[str, Any]] = None,
 ) -> Tuple[List[str], Dict[str, Any]]:
     """
     Génère la liste de lignes de toutes les sections .inp et le dictionnaire meta.
@@ -59,6 +61,11 @@ def generer_lignes_sections_inp(
         ";; SWMM Platform SaaS - Simulation Hydrodynamique Native 5.2",
         f";; Scénario : {scen['nom']}",
         f";; Durée : {duree_sim} heures | Pas de routage : {pas_routage_sec}s",
+        *([f";; Altimétrie : terrain IDW — couche {altimetrie_meta.get('layer_nom') or altimetrie_meta.get('layer_id')}, "
+           f"résolution {altimetrie_meta.get('resolution_m')} m, "
+           f"artefact sha {str(altimetrie_meta.get('gpkg_sha256') or '')[:8]}… "
+           f"(cotes estimées — ≠ mesures radier)"
+          ] if altimetrie_meta else []),
         "",
         "[OPTIONS]",
         "FLOW_UNITS          CMS",
@@ -234,7 +241,9 @@ def generer_lignes_sections_inp(
         key=lambda n: (n.isdigit() is False, n)
     )
 
-    node_elevs, source_alt = _resoudre_altimetrie_noeuds(regards, canalisations, rejets, outfall_code, pente_moyenne_pct)
+    node_elevs, source_alt = _resoudre_altimetrie_noeuds(
+        regards, canalisations, rejets, outfall_code, pente_moyenne_pct,
+        elevations_terrain=elevations_terrain, altimetrie_meta=altimetrie_meta)
     outfall_elev = node_elevs.get(outfall_code, 100.0)
 
     creer_exutoire_dedie = True

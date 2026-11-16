@@ -14,6 +14,7 @@ from typing import Dict, Any, Optional, Tuple, List, Set
 import pandas as pd
 import geopandas as gpd
 import networkx as nx
+import numpy as np
 
 from src.domain.moteur_swmm.constants import _clean_node_id
 
@@ -25,7 +26,9 @@ def _resoudre_altimetrie_noeuds(
     canalisations: gpd.GeoDataFrame,
     rejets: Optional[gpd.GeoDataFrame],
     outfall_code: str,
-    pente_moyenne_pct: Optional[float] = None
+    pente_moyenne_pct: Optional[float] = None,
+    elevations_terrain: Optional[Dict[str, float]] = None,
+    altimetrie_meta: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Dict[str, float], str]:
     """
     Détermine la cote altimétrique (radier) de chaque nœud du réseau.
@@ -76,7 +79,79 @@ def _resoudre_altimetrie_noeuds(
 
     elevations: Dict[str, float] = {}
 
-    if col_trouvee:
+    # Mode « altimétrie terrain » (option C, SHP.md §7bis) : le dict
+    # {nid: z_radier} est fourni par l'appelant (artefact regards_terrain,
+    # z_terrain_IDW − profondeur avec médiane injectée si besoin).
+    # Les nœuds non coulevés sont estimés par le voisin terrain le plus
+    # proche — JAMAIS de repli sur le datum synthétique 100 m, qui
+    # mélangerait deux systèmes de référence dans le même .inp.
+    if elevations_terrain:
+        try:
+            from scipy.spatial import cKDTree
+            _coords_couverts: Dict[str, Tuple[float, float]] = {}
+            _coords_tous: Dict[str, Tuple[float, float]] = {}
+            for idx, r in regards.iterrows():
+                nid = _clean_node_id(r.get("Code"), fallback=f"REG_{idx+1}")
+                if hasattr(r, "geometry") and r.geometry is not None and not r.geometry.is_empty:
+                    try:
+                        _coords_tous[nid] = (float(r.geometry.x), float(r.geometry.y))
+                    except Exception:
+                        pass
+            for nid, z in elevations_terrain.items():
+                nid_c = _clean_node_id(nid)
+                if not nid_c:
+                    continue
+                elevations[nid_c] = round(float(z), 3)
+                if nid_c in _coords_tous:
+                    _coords_couverts[nid_c] = _coords_tous[nid_c]
+            # Nœuds des regards + extrémités de conduites absents du dict
+            # → voisin terrain le plus proche (ou médiane si sans coords)
+            _codes_reseau = set(_coords_tous) | set(elevations.keys())
+            for _, _p in canalisations.iterrows():
+                for _col in ("ID_AMANT", "ID_AVAL"):
+                    _cid = _clean_node_id(_p.get(_col))
+                    if _cid:
+                        _codes_reseau.add(_cid)
+            if rejets is not None:
+                for _idx_r, _rj in rejets.iterrows():
+                    _rid = _clean_node_id(_rj.get("Code") or _rj.get("CODE") or _rj.get("id") or _rj.get("NOM"),
+                                          fallback=f"REJ_{_idx_r+1}")
+                    if _rid:
+                        _codes_reseau.add(_rid)
+            _manquants = [n for n in _codes_reseau if n and n not in elevations]
+            nb_estimes = 0
+            if _manquants and _coords_couverts:
+                _codes_cv = sorted(_coords_couverts)
+                _xy_cv = np.array([_coords_couverts[c] for c in _codes_cv])
+                _arbre = cKDTree(_xy_cv)
+                _z_cv = np.array([elevations[c] for c in _codes_cv])
+                for nid in _manquants:
+                    if nid in _coords_tous:
+                        _, ii = _arbre.query(_coords_tous[nid])
+                        elevations[nid] = round(float(_z_cv[int(ii)]), 3)
+                    else:
+                        elevations[nid] = round(float(np.median(_z_cv)), 3)
+                    nb_estimes += 1
+            elif _manquants:
+                _med = float(np.median(list(elevations.values()))) if elevations else 100.0
+                for nid in _manquants:
+                    elevations[nid] = round(_med, 3)
+                    nb_estimes += 1
+            # Exutoire : traité comme les autres nœuds, mais jamais absent
+            if outfall_code and outfall_code not in elevations:
+                elevations[outfall_code] = round(
+                    float(np.median(list(elevations.values()))) if elevations else 100.0, 3)
+                nb_estimes += 1
+            meta_src = (altimetrie_meta or {})
+            _src = (f"Terrain IDW (couche {meta_src.get('layer_nom') or meta_src.get('layer_id') or '?'}"
+                    f", résolution {meta_src.get('resolution_m') or '?'} m"
+                    f", artefact sha {str(meta_src.get('gpkg_sha256') or '?')[:8]}…)"
+                    f" — {len(elevations_terrain)} cotes, {nb_estimes} estimées par voisinage")
+            return elevations, _src
+        except Exception as _terr_err:
+            logger.warning("Mode altimétrie terrain indisponible, repli pente : %s", _terr_err)
+
+    # Colonnes à VRAIE sémantique altimétrique uniquement.
         for idx, r in regards.iterrows():
             nid = _clean_node_id(r.get("Code"), fallback=f"REG_{idx+1}")
             val = float(r[col_trouvee]) if pd.notna(r[col_trouvee]) else 100.0

@@ -304,6 +304,10 @@ class SimulationRunRequest(BaseModel):
     # LOT P1.3 — apports de temps sec (DWF) : injectés par défaut quand le
     # projet en possède d'actifs ; False = désactivation explicite.
     dwf_actif: Optional[bool] = None
+    # Option C (SHP.md §7bis) — altimétrie terrain IDW dans le .inp :
+    # opt-in explicite, jamais automatique ; couche optionnelle.
+    altimetrie_terrain: Optional[bool] = False
+    altimetrie_layer_id: Optional[str] = None
 
 SimulationRunRequest.model_rebuild()
 
@@ -673,6 +677,33 @@ def run_native_swmm_simulation(
             "apports_incompatibles": e.details,
         })
 
+    # 1ter. Option C (SHP.md §7bis) — altimétrie terrain IDW : opt-in
+    #    explicite. Résolution des cotes radier AVANT le hash (la couche
+    #    entre dans l'empreinte) ; refus 422 explicite si artefact absent,
+    #    périmé ou couverture < 95 % — jamais de repli silencieux sur le
+    #    datum synthétique quand l'utilisateur a demandé le mode terrain.
+    altimetrie_elevations = None
+    altimetrie_meta = None
+    if payload.altimetrie_terrain:
+        if proj is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Mode altimétrie terrain indisponible : aucun projet résolu.")
+        from api.services import aux_altimetrie_service as _alt
+        _alt_res = _alt.resoudre_elevations_terrain_pour_simulation(
+            db, org_id, proj.id, layer_id=payload.altimetrie_layer_id)
+        if _alt_res.get("statut") != "ok":
+            raise HTTPException(status_code=422, detail={
+                "message": f"Altimétrie terrain refusée : {_alt_res.get('raison')}",
+                "statut_altimetrie": _alt_res.get("statut"),
+            })
+        altimetrie_elevations = _alt_res["elevations"]
+        altimetrie_meta = _alt_res["meta"]
+        logger.info(
+            "Altimétrie terrain activée : couche=%s cotes=%s estimées=%s",
+            altimetrie_meta.get("layer_nom"), altimetrie_meta.get("nb_cotes"),
+            altimetrie_meta.get("nb_profondeurs_estimees"))
+
     # 2. Empreinte canonique (hash) des paramètres de simulation.
     #    LOT P1.4.1 — le sha256 de la version résolue (déjà calculé à
     #    l'étape 1, frais et vérifié) sert d'identité de contenu pour le
@@ -747,6 +778,9 @@ def run_native_swmm_simulation(
         params_exec = payload.model_dump()
         params_exec["cluster_id"] = cluster_id_effectif
         params_exec["apports_dwf"] = apports_dwf
+        if altimetrie_elevations is not None:
+            params_exec["altimetrie_elevations"] = altimetrie_elevations
+            params_exec["altimetrie_meta"] = altimetrie_meta
         resultat = _executer_moteur_swmm(
             gpkg_path, params_exec, execution_mode="sync",
             garde_fou_config=getattr(proj, "garde_fou_config", None))
@@ -761,6 +795,15 @@ def run_native_swmm_simulation(
             prov["gpkg_version_id"] = vmeta.get("version_id")
             prov["gpkg_sha256"] = vmeta.get("sha256")
             prov["gpkg_storage_kind"] = vmeta.get("storage_kind")
+        if altimetrie_meta is not None:
+            prov = resultat.setdefault("provenance", {})
+            prov["altimetrie"] = {
+                "mode": "terrain_idw",
+                **altimetrie_meta,
+                # La provenance doit rester visible : ces cotes sont des
+                # estimations IDW − profondeur, pas des mesures radier.
+                "nature": "estimee_interpolation_idw",
+            }
             if exutoire_persiste:
                 from api.services.gpkg_versions import exutoire_present_dans_gpkg
                 prov["coherence"] = {

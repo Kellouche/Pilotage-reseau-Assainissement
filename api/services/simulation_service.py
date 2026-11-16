@@ -257,6 +257,9 @@ def generer_cle_cache_simulation(gpkg_path: Path, payload: Any,
         "bms_heure_debut": str(getattr(payload, "bms_heure_debut", None) or "07:00"),
         "bms_heure_fin": str(getattr(payload, "bms_heure_fin", None) or "21:00"),
         "bms_profil": str(getattr(payload, "bms_profil", None) or "cloche"),
+        "altimetrie_terrain": bool(getattr(payload, "altimetrie_terrain", False)),
+        "altimetrie_layer_id": (str(getattr(payload, "altimetrie_layer_id", None))
+                                if getattr(payload, "altimetrie_layer_id", None) else None),
     }
     # Étape 3A : la référence métier du bassin n'entre dans l'empreinte
     # que lorsqu'elle est fournie — les caches historiques restent valides.
@@ -721,6 +724,8 @@ def executer_moteur_swmm(
         apports_dwf=params.get("apports_dwf"),
         execution_mode=execution_mode,
         garde_fou_config=garde_fou_config,
+        elevations_terrain=params.get("altimetrie_elevations"),
+        altimetrie_meta=params.get("altimetrie_meta"),
     )
 
     return corriger_pic_depuis_timeseries(resultat)
@@ -1539,6 +1544,20 @@ def executer_en_async(
         raise
     params_exec["apports_dwf"] = apports_dwf
 
+    # 6ter. Option C (SHP.md §7bis) — altimétrie terrain IDW : opt-in
+    #    explicite, mêmes garde-fous que le chemin synchrone (couverture
+    #    ≥ 95 %, artefact non périmé) ; échec → ValueError → job 'failed'.
+    if params_exec.get("altimetrie_terrain"):
+        from api.services import aux_altimetrie_service as _alt
+        _alt_res = _alt.resoudre_elevations_terrain_pour_simulation(
+            db, org_id, project_id,
+            layer_id=params_exec.get("altimetrie_layer_id"))
+        if _alt_res.get("statut") != "ok":
+            raise ValueError(
+                f"Altimétrie terrain refusée : {_alt_res.get('raison')}")
+        params_exec["altimetrie_elevations"] = _alt_res["elevations"]
+        params_exec["altimetrie_meta"] = _alt_res["meta"]
+
     # 7. Empreinte canonique + exécution via le MOTEUR UNIQUE (PySWMM)
     from types import SimpleNamespace
     _ns = SimpleNamespace(**{
@@ -1573,6 +1592,12 @@ def executer_en_async(
     prov["gpkg_sha256"] = version_meta.get("sha256")
     prov["gpkg_storage_kind"] = version_meta.get("storage_kind")
     prov["execution_mode"] = "celery"
+    if params_exec.get("altimetrie_meta"):
+        prov["altimetrie"] = {
+            "mode": "terrain_idw",
+            **params_exec["altimetrie_meta"],
+            "nature": "estimee_interpolation_idw",
+        }
     if getattr(cluster, "exutoire_noeud", None):
         from api.services.gpkg_versions import exutoire_present_dans_gpkg
         prov["coherence"] = {

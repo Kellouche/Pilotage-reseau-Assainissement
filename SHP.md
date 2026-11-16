@@ -138,10 +138,32 @@ l'import **et** à chaque nouvelle `gpkg_version` réseau :
   cotes altimétriques vérifiées du GPKG. Côté graphique, courbe distincte
   en pointillés « Terrain interpolé IDW (≈, ≠ fond de regard) ».
 
-### 7bis. Option C — injection terrain → radier `.inp` (à valider)
+### 7bis. Option C — injection terrain → radier `.inp` (implémentée, opt-in)
 
 Objectif : remplacer le datum synthétique (`100 m + distance × pente`)
 par des cotes radier réelles estimées `z_terrain_IDW − profondeur`.
+
+**Activation** : `altimetrie_terrain: true` (+ `altimetrie_layer_id`
+optionnel) dans `POST /api/v1/simulations/run` — case « Altimétrie
+terrain » de la modale de simulation. **Opt-in strict** : absent ou
+`false` → comportement synthétique inchangé. La couche entre dans le
+`param_hash` (cache-safe) ; chemins synchrone ET Celery couverts.
+
+**Garde-fous appliqués** :
+- Couverture ≥ **95 %** exigée (`eligible_injection_95`), sinon **422
+  explicite** — jamais de repli silencieux quand le mode est demandé
+- Artefact périmé (sha ≠ GPKG courant) → refus, recalcul requis
+- Profondeur manquante → médiane réseau, flag `profondeur_estimee`
+  propagé dans `provenance.altimetrie.nb_profondeurs_estimees`
+- Exutoire traité comme les autres nœuds ; nœuds non couverts estimés
+  par **voisin terrain le plus proche** (comptés `nb_estimees` dans la
+  provenance) — jamais de mélange avec le datum 100 m
+- Provenance : note `;; Altimétrie : terrain IDW…` dans `[TITLE]` du
+  `.inp` + `meta.source_altimetrique` + `resultat.provenance.altimetrie`
+  (`nature: estimee_interpolation_idw`)
+- Résolveur : `resoudre_elevations_terrain_pour_simulation()` dans
+  `aux_altimetrie_service.py` ; injection dans
+  `_resoudre_altimetrie_noeuds(elevations_terrain=…)`
 
 **Aperçu obligatoire avant tout usage** :
 `GET /api/v1/projets/{id}/aux-layers/{lid}/apercu-inp` → par regard
