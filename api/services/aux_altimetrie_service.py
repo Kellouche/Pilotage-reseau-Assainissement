@@ -892,6 +892,7 @@ def analyser_ecoulement_terrain(regards_gdf, canalisations_gdf, artefact) -> Dic
         # Signal 3 — azimut de plus forte descente vs cap de la conduite
         cap = _cap_conduite_deg(c)
         art_u = par_code_art.get(u) or {}
+        art_v = par_code_art.get(v) or {}
         azimut = art_u.get("azimut_pente_deg")
         pente_loc = art_u.get("pente_terrain_pct")
         conf_u, conf_v = ru.get("confiance") or "aucune", rv.get("confiance") or "aucune"
@@ -942,6 +943,8 @@ def analyser_ecoulement_terrain(regards_gdf, canalisations_gdf, artefact) -> Dic
             "pente_terrain_amont_pct": pente_loc,
             "ecart_azimut_deg": ecart_azimut,
             "confiance": _pire_confiance(conf_u, conf_v),
+            "lng_amont": art_u.get("lng"), "lat_amont": art_u.get("lat"),
+            "lng_aval": art_v.get("lng"), "lat_aval": art_v.get("lat"),
             "score": score,
             "severite": severite,
             "motifs": motifs,
