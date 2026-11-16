@@ -182,7 +182,18 @@ confiance ; statistiques couverture, **inversions amont/aval** détectées.
   Live : 10 136 conduites → 2 002 suspects (624 forts) — les écarts
   extrêmes (>50 m) signalent plutôt des erreurs de connectivité/codes
   que des simples sens inversés.
-- **P2 — Orphelins** : scoring altimétrique des candidats de connexion.
+- **P2 — Orphelins** (endpoint implémenté) :
+  `GET .../aux-layers/{lid}/raccordements-orphelins?rayon_m=50` — pour chaque
+  regard sans aucune conduite amont/aval, propose les `top_k=3` nœuds
+  connectés les plus proches dans le rayon et les classe par score
+  altimétrique 0–100 : proximité (0–40), descente du terrain vers la cible
+  (±30), radier estimé cohérent (±20), azimut de plus forte descente
+  (±10, seulement si confiance haute/moyenne). Sens proposé : orphelin →
+  cible **en amont**. **File de revue uniquement** — aucune connexion
+  créée ; max 800 orphelins analysés par appel. Coordonnées projetées en
+  mètres (CRS couche, repli UTM de l'artefact si degrés). Live : 1 867
+  orphelins → 800 analysés → 758 avec candidats (top scores ~96 pour des
+  cibles à ~4–6 m en descente franche).
 - **P3 — Profils en long** : profil terrain/radier superposé dans `profile/{fid}`.
 - **P4+ — Autres satellites** : `BV.shp` (validation sectorisation vs BV officiels), `Points de métrologie.shp` (calage), MNT raster si disponible.
 

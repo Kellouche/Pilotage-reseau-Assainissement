@@ -722,3 +722,79 @@ def test_endpoint_suspects_ecoulement_absent(db, org_projet):
     # Couche d'un autre org → stealth 404
     r2 = client.get(f"/api/v1/projets/{pid}/aux-layers/{couche.id}/suspects-ecoulement")
     assert r2.status_code in (401, 404)
+
+
+def test_analyser_raccordements_terrain():
+    """P2 — orphelin proche d'une cible connectée : candidat classé par
+    cohérence altimétrique ; orphelin isolé → aucun candidat."""
+    import geopandas as gpd
+    from shapely.geometry import LineString, Point
+    from api.services.aux_altimetrie_service import analyser_raccordements_terrain
+
+    # CRS métrique (UTM-like) pour des distances en mètres
+    regards = gpd.GeoDataFrame(
+        {"Code": ["A", "B", "O", "O2"], "Profondeur": [2.0, 2.0, 2.0, 2.0]},
+        geometry=[Point(100, 0), Point(200, 0), Point(200, 10), Point(5000, 5000)],
+        crs="EPSG:32631",
+    )
+    canas = gpd.GeoDataFrame(
+        {"ID_AMANT": ["A"], "ID_AVAL": ["B"], "Longeur": [100.0]},
+        geometry=[LineString([(100, 0), (200, 0)])],
+        crs="EPSG:32631",
+    )
+    artefact = {
+        "meta": {"gpkg_sha256": "x", "resolution_m": 30.0},
+        "regards": {
+            "A": {"z_terrain_m": 103.0, "confiance": "haute",
+                  "pente_terrain_pct": 1.0, "azimut_pente_deg": 90.0,
+                  "lng": 1.0, "lat": 36.0},
+            "B": {"z_terrain_m": 100.0, "confiance": "haute",
+                  "pente_terrain_pct": 1.0, "azimut_pente_deg": 90.0,
+                  "lng": 1.001, "lat": 36.0},
+            # O : 10 m au nord de B, terrain plus haut → O→B descend
+            "O": {"z_terrain_m": 105.0, "confiance": "haute",
+                  "pente_terrain_pct": 1.0, "azimut_pente_deg": 180.0,
+                  "lng": 1.001, "lat": 36.0001},
+            "O2": {"z_terrain_m": 90.0, "confiance": "haute",
+                   "pente_terrain_pct": 1.0, "azimut_pente_deg": 0.0,
+                   "lng": 1.05, "lat": 36.05},
+        },
+    }
+    res = analyser_raccordements_terrain(regards, canas, artefact, rayon_max_m=50.0)
+
+    assert res["statut"] == "ok"
+    assert res["nb_orphelins"] == 2
+    par_code = {r["orphelin"]: r for r in res["orphelins"]}
+    # O : cible B à 10 m, terrain descend 105→100, radier cohérent
+    o = par_code["O"]
+    assert o["candidats"], "O devrait avoir au moins un candidat"
+    top = o["candidats"][0]
+    assert top["cible"] == "B"
+    assert top["distance_m"] == 10.0
+    assert top["score"] > 50.0
+    assert any("descend" in m for m in top["motifs"])
+    # O2 : isolé à >4 km → aucun candidat dans le rayon
+    assert par_code["O2"]["candidats"] == []
+
+
+def test_endpoint_raccordements_orphelins_absent(db, org_projet):
+    """Sans artefact, l'endpoint raccordements répond 'absent' + stealth 404."""
+    client = TestClient(app)
+    pid = org_projet["proj"].id
+    tok = org_projet["token"]
+
+    couche = ProjectAuxLayer(
+        org_id=org_projet["org"].id, project_id=pid,
+        type="altimetrie_points", nom="topo sans artefact 3",
+        storage_key="cle-test3", statut="ok", colonne_z="Field4",
+    )
+    db.add(couche)
+    db.commit()
+
+    r = client.get(f"/api/v1/projets/{pid}/aux-layers/{couche.id}/raccordements-orphelins",
+                   headers=_h(tok))
+    assert r.status_code == 200
+    assert r.json()["statut"] == "absent"
+
+    r2 = client.get(f"/api/v1/projets/{pid}/aux-layers/{couche.id}/raccordements-orphelins")
+    assert r2.status_code in (401, 404)

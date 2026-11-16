@@ -406,3 +406,33 @@ def suspects_ecoulement(
         logger.exception("Erreur analyse écoulement couche %s", layer_id)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                             detail=f"Erreur analyse écoulement : {e}")
+
+
+@router.get("/projets/{project_id}/aux-layers/{layer_id}/raccordements-orphelins")
+def raccordements_orphelins(
+    project_id: str,
+    layer_id: str,
+    rayon_m: float = Query(50.0, ge=5.0, le=500.0,
+                           description="Rayon de recherche des nœuds cibles (m)"),
+    tenant_ctx: TenantContext = Depends(get_tenant_context),
+    db: Session = Depends(get_db),
+):
+    """
+    P2 (SHP.md §9) — pour chaque regard orphelin (aucune conduite amont/aval),
+    propose les nœuds connectés les plus proches dans `rayon_m` classés par
+    score altimétrique (proximité, descente du terrain, radier estimé, azimut).
+    Lecture seule : aucune connexion n'est créée automatiquement.
+    """
+    _couche(db, tenant_ctx, project_id, layer_id)
+
+    from api.services import aux_altimetrie_service as alt
+    try:
+        return alt.analyser_raccordements_projet(
+            db=db, org_id=tenant_ctx.org_id,
+            project_id=project_id, layer_id=layer_id,
+            rayon_max_m=rayon_m,
+        )
+    except Exception as e:
+        logger.exception("Erreur analyse raccordements couche %s", layer_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail=f"Erreur analyse raccordements : {e}")

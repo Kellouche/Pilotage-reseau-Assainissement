@@ -22,7 +22,7 @@ import logging
 import re
 import threading
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import geopandas as gpd
 import numpy as np
@@ -975,11 +975,11 @@ def analyser_ecoulement_terrain(regards_gdf, canalisations_gdf, artefact) -> Dic
     }
 
 
-def analyser_ecoulement_projet(db, org_id: str, project_id: str, layer_id: str) -> Dict[str, Any]:
+def _charger_contexte_altimetrie(db, org_id: str, project_id: str, layer_id: str):
     """
-    IO : charge couche + artefact + GPKG projet, délègue à
-    `analyser_ecoulement_terrain`. Mêmes gardes que l'aperçu .inp
-    (estampillage SHA-256, statut couche, artefact présent).
+    IO commun aux analyses P1/P2 : résout couche + artefact regards_terrain
+    (estampillage SHA-256) + GPKG projet. Retourne
+    (erreur_dict_ou_None, couche, regards_gdf, canas_gdf, artefact).
     """
     from api.models import Project, ProjectAuxLayer
     from api.services.simulation_service import resoudre_gpkg_effectif_pour_projet_avec_meta
@@ -990,15 +990,15 @@ def analyser_ecoulement_projet(db, org_id: str, project_id: str, layer_id: str) 
         ProjectAuxLayer.org_id == org_id,
     ).first()
     if couche is None:
-        return {"statut": "absent", "raison": "Couche introuvable."}
+        return {"statut": "absent", "raison": "Couche introuvable."}, None, None, None, None
     if couche.type != "altimetrie_points" or couche.statut != "ok":
         return {"statut": "ignore",
-                "raison": "Analyse réservée aux couches altimétrie opérationnelles."}
+                "raison": "Analyse réservée aux couches altimétrie opérationnelles."}, None, None, None, None
 
     artefact = charger_regards_terrain(org_id, project_id, layer_id)
     if not artefact:
         return {"statut": "absent",
-                "raison": "Aucun artefact regards_terrain — recalcul requis."}
+                "raison": "Aucun artefact regards_terrain — recalcul requis."}, None, None, None, None
 
     project = db.query(Project).filter(
         Project.id == project_id, Project.org_id == org_id
@@ -1014,9 +1014,9 @@ def analyser_ecoulement_projet(db, org_id: str, project_id: str, layer_id: str) 
     sha_artefact = ((artefact.get("meta") or {}).get("gpkg_sha256"))
     if sha_courant and sha_artefact and sha_courant != sha_artefact:
         return {"statut": "perime",
-                "raison": "Artefact calculé sur une autre version du réseau."}
+                "raison": "Artefact calculé sur une autre version du réseau."}, None, None, None, None
     if gpkg_path is None:
-        return {"statut": "absent", "raison": "Aucun GPKG projet résolu."}
+        return {"statut": "absent", "raison": "Aucun GPKG projet résolu."}, None, None, None, None
 
     try:
         couches = gpd.list_layers(str(gpkg_path))["name"].tolist()
@@ -1028,13 +1028,261 @@ def analyser_ecoulement_projet(db, org_id: str, project_id: str, layer_id: str) 
             None,
         )
         if nom_regards is None or nom_canas is None:
-            return {"statut": "absent", "raison": "Couches regards/canalisations absentes."}
+            return {"statut": "absent", "raison": "Couches regards/canalisations absentes."}, None, None, None, None
         regards_gdf = gpd.read_file(str(gpkg_path), layer=nom_regards)
         canas_gdf = gpd.read_file(str(gpkg_path), layer=nom_canas)
     except Exception as e:
-        return {"statut": "erreur", "raison": f"Lecture GPKG impossible : {e}"}
+        return {"statut": "erreur", "raison": f"Lecture GPKG impossible : {e}"}, None, None, None, None
+
+    return None, couche, regards_gdf, canas_gdf, artefact
+
+
+def analyser_ecoulement_projet(db, org_id: str, project_id: str, layer_id: str) -> Dict[str, Any]:
+    """
+    IO : charge couche + artefact + GPKG projet, délègue à
+    `analyser_ecoulement_terrain`. Mêmes gardes que l'aperçu .inp
+    (estampillage SHA-256, statut couche, artefact présent).
+    """
+    err, couche, regards_gdf, canas_gdf, artefact = _charger_contexte_altimetrie(
+        db, org_id, project_id, layer_id)
+    if err is not None:
+        return err
 
     res = analyser_ecoulement_terrain(regards_gdf, canas_gdf, artefact)
+    res["layer_id"] = layer_id
+    res["layer_nom"] = couche.nom
+    return res
+
+
+# ---------------------------------------------------------------------------
+# P2 — candidats de raccordement pour regards orphelins (SHP.md §9)
+# ---------------------------------------------------------------------------
+
+RACCORDEMENT_RAYON_DEFAUT_M = 50.0
+RACCORDEMENT_TOP_K = 3
+RACCORDEMENT_MAX_ORPHELINS = 800
+
+
+def _coordonnees_regards_m(regards_gdf, artefact) -> Dict[str, Tuple[float, float]]:
+    """
+    code normalisé → (x, y) en mètres. Réutilise le CRS de la couche ;
+    si la couche est en degrés (EPSG:4326), projette vers l'UTM de
+    l'artefact (`meta.utm_epsg`).
+    """
+    epsg_cible = None
+    try:
+        epsg_cible = int(((artefact or {}).get("meta") or {}).get("utm_epsg") or 0) or None
+    except (TypeError, ValueError):
+        epsg_cible = None
+
+    src_crs = getattr(regards_gdf, "crs", None)
+    g = regards_gdf
+    if src_crs is not None and epsg_cible:
+        try:
+            if src_crs.to_epsg() == 4326 and src_crs.to_epsg() != epsg_cible:
+                g = regards_gdf.to_crs(epsg_cible)
+        except Exception:
+            pass
+
+    out: Dict[str, Tuple[float, float]] = {}
+    for _, r in g.iterrows():
+        codes = _normaliser_code_regard([r.get("Code")])
+        code = codes[0] if codes else ""
+        if not code:
+            continue
+        geom = r.geometry
+        if geom is None:
+            continue
+        try:
+            out[code] = (float(geom.x), float(geom.y))
+        except Exception:
+            continue
+    return out
+
+
+def _azimut_vers(x1: float, y1: float, x2: float, y2: float) -> float:
+    """Azimut horaire depuis le Nord [0,360) du segment p1 → p2 (plan UTM)."""
+    dx, dy = x2 - x1, y2 - y1
+    return (np.degrees(np.arctan2(dx, dy)) + 360.0) % 360.0
+
+
+def _score_raccordement(dist_m: float, rayon_m: float, zt_o, zt_c,
+                        zr_o, zr_c, cap_azimut: Optional[float],
+                        azimut_descente, conf_orphelin: str) -> Tuple[float, List[str]]:
+    """
+    Score 0–100 + motifs explicites pour un candidat orphelin → cible
+    (sens proposé : l'orphelin se raccorde EN AMONT de la cible).
+    """
+    motifs: List[str] = []
+    score = 40.0 * max(0.0, 1.0 - dist_m / rayon_m)  # proximité : 0–40
+    motifs.append(f"distance {dist_m:.1f} m")
+
+    # Terrain : le flux proposé orphelin→cible exige z_terrain qui descend
+    if zt_o is not None and zt_c is not None:
+        dz = zt_c - zt_o
+        if dz < -0.3:
+            score += 30.0
+            motifs.append(f"terrain descend de {-dz:.2f} m vers la cible")
+        elif dz <= 0.3:
+            score += 5.0
+            motifs.append("terrain quasi horizontal (±0,3 m)")
+        else:
+            score -= 25.0
+            motifs.append(f"terrain remonte de {dz:.2f} m vers la cible — sens à vérifier")
+
+    # Radier estimé : gravitaire exige radier amont > radier aval
+    if zr_o is not None and zr_c is not None:
+        dzr = zr_c - zr_o
+        if dzr < 0:
+            score += 20.0
+            motifs.append(f"radier estimé cohérent ({-dzr:.2f} m de chute)")
+        else:
+            score -= 20.0
+            motifs.append(f"radier estimé aval plus haut de {dzr:.2f} m — contre-pente probable")
+
+    # Azimut : la cible devrait se situer vers la descente du terrain
+    if (cap_azimut is not None and azimut_descente is not None
+            and conf_orphelin in SEUIL_CONFIANCE_AZIMUT):
+        ecart = _ecart_angulaire(cap_azimut, float(azimut_descente))
+        if ecart <= 60.0:
+            score += 10.0
+            motifs.append(f"cible dans l'axe de descente du terrain (écart {ecart:.0f}°)")
+        elif ecart >= 120.0:
+            score -= 10.0
+            motifs.append(f"cible opposée à la descente du terrain (écart {ecart:.0f}°)")
+
+    return max(0.0, min(100.0, score)), motifs
+
+
+def analyser_raccordements_terrain(regards_gdf, canalisations_gdf, artefact,
+                                   rayon_max_m: float = RACCORDEMENT_RAYON_DEFAUT_M,
+                                   top_k: int = RACCORDEMENT_TOP_K) -> Dict[str, Any]:
+    """
+    Calcul PUR : pour chaque regard orphelin (aucune conduite amont/aval),
+    propose les `top_k` nœuds connectés les plus proches dans `rayon_max_m`
+    et les classe par score altimétrique. File de revue — aucune écriture.
+    """
+    from scipy.spatial import cKDTree
+    import pandas as pd
+
+    apercu = calculer_apercu_terrain(regards_gdf, canalisations_gdf, artefact)
+    par_regard = apercu.get("par_regard") or {}
+    par_code_art = (artefact or {}).get("regards") or {}
+
+    # Ensemble des codes connectés (extrémités de conduites)
+    connectes = set()
+    for _, c in (canalisations_gdf.iterrows() if canalisations_gdf is not None else []):
+        for col in ("ID_AMANT", "ID_AVAL"):
+            codes = _normaliser_code_regard([c.get(col)])
+            if codes:
+                connectes.update(codes)
+
+    coords = _coordonnees_regards_m(regards_gdf, artefact)
+
+    # Infos par code : coords + cotes issues de l'aperçu + azimut artefact
+    infos: Dict[str, Dict[str, Any]] = {}
+    for code, xy in coords.items():
+        rt = par_regard.get(code)
+        if not rt or rt.get("z_terrain_m") is None:
+            continue
+        art = par_code_art.get(code) or {}
+        infos[code] = {
+            "x": xy[0], "y": xy[1],
+            "z_terrain_m": rt.get("z_terrain_m"),
+            "z_radier_terrain_m": rt.get("z_radier_terrain_m"),
+            "confiance": rt.get("confiance") or "aucune",
+            "azimut_pente_deg": art.get("azimut_pente_deg"),
+            "pente_terrain_pct": art.get("pente_terrain_pct"),
+            "lng": art.get("lng"), "lat": art.get("lat"),
+        }
+
+    orphelins = {c: i for c, i in infos.items() if c not in connectes}
+    cibles = {c: i for c, i in infos.items() if c in connectes}
+
+    if not orphelins or not cibles:
+        return {
+            "statut": "ok",
+            "nb_orphelins": len(orphelins),
+            "nb_candidats": 0,
+            "orphelins": [],
+            "avertissement": "Aucun regard orphelin exploitable ou aucune cible connectée.",
+        }
+
+    # Arbre spatial sur les cibles connectées
+    codes_cibles = sorted(cibles.keys())
+    xy_cibles = np.array([[cibles[c]["x"], cibles[c]["y"]] for c in codes_cibles])
+    arbre = cKDTree(xy_cibles)
+
+    resultats = []
+    nb_analyses = 0
+    codes_orphelins = sorted(orphelins.keys())
+    for code in codes_orphelins[:RACCORDEMENT_MAX_ORPHELINS]:
+        o = orphelins[code]
+        dist, idx = arbre.query([o["x"], o["y"]], k=min(top_k * 4, len(codes_cibles)))
+        candidats = []
+        for d, i in zip(np.atleast_1d(dist), np.atleast_1d(idx)):
+            if d > rayon_max_m:
+                continue
+            cible = codes_cibles[int(i)]
+            ci = cibles[cible]
+            azimut_cap = _azimut_vers(o["x"], o["y"], ci["x"], ci["y"])
+            score, motifs = _score_raccordement(
+                float(d), rayon_max_m,
+                o["z_terrain_m"], ci["z_terrain_m"],
+                o["z_radier_terrain_m"], ci["z_radier_terrain_m"],
+                azimut_cap, o.get("azimut_pente_deg"), o.get("confiance") or "aucune")
+            candidats.append({
+                "cible": cible,
+                "distance_m": round(float(d), 1),
+                "score": round(score, 1),
+                "z_terrain_cible_m": ci["z_terrain_m"],
+                "ecart_terrain_m": (round(ci["z_terrain_m"] - o["z_terrain_m"], 3)
+                                    if ci["z_terrain_m"] is not None and o["z_terrain_m"] is not None else None),
+                "confiance_cible": ci.get("confiance"),
+                "lng_cible": ci.get("lng"), "lat_cible": ci.get("lat"),
+                "motifs": motifs,
+            })
+            if len(candidats) >= top_k:
+                break
+        nb_analyses += 1
+        resultats.append({
+            "orphelin": code,
+            "lng": o.get("lng"), "lat": o.get("lat"),
+            "z_terrain_m": o.get("z_terrain_m"),
+            "confiance": o.get("confiance"),
+            "candidats": sorted(candidats, key=lambda x: -x["score"]),
+        })
+
+    resultats.sort(key=lambda r: (
+        -(r["candidats"][0]["score"] if r["candidats"] else -1)))
+    avec_candidats = sum(1 for r in resultats if r["candidats"])
+
+    return {
+        "statut": "ok",
+        "nb_orphelins": len(orphelins),
+        "nb_orphelins_analyses": nb_analyses,
+        "nb_avec_candidats": avec_candidats,
+        "rayon_max_m": rayon_max_m,
+        "orphelins": resultats[:RACCORDEMENT_MAX_ORPHELINS],
+        "avertissement": (
+            "Propositions indicatives classées par cohérence altimétrique "
+            "(proximité, descente du terrain, radier estimé, azimut). "
+            "Aucune connexion n'est créée automatiquement — validation "
+            "hydraulique requise avant toute modification du réseau."
+        ),
+    }
+
+
+def analyser_raccordements_projet(db, org_id: str, project_id: str, layer_id: str,
+                                  rayon_max_m: float = RACCORDEMENT_RAYON_DEFAUT_M) -> Dict[str, Any]:
+    """IO : même contexte que P1, délègue à `analyser_raccordements_terrain`."""
+    err, couche, regards_gdf, canas_gdf, artefact = _charger_contexte_altimetrie(
+        db, org_id, project_id, layer_id)
+    if err is not None:
+        return err
+
+    res = analyser_raccordements_terrain(regards_gdf, canas_gdf, artefact,
+                                         rayon_max_m=rayon_max_m)
     res["layer_id"] = layer_id
     res["layer_nom"] = couche.nom
     return res
