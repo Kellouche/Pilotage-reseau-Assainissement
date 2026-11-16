@@ -286,3 +286,25 @@ def test_cockpit_includes_profil_long_components():
     assert "input-profil-amont" in panel_html
     assert "input-profil-aval" in panel_html
 
+
+
+def test_cache_topologie_profil_partage_et_surete():
+    """Le cache topo sert le même index et des copies de graphe indépendantes."""
+    if not GPKG_PROFIL.exists():
+        pytest.skip("GeoPackage de référence absent")
+    from api.routes.simulations import _charger_topo_pour_profil
+
+    a = _charger_topo_pour_profil(GPKG_PROFIL.resolve())
+    b = _charger_topo_pour_profil(GPKG_PROFIL.resolve())
+
+    # Index partagé en lecture seule, graphe = copie indépendante
+    assert a["node_index"] is b["node_index"]
+    assert a["G"] is not b["G"]
+    assert a["G"].number_of_edges() == b["G"].number_of_edges() > 0
+
+    # Muter la copie retournée ne pollue pas le cache
+    avant = a["G"].number_of_edges()
+    a["G"].add_edge("__test__", "__test2__")
+    c = _charger_topo_pour_profil(GPKG_PROFIL.resolve())
+    assert c["G"].number_of_edges() == avant
+    assert "__test__" not in c["G"].nodes

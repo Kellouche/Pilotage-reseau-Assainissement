@@ -15,6 +15,7 @@ from pathlib import Path
 import logging
 import math
 import re
+import threading
 import unicodedata
 
 logger = logging.getLogger(__name__)
@@ -1542,6 +1543,108 @@ def telecharger_rapport_diagnostic_pdf(
 # PROFIL EN LONG HYDRAULIQUE (Phase 6.A)
 # ============================================================
 
+# ---------------------------------------------------------------------------
+# Cache mémoire « graphe + index regards » pour le profil en long.
+#
+# Sans cache, chaque appel à /profil-en-long reconstruisait le graphe
+# topologique complet depuis le GPKG (~10 s pour 10k nœuds) — plus lent que
+# la sectorisation des 122 bassins. Les GPKG du cache sont immuables
+# (nom = SHA-256) : la clé inclut néanmoins mtime+taille par sécurité.
+# Le graphe retourné est une copie indépendante (G.copy()) : l'endpoint
+# peut ajouter des arêtes en repli sans polluer le cache.
+# ---------------------------------------------------------------------------
+_PROFIL_TOPO_CACHE: Dict[str, Dict[str, Any]] = {}
+_PROFIL_TOPO_CACHE_LOCK = threading.Lock()
+_PROFIL_TOPO_CACHE_MAX = 3
+
+
+def _col_val_profil(r, name):
+    """Extrait une cote numérique > 0 d'une ligne GeoDataFrame (ou None)."""
+    import pandas as pd
+    if name not in r or r[name] is None or pd.isna(r[name]):
+        return None
+    try:
+        v = float(r[name])
+    except (TypeError, ValueError):
+        return None
+    return v if v > 0 else None
+
+
+def _index_regards_profil(regards) -> Dict[str, Dict[str, Any]]:
+    """Construit l'index Code → attributs/position des regards (lecture seule)."""
+    from src.domain.moteur_swmm.constants import _clean_node_id
+    node_index: Dict[str, Any] = {}
+    for _, r in regards.iterrows():
+        nid = _clean_node_id(r.get("Code"), fallback=str(r.name))
+        if nid:
+            prof = _col_val_profil(r, "Profondeur")
+            cotetn = _col_val_profil(r, "COTETN")
+            cottn = _col_val_profil(r, "COTTN")
+            coordz = _col_val_profil(r, "COORDZ")
+            cotrad = _col_val_profil(r, "COTRAD")
+            # Cote terrain vérifiée : première source altimétrique réelle.
+            terrain_val, terrain_src = None, "absent"
+            for cand, src in ((cotetn, "COTETN"), (cottn, "COTTN"), (coordz, "COORDZ")):
+                if cand is not None:
+                    terrain_val, terrain_src = cand, src
+                    break
+            node_index[nid] = {
+                "code": nid,
+                "x": r.geometry.x if r.geometry else 0.0,
+                "y": r.geometry.y if r.geometry else 0.0,
+                "profondeur": prof,
+                "cotetn": terrain_val,
+                "cotrad": cotrad,
+                "terrain_reel": terrain_val is not None,
+                "terrain_source": terrain_src,
+            }
+    return node_index
+
+
+def _charger_topo_pour_profil(gpkg_path: Path) -> Dict[str, Any]:
+    """
+    Retourne {node_index, G (copie), canalisations} pour un GPKG donné.
+    Construit une fois par version de GPKG (~10 s) puis sert depuis le cache.
+    """
+    try:
+        st = gpkg_path.stat()
+        cle = f"{gpkg_path}|{st.st_mtime_ns}|{st.st_size}"
+    except OSError:
+        cle = str(gpkg_path)
+
+    with _PROFIL_TOPO_CACHE_LOCK:
+        entree = _PROFIL_TOPO_CACHE.get(cle)
+    if entree is not None:
+        return {
+            "node_index": entree["node_index"],
+            "G": entree["G"].copy(),
+            "canalisations": entree["canalisations"],
+        }
+
+    import geopandas as gpd
+    from src.domain.graphe_reseau import construire_graphe
+
+    layers = gpd.list_layers(str(gpkg_path))["name"].tolist()
+    regard_layer = next((l for l in layers if "regard" in l.lower()), "regards")
+    pipe_layer = next((l for l in layers if any(k in l.lower() for k in ["canalisat", "conduit", "pipe", "troncon"]) and "désaffect" not in l.lower() and "desaffect" not in l.lower()), "canalisations")
+
+    regards = gpd.read_file(str(gpkg_path), layer=regard_layer)
+    canalisations = gpd.read_file(str(gpkg_path), layer=pipe_layer)
+    node_index = _index_regards_profil(regards)
+    G = construire_graphe(str(gpkg_path))
+
+    with _PROFIL_TOPO_CACHE_LOCK:
+        if len(_PROFIL_TOPO_CACHE) >= _PROFIL_TOPO_CACHE_MAX:
+            _PROFIL_TOPO_CACHE.pop(next(iter(_PROFIL_TOPO_CACHE)))
+        _PROFIL_TOPO_CACHE[cle] = {
+            "node_index": node_index,
+            "G": G,
+            "canalisations": canalisations,
+        }
+
+    return {"node_index": node_index, "G": G.copy(), "canalisations": canalisations}
+
+
 @router.get("/profil-en-long")
 def get_profil_en_long(
     node_amont: str,
@@ -1638,58 +1741,16 @@ def get_profil_en_long(
         import pandas as pd
         from src.domain.moteur_swmm.constants import _clean_node_id
 
-        layers = gpd.list_layers(str(active_gpkg))["name"].tolist()
-        regard_layer = next((l for l in layers if "regard" in l.lower()), "regards")
-        pipe_layer = next((l for l in layers if any(k in l.lower() for k in ["canalisat", "conduit", "pipe", "troncon"]) and "désaffect" not in l.lower() and "desaffect" not in l.lower()), "canalisations")
-
-        regards = gpd.read_file(str(active_gpkg), layer=regard_layer)
-        canalisations = gpd.read_file(str(active_gpkg), layer=pipe_layer)
-
-        # Construire un index regard Code→géométrie+attributs
-        # P0 — altimétrie : une cote n'est « terrain » (MNT) que si elle
-        # provient d'une source altimétrique réelle (COTETN/COTTN/COORDZ).
-        # Profondeur sert uniquement de repli pour le radier quand une cote
-        # terrain vérifiée existe ; sinon aucune altitude n'est inventée.
-        def _col_val(r, name):
-            if name not in r or r[name] is None or pd.isna(r[name]):
-                return None
-            try:
-                v = float(r[name])
-            except (TypeError, ValueError):
-                return None
-            return v if v > 0 else None
-
-        node_index: Dict[str, Any] = {}
-        for _, r in regards.iterrows():
-            nid = _clean_node_id(r.get("Code"), fallback=str(r.name))
-            if nid:
-                prof = _col_val(r, "Profondeur")
-                cotetn = _col_val(r, "COTETN")
-                cottn = _col_val(r, "COTTN")
-                coordz = _col_val(r, "COORDZ")
-                cotrad = _col_val(r, "COTRAD")
-                # Cote terrain vérifiée : première source altimétrique réelle.
-                terrain_val, terrain_src = None, "absent"
-                for cand, src in ((cotetn, "COTETN"), (cottn, "COTTN"), (coordz, "COORDZ")):
-                    if cand is not None:
-                        terrain_val, terrain_src = cand, src
-                        break
-                node_index[nid] = {
-                    "code": nid,
-                    "x": r.geometry.x if r.geometry else 0.0,
-                    "y": r.geometry.y if r.geometry else 0.0,
-                    "profondeur": prof,
-                    "cotetn": terrain_val,
-                    "cotrad": cotrad,
-                    "terrain_reel": terrain_val is not None,
-                    "terrain_source": terrain_src,
-                }
-
-        # Construire le graphe amont→aval pour trouver le chemin
         import networkx as nx
-        from src.domain.graphe_reseau import construire_graphe
 
-        G = construire_graphe(str(active_gpkg))
+        # Topologie + index regards : servis par le cache mémoire
+        # (_charger_topo_pour_profil) — ~10 s de construction une seule fois
+        # par version de GPKG au lieu de chaque appel.
+        _topo = _charger_topo_pour_profil(active_gpkg)
+        node_index = _topo["node_index"]
+        canalisations = _topo["canalisations"]
+        G = _topo["G"]
+
         if len(G.edges) == 0:
             for idx, c in canalisations.iterrows():
                 u = _clean_node_id(c.get("ID_AMONT"))
