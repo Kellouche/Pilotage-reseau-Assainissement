@@ -243,7 +243,10 @@ class SimulationResponse(BaseModel):
     # pouvaient être numériques. Union pour ne pas casser la validation.
     id: Union[int, str]
     job_id: str
-    cluster_id: int
+    # cluster_id peut être positionnel (int) ou identifiant métier stable
+    # chaîne (« 8_rejets_346731 », « 30_ouvrages_speciaux_351607 ») —
+    # summary_kpis.cluster_id est la source de vérité.
+    cluster_id: Union[int, str]
     status: str
     result_summary: Optional[Dict[str, Any]] = None
     created_at: datetime

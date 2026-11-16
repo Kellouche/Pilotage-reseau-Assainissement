@@ -1120,19 +1120,33 @@ def list_bassin_simulations_historique(
         _cid_txt if _ref_exutoire else None)
     nom_demande = identite_bassin.get("nom")
 
-    # Cibles de correspondance : identités métier stables en priorité.
-    # Le cluster_id POSITIONNEL du dropdown (ex. « 12 ») n'est utilisé
-    # comme cible que si aucune identité stable n'a pu être résolue —
-    # sinon il est ambigu entre bassins et pourrait faire matcher la
-    # simulation d'un autre bassin du même projet.
-    _identite_stable = bool(
-        identite_bassin.get("exutoire_id") or identite_bassin.get("bassin_ref"))
-    cibles = set()
-    if _ref_exutoire or not _identite_stable:
-        cibles.update({str(cluster_id), str(_cle_recherche)})
-    for _v in (exutoire_demande, bassin_ref_demande, nom_demande):
-        if _v:
-            cibles.add(str(_v))
+    # Cibles de correspondance — ESPACES D'IDENTITÉ DISTINCTS.
+    # Comparer kpis.cluster_id (espace positionnel / placeholder des
+    # anciennes simulations) avec un exutoire ou un basin_ref contaminait
+    # l'historique : ex. l'exutoire « 1 » de Prison matchait les 47 sims
+    # legacy cluster_id=1 des AUTRES réseaux (« Quartier Témoin »,
+    # « ReseauTest »…). Chaque champ de simulation n'est donc comparé
+    # qu'à sa propre cible :
+    #   - s.exutoire_noeud  ↔ exutoire_demande
+    #   - s.bassin_ref      ↔ bassin_ref_demande
+    #   - kpis.cluster_id / parameters.cluster_id ↔ positionnels +
+    #     identifiants stables NON purement numériques (« 8_rejets_346731 »)
+    #   - nom de la sim     ↔ nom_demande (corroboration legacy)
+    _identite_stable = bool(exutoire_demande or bassin_ref_demande)
+    _cibles_exo = {str(exutoire_demande).strip().lower()} if exutoire_demande else set()
+    _cibles_bref = {str(bassin_ref_demande).strip().lower()} if bassin_ref_demande else set()
+    _cibles_pos = set()
+    if not _identite_stable:
+        # Repli sans identité stable : positionnels seuls (meilleur effort).
+        _cibles_pos = {
+            str(cluster_id).strip().lower(),
+            str(_cle_recherche).strip().lower(),
+        }
+    # kpis.cluster_id : avec identité stable, seuls les identifiants
+    # stables NON purement numériques sont acceptés — un numérique
+    # (« 1 », « 234 ») est ambigu avec les cluster_id positionnels et les
+    # placeholders des anciennes simulations d'autres réseaux.
+    _cibles_kpi = {v for v in (_cibles_exo | _cibles_bref | _cibles_pos) if v and not v.isdigit()}
 
     sims = crud.get_simulations(
         db=db, skip=0, limit=500, org_id=org_id,
@@ -1141,12 +1155,24 @@ def list_bassin_simulations_historique(
     resultats = []
     for s in sims:
         sk = s.summary_kpis or {}
-        cid_sim = str(sk.get("cluster_id") or "")
+        params = sk.get("parameters") or {}
+        cid_sim = str(sk.get("cluster_id") or "").strip().lower()
+        cid_params = (str(params.get("cluster_id") or "").strip().lower()
+                      if isinstance(params, dict) else "")
+        # La corroboration par nom ne s'applique qu'aux simulations SANS
+        # identité stable : une sim estampillée exutoire/bassin_ref d'un
+        # autre bassin ne doit jamais matcher par sous-chaîne de nom
+        # (plusieurs bassins peuvent partager un nom, ex. « Chorfa »).
+        _nom_ok = bool(
+            nom_demande and s.name
+            and not s.exutoire_noeud and not s.bassin_ref
+            and nom_demande.lower() in s.name.lower())
         ok = (
-            (cid_sim and cid_sim in cibles)
-            or (s.bassin_ref and str(s.bassin_ref) in cibles)
-            or (s.exutoire_noeud and str(s.exutoire_noeud) in cibles)
-            or (nom_demande and s.name and nom_demande in s.name)
+            (cid_sim and cid_sim in _cibles_kpi)
+            or (cid_params and cid_params in _cibles_kpi)
+            or (s.bassin_ref and str(s.bassin_ref).strip().lower() in _cibles_bref)
+            or (s.exutoire_noeud and str(s.exutoire_noeud).strip().lower() in _cibles_exo)
+            or _nom_ok
         )
         if ok:
             resultats.append(s.to_dict())
