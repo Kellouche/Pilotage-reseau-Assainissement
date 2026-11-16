@@ -289,8 +289,18 @@ async function chargerDonneesTimeSlider() {
         // link_id ne correspondent pas aux conduites affichées
         // (toute la carte resterait verte).
         const _bSel = document.getElementById('bassin-select');
+        const _optBassin = (_bSel && _bSel.selectedOptions && _bSel.selectedOptions[0]) || null;
         const _cidBassin = (_bSel && _bSel.value) ? _bSel.value : '';
-        const _qs = _cidBassin ? `?cluster_id=${encodeURIComponent(_cidBassin)}` : '';
+        // Identité métier stable portée par l'option (dataset) : l'API peut
+        // alors résoudre la simulation sans dépendre du cache de
+        // sectorisation (pont positionnel→exutoire).
+        const _exutoire = _optBassin && _optBassin.dataset ? (_optBassin.dataset.exutoireId || '') : '';
+        const _bassinRef = _optBassin && _optBassin.dataset ? (_optBassin.dataset.bassinRef || '') : '';
+        const _qsParams = [];
+        if (_cidBassin) _qsParams.push(`cluster_id=${encodeURIComponent(_cidBassin)}`);
+        if (_exutoire) _qsParams.push(`exutoire_noeud=${encodeURIComponent(_exutoire)}`);
+        if (_bassinRef) _qsParams.push(`bassin_ref=${encodeURIComponent(_bassinRef)}`);
+        const _qs = _qsParams.length ? `?${_qsParams.join('&')}` : '';
         const resp = await fetch('/api/v1/simulations/timeseries' + _qs);
         if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));

@@ -188,3 +188,95 @@ def test_endpoint_timeseries_avec_donnees():
             db.delete(org)
         db.commit()
         db.close()
+
+
+def _data_sim_ts(exutoire: str = "EX_1"):
+    """Résultat minimal valide avec séries temporelles pour un exutoire."""
+    return {
+        "status": "SUCCESS",
+        "conduit_results": {"C_1": {"flow_ratio": 0.5}},
+        "node_results": {"N1": {"status": "normal"}},
+        "meta": {"cluster_id": exutoire, "cluster_nom": "Bassin Test"},
+        "timeseries": {
+            "status": "SUCCESS",
+            "duration_hours": 1.0,
+            "total_steps": 1,
+            "sampled_count": 1,
+            "peak_outflow_m3s": 0.1,
+            "time_labels": ["00:00"],
+            "outflow_series": [0.1],
+            "steps": [{
+                "step_index": 0, "time_str": "00:00", "minute": 0,
+                "outflow_m3s": 0.1, "surcharged_pipes_count": 0,
+                "flooded_nodes_count": 0, "flooded_nodes": [],
+                "links": {"C_1": 0.5},
+            }],
+        },
+    }
+
+
+def test_endpoint_timeseries_filtres_identite_stable():
+    """Régression Rempois Chorfa : l'endpoint /timeseries doit résoudre la
+    simulation via exutoire_noeud/bassin_ref explicites (identité stable du
+    dropdown), sans dépendre du cluster_id positionnel ni du cache GPKG."""
+    db = SessionLocal()
+    org = proj = sim = None
+    try:
+        org, proj, tenant = _contexte_isole(db)
+        data = _data_sim_ts()
+        with tempfile.TemporaryDirectory() as td:
+            fjson = Path(td) / "sim_ex.json"
+            fjson.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+            sim = Simulation(
+                id=str(uuid.uuid4()), org_id=org.id, project_id=proj.id,
+                name="SWMM_EX_1", status="completed",
+                scenario_pluie="pluie_biennale", duree_heures=1.0,
+                results_s3_key=str(fjson.resolve()),
+                exutoire_noeud="EX_1",
+                bassin_ref="exutoire:EX_1",
+                summary_kpis={"cluster_id": "EX_1", "parameters": {}},
+                created_at=datetime.now(timezone.utc),
+            )
+            db.add(sim)
+            db.commit()
+
+            # Identité stable explicite → résolution directe
+            out = get_simulation_timeseries(
+                db=db, tenant=tenant,
+                exutoire_noeud="EX_1", bassin_ref="exutoire:EX_1")
+            assert out["status"] == "SUCCESS"
+            assert len(out["steps"]) == 1
+
+            # Un autre exutoire ne doit JAMAIS retomber sur cette simulation
+            with pytest.raises(HTTPException) as exc_info:
+                get_simulation_timeseries(
+                    db=db, tenant=tenant, exutoire_noeud="EX_AUTRE")
+            assert exc_info.value.status_code == 404
+    finally:
+        if sim is not None:
+            db.delete(sim)
+        if proj is not None:
+            db.delete(proj)
+        if org is not None:
+            db.delete(org)
+        db.commit()
+        db.close()
+
+
+def test_construire_reponse_simulation_timeseries_uniquement_cached():
+    """Après « Afficher » (mode cached), la réponse doit embarquer les séries
+    temporelles persistées pour que le time-slider anime la simulation
+    affichée — pas la plus récente du bassin. En mode run (non caché), la
+    clé reste vide pour ne pas alourdir la réponse."""
+    from api.services.simulation_service import construire_reponse_simulation
+
+    resultat = {
+        "meta": {"cluster_id": "EX_1"},
+        "conduit_results": {},
+        "node_results": {},
+        "timeseries": {"status": "SUCCESS", "steps": [{"step_index": 0}]},
+    }
+    rep_cached = construire_reponse_simulation(resultat, cached=True)
+    assert rep_cached["timeseries"]["status"] == "SUCCESS"
+    rep_run = construire_reponse_simulation(resultat, cached=False)
+    assert not rep_run.get("timeseries")

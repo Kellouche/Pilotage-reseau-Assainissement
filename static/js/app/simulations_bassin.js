@@ -284,6 +284,10 @@
             const dateStr = dt ? new Date(dt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
             const pic = rs.peak_outflow_m3s != null ? `${Number(rs.peak_outflow_m3s).toFixed(3)} m³/s` : '—';
             const inondes = rs.flooded_nodes_count != null ? `${rs.flooded_nodes_count} regard(s)` : '—';
+            // Identité stable du bassin portée par la simulation : permet de
+            // vérifier visuellement qu'une ligne appartient bien au bassin
+            // affiché (ex. exutoire:8_rejets_346731 = « Rempois chorfa »).
+            const identiteBassin = s.exutoire_noeud || s.bassin_ref || '';
             const statutBadge = s.status === 'completed'
                 ? '<span style="font-size:0.68rem;background:rgba(52,211,153,0.15);color:#34d399;border:1px solid rgba(52,211,153,0.4);padding:1px 7px;border-radius:9999px;font-weight:700;">terminée</span>'
                 : `<span style="font-size:0.68rem;background:rgba(148,163,184,0.15);color:#94a3b8;border:1px solid rgba(148,163,184,0.4);padding:1px 7px;border-radius:9999px;font-weight:700;">${_esc(s.status)}</span>`;
@@ -312,6 +316,7 @@
                             <span><i class="fas fa-calendar me-1" style="color:#38bdf8;"></i>${dateStr}</span>
                             <span><i class="fas fa-water me-1" style="color:#38bdf8;"></i>Pic : ${pic}</span>
                             <span><i class="fas fa-exclamation-triangle me-1" style="color:#f59e0b;"></i>${inondes}</span>
+                            ${identiteBassin ? `<span title="Identité stable du bassin (exutoire)" style="color:#64748b;"><i class="fas fa-map-marker-alt me-1"></i>${_esc(identiteBassin)}</span>` : ''}
                         </div>
                     </div>
                     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">

@@ -798,6 +798,12 @@ def construire_reponse_simulation(resultat: Dict[str, Any], cached: bool = False
         ),
         "node_results": resultat.get("node_results", {}),
         "conduit_results": resultat.get("conduit_results", {}),
+        # Séries temporelles jointes UNIQUEMENT en mode instantané (cached) :
+        # après « Afficher » sur une simulation de l'historique, le time-slider
+        # les consomme directement depuis _dernierResultatSimulation. Sans
+        # elles, l'API /timeseries re-résoudrait la simulation la plus
+        # récente du bassin — pas forcément celle affichée.
+        "timeseries": resultat.get("timeseries") if cached else None,
         "download_inp_url": "/api/v1/simulations/download/inp",
         "download_rpt_url": "/api/v1/simulations/download/rpt",
     }

@@ -1061,9 +1061,22 @@ def list_bassin_simulations_historique(
         proj = _resoudre_projet_pour_simulation(db, org_id, None)
         gpkg_identite = _resoudre_gpkg_effectif_pour_projet(db, proj)
         identite_bassin = _identite_bassin_du_cache(gpkg_identite, _cle_recherche)
-    except Exception:
+    except Exception as _e_ident_hist:
+        logger.warning("[historique] Identité bassin non résolue pour cluster_id=%s : %s", cluster_id, _e_ident_hist)
         identite_bassin = {}
         proj = None
+
+    # Sans projet résolu, on ne peut pas borner la requête : renvoyer les
+    # simulations de TOUTE l'organisation avec des cibles purement
+    # positionnelles pourrait exposer le mauvais bassin/projet.
+    # Historique vide honnête plutôt que données non fiables.
+    if proj is None:
+        return {
+            "status": "success",
+            "cluster_id": cluster_id,
+            "nb_simulations": 0,
+            "simulations": [],
+        }
 
     exutoire_demande = identite_bassin.get("exutoire_id") or (
         _cle_recherche if _ref_exutoire else None)
@@ -1071,14 +1084,23 @@ def list_bassin_simulations_historique(
         _cid_txt if _ref_exutoire else None)
     nom_demande = identite_bassin.get("nom")
 
-    cibles = {str(cluster_id), str(_cle_recherche)}
+    # Cibles de correspondance : identités métier stables en priorité.
+    # Le cluster_id POSITIONNEL du dropdown (ex. « 12 ») n'est utilisé
+    # comme cible que si aucune identité stable n'a pu être résolue —
+    # sinon il est ambigu entre bassins et pourrait faire matcher la
+    # simulation d'un autre bassin du même projet.
+    _identite_stable = bool(
+        identite_bassin.get("exutoire_id") or identite_bassin.get("bassin_ref"))
+    cibles = set()
+    if _ref_exutoire or not _identite_stable:
+        cibles.update({str(cluster_id), str(_cle_recherche)})
     for _v in (exutoire_demande, bassin_ref_demande, nom_demande):
         if _v:
             cibles.add(str(_v))
 
     sims = crud.get_simulations(
         db=db, skip=0, limit=500, org_id=org_id,
-        project_id=(proj.id if proj is not None else None))
+        project_id=proj.id)
 
     resultats = []
     for s in sims:
@@ -2318,6 +2340,8 @@ def _injecter_fiabilite_timeseries(ts_out: Dict[str, Any], sim_data: Dict[str, A
 @router.get("/timeseries")
 def get_simulation_timeseries(
     cluster_id: Optional[Union[int, str]] = None,
+    exutoire_noeud: Optional[str] = None,
+    bassin_ref: Optional[str] = None,
     db: Session = Depends(get_db),
     tenant: TenantContext = Depends(get_tenant_context),
 ):
@@ -2338,30 +2362,43 @@ def get_simulation_timeseries(
     filtres = {}
     if cluster_id is not None:
         filtres["cluster_id"] = cluster_id
+    # Identité métier stable transmise directement par le client
+    # (dataset.bassinRef / dataset.exutoireId du dropdown) : contourne le
+    # pont positionnel→exutoire par cache, fragile si le cache est absent.
+    if exutoire_noeud:
+        filtres["exutoire_noeud"] = str(exutoire_noeud).strip()
+    if bassin_ref:
+        filtres["bassin_ref"] = str(bassin_ref).strip()
+    if cluster_id is not None or exutoire_noeud or bassin_ref:
         try:
-            _cid_txt = str(cluster_id).strip()
+            _cid_txt = str(cluster_id).strip() if cluster_id is not None else ""
             _ref_ex = _cid_txt.lower().startswith("exutoire:")
             _cle = _cid_txt.split(":", 1)[1] if _ref_ex else cluster_id
             proj_id = _resoudre_projet_pour_simulation(db, org_id, None)
             gpkg_id = _resoudre_gpkg_effectif_pour_projet(db, proj_id)
-            ident = _identite_bassin_du_cache(gpkg_id, _cle)
+            ident = _identite_bassin_du_cache(gpkg_id, _cle) if _cle is not None else {}
             _exo = ident.get("exutoire_id") or (_cle if _ref_ex else None)
             _bref = ident.get("bassin_ref") or (_cid_txt if _ref_ex else None)
-            if _exo:
+            if _exo and "exutoire_noeud" not in filtres:
                 filtres["exutoire_noeud"] = _exo
-            if _bref:
+            if _bref and "bassin_ref" not in filtres:
                 filtres["bassin_ref"] = _bref
             if ident.get("nom"):
                 filtres["bassin_nom_attendu"] = ident["nom"]
-        except Exception:
-            pass
+        except Exception as _e_ident:
+            # Sans ce log, une erreur transitoire (verrou SQLite pendant
+            # l'écriture de la simulation, GPKG non résolu…) dégradait
+            # silencieusement le filtre au seul cluster_id positionnel,
+            # qui ne peut jamais matcher → 404 « aucune simulation active ».
+            logger.warning("[timeseries] Identité bassin non résolue pour cluster_id=%s : %s", cluster_id, _e_ident)
 
     ctx = None
     sim_data: Dict[str, Any] = {}
     # Repli « dernière simulation » UNIQUEMENT sans filtre bassin : avec un
-    # cluster_id demandé, servir les séries d'un autre bassin produirait
+    # filtre demandé, servir les séries d'un autre bassin produirait
     # des link_id sans correspondance (carte entièrement verte).
-    _essais = [filtres] if cluster_id is not None else [filtres, {}]
+    _a_filtre = bool(cluster_id is not None or exutoire_noeud or bassin_ref)
+    _essais = [filtres] if _a_filtre else [filtres, {}]
     for f in _essais:
         try:
             ctx = resoudre_simulation_courante(

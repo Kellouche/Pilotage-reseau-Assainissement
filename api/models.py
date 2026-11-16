@@ -548,6 +548,8 @@ class Simulation(Base):
             "org_id": self.org_id,
             "project_id": self.project_id,
             "cluster_id": (self.summary_kpis or {}).get("cluster_id", 1),
+            "bassin_ref": self.bassin_ref,
+            "exutoire_noeud": self.exutoire_noeud,
             "name": self.name,
             "status": self.status,
             "scenario_pluie": self.scenario_pluie,
