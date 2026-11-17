@@ -119,7 +119,7 @@ function fermerProfilLong() {
         state.highlightLayer = null;
     }
 
-    // Couche volatile des anomalies sur la carte : zoom flagrant sur le
+    // Couche d'anomalies sur la carte : zoom flagrant sur le
     // tracé du profil, symbologie par type d'anomalie, disparaît au premier
     // déplacement/zoom. Menu clic-droit : enregistrer / copier / quitter.
     const _d = state.lastData;
@@ -428,7 +428,7 @@ function _rangSeverite(sev) {
 function afficherProfilLong(data) {
     if (!data || !data.segments || data.segments.length === 0) return;
 
-    // Un nouveau profil remplace toute couche volatile d'anomalies
+    // Un nouveau profil remplace toute couche d'anomalies
     _retirerAnomaliesProfil();
 
     // 1. Badges d'en-tête
@@ -1049,9 +1049,10 @@ function _initProfilLongDraggable() {
 window.initProfilLongDraggable = _initProfilLongDraggable;
 
 // ============================================================
-// COUCHE VOLATILE D'ANOMALIES SUR LA CARTE (à la sortie du profil)
-// Affiche le tracé + marqueurs par type d'anomalie, zoom flagrant,
-// disparaît au premier déplacement/zoom, menu clic-droit
+// COUCHE D'ANOMALIES SUR LA CARTE (à la sortie du profil)
+// Affiche le tracé + marqueurs par type d'anomalie, zoom flagrant.
+// Persiste au pan/zoom ; retirée sur « Quitter » (clic droit) ou
+// création d'un nouveau profil. Menu clic-droit
 // (enregistrer / presse-papier / quitter).
 // ============================================================
 
@@ -1078,7 +1079,7 @@ function _iconeNoeudAnomaliesProfil(liste) {
 }
 
 /**
- * Affiche sur la carte le tracé du profil et ses anomalies (couche volatile).
+ * Affiche sur la carte le tracé du profil et ses anomalies (couche persistante).
  */
 function _afficherAnomaliesSurCarte(data) {
     const map = _getCarte();
@@ -1156,15 +1157,9 @@ function _afficherAnomaliesSurCarte(data) {
     const bounds = L.latLngBounds(latlngs);
     map.fitBounds(bounds, { padding: [40, 40], maxZoom: 19 });
 
-    // --- Volatilité : suppression au premier déplacement/zoom réel ---
-    // Fenêtre de grâce : le fitBounds programmé déclenche aussi moveend,
-    // on l'ignore pendant ~1,4 s puis tout moveend ultérieur retire la couche.
-    const _t0 = Date.now();
-    const _onMove = function () {
-        if (Date.now() - _t0 < 1400) return;
-        _retirerAnomaliesProfil();
-    };
-    map.on('moveend', _onMove);
+    // --- Persistance : la couche reste affichée au pan/zoom ---
+    // Elle ne disparaît que sur action explicite : « Quitter » du menu
+    // contextuel ou création d'un nouveau profil.
 
     // --- Menu contextuel clic-droit ---
     const _onCtx = function (e) {
@@ -1180,12 +1175,12 @@ function _afficherAnomaliesSurCarte(data) {
     map.on('click', _onClick);
 
     window._anomaliesProfil = {
-        layer: group, data: data, onMove: _onMove, onCtx: _onCtx, onClick: _onClick
+        layer: group, data: data, onCtx: _onCtx, onClick: _onClick
     };
 }
 
 /**
- * Retire la couche volatile d'anomalies et tous ses écouteurs.
+ * Retire la couche d'anomalies et tous ses écouteurs.
  */
 function _retirerAnomaliesProfil() {
     const st = window._anomaliesProfil;
@@ -1193,7 +1188,6 @@ function _retirerAnomaliesProfil() {
     if (!st) return;
     if (map) {
         if (st.layer) map.removeLayer(st.layer);
-        if (st.onMove) map.off('moveend', st.onMove);
         if (st.onCtx) map.off('contextmenu', st.onCtx);
         if (st.onClick) map.off('click', st.onClick);
     }
