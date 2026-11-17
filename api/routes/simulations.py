@@ -2183,6 +2183,30 @@ def get_profil_en_long(
         segments = []
         distance_cumulee = 0.0
 
+        # Coordonnées WGS84 des nœuds du chemin (pour la couche d'anomalies
+        # sur la carte) — même conversion que /recherche-element, limitée
+        # aux nœuds du profil (pas les ~10k du réseau).
+        _noeud_wgs = {}
+        _crs_topo = _topo.get("crs")
+        _tf_wgs = None
+        if _crs_topo and "4326" not in str(_crs_topo):
+            try:
+                from pyproj import Transformer
+                _tf_wgs = Transformer.from_crs(str(_crs_topo), "EPSG:4326", always_xy=True)
+            except Exception:
+                _tf_wgs = None
+        for _nid in path_nodes:
+            _info = node_index.get(_nid) or {}
+            _x, _y = _info.get("x"), _info.get("y")
+            if _x is None or _y is None:
+                continue
+            if _tf_wgs is not None:
+                try:
+                    _x, _y = _tf_wgs.transform(float(_x), float(_y))
+                except Exception:
+                    continue
+            _noeud_wgs[_nid] = (_x, _y)
+
         for i, nid in enumerate(path_nodes):
             info = node_index.get(nid, {})
             profondeur = info.get("profondeur")
@@ -2370,8 +2394,11 @@ def get_profil_en_long(
             else:
                 z_eau_conduite = None
 
+            _ll_wgs = _noeud_wgs.get(nid)
             segments.append({
                 "node_id": nid,
+                "lng": _ll_wgs[0] if _ll_wgs else None,
+                "lat": _ll_wgs[1] if _ll_wgs else None,
                 "distance_m": round(distance_cumulee, 2),
                 "z_radier": round(z_rad, 3) if z_rad is not None else None,
                 "z_terrain": round(z_terrain, 3) if z_terrain is not None else None,

@@ -910,10 +910,13 @@ function _surlignerCheminCarte(segments) {
         state.highlightLayer = null;
     }
 
-    // Récupérer les coordonnées géographiques des regards depuis TOUTES les couches de points
+    // Récupérer les coordonnées géographiques des regards : d'abord celles
+    // fournies par l'API par segment (fiables), repli sur les couches.
     const latlngs = [];
     segments.forEach(s => {
-        const ll = _trouverCoordonneesRegard(s.node_id);
+        const ll = (s.lat != null && s.lng != null)
+            ? L.latLng(s.lat, s.lng)
+            : _trouverCoordonneesRegard(s.node_id);
         if (ll) latlngs.push(ll);
     });
 
@@ -1087,7 +1090,11 @@ function _afficherAnomaliesSurCarte(data) {
     const anomalies = [];
 
     data.segments.forEach(s => {
-        const ll = _trouverCoordonneesRegard(s.node_id);
+        // Coordonnées fournies par l'API (fiables, indépendantes de l'état
+        // des couches physiques) ; repli sur la recherche dans les couches.
+        const ll = (s.lat != null && s.lng != null)
+            ? L.latLng(s.lat, s.lng)
+            : _trouverCoordonneesRegard(s.node_id);
         if (!ll) return;
         latlngs.push(ll);
         const an = s.anomalies || [];
