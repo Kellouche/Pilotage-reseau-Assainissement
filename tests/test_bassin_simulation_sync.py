@@ -153,9 +153,12 @@ def test_zone_simulee_survol_garde_bleu_ciel():
     det_js = Path("static/js/app/bassins_detection.js").read_text(encoding="utf-8")
     sel_js = Path("static/js/app/bassins_selection.js").read_text(encoding="utf-8")
 
-    # resultats_couches.js
-    assert "mouseover.simBassin" in couches_js
-    assert "mouseout.simBassin" in couches_js
+    # resultats_couches.js — handlers simples référencés (_simBassinHandlers)
+    # car les écouteurs namespacés Leaflet ne se déclenchent pas sur les
+    # événements DOM réels ; les styles bleu ciel sont identiques.
+    assert "_simBassinHandlers" in couches_js
+    assert "layer.on('mouseover', _bassinOver)" in couches_js
+    assert "layer.on('mouseout', _bassinOut)" in couches_js
     assert "fillColor: '#38bdf8'" in couches_js
     assert "color: '#0284c7'" in couches_js
 

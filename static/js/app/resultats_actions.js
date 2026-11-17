@@ -12,6 +12,16 @@ window.reinitialiserAffichageSimulation = function() {
             if (couches.res_conduites) couches.res_conduites.clearLayers();
             if (couches.res_regards) couches.res_regards.clearLayers();
             if (couches.sens_ecoulement) couches.sens_ecoulement.clearLayers();
+            // Contexte « infobulles » : la simulation n'est plus affichée
+            window._simCtxActif = false;
+            window._simTipLayers = [];
+            if (window._menuInfobullesSim) {
+                if (window._menuInfobullesSim._escHandler) {
+                    document.removeEventListener('keydown', window._menuInfobullesSim._escHandler);
+                }
+                window._menuInfobullesSim.remove();
+                window._menuInfobullesSim = null;
+            }
             if (window._coucheRaccordementsOrphelins) {
                 window._coucheRaccordementsOrphelins.clearLayers();
                 if (window.carte && window.carte.hasLayer(window._coucheRaccordementsOrphelins)) {
@@ -123,8 +133,8 @@ window.reinitialiserAffichageSimulation = function() {
                         weight: 1.5,
                         opacity: 0.85
                     });
-                    if (window._tooltipSimSurDemande && window._tooltipSimSurDemande.retirer) {
-                        window._tooltipSimSurDemande.retirer(layer);
+                    if (window._simTipLayers) {
+                        window._simTipLayers = window._simTipLayers.filter(e => e.layer !== layer);
                     }
                     if (layer._originalTooltip) {
                         layer.unbindTooltip();
@@ -137,9 +147,13 @@ window.reinitialiserAffichageSimulation = function() {
             // Rétablir les infobulles initiales des bassins
             const restoreBassinTooltip = (layer) => {
                 layer._isSimulatedBassin = false;
-                layer.off('mouseover.simBassin mouseout.simBassin');
-                if (window._tooltipSimSurDemande && window._tooltipSimSurDemande.retirer) {
-                    window._tooltipSimSurDemande.retirer(layer);
+                if (layer._simBassinHandlers) {
+                    layer.off('mouseover', layer._simBassinHandlers.over);
+                    layer.off('mouseout', layer._simBassinHandlers.out);
+                    layer._simBassinHandlers = null;
+                }
+                if (window._simTipLayers) {
+                    window._simTipLayers = window._simTipLayers.filter(e => e.layer !== layer);
                 }
                 const f = layer.feature;
                 if (f && f.properties && f.properties.type === 'bassin_urbain') {

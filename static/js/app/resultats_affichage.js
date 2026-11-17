@@ -9,67 +9,109 @@
  */
 
 // ==========================================
-// INFOBULLES RÉSULTATS SWMM À LA DEMANDE (clic droit)
-// Les résultats de simulation n'affichent plus d'infobulle au survol :
-// un clic droit sur un ouvrage affiche son infobulle d'information
-// à l'endroit cliqué. Une seule infobulle « à la demande » à la fois.
+// INFOBULLES RÉSULTATS SWMM — BASCULE PAR MENU CONTEXTUEL
+// Par défaut les infobulles de survol sont masquées. Un clic droit
+// n'importe où sur la carte en mode simulation affiche un menu
+// contextuel avec la case à cocher « Infobulles » pour les réactiver.
 // ==========================================
-window._tooltipSimActif = null;
+window._simInfobullesActives = false;
+window._simTipLayers = [];
+window._simCtxActif = false;
 
-window._fermerTooltipSimDemande = function () {
-    const map = window.carte || window.map;
-    if (!map) return;
-    if (window._tooltipSimActif) {
-        try { map.removeLayer(window._tooltipSimActif); } catch (_) {}
-        window._tooltipSimActif = null;
-    }
-};
-
-// NB : Leaflet 1.9.4 ne déclenche PAS les écouteurs namespacés (« type.ns »)
-// sur les événements DOM réels — on utilise donc 'contextmenu' simple avec
-// une référence de handler pour permettre un retrait ciblé.
-window._tooltipSimSurDemande = function (layer, html, opts) {
-    if (!layer || typeof layer.on !== 'function') return;
-    window._tooltipSimSurDemande.retirer(layer);
-    const handler = function (e) {
-        const map = window.carte || window.map;
-        if (!map || !e || !e.latlng) return;
-        if (e.originalEvent) {
-            try { e.originalEvent.preventDefault(); } catch (_) {}
-        }
-        // Horodatage : empêche le menu contextuel des anomalies profil
-        // de s'ouvrir par-dessus l'infobulle demandée.
-        window._ctxSimTs = Date.now();
-        window._fermerTooltipSimDemande();
-        const tip = L.tooltip(Object.assign({
-            direction: 'top',
-            offset: [0, -8],
-            opacity: 0.98,
-            className: 'sim-ask-tooltip'
-        }, opts || {}));
-        tip.setLatLng(e.latlng).setContent(html).addTo(map);
-        window._tooltipSimActif = tip;
-        const fermer = function () {
-            try { map.removeLayer(tip); } catch (_) {}
-            if (window._tooltipSimActif === tip) window._tooltipSimActif = null;
-        };
-        map.once('click', fermer);
-        map.once('zoomstart', fermer);
-        map.once('movestart', fermer);
-        // Différé : l'événement contextmenu courant se propage encore vers la carte
-        setTimeout(function () { map.once('contextmenu', fermer); }, 0);
-    };
-    layer._simAskHandler = handler;
-    layer.on('contextmenu', handler);
-};
-
-window._tooltipSimSurDemande.retirer = function (layer) {
+// Enregistre une infobulle de résultat : elle n'est liée à la couche
+// (et donc visible au survol) que si la bascule est cochée.
+window._enregistrerInfobulleSim = function (layer, html, opts) {
     if (!layer) return;
-    if (layer._simAskHandler) {
-        try { layer.off('contextmenu', layer._simAskHandler); } catch (_) {}
-        layer._simAskHandler = null;
-    }
+    window._simTipLayers.push({ layer: layer, html: html, opts: opts || {} });
+    window._appliquerInfobullesSim();
 };
+
+window._appliquerInfobullesSim = function () {
+    const actif = !!window._simInfobullesActives;
+    (window._simTipLayers || []).forEach(function (entry) {
+        try {
+            if (actif) {
+                entry.layer.bindTooltip(entry.html, entry.opts);
+            } else if (typeof entry.layer.unbindTooltip === 'function') {
+                entry.layer.unbindTooltip();
+            }
+        } catch (_) {}
+    });
+};
+
+window._basculerInfobullesSim = function () {
+    window._simInfobullesActives = !window._simInfobullesActives;
+    window._appliquerInfobullesSim();
+    return window._simInfobullesActives;
+};
+
+// Construit l'élément « case à cocher Infobulles » réutilisable dans
+// n'importe quel menu contextuel (menu simulation ou menu anomalies).
+window._ajouterItemInfobullesSim = function (menu) {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.style.cssText = 'display:flex;align-items:center;gap:8px;width:100%;text-align:left;'
+        + 'background:none;border:none;color:#e2e8f0;padding:7px 10px;border-radius:6px;'
+        + 'cursor:pointer;font-size:0.8rem;';
+    const _rendu = function () {
+        item.innerHTML = '<span style="width:14px;text-align:center;flex:none;">'
+            + (window._simInfobullesActives ? '☑' : '☐') + '</span> Infobulles au survol';
+    };
+    _rendu();
+    item.onmouseenter = function () { item.style.background = 'rgba(56,189,248,0.15)'; };
+    item.onmouseleave = function () { item.style.background = 'none'; };
+    item.onclick = function (ev) {
+        ev.stopPropagation();
+        window._basculerInfobullesSim();
+        _rendu();
+    };
+    menu.appendChild(item);
+    return item;
+};
+
+// Menu contextuel « Infobulles » — affiché au clic droit sur la carte
+// lorsque des résultats de simulation sont affichés (hors menu anomalies).
+function _afficherMenuInfobullesSim(domEvent) {
+    _masquerMenuInfobullesSim();
+    if (!domEvent) return;
+    const x = domEvent.clientX, y = domEvent.clientY;
+
+    const menu = document.createElement('div');
+    menu.className = 'menu-infobulles-sim';
+    menu.style.cssText = 'position:fixed;z-index:9999;background:rgba(15,23,42,0.97);'
+        + 'border:1px solid rgba(56,189,248,0.45);border-radius:10px;padding:5px;'
+        + 'min-width:190px;box-shadow:0 10px 30px rgba(0,0,0,0.55);'
+        + 'font-family:"Plus Jakarta Sans",sans-serif;';
+
+    window._ajouterItemInfobullesSim(menu);
+
+    menu.style.left = Math.max(4, Math.min(x + 6, window.innerWidth - 200)) + 'px';
+    menu.style.top = Math.max(4, Math.min(y + 6, window.innerHeight - 90)) + 'px';
+    document.body.appendChild(menu);
+    window._menuInfobullesSim = menu;
+
+    setTimeout(function () {
+        const _hide = function (ev) {
+            if (menu.contains(ev.target)) return;
+            _masquerMenuInfobullesSim();
+            document.removeEventListener('click', _hide, true);
+        };
+        document.addEventListener('click', _hide, true);
+        const _esc = function (ev) { if (ev.key === 'Escape') _masquerMenuInfobullesSim(); };
+        document.addEventListener('keydown', _esc);
+        menu._escHandler = _esc;
+    }, 0);
+}
+
+function _masquerMenuInfobullesSim() {
+    if (window._menuInfobullesSim) {
+        if (window._menuInfobullesSim._escHandler) {
+            document.removeEventListener('keydown', window._menuInfobullesSim._escHandler);
+        }
+        window._menuInfobullesSim.remove();
+        window._menuInfobullesSim = null;
+    }
+}
 
 // ==========================================
         // POINTS 2 & 3 : COUCHES RÉSULTATS SWMM 5.2
@@ -77,7 +119,27 @@ window._tooltipSimSurDemande.retirer = function (layer) {
         window.afficherResultatsSimulation = function(data) {
             if (!data || !data.conduit_results || !data.node_results) return;
             window._dernierResultatSimulation = data;
-            if (window._fermerTooltipSimDemande) window._fermerTooltipSimDemande();
+
+            // Contexte « infobulles » : réinitialise le registre et active
+            // le menu contextuel carte (case à cocher Infobulles au clic droit).
+            window._simTipLayers = [];
+            window._simCtxActif = true;
+            if (!window._simCtxBound) {
+                window._simCtxBound = true;
+                const _mapCtx = window.carte || window.map;
+                if (_mapCtx && typeof _mapCtx.on === 'function') {
+                    _mapCtx.on('contextmenu', function (e) {
+                        if (!window._simCtxActif) return;
+                        // Le menu des anomalies profil (s'il est actif) intègre
+                        // déjà la case à cocher Infobulles — pas de doublon.
+                        if (window._anomaliesProfil) return;
+                        if (e && e.originalEvent) {
+                            try { e.originalEvent.preventDefault(); } catch (_) {}
+                        }
+                        _afficherMenuInfobullesSim(e && e.originalEvent);
+                    });
+                }
+            }
 
             // LOT P1.5.3 — traçabilité DWF dans la légende : réutilise la
             // provenance existante (provenance.apports_dwf du résultat),
@@ -267,7 +329,7 @@ window._tooltipSimSurDemande.retirer = function (layer) {
                             </div>
                         `;
                         layer.bindPopup(popupHtml);
-                        window._tooltipSimSurDemande(layer, `<b>${r.link_id || 'Conduite'}</b> (${u}&rarr;${d}) : Q/Qmax = <b>${qPct}%</b> (${r.label})`, { direction: 'top', offset: [0, -6] });
+                        window._enregistrerInfobulleSim(layer, `<b>${r.link_id || 'Conduite'}</b> (${u}&rarr;${d}) : Q/Qmax = <b>${qPct}%</b> (${r.label})`, { direction: 'top', offset: [0, -6], opacity: 0.98 });
 
                         // Interaction de survol épurée sans bringToFront pour préserver le cycle des événements Leaflet
                         layer.on('mouseover', function() {
@@ -385,7 +447,7 @@ window._tooltipSimSurDemande.retirer = function (layer) {
                         });
 
                         if (!r) {
-                            window._tooltipSimSurDemande(layer, `Regard ${cleanNid} (Écoulement normal)`, { direction: 'top', offset: [0, -6] });
+                            window._enregistrerInfobulleSim(layer, `Regard ${cleanNid} (Écoulement normal)`, { sticky: true });
                             return;
                         }
 
@@ -414,7 +476,7 @@ window._tooltipSimSurDemande.retirer = function (layer) {
                             ? (r.flood_volume_m3 < 1.0 ? `${Number(r.flood_volume_m3).toFixed(2)} m³` : `${Number(r.flood_volume_m3).toFixed(1)} m³`)
                             : '< 0.05 m³';
                         layer.bindPopup(popupHtml);
-                        window._tooltipSimSurDemande(layer, `<b>${isFlooded ? '🚨 Débordement' : (isSurcharged ? '⚠️ Surcharge' : 'Regard')} : ${cleanNid}</b>${isFlooded ? ` (${volTooltipStr})` : ''}`, { direction: 'top', offset: [0, -6] });
+                        window._enregistrerInfobulleSim(layer, `<b>${isFlooded ? '🚨 Débordement' : (isSurcharged ? '⚠️ Surcharge' : 'Regard')} : ${cleanNid}</b>${isFlooded ? ` (${volTooltipStr})` : ''}`, { direction: 'top', offset: [0, -6], opacity: 0.98 });
                         
                         layer.on('popupopen', function() {
                             if (window.profilLongState && window.profilLongState.active) {
@@ -478,7 +540,7 @@ window._tooltipSimSurDemande.retirer = function (layer) {
                             </div>
                         `;
                         polyRacc.bindPopup(popupHtml);
-                        window._tooltipSimSurDemande(polyRacc, `⚡ <b>Collecteur de délestage actif (DN 600)</b> &rarr; ${ro.nom} (${ro.distance_m} m)`, { direction: 'top', offset: [0, -6] });
+                        window._enregistrerInfobulleSim(polyRacc, `⚡ <b>Collecteur de délestage actif (DN 600)</b> &rarr; ${ro.nom} (${ro.distance_m} m)`, { sticky: true, opacity: 0.98 });
 
                         // Marqueur de l'ouvrage spécial récepteur activé avec dimensionnement dynamique ajusté au zoom
                         const curZ = carte.getZoom ? carte.getZoom() : 15;
@@ -504,7 +566,7 @@ window._tooltipSimSurDemande.retirer = function (layer) {
                                 </div>
                             </div>
                         `);
-                        window._tooltipSimSurDemande(markerActif, `🎯 <b>${ro.nom}</b><br><span style="color:#10b981; font-weight:700;">Mise en eau confirmée (Variante 0)</span>`, { direction: 'top', offset: [0, -6] });
+                        window._enregistrerInfobulleSim(markerActif, `🎯 <b>${ro.nom}</b><br><span style="color:#10b981; font-weight:700;">Mise en eau confirmée (Variante 0)</span>`, { sticky: true });
 
                         couches.res_conduites.addLayer(polyRacc);
                         couches.res_regards.addLayer(markerActif);

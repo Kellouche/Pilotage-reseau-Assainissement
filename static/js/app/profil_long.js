@@ -1165,9 +1165,6 @@ function _afficherAnomaliesSurCarte(data) {
     const _onCtx = function (e) {
         const st = window._anomaliesProfil;
         if (!st) return;
-        // Clic droit sur un élément de simulation → infobulle à la demande,
-        // pas le menu des anomalies.
-        if (Date.now() - (window._ctxSimTs || 0) < 500) return;
         if (e && e.originalEvent) e.originalEvent.preventDefault();
         _afficherMenuAnomaliesProfil(e && e.originalEvent);
     };
@@ -1225,6 +1222,15 @@ function _afficherMenuAnomaliesProfil(domEvent) {
         b.onclick = (ev) => { ev.stopPropagation(); _actionMenuAnomalies(act, b); };
         return b;
     };
+
+    // Case à cocher « Infobulles » quand une simulation est affichée :
+    // même bascule que le menu contextuel de la carte.
+    if (window._simCtxActif && window._ajouterItemInfobullesSim) {
+        window._ajouterItemInfobullesSim(menu);
+        const sep = document.createElement('div');
+        sep.style.cssText = 'height:1px;background:rgba(148,163,184,0.25);margin:4px 6px;';
+        menu.appendChild(sep);
+    }
 
     menu.appendChild(_btn('enregistrer', '💾 Enregistrer (.txt)'));
     menu.appendChild(_btn('copier', '📋 Copier (presse-papier)'));

@@ -481,19 +481,22 @@ window.addEventListener('DOMContentLoaded', initSaaSNavbar);
                     }
                     const fullSimTooltip = window.genererTooltipBassinVersantHtml ? window.genererTooltipBassinVersantHtml(f.properties, data) : simCardHtml;
                     layer.unbindTooltip();
-                    window._tooltipSimSurDemande(layer, fullSimTooltip, {
+                    window._enregistrerInfobulleSim(layer, fullSimTooltip, {
+                        sticky: true,
                         direction: 'left',
                         offset: [-15, 0],
+                        opacity: 0.98,
                         className: 'sim-bassin-tooltip'
                     });
                     layer._isSimulatedBassin = true;
-                    layer.off('mouseout.bassinFix mouseover.simBassin mouseout.simBassin');
-                    layer.on('mouseout.bassinFix', function() {
-                        if (typeof this.closeTooltip === 'function') {
-                            try { this.closeTooltip(); } catch(_) {}
-                        }
-                    });
-                    layer.on('mouseover.simBassin', function() {
+                    // NB : les écouteurs namespacés Leaflet (« type.ns ») ne se
+                    // déclenchent pas sur les événements DOM réels — handlers
+                    // simples référencés pour permettre un retrait ciblé.
+                    if (layer._simBassinHandlers) {
+                        layer.off('mouseover', layer._simBassinHandlers.over);
+                        layer.off('mouseout', layer._simBassinHandlers.out);
+                    }
+                    const _bassinOver = function() {
                         this.setStyle({
                             color: '#0284c7',
                             weight: 3.5,
@@ -501,8 +504,8 @@ window.addEventListener('DOMContentLoaded', initSaaSNavbar);
                             fillOpacity: 0.32,
                             dashArray: '7, 4'
                         });
-                    });
-                    layer.on('mouseout.simBassin', function() {
+                    };
+                    const _bassinOut = function() {
                         this.setStyle({
                             color: '#0284c7',
                             weight: 3.5,
@@ -510,7 +513,10 @@ window.addEventListener('DOMContentLoaded', initSaaSNavbar);
                             fillOpacity: 0.20,
                             dashArray: '7, 4'
                         });
-                    });
+                    };
+                    layer._simBassinHandlers = { over: _bassinOver, out: _bassinOut };
+                    layer.on('mouseover', _bassinOver);
+                    layer.on('mouseout', _bassinOut);
                     try { layer.unbindPopup(); } catch(_) {}
                     layer.options.pane = 'bassinsPane';
                     layer.setStyle({
@@ -564,9 +570,11 @@ window.addEventListener('DOMContentLoaded', initSaaSNavbar);
                             </div>
                         `;
                         sbLayer.unbindTooltip();
-                        window._tooltipSimSurDemande(sbLayer, sbTooltipHtml, {
+                        window._enregistrerInfobulleSim(sbLayer, sbTooltipHtml, {
+                            sticky: true,
                             direction: 'left',
                             offset: [-15, 0],
+                            opacity: 0.98,
                             className: 'sim-bassin-tooltip'
                         });
                     }
