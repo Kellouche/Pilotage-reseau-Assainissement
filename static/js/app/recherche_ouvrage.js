@@ -62,7 +62,16 @@
             iconSize: [34, 34],
             iconAnchor: [17, 17],
         });
-        _pulseLayer = L.marker([lat, lng], { icon: icon, zIndexOffset: 1000 }).addTo(carte);
+        // Pane dédié au premier plan : markerPane (600) passerait SOUS les
+        // résultats SWMM (swmmNodesPane = 650) — le repère doit rester
+        // visible quelle que soit la thématique affichée.
+        if (!carte.getPane('searchPulsePane')) {
+            const p = carte.createPane('searchPulsePane');
+            p.style.zIndex = 900;
+        }
+        _pulseLayer = L.marker([lat, lng], {
+            icon: icon, zIndexOffset: 1000, pane: 'searchPulsePane'
+        }).addTo(carte);
         if (label) {
             _pulseLayer.bindTooltip(String(label), {
                 permanent: true, direction: 'top', offset: [0, -20],
