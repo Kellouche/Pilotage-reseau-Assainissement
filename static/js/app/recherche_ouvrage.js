@@ -119,6 +119,11 @@
 
     function centrerCarte(lng, lat, label) {
         const carte = _carte();
+        // Le positionnement de recherche est une action utilisateur explicite :
+        // pendant ~8 s, aucun rendu asynchrone (ré-affichage simulation →
+        // fitBounds, ou rechargement des couches auxiliaires au moveend) ne doit
+        // détourner le zoom ni la thématique actuellement affichée.
+        window._rechercheCentrageJusqua = Date.now() + 8000;
         if (carte && lng != null && lat != null && typeof carte.setView === 'function') {
             try { carte.setView([lat, lng], 18); } catch (e) { /* noop */ }
         }

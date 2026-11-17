@@ -466,7 +466,10 @@
                 } else if (window._activeClusterLayer && window._activeClusterLayer.getBounds && window._activeClusterLayer.getBounds().isValid()) {
                     boundsToFit = window._activeClusterLayer.getBounds();
                 }
-                if (boundsToFit && boundsToFit.isValid()) {
+                // Ne pas détourner le zoom si l'utilisateur vient de positionner
+                // la carte via la recherche d'ouvrage (ré-affichage asynchrone tardif).
+                const _zoomBloqueRecherche = window._rechercheCentrageJusqua && Date.now() < window._rechercheCentrageJusqua;
+                if (!_zoomBloqueRecherche && boundsToFit && boundsToFit.isValid()) {
                     carte.fitBounds(boundsToFit, { padding: [35, 35], maxZoom: 19 });
                 }
             } catch(e) {

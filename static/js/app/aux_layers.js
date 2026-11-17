@@ -570,7 +570,13 @@
             let t = null;
             m.on('moveend', () => {
                 clearTimeout(t);
-                t = setTimeout(majCouchesVisibles, 400);
+                t = setTimeout(() => {
+                    // Pendant un positionnement de recherche d'ouvrage, conserver
+                    // les couches auxiliaires déjà chargées : évite le rechargement
+                    // massif de la couche altimétrique (gel) et le clignotement.
+                    if (window._rechercheCentrageJusqua && Date.now() < window._rechercheCentrageJusqua) return;
+                    majCouchesVisibles();
+                }, 400);
             });
         }
     }
