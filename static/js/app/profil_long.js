@@ -68,6 +68,7 @@ function toggleProfilLongMode() {
 
         // Nettoyer les sélections précédentes si nouveau tracé
         _nettoyerMarqueursProfil();
+        _retirerAnomaliesProfil();
     } else {
         // Si le panneau est fermé, l'ouvrir s'il y a déjà des données
         if (panel && panel.style.display === 'none' && state.lastData) {
@@ -111,10 +112,19 @@ function fermerProfilLong() {
     if (panel) panel.style.display = 'none';
     annulerSelectionProfil();
 
+    const state = window.profilLongState;
     const map = _getCarte();
-    if (map && window.profilLongState.highlightLayer) {
-        map.removeLayer(window.profilLongState.highlightLayer);
-        window.profilLongState.highlightLayer = null;
+    if (map && state.highlightLayer) {
+        map.removeLayer(state.highlightLayer);
+        state.highlightLayer = null;
+    }
+
+    // Couche volatile des anomalies sur la carte : zoom flagrant sur le
+    // tracé du profil, symbologie par type d'anomalie, disparaît au premier
+    // déplacement/zoom. Menu clic-droit : enregistrer / copier / quitter.
+    const _d = state.lastData;
+    if (_d && _d.segments && _d.segments.some(s => s.anomalies && s.anomalies.length)) {
+        _afficherAnomaliesSurCarte(_d);
     }
 }
 
@@ -377,11 +387,49 @@ function chargerProfilLong(nodeAmont, nodeAval) {
         });
 }
 
+/** Libellés courts des types d'anomalie (état, sans diagnostic détaillé). */
+const _TYPE_ANOMALIE_LABELS = {
+    contre_pente: 'Contre-pente',
+    pente_forte: 'Pente forte',
+    autocurage_insuffisant: 'Autocurage insuffisant',
+    autocurage_excessif: 'Vitesse excessive',
+    hydraulique: 'Hydraulique (surcharge/inondation)',
+    terrain_remonte: 'Terrain remonté'
+};
+const _SEV_ANOMALIE_LABELS = { fort: 'Fort', moyen: 'Moyen', faible: 'Faible', info: 'Info' };
+const _COULEUR_SEV = { fort: '#ef4444', moyen: '#f59e0b', faible: '#fb923c', info: '#38bdf8' };
+const _ICONE_TYPE_ANOMALIE = {
+    contre_pente: 'fa-arrow-up',
+    pente_forte: 'fa-chart-line',
+    autocurage_insuffisant: 'fa-hourglass-half',
+    autocurage_excessif: 'fa-tachometer-alt',
+    hydraulique: 'fa-water',
+    terrain_remonte: 'fa-mountain'
+};
+
+function _libelleTypeAnomalie(t) {
+    return _TYPE_ANOMALIE_LABELS[t] || String(t || 'anomalie').replace(/_/g, ' ');
+}
+/** État court d'une anomalie : « Fort — Contre-pente » (sans message). */
+function _etatAnomalie(a) {
+    const sev = (a && a.severite) || 'info';
+    return `${_SEV_ANOMALIE_LABELS[sev] || sev} — ${_libelleTypeAnomalie(a && a.type)}`;
+}
+function _couleurSeverite(sev) {
+    return _COULEUR_SEV[sev] || _COULEUR_SEV.info;
+}
+function _rangSeverite(sev) {
+    return { fort: 4, moyen: 3, faible: 2, info: 1 }[sev] || 0;
+}
+
 /**
  * Rendu graphique Chart.js et mise à jour de l'interface
  */
 function afficherProfilLong(data) {
     if (!data || !data.segments || data.segments.length === 0) return;
+
+    // Un nouveau profil remplace toute couche volatile d'anomalies
+    _retirerAnomaliesProfil();
 
     // 1. Badges d'en-tête
     const bTroncons = document.getElementById('badge-profil-troncons');
@@ -464,16 +512,8 @@ function afficherProfilLong(data) {
         const _nm = (_sa && _sa.moyens) || 0;
         const _nt = (_sa && _sa.total) || 0;
         if (_nt > 0) {
-            const _libelles = {
-                contre_pente: 'contre-pente',
-                pente_forte: 'pente forte',
-                autocurage_insuffisant: 'autocurage insuffisant',
-                autocurage_excessif: 'vitesse excessive',
-                hydraulique: 'hydraulique (surcharge/inondation)',
-                terrain_remonte: 'terrain remonté',
-            };
             const _types = Object.entries((_sa && _sa.types_majeurs) || {})
-                .map(([t, c]) => `${_libelles[t] || t.replace(/_/g, ' ')} ×${c}`)
+                .map(([t, c]) => `${_libelleTypeAnomalie(t)} ×${c}`)
                 .join(', ');
             _txtAnom.textContent = `${_nf} anomalie(s) forte(s), ${_nm} moyenne(s)` +
                 (_types ? ` — ${_types}` : '') +
@@ -767,7 +807,10 @@ function afficherProfilLong(data) {
                             if (_lblDs === 'Anomalies du profil (jalons)') {
                                 const an = s.anomalies || [];
                                 if (!an.length) return '';
-                                return '⚠ ' + an.map(a => a.message).join('  •  ');
+                                // État seul (sévérité + type) — les messages
+                                // complets restent dans le volet alertes et
+                                // le rapport exporté, pas dans l'infobulle.
+                                return '⚠ ' + an.map(a => _etatAnomalie(a)).join('  •  ');
                             }
                             if (_estDebordement(s)) {
                                 return `🔴 État : Débordement confirmé par SWMM (eau déversée en surface)`;
@@ -1001,3 +1044,310 @@ function _initProfilLongDraggable() {
 // Exposer pour appel depuis d'autres modules si nécessaire
 window.initProfilLongDraggable = _initProfilLongDraggable;
 
+// ============================================================
+// COUCHE VOLATILE D'ANOMALIES SUR LA CARTE (à la sortie du profil)
+// Affiche le tracé + marqueurs par type d'anomalie, zoom flagrant,
+// disparaît au premier déplacement/zoom, menu clic-droit
+// (enregistrer / presse-papier / quitter).
+// ============================================================
+
+/**
+ * Construit l'icône Leaflet d'un marqueur d'anomalie : forme/couleur par
+ * type, teinte par sévérité.
+ */
+function _iconeAnomalieProfil(type, severite) {
+    const couleur = _couleurSeverite(severite);
+    const icone = _ICONE_TYPE_ANOMALIE[type] || 'fa-exclamation';
+    return L.divIcon({
+        className: 'anomalie-profil-marker',
+        html: `<div style="width:26px;height:26px;border-radius:50%;background:rgba(15,23,42,0.88);border:2px solid ${couleur};display:flex;align-items:center;justify-content:center;box-shadow:0 0 10px ${couleur}88;">`
+            + `<i class="fas ${icone}" style="color:${couleur};font-size:13px;"></i></div>`,
+        iconSize: [26, 26],
+        iconAnchor: [13, 13]
+    });
+}
+
+/**
+ * Affiche sur la carte le tracé du profil et ses anomalies (couche volatile).
+ */
+function _afficherAnomaliesSurCarte(data) {
+    const map = _getCarte();
+    if (!map || !data || !data.segments) return;
+    _retirerAnomaliesProfil();
+
+    // Pane dédié au premier plan (au-dessus des résultats de simulation)
+    if (!map.getPane('anomaliesProfilPane')) {
+        const p = map.createPane('anomaliesProfilPane');
+        p.style.zIndex = 800;
+    }
+
+    const group = L.layerGroup();
+    const latlngs = [];
+    const noeuds = [];
+    const anomalies = [];
+
+    data.segments.forEach(s => {
+        const ll = _trouverCoordonneesRegard(s.node_id);
+        if (!ll) return;
+        latlngs.push(ll);
+        const an = s.anomalies || [];
+        let sevMax = null;
+        an.forEach(a => {
+            if (_rangSeverite(a.severite) > _rangSeverite(sevMax)) sevMax = a.severite;
+        });
+        noeuds.push({ ll: ll, id: s.node_id, sev: sevMax });
+        an.forEach((a, j) => {
+            // Décalage déterministe quand plusieurs anomalies coexistent
+            // sur un même nœud, pour éviter la superposition exacte.
+            const off = an.length > 1 ? (j - (an.length - 1) / 2) * 0.00022 : 0;
+            anomalies.push({
+                ll: L.latLng(ll.lat + off, ll.lng + off * 0.7),
+                node: s.node_id,
+                type: a.type,
+                severite: a.severite,
+                message: a.message
+            });
+        });
+    });
+
+    if (!latlngs.length) return;
+
+    // Tronçons du profil (trait fin pointillé)
+    if (latlngs.length >= 2) {
+        L.polyline(latlngs, {
+            color: '#f59e0b', weight: 4, opacity: 0.7,
+            dashArray: '6, 6', pane: 'anomaliesProfilPane'
+        }).addTo(group);
+    }
+
+    // Regards du profil (point coloré par la pire anomalie du nœud)
+    noeuds.forEach(n => {
+        L.circleMarker(n.ll, {
+            radius: 5, color: '#0f172a', weight: 2,
+            fillColor: n.sev ? _couleurSeverite(n.sev) : '#94a3b8',
+            fillOpacity: 0.95, pane: 'anomaliesProfilPane'
+        }).bindTooltip(`<b>Regard ${n.id}</b>`, { direction: 'top' })
+          .addTo(group);
+    });
+
+    // Marqueurs d'anomalies (icône par type, teinte par sévérité)
+    anomalies.forEach(an => {
+        L.marker(an.ll, {
+            icon: _iconeAnomalieProfil(an.type, an.severite),
+            pane: 'anomaliesProfilPane'
+        }).bindTooltip(
+            `<b>${an.node}</b> — ${_etatAnomalie(an)}`,
+            { direction: 'top' }
+        ).addTo(group);
+    });
+
+    group.addTo(map);
+
+    // Zoom flagrant sur l'ensemble du profil
+    const bounds = L.latLngBounds(latlngs);
+    map.fitBounds(bounds, { padding: [60, 60], maxZoom: 17 });
+
+    // --- Volatilité : suppression au premier déplacement/zoom réel ---
+    // Fenêtre de grâce : le fitBounds programmé déclenche aussi moveend,
+    // on l'ignore pendant ~1,4 s puis tout moveend ultérieur retire la couche.
+    const _t0 = Date.now();
+    const _onMove = function () {
+        if (Date.now() - _t0 < 1400) return;
+        _retirerAnomaliesProfil();
+    };
+    map.on('moveend', _onMove);
+
+    // --- Menu contextuel clic-droit ---
+    const _onCtx = function (e) {
+        const st = window._anomaliesProfil;
+        if (!st) return;
+        if (e && e.originalEvent) e.originalEvent.preventDefault();
+        _afficherMenuAnomaliesProfil(e && e.originalEvent);
+    };
+    map.on('contextmenu', _onCtx);
+
+    // Clic gauche : referme juste le menu (la couche reste)
+    const _onClick = function () { _menuAnomaliesProfilHide(); };
+    map.on('click', _onClick);
+
+    window._anomaliesProfil = {
+        layer: group, data: data, onMove: _onMove, onCtx: _onCtx, onClick: _onClick
+    };
+}
+
+/**
+ * Retire la couche volatile d'anomalies et tous ses écouteurs.
+ */
+function _retirerAnomaliesProfil() {
+    const st = window._anomaliesProfil;
+    const map = _getCarte();
+    if (!st) return;
+    if (map) {
+        if (st.layer) map.removeLayer(st.layer);
+        if (st.onMove) map.off('moveend', st.onMove);
+        if (st.onCtx) map.off('contextmenu', st.onCtx);
+        if (st.onClick) map.off('click', st.onClick);
+    }
+    _menuAnomaliesProfilHide();
+    window._anomaliesProfil = null;
+}
+
+/**
+ * Menu contextuel (clic droit) : enregistrer / presse-papier / quitter.
+ */
+function _afficherMenuAnomaliesProfil(domEvent) {
+    _menuAnomaliesProfilHide();
+    if (!domEvent) return;
+    const x = domEvent.clientX, y = domEvent.clientY;
+
+    const menu = document.createElement('div');
+    menu.className = 'menu-anomalies-profil';
+    menu.style.cssText = 'position:fixed;z-index:9999;background:rgba(15,23,42,0.97);'
+        + 'border:1px solid rgba(56,189,248,0.45);border-radius:10px;padding:5px;'
+        + 'min-width:190px;box-shadow:0 10px 30px rgba(0,0,0,0.55);'
+        + 'font-family:"Plus Jakarta Sans",sans-serif;';
+
+    const _btn = (act, label) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.dataset.act = act;
+        b.textContent = label;
+        b.style.cssText = 'display:block;width:100%;text-align:left;background:none;border:none;'
+            + 'color:#e2e8f0;padding:7px 10px;border-radius:6px;cursor:pointer;font-size:0.8rem;';
+        b.onmouseenter = () => { b.style.background = 'rgba(56,189,248,0.15)'; };
+        b.onmouseleave = () => { b.style.background = 'none'; };
+        b.onclick = (ev) => { ev.stopPropagation(); _actionMenuAnomalies(act, b); };
+        return b;
+    };
+
+    menu.appendChild(_btn('enregistrer', '💾 Enregistrer (.txt)'));
+    menu.appendChild(_btn('copier', '📋 Copier (presse-papier)'));
+    menu.appendChild(_btn('quitter', '✖ Quitter'));
+
+    // Position calée dans le viewport
+    menu.style.left = Math.max(4, Math.min(x + 6, window.innerWidth - 200)) + 'px';
+    menu.style.top = Math.max(4, Math.min(y + 6, window.innerHeight - 140)) + 'px';
+    document.body.appendChild(menu);
+
+    if (window._anomaliesProfil) window._anomaliesProfil.menu = menu;
+
+    // Fermeture au clic hors menu / Échap
+    setTimeout(() => {
+        const _hide = (ev) => {
+            if (menu.contains(ev.target)) return;
+            _menuAnomaliesProfilHide();
+            document.removeEventListener('click', _hide, true);
+        };
+        document.addEventListener('click', _hide, true);
+        const _esc = (ev) => { if (ev.key === 'Escape') _menuAnomaliesProfilHide(); };
+        document.addEventListener('keydown', _esc);
+        menu._escHandler = _esc;
+    }, 0);
+}
+
+function _menuAnomaliesProfilHide() {
+    const st = window._anomaliesProfil;
+    if (st && st.menu) {
+        if (st.menu._escHandler) document.removeEventListener('keydown', st.menu._escHandler);
+        st.menu.remove();
+        st.menu = null;
+    } else {
+        document.querySelectorAll('.menu-anomalies-profil').forEach(m => m.remove());
+    }
+}
+
+/**
+ * Actions du menu contextuel.
+ */
+function _actionMenuAnomalies(act, btn) {
+    const st = window._anomaliesProfil;
+    if (!st || !st.data) { _menuAnomaliesProfilHide(); return; }
+
+    if (act === 'quitter') {
+        _retirerAnomaliesProfil();
+        return;
+    }
+
+    const txt = _rapportAnomaliesTexte(st.data);
+
+    if (act === 'enregistrer') {
+        const blob = new Blob([txt], { type: 'text/plain;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `anomalies_profil_${st.data.node_amont || 'amont'}_${st.data.node_aval || 'aval'}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+        _menuAnomaliesProfilHide();
+        return;
+    }
+
+    if (act === 'copier') {
+        const _ok = () => {
+            if (btn) {
+                btn.textContent = '✓ Copié !';
+                setTimeout(() => { btn.textContent = '📋 Copier (presse-papier)'; }, 1500);
+            }
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(txt).then(_ok).catch(() => _copierFallback(txt, _ok));
+        } else {
+            _copierFallback(txt, _ok);
+        }
+    }
+}
+
+function _copierFallback(texte, cb) {
+    try {
+        const ta = document.createElement('textarea');
+        ta.value = texte;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+        if (cb) cb();
+    } catch (e) { /* presse-papier indisponible */ }
+}
+
+/**
+ * Rapport texte des anomalies du profil (export .txt / presse-papier).
+ */
+function _rapportAnomaliesTexte(data) {
+    const lignes = [];
+    lignes.push('PROFIL EN LONG — ANOMALIES DÉTECTÉES');
+    lignes.push('================================');
+    lignes.push(`Profil      : ${data.node_amont || '?'} → ${data.node_aval || '?'}`);
+    lignes.push(`Tronçons    : ${data.nb_troncons || '?'} | Longueur : ${data.longueur_totale_m || '?'} m`);
+    const alt = data.altimetrie || {};
+    lignes.push(`Altimétrie  : ${alt.label || 'non tracée'}${alt.source ? ` (${alt.source})` : ''}`);
+    const sa = data.synthese_anomalies || {};
+    lignes.push(`Anomalies   : ${sa.total || 0} (dont ${sa.forts || 0} forte(s), ${sa.moyens || 0} moyenne(s))`);
+    lignes.push(`Date        : ${new Date().toLocaleString('fr-FR')}`);
+    lignes.push('');
+
+    const parNoeud = {};
+    (data.segments || []).forEach(s => {
+        (s.anomalies || []).forEach(a => {
+            (parNoeud[s.node_id] = parNoeud[s.node_id] || []).push(a);
+        });
+    });
+
+    const distParNoeud = {};
+    (data.segments || []).forEach(s => { distParNoeud[String(s.node_id)] = s.distance_m || 0; });
+    const noeuds = Object.keys(parNoeud).sort((a, b) => (distParNoeud[a] || 0) - (distParNoeud[b] || 0));
+
+    noeuds.forEach(nid => {
+        lignes.push(`■ Regard ${nid} (${Math.round(distParNoeud[nid] || 0)} m)`);
+        parNoeud[nid].forEach(a => {
+            const val = a.valeur_m != null ? ` (${a.valeur_m} m)` : (a.valeur_ms != null ? ` (${a.valeur_ms} m/s)` : '');
+            lignes.push(`   [${_SEV_ANOMALIE_LABELS[a.severite] || a.severite}] ${_libelleTypeAnomalie(a.type)}${val}`);
+            if (a.message) lignes.push(`      ${a.message}`);
+        });
+        lignes.push('');
+    });
+
+    return lignes.join('\n');
+}
