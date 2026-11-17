@@ -1165,6 +1165,9 @@ function _afficherAnomaliesSurCarte(data) {
     const _onCtx = function (e) {
         const st = window._anomaliesProfil;
         if (!st) return;
+        // Clic droit sur un élément de simulation → infobulle à la demande,
+        // pas le menu des anomalies.
+        if (Date.now() - (window._ctxSimTs || 0) < 500) return;
         if (e && e.originalEvent) e.originalEvent.preventDefault();
         _afficherMenuAnomaliesProfil(e && e.originalEvent);
     };

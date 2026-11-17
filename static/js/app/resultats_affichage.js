@@ -9,11 +9,75 @@
  */
 
 // ==========================================
+// INFOBULLES RÉSULTATS SWMM À LA DEMANDE (clic droit)
+// Les résultats de simulation n'affichent plus d'infobulle au survol :
+// un clic droit sur un ouvrage affiche son infobulle d'information
+// à l'endroit cliqué. Une seule infobulle « à la demande » à la fois.
+// ==========================================
+window._tooltipSimActif = null;
+
+window._fermerTooltipSimDemande = function () {
+    const map = window.carte || window.map;
+    if (!map) return;
+    if (window._tooltipSimActif) {
+        try { map.removeLayer(window._tooltipSimActif); } catch (_) {}
+        window._tooltipSimActif = null;
+    }
+};
+
+// NB : Leaflet 1.9.4 ne déclenche PAS les écouteurs namespacés (« type.ns »)
+// sur les événements DOM réels — on utilise donc 'contextmenu' simple avec
+// une référence de handler pour permettre un retrait ciblé.
+window._tooltipSimSurDemande = function (layer, html, opts) {
+    if (!layer || typeof layer.on !== 'function') return;
+    window._tooltipSimSurDemande.retirer(layer);
+    const handler = function (e) {
+        const map = window.carte || window.map;
+        if (!map || !e || !e.latlng) return;
+        if (e.originalEvent) {
+            try { e.originalEvent.preventDefault(); } catch (_) {}
+        }
+        // Horodatage : empêche le menu contextuel des anomalies profil
+        // de s'ouvrir par-dessus l'infobulle demandée.
+        window._ctxSimTs = Date.now();
+        window._fermerTooltipSimDemande();
+        const tip = L.tooltip(Object.assign({
+            direction: 'top',
+            offset: [0, -8],
+            opacity: 0.98,
+            className: 'sim-ask-tooltip'
+        }, opts || {}));
+        tip.setLatLng(e.latlng).setContent(html).addTo(map);
+        window._tooltipSimActif = tip;
+        const fermer = function () {
+            try { map.removeLayer(tip); } catch (_) {}
+            if (window._tooltipSimActif === tip) window._tooltipSimActif = null;
+        };
+        map.once('click', fermer);
+        map.once('zoomstart', fermer);
+        map.once('movestart', fermer);
+        // Différé : l'événement contextmenu courant se propage encore vers la carte
+        setTimeout(function () { map.once('contextmenu', fermer); }, 0);
+    };
+    layer._simAskHandler = handler;
+    layer.on('contextmenu', handler);
+};
+
+window._tooltipSimSurDemande.retirer = function (layer) {
+    if (!layer) return;
+    if (layer._simAskHandler) {
+        try { layer.off('contextmenu', layer._simAskHandler); } catch (_) {}
+        layer._simAskHandler = null;
+    }
+};
+
+// ==========================================
         // POINTS 2 & 3 : COUCHES RÉSULTATS SWMM 5.2
         // ==========================================
         window.afficherResultatsSimulation = function(data) {
             if (!data || !data.conduit_results || !data.node_results) return;
             window._dernierResultatSimulation = data;
+            if (window._fermerTooltipSimDemande) window._fermerTooltipSimDemande();
 
             // LOT P1.5.3 — traçabilité DWF dans la légende : réutilise la
             // provenance existante (provenance.apports_dwf du résultat),
@@ -203,22 +267,20 @@
                             </div>
                         `;
                         layer.bindPopup(popupHtml);
-                        layer.bindTooltip(`<b>${r.link_id || 'Conduite'}</b> (${u}&rarr;${d}) : Q/Qmax = <b>${qPct}%</b> (${r.label})`, { direction: 'top', offset: [0, -6], opacity: 0.98 });
-                        
+                        window._tooltipSimSurDemande(layer, `<b>${r.link_id || 'Conduite'}</b> (${u}&rarr;${d}) : Q/Qmax = <b>${qPct}%</b> (${r.label})`, { direction: 'top', offset: [0, -6] });
+
                         // Interaction de survol épurée sans bringToFront pour préserver le cycle des événements Leaflet
                         layer.on('mouseover', function() {
                             const isS = (r.status === 'surcharge' || (r.depth_ratio >= 1.0) || (r.flow_ratio >= 1.0));
                             const isC = (r.status === 'critique' || (r.depth_ratio >= 0.8));
                             const hW = isS ? 8.0 : (isC ? 7.0 : 6.0);
                             this.setStyle({ weight: hW, opacity: 1.0 });
-                            this.openTooltip();
                         });
                         layer.on('mouseout', function() {
                             const isS = (r.status === 'surcharge' || (r.depth_ratio >= 1.0) || (r.flow_ratio >= 1.0));
                             const isC = (r.status === 'critique' || (r.depth_ratio >= 0.8));
                             const initW = isS ? 6.0 : (isC ? 5.0 : 4.0);
                             this.setStyle({ weight: initW, opacity: 1.0 });
-                            this.closeTooltip();
                         });
 
                         // Clic sur conduite en mode profil en long : capture le regard cible sans ouvrir de popup
@@ -323,7 +385,7 @@
                         });
 
                         if (!r) {
-                            layer.bindTooltip(`Regard ${cleanNid} (Écoulement normal)`, { sticky: true });
+                            window._tooltipSimSurDemande(layer, `Regard ${cleanNid} (Écoulement normal)`, { direction: 'top', offset: [0, -6] });
                             return;
                         }
 
@@ -352,7 +414,7 @@
                             ? (r.flood_volume_m3 < 1.0 ? `${Number(r.flood_volume_m3).toFixed(2)} m³` : `${Number(r.flood_volume_m3).toFixed(1)} m³`)
                             : '< 0.05 m³';
                         layer.bindPopup(popupHtml);
-                        layer.bindTooltip(`<b>${isFlooded ? '🚨 Débordement' : (isSurcharged ? '⚠️ Surcharge' : 'Regard')} : ${cleanNid}</b>${isFlooded ? ` (${volTooltipStr})` : ''}`, { direction: 'top', offset: [0, -6], opacity: 0.98 });
+                        window._tooltipSimSurDemande(layer, `<b>${isFlooded ? '🚨 Débordement' : (isSurcharged ? '⚠️ Surcharge' : 'Regard')} : ${cleanNid}</b>${isFlooded ? ` (${volTooltipStr})` : ''}`, { direction: 'top', offset: [0, -6] });
                         
                         layer.on('popupopen', function() {
                             if (window.profilLongState && window.profilLongState.active) {
@@ -366,13 +428,11 @@
                         layer.on('mouseover', function() {
                             const curR = isFlooded ? 5.5 : (isSurcharged ? 4.0 : 2.5);
                             this.setStyle({ radius: curR + 1.8, weight: 2.2 });
-                            this.openTooltip();
                         });
                         layer.on('mouseout', function() {
                             const curR = isFlooded ? 5.5 : (isSurcharged ? 4.0 : 2.5);
                             const curW = isFlooded ? 1.5 : (isSurcharged ? 1.2 : 0.8);
                             this.setStyle({ radius: curR, weight: curW });
-                            this.closeTooltip();
                         });
                     }
                 }).addTo(couches.res_regards);
@@ -418,7 +478,7 @@
                             </div>
                         `;
                         polyRacc.bindPopup(popupHtml);
-                        polyRacc.bindTooltip(`⚡ <b>Collecteur de délestage actif (DN 600)</b> &rarr; ${ro.nom} (${ro.distance_m} m)`, { sticky: true, opacity: 0.98 });
+                        window._tooltipSimSurDemande(polyRacc, `⚡ <b>Collecteur de délestage actif (DN 600)</b> &rarr; ${ro.nom} (${ro.distance_m} m)`, { direction: 'top', offset: [0, -6] });
 
                         // Marqueur de l'ouvrage spécial récepteur activé avec dimensionnement dynamique ajusté au zoom
                         const curZ = carte.getZoom ? carte.getZoom() : 15;
@@ -444,7 +504,7 @@
                                 </div>
                             </div>
                         `);
-                        markerActif.bindTooltip(`🎯 <b>${ro.nom}</b><br><span style="color:#10b981; font-weight:700;">Mise en eau confirmée (Variante 0)</span>`, { sticky: true });
+                        window._tooltipSimSurDemande(markerActif, `🎯 <b>${ro.nom}</b><br><span style="color:#10b981; font-weight:700;">Mise en eau confirmée (Variante 0)</span>`, { direction: 'top', offset: [0, -6] });
 
                         couches.res_conduites.addLayer(polyRacc);
                         couches.res_regards.addLayer(markerActif);

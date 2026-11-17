@@ -123,6 +123,9 @@ window.reinitialiserAffichageSimulation = function() {
                         weight: 1.5,
                         opacity: 0.85
                     });
+                    if (window._tooltipSimSurDemande && window._tooltipSimSurDemande.retirer) {
+                        window._tooltipSimSurDemande.retirer(layer);
+                    }
                     if (layer._originalTooltip) {
                         layer.unbindTooltip();
                         layer.bindTooltip(layer._originalTooltip, { sticky: true, opacity: 0.95 });
@@ -135,6 +138,9 @@ window.reinitialiserAffichageSimulation = function() {
             const restoreBassinTooltip = (layer) => {
                 layer._isSimulatedBassin = false;
                 layer.off('mouseover.simBassin mouseout.simBassin');
+                if (window._tooltipSimSurDemande && window._tooltipSimSurDemande.retirer) {
+                    window._tooltipSimSurDemande.retirer(layer);
+                }
                 const f = layer.feature;
                 if (f && f.properties && f.properties.type === 'bassin_urbain') {
                     const baseTip = window.genererTooltipBassinVersantHtml ? window.genererTooltipBassinVersantHtml(f.properties, null) : layer._originalTooltip;

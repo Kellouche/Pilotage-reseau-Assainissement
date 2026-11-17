@@ -481,11 +481,9 @@ window.addEventListener('DOMContentLoaded', initSaaSNavbar);
                     }
                     const fullSimTooltip = window.genererTooltipBassinVersantHtml ? window.genererTooltipBassinVersantHtml(f.properties, data) : simCardHtml;
                     layer.unbindTooltip();
-                    layer.bindTooltip(fullSimTooltip, {
-                        sticky: true,
+                    window._tooltipSimSurDemande(layer, fullSimTooltip, {
                         direction: 'left',
                         offset: [-15, 0],
-                        opacity: 0.98,
                         className: 'sim-bassin-tooltip'
                     });
                     layer._isSimulatedBassin = true;
@@ -566,18 +564,10 @@ window.addEventListener('DOMContentLoaded', initSaaSNavbar);
                             </div>
                         `;
                         sbLayer.unbindTooltip();
-                        sbLayer.bindTooltip(sbTooltipHtml, {
-                            sticky: true,
+                        window._tooltipSimSurDemande(sbLayer, sbTooltipHtml, {
                             direction: 'left',
                             offset: [-15, 0],
-                            opacity: 0.98,
                             className: 'sim-bassin-tooltip'
-                        });
-                        sbLayer.off('mouseout.sbFix');
-                        sbLayer.on('mouseout.sbFix', function() {
-                            if (typeof this.closeTooltip === 'function') {
-                                try { this.closeTooltip(); } catch(_) {}
-                            }
                         });
                     }
                 });
