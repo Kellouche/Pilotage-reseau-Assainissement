@@ -94,9 +94,16 @@
             carte.getPane('popupPane').style.zIndex = 1100;
         }
 
+        // Les couches « Conduites » et « Regards de visite » respectent
+        // l'état décoché par défaut des cases de la sidebar : le groupe
+        // n'est ajouté à la carte que si la case est cochée.
+        const _coucheInitVisible = (id) => {
+            const el = document.getElementById(id);
+            return el ? el.checked : true;
+        };
         let couches = {
-            conduites: L.layerGroup().addTo(carte),
-            regards: L.layerGroup().addTo(carte),
+            conduites: (_coucheInitVisible('f-conduites') ? L.layerGroup().addTo(carte) : L.layerGroup()),
+            regards: (_coucheInitVisible('f-regards') ? L.layerGroup().addTo(carte) : L.layerGroup()),
             rejets: L.layerGroup().addTo(carte),
             stations: L.layerGroup().addTo(carte),
             step: L.layerGroup().addTo(carte),
