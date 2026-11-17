@@ -401,6 +401,37 @@ function afficherProfilLong(data) {
         bSurcharges.style.display = data.conduites_en_charge > 0 ? 'inline-block' : 'none';
     }
 
+    // 1a. Badge de provenance altimétrique : le profil déclare si les cotes
+    // radier proviennent du SIG réel, du terrain interpolé (IDW) ou d'un
+    // modèle synthétique — critique pour interpréter les écarts radier/terrain.
+    const bAlt = document.getElementById('badge-profil-altimetrie');
+    if (bAlt) {
+        const alt = data.altimetrie || null;
+        if (alt && alt.mode && alt.mode !== 'indisponible') {
+            const _conf = {
+                sig_reel:     { bg: 'rgba(52,211,153,0.18)',  color: '#34d399', icone: 'fa-check-double' },
+                terrain_idw:  { bg: 'rgba(251,191,36,0.18)',  color: '#fbbf24', icone: 'fa-mountain' },
+                synthetique:  { bg: 'rgba(248,113,113,0.20)', color: '#f87171', icone: 'fa-exclamation-triangle' },
+            }[alt.mode] || { bg: 'rgba(148,163,184,0.18)', color: '#94a3b8', icone: 'fa-info-circle' };
+            let _txt = alt.label || 'Altimétrie';
+            if (alt.ecart_radier_terrain_med_m != null && alt.mode === 'synthetique') {
+                _txt += ` — écart ~${alt.ecart_radier_terrain_med_m} m`;
+            }
+            bAlt.innerHTML = `<i class="fas ${_conf.icone}"></i> ${_txt}`;
+            bAlt.style.display = 'inline-block';
+            bAlt.style.background = _conf.bg;
+            bAlt.style.color = _conf.color;
+            bAlt.style.border = `1px solid ${_conf.color}`;
+            bAlt.title = (alt.avertissement || '') +
+                (alt.source ? `\nSource : ${alt.source}` : '') +
+                (alt.ecart_radier_terrain_max_m != null
+                    ? `\nÉcart radier↔terrain : médiane ${alt.ecart_radier_terrain_med_m} m, max ${alt.ecart_radier_terrain_max_m} m`
+                    : '');
+        } else {
+            bAlt.style.display = 'none';
+        }
+    }
+
     // 1b. Bandeau fiabilité du modèle sous-jacent (garde-fou hydraulicien)
     const _fiabBanner = document.getElementById('profil-fiabilite-banner');
     const _fiabTexte = document.getElementById('profil-fiabilite-texte');

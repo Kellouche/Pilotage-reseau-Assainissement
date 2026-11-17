@@ -2680,8 +2680,75 @@ def get_profil_en_long(
         # quand le modèle est dégradé.
         _gf_prof = ((sim_data.get("agents_expertise") or {}).get("controle_modele_hydraulique") or {}) if sim_data else {}
 
+        # Provenance altimétrique des cotes radier : le profil déclare si le
+        # modèle a été résolu sur altimétrie SIG réelle, terrain interpolé
+        # (IDW) ou cotes synthétiques — indispensable pour interpréter tout
+        # écart radier/terrain (ex. radier ~40 m sous le sol réel).
+        _meta_alt = (sim_data.get("meta") or {}) if sim_data else {}
+        _prov_alt = ((sim_data.get("provenance") or {}).get("altimetrie") or {}) if sim_data else {}
+        _src_alt = str(_meta_alt.get("source_altimetrique") or "")
+        _src_low = _src_alt.lower()
+
+        # Écart médian radier ↔ terrain interpolé : quantifie le décalage de
+        # datum. Calculé AVANT la détection du mode car il sert de repli pour
+        # les anciennes simulations sans provenance enregistrée.
+        _ecarts = [
+            abs(s["z_radier"] - s["z_terrain_interp"])
+            for s in segments
+            if s.get("z_radier") is not None and s.get("z_terrain_interp") is not None
+        ]
+        if _ecarts:
+            import statistics as _st
+            _ecarts_tri = sorted(_ecarts)
+            _ecart_med = round(_st.median(_ecarts_tri), 2)
+            _ecart_max = round(_ecarts_tri[-1], 2)
+        else:
+            _ecart_med = _ecart_max = None
+
+        if _prov_alt.get("mode") == "terrain_idw" or "terrain" in _src_low or "idw" in _src_low:
+            _alt_mode, _alt_fiable = "terrain_idw", "estimee"
+            _alt_label = "Altimétrie : terrain interpolé (IDW)"
+        elif "réelles" in _src_low or "reelles" in _src_low or "sig" in _src_low:
+            _alt_mode, _alt_fiable = "sig_reel", "reelle"
+            _alt_label = "Altimétrie : SIG réelle"
+        elif _src_alt:
+            _alt_mode, _alt_fiable = "synthetique", "synthetique"
+            _alt_label = "Altimétrie : synthétique"
+        elif _ecart_med is not None and _ecart_med > 8.0:
+            # Repli (anciennes simulations non estampillées) : un écart médian
+            # radier↔terrain > 8 m trahit des cotes synthétiques sur un datum
+            # fictif (ex. exutoire 100 m + pente) — jamais un vrai relief.
+            _alt_mode, _alt_fiable = "synthetique", "synthetique"
+            _alt_label = "Altimétrie : synthétique (inférée)"
+        else:
+            _alt_mode, _alt_fiable = "indisponible", "inconnue"
+            _alt_label = "Altimétrie : source non tracée"
+
+        _altimetrie_info = {
+            "mode": _alt_mode,
+            "fiable": _alt_fiable,
+            "label": _alt_label,
+            "source": _src_alt or None,
+            "ecart_radier_terrain_med_m": _ecart_med,
+            "ecart_radier_terrain_max_m": _ecart_max,
+            "avertissement": (
+                "Cotes radier synthétiques : exutoire de référence + pente "
+                "moyenne, sans lien avec le terrain réel. Les écarts radier/"
+                "terrain ne sont pas des anomalies hydrauliques mais un "
+                "défaut de données altimétriques."
+                if _alt_mode == "synthetique" else
+                "Cotes radier dérivées du terrain interpolé (IDW ±1–2 m) : "
+                "estimations, pas des mesures de radier."
+                if _alt_mode == "terrain_idw" else
+                "Cotes radier issues du SIG (relevés altimétriques)."
+                if _alt_mode == "sig_reel" else
+                "Provenance altimétrique non enregistrée pour cette simulation."
+            ),
+        }
+
         return {
             "status": "success",
+            "altimetrie": _altimetrie_info,
             "node_amont": src,
             "node_aval": dst,
             "fiabilite_modele": _gf_prof.get("fiabilite_modele"),
