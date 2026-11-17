@@ -453,6 +453,41 @@ function afficherProfilLong(data) {
         }
     }
 
+    // 1c. Synthèse des anomalies hydrauliques du profil — distincte de la
+    // fiabilité du modèle : un modèle SAIN peut avoir des contre-pentes,
+    // débordements ou dépôts. Rend l'anomalie impossible à manquer.
+    const _resAnom = document.getElementById('profil-anomalies-resume');
+    const _txtAnom = document.getElementById('profil-anomalies-texte');
+    if (_resAnom && _txtAnom) {
+        const _sa = data.synthese_anomalies || null;
+        const _nf = (_sa && _sa.forts) || 0;
+        const _nm = (_sa && _sa.moyens) || 0;
+        const _nt = (_sa && _sa.total) || 0;
+        if (_nt > 0) {
+            const _libelles = {
+                contre_pente: 'contre-pente',
+                pente_forte: 'pente forte',
+                autocurage_insuffisant: 'autocurage insuffisant',
+                autocurage_excessif: 'vitesse excessive',
+                hydraulique: 'hydraulique (surcharge/inondation)',
+                terrain_remonte: 'terrain remonté',
+            };
+            const _types = Object.entries((_sa && _sa.types_majeurs) || {})
+                .map(([t, c]) => `${_libelles[t] || t.replace(/_/g, ' ')} ×${c}`)
+                .join(', ');
+            _txtAnom.textContent = `${_nf} anomalie(s) forte(s), ${_nm} moyenne(s)` +
+                (_types ? ` — ${_types}` : '') +
+                `. Survolez les jalons ◆ sur le graphique.`;
+            _resAnom.style.display = 'flex';
+            const _alerte = _nf > 0;
+            _resAnom.style.color = _alerte ? '#f87171' : '#fbbf24';
+            _resAnom.style.background = _alerte ? 'rgba(248,113,113,0.12)' : 'rgba(251,191,36,0.12)';
+            _resAnom.title = ((_sa && _sa.messages_forts) || []).join('\n');
+        } else {
+            _resAnom.style.display = 'none';
+        }
+    }
+
     // 2. Alertes et recommandations
     const alertContainer = document.getElementById('profil-alertes-container');
     const alertList = document.getElementById('profil-alertes-list');

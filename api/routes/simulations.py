@@ -2746,9 +2746,34 @@ def get_profil_en_long(
             ),
         }
 
+        # Synthèse des anomalies hydrauliques du profil : indépendante de la
+        # fiabilité du modèle (un modèle SAIN peut présenter des contre-pentes,
+        # débordements ou dépôts). Compteurs par sévérité et types majeurs.
+        _anoms_prof = [a for s in segments for a in (s.get("anomalies") or [])]
+        _par_sev = {}
+        _par_type = {}
+        for _a in _anoms_prof:
+            _sev = _a.get("severite") or "info"
+            _par_sev[_sev] = _par_sev.get(_sev, 0) + 1
+            if _sev in ("fort", "moyen"):
+                _t = _a.get("type") or "autre"
+                _par_type[_t] = _par_type.get(_t, 0) + 1
+        _synthese_anomalies = {
+            "total": len(_anoms_prof),
+            "forts": _par_sev.get("fort", 0),
+            "moyens": _par_sev.get("moyen", 0),
+            "faibles": _par_sev.get("faible", 0),
+            "types_majeurs": _par_type,
+            "messages_forts": [
+                _a.get("message") for _a in _anoms_prof
+                if _a.get("severite") == "fort" and _a.get("message")
+            ][:3],
+        }
+
         return {
             "status": "success",
             "altimetrie": _altimetrie_info,
+            "synthese_anomalies": _synthese_anomalies,
             "node_amont": src,
             "node_aval": dst,
             "fiabilite_modele": _gf_prof.get("fiabilite_modele"),
