@@ -221,6 +221,7 @@
     }
 
     window.centrerDepuisRecherche = function (pos) {
+        window.fermerPaletteRecherche();
         centrerCarte(pos.lng, pos.lat, pos.libelle);
     };
 
