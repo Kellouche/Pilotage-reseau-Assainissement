@@ -1059,15 +1059,21 @@ window.initProfilLongDraggable = _initProfilLongDraggable;
  * Construit l'icône Leaflet d'un marqueur d'anomalie : forme/couleur par
  * type, teinte par sévérité.
  */
-function _iconeAnomalieProfil(type, severite) {
-    const couleur = _couleurSeverite(severite);
-    const icone = _ICONE_TYPE_ANOMALIE[type] || 'fa-exclamation';
+function _iconeNoeudAnomaliesProfil(liste) {
+    // Badges empilés en colonne, superposés, ancrés en bas sur le regard —
+    // taille réduite (18 px) pour rester lisible sur le tronçon.
+    const badges = liste.map((a, i) => {
+        const couleur = _couleurSeverite(a.severite);
+        const icone = _ICONE_TYPE_ANOMALIE[a.type] || 'fa-exclamation';
+        const marge = i === 0 ? '0' : '-6px';
+        return `<div style="width:18px;height:18px;border-radius:50%;background:rgba(15,23,42,0.92);border:1.5px solid ${couleur};display:flex;align-items:center;justify-content:center;box-shadow:0 0 6px ${couleur}77;margin-top:${marge};"><i class="fas ${icone}" style="color:${couleur};font-size:9px;"></i></div>`;
+    }).join('');
+    const h = 18 + Math.max(0, liste.length - 1) * 12 + 2;
     return L.divIcon({
         className: 'anomalie-profil-marker',
-        html: `<div style="width:26px;height:26px;border-radius:50%;background:rgba(15,23,42,0.88);border:2px solid ${couleur};display:flex;align-items:center;justify-content:center;box-shadow:0 0 10px ${couleur}88;">`
-            + `<i class="fas ${icone}" style="color:${couleur};font-size:13px;"></i></div>`,
-        iconSize: [26, 26],
-        iconAnchor: [13, 13]
+        html: `<div style="display:flex;flex-direction:column;align-items:center;">${badges}</div>`,
+        iconSize: [26, h],
+        iconAnchor: [13, h]
     });
 }
 
@@ -1104,18 +1110,11 @@ function _afficherAnomaliesSurCarte(data) {
             if (_rangSeverite(a.severite) > _rangSeverite(sevMax)) sevMax = a.severite;
         });
         noeuds.push({ ll: ll, id: s.node_id, sev: sevMax });
-        an.forEach((a, j) => {
-            // Décalage déterministe quand plusieurs anomalies coexistent
-            // sur un même nœud, pour éviter la superposition exacte.
-            const off = an.length > 1 ? (j - (an.length - 1) / 2) * 0.00022 : 0;
-            anomalies.push({
-                ll: L.latLng(ll.lat + off, ll.lng + off * 0.7),
-                node: s.node_id,
-                type: a.type,
-                severite: a.severite,
-                message: a.message
-            });
-        });
+        if (an.length) {
+            // Un marqueur par nœud : ses anomalies sont empilées en colonne
+            // (superposées) dans l'icône — pas de décalage géographique.
+            anomalies.push({ ll: ll, node: s.node_id, anList: an });
+        }
     });
 
     if (!latlngs.length) return;
@@ -1138,13 +1137,14 @@ function _afficherAnomaliesSurCarte(data) {
           .addTo(group);
     });
 
-    // Marqueurs d'anomalies (icône par type, teinte par sévérité)
+    // Marqueurs d'anomalies : un marqueur par nœud, icônes empilées en
+    // colonne superposée (type + sévérité), ancrées sur le regard.
     anomalies.forEach(an => {
         L.marker(an.ll, {
-            icon: _iconeAnomalieProfil(an.type, an.severite),
+            icon: _iconeNoeudAnomaliesProfil(an.anList),
             pane: 'anomaliesProfilPane'
         }).bindTooltip(
-            `<b>${an.node}</b> — ${_etatAnomalie(an)}`,
+            `<b>Regard ${an.node}</b><br>` + an.anList.map(a => _etatAnomalie(a)).join('<br>'),
             { direction: 'top' }
         ).addTo(group);
     });
