@@ -19,19 +19,21 @@ window.reinitialiserAffichageSimulation = function() {
                 }
             }
 
-            // Rétablir la visibilité normale de la couche physique des conduites
-            if (!carte.hasLayer(couches.conduites)) {
-                couches.conduites.addTo(carte);
-            }
+            // Conduites / regards : restaurer selon l'état de la case —
+            // jamais de re-cochage forcé (décochées par défaut).
             const elCond = document.getElementById('f-conduites');
-            if (elCond) elCond.checked = true;
-
-            // Rétablir la visibilité normale de la couche physique des regards
-            if (!carte.hasLayer(couches.regards)) {
-                couches.regards.addTo(carte);
+            if (elCond && elCond.checked) {
+                if (!carte.hasLayer(couches.conduites)) couches.conduites.addTo(carte);
+            } else if (carte.hasLayer(couches.conduites)) {
+                carte.removeLayer(couches.conduites);
             }
+
             const elReg = document.getElementById('f-regards');
-            if (elReg) elReg.checked = true;
+            if (elReg && elReg.checked) {
+                if (!carte.hasLayer(couches.regards)) couches.regards.addTo(carte);
+            } else if (carte.hasLayer(couches.regards)) {
+                carte.removeLayer(couches.regards);
+            }
 
             // Rétablir et maintenir toujours cochés les rejets et la STEP
             if (couches.rejets && !carte.hasLayer(couches.rejets)) {

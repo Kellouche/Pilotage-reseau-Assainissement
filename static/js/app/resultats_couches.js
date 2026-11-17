@@ -33,10 +33,12 @@ window.addEventListener('DOMContentLoaded', initSaaSNavbar);
                 }
             } else {
                 carte.removeLayer(couches.res_conduites);
-                if (!carte.hasLayer(couches.conduites)) {
+                // Restaurer la couche physique seulement si sa case est cochée
+                const el = document.getElementById('f-conduites');
+                if (el && el.checked && !carte.hasLayer(couches.conduites)) {
                     couches.conduites.addTo(carte);
-                    const el = document.getElementById('f-conduites');
-                    if (el) el.checked = true;
+                } else if ((!el || !el.checked) && carte.hasLayer(couches.conduites)) {
+                    carte.removeLayer(couches.conduites);
                 }
             }
         };
