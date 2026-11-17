@@ -1,0 +1,22 @@
+<!--
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Objet : Palette de recherche rapide d'un regard ou d'un tronçon par numéro
+================================================================================
+-->
+<div id="palette-recherche-ouvrage" style="display: none; position: fixed; top: 64px; left: 50%; transform: translateX(-50%); width: min(520px, 92vw); z-index: 4000; background: rgba(15,23,42,0.97); border: 1px solid rgba(56,189,248,0.4); border-radius: 12px; box-shadow: 0 16px 40px rgba(0,0,0,0.6); backdrop-filter: blur(8px);">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+        <i class="fas fa-search" style="color: #38bdf8;"></i>
+        <input type="text" id="input-recherche-ouvrage" placeholder="N° du regard ou du tronçon (ex. 6152, 356)…" autocomplete="off"
+               oninput="rechercherOuvrage(this.value)"
+               style="flex: 1; background: transparent; border: none; outline: none; color: #f1f5f9; font-size: 0.88rem;">
+        <span style="font-size: 0.65rem; color: #64748b; border: 1px solid rgba(255,255,255,0.12); border-radius: 4px; padding: 1px 6px;">Échap</span>
+        <button onclick="fermerPaletteRecherche()" style="background: transparent; border: none; color: #94a3b8; cursor: pointer; font-size: 15px;" title="Fermer">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+    <div id="resultats-recherche-ouvrage" style="max-height: 320px; overflow-y: auto; padding: 4px 0;"></div>
+    <div style="padding: 6px 14px; border-top: 1px solid rgba(255,255,255,0.06); font-size: 0.68rem; color: #64748b;">
+        Regard : <b style="color:#34d399;">Amont</b> / <b style="color:#38bdf8;">Aval</b> pour le profil · Tronçon : <b style="color:#38bdf8;">Profil</b> direct · <i class="fas fa-map-marker-alt"></i> centre la carte
+    </div>
+</div>

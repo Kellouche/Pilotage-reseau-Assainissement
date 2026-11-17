@@ -376,3 +376,27 @@ def test_profil_en_long_frontend_jalons_anomalies():
     assert "s.anomalies" in js
     assert "pointStyle: 'rectRot'" in js
     assert "resume_anomalies" in js or "anomalies" in js
+
+
+def test_recherche_element_reseau(tenant_profil):
+    """La recherche d'ouvrage retourne des regards et tronçons avec
+    coordonnées WGS84 exploitables pour le centrage carte."""
+    from api.routes.simulations import rechercher_element_reseau
+    db = SessionLocal()
+    try:
+        res = rechercher_element_reseau(q="267", limite=10, db=db, tenant=tenant_profil)
+        assert res["total"] >= 1
+        types = {r["type"] for r in res["resultats"]}
+        assert types <= {"regard", "troncon"}
+        for r in res["resultats"]:
+            assert r["id"]
+            assert r["libelle"]
+            # Coordonnées WGS84 (pas de projection locale)
+            if r.get("lng") is not None:
+                assert -180 <= r["lng"] <= 180
+                assert -90 <= r["lat"] <= 90
+        # Requête trop courte → liste vide
+        res2 = rechercher_element_reseau(q="2", limite=10, db=db, tenant=tenant_profil)
+        assert res2["resultats"] == []
+    finally:
+        db.close()

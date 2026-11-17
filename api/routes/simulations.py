@@ -1663,6 +1663,7 @@ def _charger_topo_pour_profil(gpkg_path: Path) -> Dict[str, Any]:
             "G": entree["G"].copy(),
             "canalisations": entree["canalisations"],
             "gpkg_sha": entree.get("gpkg_sha"),
+            "crs": entree.get("crs"),
         }
 
     import hashlib
@@ -1695,6 +1696,7 @@ def _charger_topo_pour_profil(gpkg_path: Path) -> Dict[str, Any]:
             "G": G,
             "canalisations": canalisations,
             "gpkg_sha": gpkg_sha,
+            "crs": str(regards.crs) if getattr(regards, "crs", None) else None,
         }
 
     return {
@@ -1702,6 +1704,7 @@ def _charger_topo_pour_profil(gpkg_path: Path) -> Dict[str, Any]:
         "G": G.copy(),
         "canalisations": canalisations,
         "gpkg_sha": gpkg_sha,
+        "crs": str(regards.crs) if getattr(regards, "crs", None) else None,
     }
 
 
@@ -2742,6 +2745,138 @@ def _injecter_fiabilite_timeseries(ts_out: Dict[str, Any], sim_data: Dict[str, A
             ts_out["fiabilite_modele"] = _gf.get("fiabilite_modele")
             ts_out["modelisation_anomalies"] = _gf.get("anomalies") or []
     return ts_out
+
+
+@router.get("/recherche-element")
+def rechercher_element_reseau(
+    q: str,
+    project_id: Optional[str] = None,
+    limite: int = 20,
+    db: Session = Depends(get_db),
+    tenant: TenantContext = Depends(get_tenant_context),
+):
+    """
+    Recherche un regard (par code) ou un tronçon (par regard amont/aval)
+    dans le GPKG du projet — alimente l'outil de recherche du profil en
+    long. Lecture seule, isolation org_id stricte (stealth 404).
+    """
+    org_id = _org_id_requete(tenant)
+    requete = (q or "").strip()
+    if len(requete) < 2:
+        return {"resultats": [], "total": 0}
+    limite = max(1, min(int(limite or 20), 50))
+
+    proj = None
+    try:
+        proj = _resoudre_projet_pour_simulation(db, org_id, project_id)
+    except ProjetAmbigu as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ContexteSimulationIntrouvable:
+        if project_id:
+            raise HTTPException(status_code=404, detail="Projet introuvable ou non autorisé.")
+        proj = None
+    gpkg_effectif = _resoudre_gpkg_effectif_pour_projet(db, proj)
+    if gpkg_effectif is None:
+        gpkg_effectif = _gpkg_demo_autorise()
+    if gpkg_effectif is None or not gpkg_effectif.exists():
+        raise HTTPException(status_code=404, detail="Réseau introuvable.")
+
+    topo = _charger_topo_pour_profil(gpkg_effectif)
+    node_index = topo.get("node_index") or {}
+    canalisations = topo.get("canalisations")
+
+    q_low = requete.lower()
+    # Recherche numérique tolérante : « 615 » doit trouver « 6152 ».
+    q_num = None
+    try:
+        q_num = float(requete)
+    except (TypeError, ValueError):
+        pass
+
+    resultats = []
+
+    # --- Regards ---
+    for nid, info in node_index.items():
+        nid_low = str(nid).lower()
+        match = q_low in nid_low
+        if not match and q_num is not None:
+            try:
+                match = float(nid) == q_num
+            except (TypeError, ValueError):
+                pass
+        if match:
+            resultats.append({
+                "type": "regard",
+                "id": nid,
+                "libelle": f"Regard {nid}",
+                "sous_titre": info.get("nom_voie") or "",
+                "lng": info.get("x"),
+                "lat": info.get("y"),
+            })
+            if len([r for r in resultats if r["type"] == "regard"]) >= limite:
+                break
+
+    # --- Tronçons (identifiés par le couple amont → aval) ---
+    if canalisations is not None and len(resultats) < limite * 2:
+        try:
+            cols = set(canalisations.columns)
+            col_am = next((c for c in ("ID_AMONT", "id_amont", "AMONT") if c in cols), None)
+            col_av = next((c for c in ("ID_AVAL", "id_aval", "AVAL") if c in cols), None)
+            if col_am and col_av:
+                for _, row in canalisations.iterrows():
+                    am = str(row.get(col_am) or "").strip()
+                    av = str(row.get(col_av) or "").strip()
+                    if not am or not av:
+                        continue
+                    pair = f"{am} → {av}"
+                    hay = f"{am} {av} {pair}".lower()
+                    match = q_low in hay
+                    if not match and q_num is not None:
+                        try:
+                            match = (float(am) == q_num or float(av) == q_num)
+                        except (TypeError, ValueError):
+                            pass
+                    if match:
+                        try:
+                            geom = row.geometry
+                            cx, cy = (geom.centroid.x, geom.centroid.y) if geom else (None, None)
+                        except Exception:
+                            cx = cy = None
+                        resultats.append({
+                            "type": "troncon",
+                            "id": pair,
+                            "libelle": f"Tronçon {am} → {av}",
+                            "sous_titre": str(row.get("NOM-VOIE") or row.get("nom_voie") or ""),
+                            "lng": cx,
+                            "lat": cy,
+                            "amont": am,
+                            "aval": av,
+                        })
+                        if len([r for r in resultats if r["type"] == "troncon"]) >= limite:
+                            break
+        except Exception as e:
+            logger.warning("Recherche tronçons impossible : %s", e)
+
+    # Regards d'abord, tronçons ensuite, plafond global
+    regards = [r for r in resultats if r["type"] == "regard"][:limite]
+    troncons = [r for r in resultats if r["type"] == "troncon"][:limite]
+
+    # Conversion CRS projet → WGS84 pour le centrage carte Leaflet
+    _crs = topo.get("crs")
+    if _crs and "4326" not in str(_crs):
+        try:
+            from pyproj import Transformer
+            _tf = Transformer.from_crs(str(_crs), "EPSG:4326", always_xy=True)
+            for _r in regards + troncons:
+                if _r.get("lng") is not None and _r.get("lat") is not None:
+                    try:
+                        _r["lng"], _r["lat"] = _tf.transform(_r["lng"], _r["lat"])
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.warning("Transformation CRS recherche impossible : %s", e)
+
+    return {"resultats": regards + troncons, "total": len(regards) + len(troncons)}
 
 
 @router.get("/timeseries")

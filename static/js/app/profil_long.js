@@ -934,3 +934,4 @@ function _initProfilLongDraggable() {
 
 // Exposer pour appel depuis d'autres modules si nécessaire
 window.initProfilLongDraggable = _initProfilLongDraggable;
+
