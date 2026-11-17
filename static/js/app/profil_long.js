@@ -929,8 +929,9 @@ function _surlignerCheminCarte(segments) {
             className: 'pulsing-profil-path'
         }).addTo(map);
 
-        // Zoomer légèrement pour cadrer le profil
-        map.fitBounds(state.highlightLayer.getBounds(), { padding: [60, 60], maxZoom: 17 });
+        // Zoomer pour cadrer le profil — agrandissement maximal (tuiles
+        // natives jusqu'à z19) tout en gardant tout le tronçon visible.
+        map.fitBounds(state.highlightLayer.getBounds(), { padding: [40, 40], maxZoom: 19 });
     }
 }
 
@@ -1150,9 +1151,10 @@ function _afficherAnomaliesSurCarte(data) {
 
     group.addTo(map);
 
-    // Zoom flagrant sur l'ensemble du profil
+    // Zoom flagrant sur l'ensemble du profil — agrandissement maximal
+    // (tuiles natives z19) tout en gardant tout le tronçon visible.
     const bounds = L.latLngBounds(latlngs);
-    map.fitBounds(bounds, { padding: [60, 60], maxZoom: 17 });
+    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 19 });
 
     // --- Volatilité : suppression au premier déplacement/zoom réel ---
     // Fenêtre de grâce : le fitBounds programmé déclenche aussi moveend,
