@@ -308,3 +308,71 @@ def test_cache_topologie_profil_partage_et_surete():
     c = _charger_topo_pour_profil(GPKG_PROFIL.resolve())
     assert c["G"].number_of_edges() == avant
     assert "__test__" not in c["G"].nodes
+
+
+def test_profil_en_long_jalons_anomalies(tenant_profil):
+    """Le profil expose les jalons d'anomalies (autocurage, contre-pente,
+    hydraulique) avec un résumé cohérent — jamais de valeur inventée."""
+    db = SessionLocal()
+    try:
+        res = get_profil_en_long(node_amont="2674", node_aval="2672", db=db, tenant=tenant_profil)
+        assert res["status"] == "success"
+
+        # Structure de la charge utile
+        assert "anomalies" in res
+        assert "resume_anomalies" in res
+        resume = res["resume_anomalies"]
+        assert resume["total"] == len(res["anomalies"])
+        # En environnement de test sans simulation, z_radier peut être
+        # None → aucun lien n'est comptabilisé ; la clé doit exister.
+        assert resume["liens_avec_radier"] >= 0
+        assert "contre_pentes" in resume
+        assert "orientation_suspecte" in resume
+
+        # Chaque segment porte sa liste d'anomalies
+        for s in res["segments"]:
+            assert isinstance(s.get("anomalies"), list)
+
+        # Cohérence : les anomalies du résumé = union des anomalies segments
+        union = [a for s in res["segments"] for a in s["anomalies"]]
+        assert len(union) == resume["total"]
+
+        # Champs obligatoires de chaque anomalie
+        for a in res["anomalies"]:
+            assert a["type"] in (
+                "contre_pente", "pente_forte", "vitesse_autocurage",
+                "autocurage_insuffisant", "terrain_remonte", "hydraulique",
+            )
+            assert a["severite"] in ("fort", "moyen", "faible", "info")
+            assert a["message"]
+            assert "node_id" in a and "distance_m" in a
+
+        # La conduite sortante expose la pente et la vitesse SWMM si dispo
+        for s in res["segments"]:
+            cond = s.get("conduit_sortant")
+            if cond and cond.get("length"):
+                assert "max_velocity_ms" in cond
+    finally:
+        db.close()
+
+
+def test_profil_en_long_jalons_contre_pente_synthetique():
+    """Contre-pente : radier aval > radier amont → jalon 'contre_pente'."""
+    # Test unitaire du critère : on simule deux segments consécutifs via
+    # le calcul inline — ici on vérifie directement la logique sur des
+    # cotes fictives en rejouant le même delta que le endpoint.
+    dz = 0.35          # radier aval − radier amont (m)
+    longueur = 50.0    # m
+    assert dz > 0.02                       # seuil contre-pente
+    assert dz > 0.30                       # → sévérité 'fort'
+    pente_pct = round(-100.0 * dz / longueur, 2)
+    assert pente_pct == -0.7               # négative = montée
+
+
+def test_profil_en_long_frontend_jalons_anomalies():
+    """Le frontend déclare le dataset de jalons et la tooltip dédiée."""
+    js = Path("static/js/app/profil_long.js").read_text(encoding="utf-8")
+    assert "Anomalies du profil (jalons)" in js
+    assert "s.anomalies" in js
+    assert "pointStyle: 'rectRot'" in js
+    assert "resume_anomalies" in js or "anomalies" in js

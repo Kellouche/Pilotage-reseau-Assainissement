@@ -626,6 +626,31 @@ function afficherProfilLong(data) {
                     pointBackgroundColor: '#ef4444',
                     pointBorderColor: '#ffffff',
                     pointBorderWidth: 2
+                },
+                {
+                    label: 'Anomalies du profil (jalons)',
+                    // Jalons ◆ par nœud : une anomalie est accrochée au
+                    // nœud aval du tronçon concerné (voir backend
+                    // `anomalies` / `resume_anomalies`). Couleur = pire
+                    // sévérité du nœud ; rayon 0 quand aucune anomalie.
+                    data: data.segments.map((s, idx) => ({
+                        x: labels[idx],
+                        y: (s.z_radier != null ? s.z_radier : (s.z_hgl != null ? s.z_hgl : (s.z_terrain_interp != null ? s.z_terrain_interp : s.z_terrain)))
+                    })),
+                    showLine: false,
+                    pointStyle: 'rectRot',
+                    pointRadius: data.segments.map(s => (s.anomalies && s.anomalies.length) ? 9 : 0),
+                    pointHoverRadius: 13,
+                    pointBackgroundColor: data.segments.map(s => {
+                        const an = s.anomalies || [];
+                        if (!an.length) return 'transparent';
+                        const sev = an.some(a => a.severite === 'fort') ? 'fort'
+                            : an.some(a => a.severite === 'moyen') ? 'moyen'
+                            : an.some(a => a.severite === 'faible') ? 'faible' : 'info';
+                        return { fort: '#ef4444', moyen: '#f59e0b', faible: '#fb923c', info: '#38bdf8' }[sev];
+                    }),
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 2
                 }
             ]
         },
@@ -659,7 +684,8 @@ function afficherProfilLong(data) {
                     filter: function(tooltipItem) {
                         const lbl = tooltipItem.dataset && tooltipItem.dataset.label;
                         return lbl === 'Ligne de charge HGL (zone de surpression hachuree)'
-                            || lbl === 'Ligne de charge HGL (zone de surpression hachurée)';
+                            || lbl === 'Ligne de charge HGL (zone de surpression hachurée)'
+                            || lbl === 'Anomalies du profil (jalons)';
                     },
                     callbacks: {
                         title: function(items) {
@@ -671,6 +697,12 @@ function afficherProfilLong(data) {
                         label: function(item) {
                             const s = data.segments[item.dataIndex];
                             if (!s) return '';
+                            const _lblDs = item.dataset && item.dataset.label;
+                            if (_lblDs === 'Anomalies du profil (jalons)') {
+                                const an = s.anomalies || [];
+                                if (!an.length) return '';
+                                return '⚠ ' + an.map(a => a.message).join('  •  ');
+                            }
                             if (_estDebordement(s)) {
                                 return `🔴 État : Débordement confirmé par SWMM (eau déversée en surface)`;
                             } else if (s.hgl_regime === 'inondation') {

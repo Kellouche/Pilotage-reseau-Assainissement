@@ -2335,11 +2335,14 @@ def get_profil_en_long(
                         conduit["flow_ratio"] = cond_sim.get("flow_ratio", 0.0)
                         conduit["depth_ratio"] = cond_sim.get("depth_ratio", 0.0)
                         conduit["max_flow_cms"] = cond_sim.get("max_flow_cms", 0.0)
+                        conduit["max_velocity_ms"] = cond_sim.get("max_velocity_ms")
                         conduit["status"] = cond_sim.get("status", "normal")
                         conduit["color"] = cond_sim.get("color", "#10b981")
                     else:
                         conduit["flow_ratio"] = 0.0
                         conduit["depth_ratio"] = 0.0
+                        conduit["max_flow_cms"] = 0.0
+                        conduit["max_velocity_ms"] = None
                         conduit["status"] = "inconnu"
                         conduit["color"] = "#64748b"
 
@@ -2402,6 +2405,146 @@ def get_profil_en_long(
 
         # Ajouter le dernier nœud (aval) sans conduit sortant
         # (il est déjà ajouté dans la boucle)
+
+        # ------------------------------------------------------------------
+        # Jalons d'anomalies — audit visuel du profil en long.
+        # Chaque anomalie est accrochée au nœud AVAL du tronçon concerné
+        # (segment[i] porte la conduite sortante vers segment[i+1]) et
+        # listée dans `anomalies` avec un résumé `resume_anomalies`.
+        # Seuils documentés (valeurs indicatives d'ingénierie, affichées
+        # dans les messages — pas des seuils arbitraires cachés) :
+        #   - vitesse max SWMM ≥ 4 m/s  → fort (érosion / mise en charge)
+        #   - vitesse max SWMM ≥ 3 m/s  → moyen
+        #   - vitesse max < 0,6 m/s avec écoulement → faible (autocurage
+        #     insuffisant → risque de dépôt)
+        #   - radier aval > radier amont de plus de 2 cm → contre-pente
+        #   - pente radier > 8 % → forte pente (à recouper avec la vitesse)
+        #   - terrain interpolé qui remonte de plus de 0,5 m → info
+        #     (bruit IDW probable — jamais une anomalie hydraulique)
+        # ------------------------------------------------------------------
+        for _s in segments:
+            _s["anomalies"] = []
+        anomalies_liste = []
+        _n_liens_radier = 0
+        _n_contre_pentes = 0
+
+        def _jalon(cible, type_, severite, message, **kw):
+            a = {"type": type_, "severite": severite, "message": message, **kw}
+            cible["anomalies"].append(a)
+            anomalies_liste.append({
+                "node_id": cible["node_id"],
+                "distance_m": cible["distance_m"],
+                **a,
+            })
+
+        for _i, _s in enumerate(segments):
+            _cond = _s.get("conduit_sortant")
+            # --- anomalies sur la conduite sortante (nœud i → i+1) ---
+            if _cond and _i + 1 < len(segments):
+                _long = _cond.get("length") or 0.0
+                _sn = segments[_i + 1]
+                _zr_a = _s.get("z_radier")
+                _zr_b = _sn.get("z_radier")
+                if _zr_a is not None and _zr_b is not None and _long > 0:
+                    _n_liens_radier += 1
+                    _dz = _zr_b - _zr_a
+                    _pente_pct = round(-100.0 * _dz / _long, 2)
+                    _cond["slope_pct"] = _pente_pct
+                    _cond["dz_radier_m"] = round(_dz, 3)
+                    if _dz > 0.02:
+                        _n_contre_pentes += 1
+                        _sev = "fort" if _dz > 0.30 else "moyen"
+                        _jalon(
+                            _sn, "contre_pente", _sev,
+                            f"Contre-pente radier : +{_dz:.2f} m sur {_long:.0f} m "
+                            f"(pente {_pente_pct:.1f} %) — l'eau doit remonter, "
+                            f"vérifier le sens ou la cote aval",
+                            valeur_m=_dz, unite="m",
+                        )
+                    elif _pente_pct > 8.0:
+                        _jalon(
+                            _sn, "pente_forte", "moyen",
+                            f"Pente radier forte : {_pente_pct:.1f} % "
+                            f"({_zr_a:.2f} → {_zr_b:.2f} m sur {_long:.0f} m) — "
+                            f"risque d'érosion / vitesse excessive",
+                            valeur_pct=_pente_pct, unite="%",
+                        )
+                    # vitesse d'autocurage (SWMM réel, jamais estimée)
+                    _v = _cond.get("max_velocity_ms")
+                    _q = _cond.get("max_flow_cms") or 0.0
+                    if _v is not None:
+                        if _v >= 4.0:
+                            _jalon(
+                                _sn, "vitesse_autocurage", "fort",
+                                f"Vitesse max {_v:.2f} m/s ≥ 4 m/s — risque "
+                                f"d'érosion et de mise en charge brutal",
+                                valeur_ms=_v, unite="m/s",
+                            )
+                        elif _v >= 3.0:
+                            _jalon(
+                                _sn, "vitesse_autocurage", "moyen",
+                                f"Vitesse max {_v:.2f} m/s ≥ 3 m/s — vérifier "
+                                f"l'absence d'érosion et la tenue du radier",
+                                valeur_ms=_v, unite="m/s",
+                            )
+                        elif _v < 0.6 and _q > 0.005:
+                            _jalon(
+                                _sn, "autocurage_insuffisant", "faible",
+                                f"Vitesse max {_v:.2f} m/s < 0,6 m/s avec "
+                                f"écoulement ({_q:.3f} m³/s) — risque de dépôt",
+                                valeur_ms=_v, unite="m/s",
+                            )
+                # terrain interpolé qui remonte (info — bruit IDW possible)
+                _zt_a = _s.get("z_terrain_interp")
+                _zt_b = _sn.get("z_terrain_interp")
+                if (_zt_a is not None and _zt_b is not None
+                        and (_zt_b - _zt_a) > 0.5):
+                    _jalon(
+                        _sn, "terrain_remonte", "info",
+                        f"Terrain interpolé remonte de {_zt_b - _zt_a:.2f} m "
+                        f"— probable bruit IDW, pas une anomalie hydraulique",
+                        valeur_m=round(_zt_b - _zt_a, 2), unite="m",
+                    )
+            # --- anomalies au nœud lui-même (hydraulique) ---
+            _statut = _s.get("node_status") or ""
+            _regime = _s.get("hgl_regime") or ""
+            if _statut == "flooded" or _regime in ("inondation", "debordement"):
+                _jalon(
+                    _s, "hydraulique", "fort",
+                    "Nœud inondé / débordement confirmé par SWMM — "
+                    "intervention hydraulique requise",
+                    flooding_m3s=_s.get("flooding_max_m3s"), unite="m³/s",
+                )
+            elif _statut == "surcharged" or _regime == "surcharge":
+                _jalon(
+                    _s, "hydraulique", "moyen",
+                    "Conduite ou nœud en surcharge — HGL au-dessus de la "
+                    "génératrice supérieure",
+                    pression_m=_s.get("pression_m"), unite="m",
+                )
+            elif _s.get("atteint_sommet"):
+                _jalon(
+                    _s, "hydraulique", "faible",
+                    "Plan d'eau atteint le sommet du regard — marge "
+                    "quasi nulle",
+                )
+
+        _par_sev = {}
+        _par_type = {}
+        for _a in anomalies_liste:
+            _par_sev[_a["severite"]] = _par_sev.get(_a["severite"], 0) + 1
+            _par_type[_a["type"]] = _par_type.get(_a["type"], 0) + 1
+        resume_anomalies = {
+            "total": len(anomalies_liste),
+            "par_severite": _par_sev,
+            "par_type": _par_type,
+            "orientation_suspecte": bool(
+                _n_liens_radier >= 3
+                and _n_contre_pentes > 0.5 * _n_liens_radier
+            ),
+            "liens_avec_radier": _n_liens_radier,
+            "contre_pentes": _n_contre_pentes,
+        }
 
         # Statistiques du profil — uniquement sur les cotes réellement
         # disponibles (aucune valeur nulle n'est comptée comme une altitude).
@@ -2573,6 +2716,8 @@ def get_profil_en_long(
                      "les evenements de debordement detectes a d'autres "
                      "instants sont signales separement"),
             "instant_minute": instant_minute,
+            "anomalies": anomalies_liste,
+            "resume_anomalies": resume_anomalies,
             "segments": segments,
             "alertes": alerts,
         }
