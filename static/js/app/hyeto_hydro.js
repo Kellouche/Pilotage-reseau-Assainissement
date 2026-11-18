@@ -379,8 +379,10 @@
         // Calcul des bornes d'échelles pour un étagement harmonieux :
         // La pluie descend du haut (occupant 35% de la hauteur)
         // Le débit monte du bas (occupant 65% de la hauteur)
-        const maxRain = Math.max(...rainValues, 10.0);
-        const maxFlow = Math.max(...outflowValues, 0.1);
+        // reduce() et non Math.max(...) : le spread explose la pile
+        // JS (« Maximum call stack size exceeded ») sur les longues séries.
+        const maxRain = (rainValues || []).reduce((m, v) => (v > m ? v : m), 10.0);
+        const maxFlow = (outflowValues || []).reduce((m, v) => (v > m ? v : m), 0.1);
 
         const yRainMax = maxRain * 2.6; // étalement vertical pour laisser le bas libre
         const yFlowMax = maxFlow * 1.35; // étalement vertical pour laisser le haut libre
