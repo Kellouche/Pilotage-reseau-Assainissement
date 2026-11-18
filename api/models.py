@@ -855,6 +855,13 @@ class ProjectAuxLayer(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_gen_uuid)
     org_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), index=True, nullable=False)
     project_id: Mapped[str] = mapped_column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), index=True, nullable=False)
+    # Version GPKG du réseau contre laquelle la couche a été importée :
+    # un projet = un seul slot « réseau courant », chaque chargement de
+    # .gpkg/.inp crée une gpkg_version. Sans cet estampillage, les couches
+    # satellites suivaient TOUS les réseaux chargés (project_id identique).
+    # NULL = couche importée hors versionnement (projet vierge / legacy).
+    gpkg_version_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("gpkg_versions.id"), nullable=True)
     type: Mapped[str] = mapped_column(String(40), nullable=False)  # altimetrie_points, bv_officiel, metrologie, autre…
     nom: Mapped[str] = mapped_column(String(255), nullable=False)
     fichier_source: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
@@ -873,12 +880,14 @@ class ProjectAuxLayer(Base):
 
     __table_args__ = (
         Index("ix_aux_layers_org_proj", "org_id", "project_id"),
+        Index("ix_aux_layers_gpkg_version", "gpkg_version_id"),
     )
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "id": self.id,
             "project_id": self.project_id,
+            "gpkg_version_id": self.gpkg_version_id,
             "type": self.type,
             "nom": self.nom,
             "fichier_source": self.fichier_source,

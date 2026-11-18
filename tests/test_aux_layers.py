@@ -21,7 +21,7 @@ from starlette.testclient import TestClient
 from api.core.auth import create_access_token, hash_password
 from api.database import SessionLocal
 from api.main import app
-from api.models import Membership, Organization, Project, ProjectAuxLayer, User
+from api.models import GpkgVersion, Membership, Organization, Project, ProjectAuxLayer, User
 from api.services import aux_altimetrie_service as alt
 from api.services import aux_layers_service as svc
 
@@ -846,3 +846,68 @@ def test_resoudre_elevations_terrain_pour_simulation_absent(db, org_projet):
     res = resoudre_elevations_terrain_pour_simulation(
         db, org_projet["org"].id, org_projet["proj"].id)
     assert res["statut"] in ("absent", "ignore")
+
+def test_couches_scopees_par_version_gpkg(db, org_projet, tmp_path):
+    """Cloisonnement réseau : une couche importée sur la version V1 du
+    projet disparaît quandcelui-ci pointe sur V2 (autre réseau chargé),
+    et réapparaît sur V1 — jamais visible sur un réseau différent."""
+    client = TestClient(app)
+    proj = org_projet["proj"]
+    pid, tok = proj.id, org_projet["token"]
+
+    # Deux versions GPKG factices du MÊME projet (même project_id)
+    v1 = GpkgVersion(org_id=proj.org_id, project_id=pid,
+                     sha256="a" * 64, size_bytes=1,
+                     storage_kind="LEGACY_LOCAL", storage_ref="/tmp/v1.gpkg")
+    v2 = GpkgVersion(org_id=proj.org_id, project_id=pid,
+                     sha256="b" * 64, size_bytes=1,
+                     storage_kind="LEGACY_LOCAL", storage_ref="/tmp/v2.gpkg")
+    db.add_all([v1, v2])
+    db.commit()
+
+    # Projet sur V1 → import d'une couche altimétrie
+    proj.gpkg_version_id = v1.id
+    db.commit()
+    gdf = _topo_gdf(n=30)
+    f = tmp_path / "topo.gpkg"
+    _ecrire_fichier(gdf, f, "gpkg")
+    with open(f, "rb") as fh:
+        r = client.post(
+            f"/api/v1/projets/{pid}/aux-layers",
+            files=[("files", ("topo.gpkg", fh, "application/octet-stream"))],
+            data={"type": "altimetrie_points", "colonne_z": "Field4"},
+            headers=_h(tok),
+        )
+    assert r.status_code == 200, r.text
+    layer_id = r.json()["couche"]["id"]
+    assert r.json()["couche"]["gpkg_version_id"] == v1.id
+
+    try:
+        # Visible sur V1
+        r = client.get(f"/api/v1/projets/{pid}/aux-layers", headers=_h(tok))
+        assert any(c["id"] == layer_id for c in r.json()["couches"])
+
+        # Bascule sur V2 (autre réseau chargé) → couche invisible partout
+        proj.gpkg_version_id = v2.id
+        db.commit()
+        r = client.get(f"/api/v1/projets/{pid}/aux-layers", headers=_h(tok))
+        assert r.status_code == 200
+        assert not any(c["id"] == layer_id for c in r.json()["couches"])
+        assert client.get(f"/api/v1/projets/{pid}/aux-layers/{layer_id}",
+                          headers=_h(tok)).status_code == 404
+        assert client.get(f"/api/v1/projets/{pid}/aux-layers/{layer_id}/geojson",
+                          headers=_h(tok)).status_code == 404
+
+        # Retour sur V1 → la couche réapparaît (même réseau = même version)
+        proj.gpkg_version_id = v1.id
+        db.commit()
+        r = client.get(f"/api/v1/projets/{pid}/aux-layers", headers=_h(tok))
+        assert any(c["id"] == layer_id for c in r.json()["couches"])
+    finally:
+        # FK project_aux_layers.gpkg_version_id : couches d'abord
+        db.query(ProjectAuxLayer).filter(
+            ProjectAuxLayer.project_id == pid).delete(synchronize_session=False)
+        db.query(GpkgVersion).filter(GpkgVersion.id.in_([v1.id, v2.id])).delete(
+            synchronize_session=False)
+        db.commit()
+

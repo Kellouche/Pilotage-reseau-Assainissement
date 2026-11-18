@@ -156,6 +156,9 @@ def init_db():
             "ALTER TABLE apports_dwf ADD COLUMN gpkg_sha256 VARCHAR(64)",
             # Paramétrage garde-fou par projet (JSON nullable)
             "ALTER TABLE projects ADD COLUMN garde_fou_config JSON",
+            # Cloisonnement couches SIG satellites par version GPKG
+            "ALTER TABLE project_aux_layers ADD COLUMN gpkg_version_id VARCHAR(36)",
+            "CREATE INDEX IF NOT EXISTS ix_aux_layers_gpkg_version ON project_aux_layers (gpkg_version_id)",
         ):
             try:
                 conn.execute(text(ddl))
@@ -169,6 +172,17 @@ def init_db():
             pass
         try:
             conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_gpkgver_id_project ON gpkg_versions (id, project_id)"))
+            conn.commit()
+        except Exception:
+            pass
+        # Backfill : rattache les couches satellites existantes à la
+        # version GPKG courante de leur projet (NULL reste NULL).
+        try:
+            conn.execute(text(
+                """UPDATE project_aux_layers SET gpkg_version_id = (
+                    SELECT p.gpkg_version_id FROM projects p
+                    WHERE p.id = project_aux_layers.project_id
+                ) WHERE project_aux_layers.gpkg_version_id IS NULL"""))
             conn.commit()
         except Exception:
             pass

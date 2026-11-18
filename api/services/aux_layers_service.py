@@ -222,6 +222,9 @@ def importer_couche_aux(
         id=layer_id,
         org_id=org_id,
         project_id=project_id,
+        # Rattachement à la version GPKG du réseau courant : la couche
+        # n'est visible que tant que ce réseau est chargé.
+        gpkg_version_id=getattr(project, "gpkg_version_id", None),
         type=type_couche,
         nom=nom or fichier_nom,
         fichier_source=fichier_nom,

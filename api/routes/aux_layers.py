@@ -42,13 +42,27 @@ def _projet_org(db: Session, tenant_ctx: TenantContext, project_id: str) -> Proj
     return projet
 
 
+def _filtre_version_gpkg(projet: Project):
+    """Couches visibles = celles importées sur la version GPKG courante.
+
+    NULL-safe : un projet sans version (vierge/legacy) ne montre que les
+    couches non estampillées ; un projet versionné ne montre que les
+    couches de SA version — jamais celles d'un réseau précédent.
+    """
+    vid = getattr(projet, "gpkg_version_id", None)
+    if vid is None:
+        return ProjectAuxLayer.gpkg_version_id.is_(None)
+    return ProjectAuxLayer.gpkg_version_id == vid
+
+
 def _couche(db: Session, tenant_ctx: TenantContext, project_id: str, layer_id: str) -> ProjectAuxLayer:
-    """Résout la couche satellite — stealth 404 si org/projet mismatch."""
-    _projet_org(db, tenant_ctx, project_id)
+    """Résout la couche satellite — stealth 404 si org/projet/version mismatch."""
+    projet = _projet_org(db, tenant_ctx, project_id)
     couche = db.query(ProjectAuxLayer).filter(
         ProjectAuxLayer.id == layer_id,
         ProjectAuxLayer.project_id == project_id,
         ProjectAuxLayer.org_id == tenant_ctx.org_id,
+        _filtre_version_gpkg(projet),
     ).first()
     if not couche:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Couche introuvable.")
@@ -186,10 +200,11 @@ def list_aux_layers(
     db: Session = Depends(get_db),
 ):
     """Liste les couches satellite du projet (isolation org)."""
-    _projet_org(db, tenant_ctx, project_id)
+    projet = _projet_org(db, tenant_ctx, project_id)
     couches = db.query(ProjectAuxLayer).filter(
         ProjectAuxLayer.project_id == project_id,
         ProjectAuxLayer.org_id == tenant_ctx.org_id,
+        _filtre_version_gpkg(projet),
     ).order_by(ProjectAuxLayer.created_at.desc()).all()
     return {"statut": "ok", "couches": [c.to_dict() for c in couches]}
 
