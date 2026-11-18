@@ -3189,6 +3189,7 @@ def get_simulation_resultat(
         data["source_gpkg"] = str(ctx.gpkg_path.resolve())
     if ctx.project is not None and getattr(ctx.project, "name", None):
         data["project_name"] = ctx.project.name
+    _signaler_mismatch_version_gpkg(data, ctx, ctx.project)
     return _construire_reponse_simulation(data, cached=True)
 
 

@@ -269,6 +269,7 @@
             corps.innerHTML = `<div style="text-align:center;color:#94a3b8;padding:34px;">
                 <i class="fas fa-flask fa-2x mb-3" style="color:#38bdf8;"></i>
                 <p>Aucune simulation enregistrée pour ce bassin.<br><small>Lancez un calcul depuis la modale Simulation.</small></p>
+                <p style="margin-top:10px;font-size:0.74rem;color:#64748b;">Plusieurs bassins peuvent porter le même nom — vérifiez la surface et le nombre de regards dans la liste pour viser le bon exutoire.</p>
             </div>`;
             if (pied) pied.textContent = '';
             return;
