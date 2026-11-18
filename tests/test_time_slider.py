@@ -34,6 +34,150 @@ def test_extraire_series_temporelles_fichier_inexistant():
     assert res["steps"] == []
 
 
+def test_indices_pics_surcharge_injection():
+    """L'injection des instants de pic retient l'index du maximum CAPACITY
+    des conduites dont le pic ≥ 0.8 — même s'il tombe entre deux pas
+    échantillonnés réguliers (sinon la surcharge « rouge » n'apparaît
+    jamais dans l'animation alors que le .rpt l'a captée)."""
+    from datetime import datetime, timedelta
+    from src.domain.moteur_swmm.timeseries_extractor import (
+        _indices_pics_surcharge,
+    )
+
+    base = datetime(2026, 1, 1)
+    times = [base + timedelta(minutes=i) for i in range(60)]
+
+    # Pic bref à l'index 37 (hors grille régulière 0,6,12,…), valeur 1.0
+    link_caps = {
+        "C_pic": {times[i]: (1.0 if i == 37 else 0.1) for i in range(60)},
+        "C_moyen": {times[i]: 0.5 for i in range(60)},   # pic < 0.8 → ignoré
+        "C_rien": {times[i]: 0.0 for i in range(60)},
+    }
+    idx = _indices_pics_surcharge(link_caps, times)
+    assert idx == [37]
+
+    # Plusieurs liens : même index → dédupliqué ; index distincts triés
+    link_caps["C_pic2"] = {times[i]: (0.95 if i == 50 else 0.1) for i in range(60)}
+    idx = _indices_pics_surcharge(link_caps, times)
+    assert idx == [37, 50]
+
+    # Pic exactement à 0.8 → inclus (seuil de criticité)
+    link_caps["C_seuil"] = {times[i]: (0.8 if i == 10 else 0.0) for i in range(60)}
+    idx = _indices_pics_surcharge(link_caps, times)
+    assert idx == [10, 37, 50]
+
+    # Borne max_inject : seuls les pics les plus marqués sont conservés
+    times_long = [base + timedelta(minutes=i) for i in range(120)]
+    many = {}
+    for i in range(100):
+        many[f"L{i}"] = {times_long[5 + i]: 0.8 + i * 0.001}
+    idx = _indices_pics_surcharge(many, times_long, max_inject=10)
+    assert len(idx) == 10
+    # les 10 plus fortes valeurs (i = 90..99 → index 95..104)
+    assert idx == list(range(95, 105))
+
+
+def test_extraire_series_temporelles_capture_pic_surcharge_bref():
+    """Intégration : sur un .out réel avec surcharge, le maximum CAPACITY de
+    chaque conduite critique (≥ 0.8) est retrouvé dans les steps échantillonnés."""
+    pyswmm = pytest.importorskip("pyswmm")
+    from pyswmm import Simulation, Output
+    from swmm.toolkit.shared_enum import LinkAttribute
+
+    inp = """[TITLE]
+Test pic bref
+[OPTIONS]
+FLOW_UNITS CMS
+INFILTRATION HORTON
+FLOW_ROUTING DYNWAVE
+START_DATE 01/01/2026
+START_TIME 00:00:00
+END_DATE 01/01/2026
+END_TIME 03:00:00
+REPORT_STEP 00:01:00
+ALLOW_PONDING NO
+[EVAPORATION]
+CONSTANT 0
+[JUNCTIONS]
+J1 10.0 2.0 0 0 0
+J2 9.0 2.0 0 0 0
+J3 8.0 2.0 0 0 0
+[OUTFALLS]
+OUT1 7.5 FREE NO
+[CONDUITS]
+C1 J1 J2 50 0.013 0 0 0 0
+C2 J2 J3 50 0.013 0 0 0 0
+C3 J3 OUT1 50 0.013 0 0 0 0
+[XSECTIONS]
+C1 CIRCULAR 0.15 0 0 0 1
+C2 CIRCULAR 0.15 0 0 0 1
+C3 CIRCULAR 0.15 0 0 0 1
+[SUBCATCHMENTS]
+S1 RG1 J1 1.0 100 50 1.0 0
+[SUBAREAS]
+S1 0.015 0.10 2.0 5.0 25 OUTLET
+[INFILTRATION]
+S1 75 10 4 7 0
+[RAINGAGES]
+RG1 INTENSITY 0:05 1.0 TIMESERIES TS1
+[TIMESERIES]
+TS1 00:00 0.00
+TS1 00:30 0.00
+TS1 01:00 200.00
+TS1 01:10 200.00
+TS1 01:20 0.00
+TS1 03:00 0.00
+[REPORT]
+INPUT NO
+CONTROLS NO
+SUBCATCHMENTS ALL
+NODES ALL
+LINKS ALL
+"""
+    with tempfile.NamedTemporaryFile(suffix=".inp", mode="w", delete=False,
+                                     encoding="utf-8") as f:
+        f.write(inp)
+        tmp_inp = f.name
+    out_path = tmp_inp.replace(".inp", ".out")
+    try:
+        with Simulation(tmp_inp) as sim:
+            sim.execute()
+
+        # Référence moteur : max CAPACITY par lien sur TOUS les pas .out
+        ref_max = {}
+        with Output(out_path) as out:
+            for lid in out.links.keys():
+                series = out.link_series(lid, LinkAttribute.CAPACITY)
+                vals = [v for v in series.values() if v is not None]
+                ref_max[lid] = max(vals) if vals else 0.0
+        assert any(v >= 0.8 for v in ref_max.values()), \
+            "Le scénario de test doit produire au moins une surcharge"
+
+        # Échantillonnage volontairement grossier
+        ts = extraire_series_temporelles(out_path, max_steps=30, inp_path=tmp_inp)
+        assert ts["status"] == "SUCCESS"
+        assert ts["steps"], "steps ne doit pas être vide"
+
+        for lid, mx in ref_max.items():
+            if mx < 0.8:
+                continue
+            sampled_max = max(
+                (st.get("links", {}).get(lid, 0.0) or 0.0) for st in ts["steps"]
+            )
+            # round(..., 2) côté extracteur → tolérance 0.011
+            assert sampled_max == pytest.approx(mx, abs=0.011), (
+                f"Pic de {lid} non capturé : réel={mx:.3f} "
+                f"échantillonné={sampled_max:.3f}"
+            )
+    finally:
+        for p in (tmp_inp, out_path, tmp_inp.replace(".inp", ".rpt")):
+            try:
+                if os.path.exists(p):
+                    os.unlink(p)
+            except Exception:
+                pass
+
+
 def test_executer_solver_swmm_retrocompatibilite():
     """Vérifie que executer_solver_swmm sans argument renvoie bien un tuple de 2 éléments."""
     inp = """[TITLE]

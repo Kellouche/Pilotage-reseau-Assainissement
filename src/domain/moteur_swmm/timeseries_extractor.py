@@ -330,7 +330,38 @@ def enrichir_timeseries_pluie(ts: Dict[str, Any], sim_data: Dict[str, Any]) -> D
     return ts
 
 
-def extraire_series_temporelles(out_path: str, max_steps: int = 60, inp_path: Optional[str] = None) -> Dict[str, Any]:
+def _indices_pics_surcharge(
+    link_caps: Dict[str, Dict[Any, float]],
+    times: List[Any],
+    max_inject: int = 80,
+) -> List[int]:
+    """
+    Retourne les index de pas de temps correspondant au maximum instantané
+    (CAPACITY = Q/Qfull) de chaque conduite dont ce pic atteint ≥ 0.8.
+
+    Borné à `max_inject` instants (les plus chargés) pour contenir la taille
+    du échantillon. Un pic de surcharge bref ainsi injecté garantit que
+    l'animation temporelle passe par l'instant du maximum — cohérent avec
+    les maximums .rpt « Link Flow Summary ».
+    """
+    t2i = {t: i for i, t in enumerate(times)}
+    pics: Dict[int, float] = {}
+    for series in link_caps.values():
+        bi, bv = -1, 0.0
+        for t, v in series.items():
+            if v is not None and v > bv:
+                bv = float(v)
+                bi = t2i.get(t, -1)
+        if bv >= 0.8 and bi >= 0:
+            if bv > pics.get(bi, 0.0):
+                pics[bi] = bv
+    if len(pics) > max_inject:
+        keep = set(sorted(pics, key=lambda i: pics[i], reverse=True)[:max_inject])
+        pics = {i: pics[i] for i in keep}
+    return sorted(pics)
+
+
+def extraire_series_temporelles(out_path: str, max_steps: int = 200, inp_path: Optional[str] = None) -> Dict[str, Any]:
     """
     Extrait les séries temporelles pour l'animation de l'onde de crue (Time Slider)
     et le double-graphique Hyétogramme (pluie) ↔ Hydrogramme (crue).
@@ -373,6 +404,15 @@ def extraire_series_temporelles(out_path: str, max_steps: int = 60, inp_path: Op
                     link_caps[lid] = out.link_series(lid, LinkAttribute.CAPACITY)
                 except Exception:
                     pass
+
+            # Injecter les instants de PIC des conduites critiques/en
+            # surcharge : le .rpt « Link Flow Summary » capte le maximum à
+            # CHAQUE pas de routage, alors que le .out n'écrit qu'aux pas de
+            # rapport — sans injection, une surcharge brève tomberait entre
+            # deux pas échantillonnés et ne serait jamais visible en rouge.
+            _pics = _indices_pics_surcharge(link_caps, times)
+            if _pics:
+                sampled_indices = sorted(set(sampled_indices) | set(_pics))
 
             # 2. Regards : Débordement en surface (FLOODING_LOSSES)
             node_floods: Dict[str, Dict[Any, float]] = {}

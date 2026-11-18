@@ -102,6 +102,42 @@
         // ==========================================
         // SYNCHRONISATION INDICATEUR BASSIN / BASSINS EN COURS
         // ==========================================
+        // Résout le nom métier d'un bassin : priorise bassin_nom/cluster_nom
+        // des métadonnées de simulation (ex. « Chorfa ») plutôt que
+        // l'identifiant positionnel cluster_id (« Bassin 0 »).
+        function _nomMetierBassin(cidStr, meta) {
+            const _depuis = (m) => {
+                if (!m) return '';
+                return String(m.bassin_nom || m.cluster_nom || '').trim();
+            };
+            const direct = _depuis(meta);
+            if (direct) return direct;
+            const _cands = [];
+            if (window._simulationsCache && cidStr) {
+                _cands.push(window._simulationsCache[cidStr]);
+                const _bn = window._bassinNoms && window._bassinNoms[cidStr];
+                if (_bn) _cands.push(window._simulationsCache[_bn]);
+            }
+            if (window._dernierResultatSimulation) _cands.push(window._dernierResultatSimulation);
+            for (const _c of _cands) {
+                const _cm = (_c && _c.meta) || null;
+                if (!_cm) continue;
+                const _cidM = String(_cm.cluster_id !== undefined && _cm.cluster_id !== null ? _cm.cluster_id : '');
+                const _nm = _depuis(_cm);
+                // N'emprunter le nom que si l'identité correspond
+                if (_nm && (cidStr === _cidM || _nm === cidStr || _nm.toLowerCase() === String(cidStr).toLowerCase() || !_cidM)) {
+                    return _nm;
+                }
+            }
+            if (window._bassinNoms && cidStr && window._bassinNoms[cidStr]) return window._bassinNoms[cidStr];
+            const _p = window._bassinProperties && cidStr ? window._bassinProperties[cidStr] : null;
+            if (_p) {
+                const _pn = String(_p.nom || _p.nom_exutoire || _p.bassin_nom || '').trim();
+                if (_pn && !/^Bassin\s+\d+$/i.test(_pn)) return _pn;
+            }
+            return cidStr ? `Bassin ${cidStr}` : 'Tous les bassins';
+        }
+
         window.mettreAJourIndicateurBassin = function(clusterId, state = {}) {
             const topPill = document.getElementById('topbar-bassin-pill');
             const topIcon = document.getElementById('topbar-bassin-icon');
@@ -116,7 +152,7 @@
 
             // État 1 : Simulation en cours
             if (state.status === 'simulating') {
-                const nom = (window._bassinNoms && cidStr && window._bassinNoms[cidStr]) ? window._bassinNoms[cidStr] : `Bassin ${cidStr || ''}`;
+                const nom = _nomMetierBassin(cidStr, state && state.meta ? state.meta : null);
                 if (topIcon) topIcon.innerHTML = '<i class="fas fa-circle-notch fa-spin" style="color: #fbbf24;"></i>';
                 if (topText) topText.innerHTML = `Simulation en cours : <span style="color: #fbbf24; font-weight: 700;">${nom}</span>`;
                 if (topBadge) {
@@ -159,7 +195,7 @@
             if (simActive) {
                 const kp = simActive.kpis || simActive;
                 const m = simActive.meta || {};
-                const nom = m.cluster_nom || (window._bassinNoms && cidStr && window._bassinNoms[cidStr]) || `Bassin ${cidStr || ''}`;
+                const nom = _nomMetierBassin(cidStr, m);
 
                 const qExutoire = (kp.q_exutoire_m3s !== undefined) ? parseFloat(kp.q_exutoire_m3s) : (kp.peak_flow ? parseFloat(kp.peak_flow) : (kp.peak_outflow_m3s ? parseFloat(kp.peak_outflow_m3s) : 0.0));
                 const qDerive = (kp.q_derive_m3s !== undefined) ? parseFloat(kp.q_derive_m3s) : (kp.q_deleste_ls ? (parseFloat(kp.q_deleste_ls) / 1000.0) : (kp.q_deleste_m3s ? parseFloat(kp.q_deleste_m3s) : 0.0));

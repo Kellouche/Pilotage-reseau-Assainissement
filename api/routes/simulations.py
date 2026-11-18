@@ -837,6 +837,35 @@ def run_native_swmm_simulation(
         raise HTTPException(status_code=500, detail=f"Erreur d'exécution SWMM 5.2 : {str(e)}")
 
 
+def _signaler_mismatch_version_gpkg(data: Dict[str, Any], ctx: Any, proj: Any) -> None:
+    """
+    Compare la version GPKG ayant produit la simulation restaurée avec la
+    version COURANTE du projet. En cas de divergence, marque
+    ``meta.gpkg_version_mismatch`` pour que le frontend puisse avertir
+    l'utilisateur : les entités réseau/bassins affichées correspondent à la
+    version courante, pas forcément à celle de la simulation.
+    """
+    try:
+        if not isinstance(data, dict):
+            return
+        vid_sim = None
+        if ctx is not None and getattr(ctx, "simulation", None) is not None:
+            vid_sim = getattr(ctx.simulation, "gpkg_version_id", None)
+        if vid_sim is None and isinstance(getattr(ctx, "meta_version", None), dict):
+            vid_sim = ctx.meta_version.get("version_id")
+        if vid_sim is None:
+            vid_sim = ((data.get("provenance") or {}).get("gpkg_version_id"))
+        vid_projet = getattr(proj, "gpkg_version_id", None) if proj is not None else None
+        if vid_sim and vid_projet and str(vid_sim) != str(vid_projet):
+            meta = data.setdefault("meta", {})
+            if isinstance(meta, dict):
+                meta["gpkg_version_mismatch"] = True
+                meta["gpkg_version_sim_id"] = str(vid_sim)
+                meta["gpkg_version_courante_id"] = str(vid_projet)
+    except Exception:
+        pass
+
+
 @router.get("/latest")
 def get_latest_simulation(
     db: Session = Depends(get_db),
@@ -919,6 +948,7 @@ def get_latest_simulation(
     else:
         data["project_name"] = project_name or data.get("project_name")
 
+    _signaler_mismatch_version_gpkg(data, ctx, proj)
     return _construire_reponse_simulation(data, cached=True)
 
 
@@ -998,6 +1028,7 @@ def get_bassin_simulation(
         if gpkg_sim is not None and gpkg_sim.exists():
             data["source_gpkg"] = str(gpkg_sim.resolve())
             data["project_name"] = project_name or gpkg_sim.stem
+            _signaler_mismatch_version_gpkg(data, ctx, proj)
             return _construire_reponse_simulation(data, cached=True)
 
     # 2. Repli legacy : résolution non ambiguë du projet puis scan disque
@@ -1823,7 +1854,14 @@ def get_profil_en_long(
 
     if ctx is not None:
         sim_data = ctx.data or {}
-        active_gpkg = ctx.gpkg_path if (ctx.gpkg_path and ctx.gpkg_path.exists()) else None
+        # Topologie = réseau actuellement affiché (gpkg_effectif), pas le
+        # snapshot du seul bassin simulé : un profil doit pouvoir être tracé
+        # sur N'IMPORTE QUEL regard du réseau visible. Les résultats HGL de
+        # sim_data restent indexés par code de regard (stable entre versions) —
+        # ils s'appliquent aux nœuds couverts par la simulation, les autres
+        # restants en lecture topographique seule.
+        active_gpkg = gpkg_effectif if (gpkg_effectif and gpkg_effectif.exists()) else (
+            ctx.gpkg_path if (ctx.gpkg_path and ctx.gpkg_path.exists()) else None)
     elif proj is not None and gpkg_effectif and gpkg_effectif.exists():
         # Repli legacy : simulation sans ligne DB (ancien cache disque) —
         # uniquement si le projet est vérifiable (3D.6).

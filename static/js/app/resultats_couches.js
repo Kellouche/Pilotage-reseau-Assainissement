@@ -277,7 +277,7 @@ window.addEventListener('DOMContentLoaded', initSaaSNavbar);
             const miniStatsEl = document.getElementById('mini-stats');
             if (miniStatsEl) {
                 if (isTargeted) {
-                    miniStatsEl.innerHTML = `<span style="color: #38bdf8; font-weight: 700;">Zone : ${meta.cluster_nom || ('Bassin ' + meta.cluster_id)}</span> | Conduites: <b>${meta.conduits_count}</b> | Regards: <b>${meta.junctions_count + 1}</b>`;
+                    miniStatsEl.innerHTML = `<span style="color: #38bdf8; font-weight: 700;">Zone : ${meta.cluster_nom || meta.bassin_nom || ('Bassin ' + meta.cluster_id)}</span> | Conduites: <b>${meta.conduits_count}</b> | Regards: <b>${meta.junctions_count + 1}</b>`;
                     miniStatsEl.style.background = 'rgba(56, 189, 248, 0.15)';
                     miniStatsEl.style.border = '1px solid rgba(56, 189, 248, 0.3)';
                     miniStatsEl.style.color = '#f8fafc';
@@ -306,7 +306,7 @@ window.addEventListener('DOMContentLoaded', initSaaSNavbar);
             const subLeg = document.getElementById('subcatchments-legend');
             if (subLeg) {
                 if (isTargeted) {
-                    subLeg.innerHTML = `Périmètre simulé : <b style="color: #38bdf8;">${meta.cluster_nom || ('Bassin ' + meta.cluster_id)}</b> (${meta.total_area_ha} ha drainés vers l'exutoire ${meta.outfall_code || ''}).`;
+                    subLeg.innerHTML = `Périmètre simulé : <b style="color: #38bdf8;">${meta.cluster_nom || meta.bassin_nom || ('Bassin ' + meta.cluster_id)}</b> (${meta.total_area_ha} ha drainés vers l'exutoire ${meta.outfall_code || ''}).`;
                 } else {
                     subLeg.innerHTML = `Surface drainée totale : <b>${meta.total_area_ha} ha</b> sur <b>${meta.subcatchments_count} sous-bassins</b>.`;
                 }
@@ -415,10 +415,13 @@ window.addEventListener('DOMContentLoaded', initSaaSNavbar);
             // 5. Mettre à jour le titre de la légende flottante
             const legTitle = document.querySelector('#sim-floating-legend span');
             if (legTitle) {
+                const _warnVersion = meta.gpkg_version_mismatch
+                    ? ' <span style="color:#f59e0b; font-size:0.72rem; font-weight:700;" title="Cette simulation provient d\'une autre version du GeoPackage que le réseau actuellement affiché">⚠ autre version réseau</span>'
+                    : '';
                 if (isTargeted) {
-                    legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> SWMM 5.2 — ${meta.cluster_nom || ('Bassin ' + meta.cluster_id)}`;
+                    legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> SWMM 5.2 — ${meta.cluster_nom || meta.bassin_nom || ('Bassin ' + meta.cluster_id)}${_warnVersion}`;
                 } else {
-                    legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> Légende SWMM 5.2`;
+                    legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> Légende SWMM 5.2${_warnVersion}`;
                 }
             }
 
@@ -443,7 +446,7 @@ window.addEventListener('DOMContentLoaded', initSaaSNavbar);
             const simCardHtml = `
                 <div style="font-family: inherit; font-size: 12px; min-width: 220px; color: #f8fafc; padding: 2px;">
                     <div style="font-weight: 800; color: #38bdf8; font-size: 13px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.15); padding-bottom: 4px; margin-bottom: 6px;">
-                        <span>${meta.cluster_nom || ('Bassin ' + meta.cluster_id)}</span>
+                        <span>${meta.cluster_nom || meta.bassin_nom || ('Bassin ' + meta.cluster_id)}</span>
                         <span style="font-size: 10px; background: rgba(56,189,248,0.25); color: #38bdf8; padding: 1px 6px; border-radius: 4px; font-weight: 800;">SIMULÉ</span>
                     </div>
                     <div style="color: #94a3b8; font-size: 11px; margin-bottom: 3px;">🏷️ Exutoire récepteur : <b>${meta.outfall_code || 'N/A'}</b></div>
@@ -551,7 +554,7 @@ window.addEventListener('DOMContentLoaded', initSaaSNavbar);
                         const sbTooltipHtml = `
                             <div style="font-family: inherit; font-size: 12px; min-width: 220px; color: #f8fafc; padding: 2px;">
                                 <div style="font-weight: 800; color: #38bdf8; font-size: 13px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.15); padding-bottom: 4px; margin-bottom: 6px;">
-                                    <span>${meta.cluster_nom || ('Bassin ' + meta.cluster_id)}</span>
+                                    <span>${meta.cluster_nom || meta.bassin_nom || ('Bassin ' + meta.cluster_id)}</span>
                                     <span style="font-size: 10px; background: rgba(56,189,248,0.25); color: #38bdf8; padding: 1px 6px; border-radius: 4px; font-weight: 800;">SIMULÉ</span>
                                 </div>
                                 <div style="color: #94a3b8; font-size: 11px; margin-bottom: 3px;">🏷️ Exutoire récepteur : <b>${meta.outfall_code || 'N/A'}</b></div>
