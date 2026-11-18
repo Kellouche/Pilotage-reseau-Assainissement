@@ -355,8 +355,12 @@
             const j = await r.json().catch(() => ({}));
             if (!r.ok) throw new Error(j.detail || r.statusText);
             const ex = j.extraction || {};
+            const nbObjets = ex.nb_objets || 0;
+            const nbCouches = (ex.manifeste && Array.isArray(ex.manifeste.couches))
+                ? ex.manifeste.couches.length : null;
+            const detailCouches = nbCouches != null ? ` en ${nbCouches} couche(s) thématique(s)` : '';
             _statutPochoir(
-                `✔ ${ex.nom_zip || 'Archive'} prête — ${ex.nb_objets || 0} couche(s) thématique(s) extraite(s).`, true);
+                `✔ ${ex.nom_zip || 'Archive'} prête — ${nbObjets.toLocaleString('fr-FR')} objet(s) extrait(s)${detailCouches}.`, true);
             // Téléchargement automatique du zip
             if (ex.url_download) _telechargerArtefact(ex.url_download, ex.nom_zip || `${nom}.zip`);
         } catch (err) {
