@@ -348,6 +348,7 @@
     let _auxDossierIndex = {};
     let _auxEntrees = [];
     let _auxSelectionnes = new Set();
+    let nomDossierGlobal = '(dossier)';
 
     window.ouvrirModalAuxLayer = function () {
         const m = document.getElementById('modal-aux-layer');
@@ -417,8 +418,8 @@
         if (!dispo.length) {
             itemsEl.innerHTML = '<div style="color:#94a3b8;font-size:0.8rem;padding:8px;">' +
                 (nbMasques
-                    ? `Tous les fichiers SIG reconnus de ce dossier sont déjà importés (${nbMasques} masqué${nbMasques > 1 ? 's' : ''}).`
-                    : 'Aucun shapefile ni fichier SIG reconnu dans ce dossier.') +
+                    ? `Toutes les couches SIG reconnues de ce dossier sont déjà importées (${nbMasques} masquée${nbMasques > 1 ? 's' : ''}).`
+                    : 'Aucune couche SIG reconnue dans ce dossier.') +
                 '</div>';
         } else {
             dispo.forEach(e => {
@@ -462,12 +463,12 @@
             if (nbMasques) {
                 const note = document.createElement('div');
                 note.style.cssText = 'font-size:0.7rem;color:#64748b;padding:6px 8px 2px;';
-                note.textContent = `— ${nbMasques} fichier${nbMasques > 1 ? 's' : ''} déjà importé${nbMasques > 1 ? 's' : ''} masqué${nbMasques > 1 ? 's' : ''} —`;
+                note.textContent = `— ${nbMasques} couche${nbMasques > 1 ? 's' : ''} déjà importée${nbMasques > 1 ? 's' : ''} masquée${nbMasques > 1 ? 's' : ''} —`;
                 itemsEl.appendChild(note);
             }
         }
 
-        // Auto-coche si un seul fichier importable
+        // Auto-coche si une seule couche importable
         const importables = dispo.filter(e => e.ok);
         if (importables.length === 1 && !_auxSelectionnes.size) {
             _auxSelectionnes.add(importables[0].cle);
@@ -477,6 +478,13 @@
 
         if (listeEl) listeEl.style.display = 'block';
         _majEtatSelectionAux();
+
+        // Libellé dossier : nombre de couches détectées (pas de fichiers —
+        // un .shp + ses sidecars compte pour une seule couche).
+        const lblDos = document.getElementById('aux-folder-label');
+        if (lblDos && _auxEntrees.length) {
+            lblDos.textContent = `📂 ${nomDossierGlobal}  — ${_auxEntrees.length} couche${_auxEntrees.length > 1 ? 's' : ''} détectée${_auxEntrees.length > 1 ? 's' : ''}`;
+        }
     }
 
     /**
@@ -500,9 +508,10 @@
 
         // Libellé dossier
         const premierChemin = allFiles[0].webkitRelativePath || allFiles[0].name;
-        const nomDossier = premierChemin.split('/')[0] || '(dossier)';
+        nomDossierGlobal = premierChemin.split('/')[0] || '(dossier)';
         const lbl = document.getElementById('aux-folder-label');
-        if (lbl) lbl.textContent = `📂 ${nomDossier}  — ${allFiles.length} fichier(s) trouvé(s)`;
+        // NB : le compteur affiché après _rendreItemsAux() = nb de couches
+        // (un shapefile + ses sidecars = 1 seule couche).
 
         // Index par nom de base (sans extension, insensible à la casse)
         allFiles.forEach(f => {
@@ -591,7 +600,7 @@
 
         const selection = _auxEntrees.filter(e => _auxSelectionnes.has(e.cle) && !e.deja && e.ok);
         if (!selection.length) {
-            afficherErreur("Cochez d'abord au moins un fichier à importer dans la liste.");
+            afficherErreur("Cochez d'abord au moins une couche à importer dans la liste.");
             return;
         }
 
@@ -663,6 +672,19 @@
         btn.style.opacity = '1';
         btn.style.cursor  = 'pointer';
         btn.innerHTML = '<i class="fas fa-upload me-1"></i> Importer';
+
+        // Succès complet → clôturer la modale : l'import est terminé, pas de
+        // « re-confirmation » (Annuler/Importer) à retaper. En cas d'erreur
+        // partielle, la modale reste ouverte avec le récapitulatif.
+        if (nbOk === selection.length) {
+            if (typeof window.dialogueNotifier === 'function') {
+                window.dialogueNotifier({
+                    message: `${nbOk} couche${nbOk > 1 ? 's' : ''} importée${nbOk > 1 ? 's' : ''} avec succès.`,
+                    type: 'succes'
+                });
+            }
+            window.fermerModalAuxLayer();
+        }
     };
 
     // Compat ascendante : plus utilisé par la liste (cases à cocher),
