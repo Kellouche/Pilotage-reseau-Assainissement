@@ -273,6 +273,29 @@ def _chemin_materialise(layer_id: str, storage_key: str) -> Path:
     return cible
 
 
+def supprimer_artefacts_couche(org_id: str, project_id: str, layer_id: str) -> int:
+    """Purge tous les artefacts stockés d'une couche satellite.
+
+    Couvre layer.gpkg, la copie source et les dérivés (derive/grid.npz,
+    derive/regards_terrain.json) — tous sous gis/aux_layers/{layer_id}/.
+    Purge aussi le cache local matérialisé. Retourne le nb d'objets
+    supprimés du store (0 si indisponible)."""
+    _CACHE_MATERIALISE.pop(layer_id, None)
+    cache_dir = Path("data/.aux_layers_cache")
+    if cache_dir.exists():
+        for p in cache_dir.glob(f"{layer_id}*"):
+            try:
+                p.unlink()
+            except OSError:
+                pass
+    prefix = ArtifactStore.build_key(org_id, project_id, f"gis/aux_layers/{layer_id}/")
+    try:
+        return _store().delete_prefix(prefix)
+    except Exception as e:
+        logger.warning("Purge artefacts couche satellite %s : %s", layer_id, e)
+        return 0
+
+
 def lire_gdf_couche(layer_id: str, storage_key: str, bounds: Optional[Tuple[float, float, float, float]] = None) -> gpd.GeoDataFrame:
     """Lit la couche satellite (avec filtre d'emprise optionnel en EPSG:4326)."""
     chemin = _chemin_materialise(layer_id, storage_key)

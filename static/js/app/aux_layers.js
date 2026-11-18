@@ -180,6 +180,7 @@
                 <span style="font-size:0.62rem; color:#64748b;">${c.nb_features} objets</span>
                 ${estTopo ? `<button type="button" class="aux-sonde-btn" data-id="${c.id}" title="Sonde altimétrique : activer puis cliquer sur la carte pour lire la cote terrain (recliquer pour désactiver)" style="background:rgba(148,163,184,0.15); border:1px solid rgba(148,163,184,0.35); color:#cbd5e1; border-radius:5px; padding:1px 6px; font-size:0.65rem; cursor:pointer;">⌖ sonde</button>
                 <button type="button" class="aux-suspects-btn" data-id="${c.id}" title="File de revue P1 : conduites dont le sens d'écoulement est suspect au regard du terrain" style="background:rgba(245,158,11,0.15); border:1px solid rgba(245,158,11,0.4); color:#fbbf24; border-radius:5px; padding:1px 6px; font-size:0.65rem; cursor:pointer;">⇄ écoulement</button>` : ''}
+                <button type="button" class="aux-del-btn" data-id="${c.id}" title="Supprimer définitivement cette couche satellite" style="background:rgba(248,113,113,0.12); border:1px solid rgba(248,113,113,0.35); color:#fca5a5; border-radius:5px; padding:1px 6px; font-size:0.65rem; cursor:pointer; flex:none;">🗑</button>
             `;
             div.querySelector('input[type=checkbox]').addEventListener('change', (e) => {
                 basculerCouche(c.id, e.target.checked);
@@ -191,6 +192,10 @@
             const btnSuspects = div.querySelector('.aux-suspects-btn');
             if (btnSuspects) {
                 btnSuspects.addEventListener('click', () => ouvrirModalSuspects(c.id));
+            }
+            const btnDel = div.querySelector('.aux-del-btn');
+            if (btnDel) {
+                btnDel.addEventListener('click', () => supprimerCouche(c.id));
             }
             cont.appendChild(div);
 
@@ -261,6 +266,38 @@
         Object.values(AUX.couches).forEach(c => {
             if (c.visible) chargerGeoJSON(c);
         });
+    }
+
+    // ------------------------------------------------------------------
+    // Suppression d'une couche satellite (backend DELETE + purge locale)
+    // ------------------------------------------------------------------
+    async function supprimerCouche(layerId) {
+        const c = AUX.couches[layerId];
+        const nom = (c && c.meta && c.meta.nom) || layerId;
+        if (!confirm(`Supprimer définitivement la couche « ${nom} » ?\n\nCette action retire la couche de la carte et efface ses données stockées.`)) return;
+        const m = carte();
+        try {
+            await fetchJSON(
+                `/api/v1/projets/${encodeURIComponent(AUX.projectId)}/aux-layers/${layerId}`,
+                { method: 'DELETE' }
+            );
+        } catch (e) {
+            if (typeof window.dialogueNotifier === 'function') {
+                window.dialogueNotifier({ message: 'Suppression impossible : ' + e.message, type: 'error' });
+            } else {
+                alert('Suppression impossible : ' + e.message);
+            }
+            return;
+        }
+        // Nettoyage local : sonde, couche carte, registre — puis rechargement
+        // de la liste depuis le serveur (source à réimporter redeviendra
+        // proposée dans la liste d'import).
+        desactiverSonde(layerId);
+        if (m && c && c.groupe) {
+            try { m.removeLayer(c.groupe); } catch (_) {}
+        }
+        delete AUX.couches[layerId];
+        await chargerListeCouches();
     }
 
     // ------------------------------------------------------------------

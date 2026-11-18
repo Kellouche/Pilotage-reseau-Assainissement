@@ -221,6 +221,26 @@ def get_aux_layer(
     return {"statut": "ok", "couche": couche.to_dict()}
 
 
+@router.delete("/projets/{project_id}/aux-layers/{layer_id}")
+def delete_aux_layer(
+    project_id: str,
+    layer_id: str,
+    tenant_ctx: TenantContext = Depends(get_tenant_context),
+    db: Session = Depends(get_db),
+):
+    """
+    Supprime une couche satellite : ligne ProjectAuxLayer + tous ses
+    artefacts stockés (gpkg, source, grille IDW, regards_terrain) et le
+    cache matérialisé. Isolation org/projet/version via _couche (stealth 404).
+    """
+    couche = _couche(db, tenant_ctx, project_id, layer_id)
+    nb_artefacts = svc.supprimer_artefacts_couche(
+        tenant_ctx.org_id, project_id, couche.id)
+    db.delete(couche)
+    db.commit()
+    return {"statut": "ok", "supprime": couche.id, "artefacts_purges": nb_artefacts}
+
+
 @router.get("/projets/{project_id}/aux-layers/{layer_id}/geojson")
 def get_aux_layer_geojson(
     project_id: str,

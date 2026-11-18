@@ -911,3 +911,64 @@ def test_couches_scopees_par_version_gpkg(db, org_projet, tmp_path):
             synchronize_session=False)
         db.commit()
 
+
+def test_endpoint_delete_couche(db, org_projet, tmp_path):
+    """DELETE /aux-layers/{id} : supprime ligne + artefacts stockés ;
+    stealth 404 pour un tenant d'une autre organisation."""
+    client = TestClient(app)
+    pid = org_projet["proj"].id
+    tok = org_projet["token"]
+
+    res = _importer_topo(db, org_projet, tmp_path, n=20)
+    layer_id = res["id"]
+
+    # Visible dans la liste
+    r = client.get(f"/api/v1/projets/{pid}/aux-layers", headers=_h(tok))
+    assert any(c["id"] == layer_id for c in r.json()["couches"])
+
+    # Artefact stocké présent avant suppression
+    from api.services.aux_layers_service import cle_couche_aux, _store
+    cle = cle_couche_aux(org_projet["org"].id, pid, layer_id, "layer.gpkg")
+    assert _store().exists(cle)
+
+    # Suppression par une AUTRE org → stealth 404, couche conservée
+    sfx = _uid()
+    org_b = Organization(id=f"auxdb_{sfx}", name="B", slug=f"b-{sfx}")
+    user_b = User(id=f"auxub2_{sfx}", email=f"b2_{sfx}@t.dz",
+                  password_hash=hash_password("BPass2026!"), full_name="B",
+                  email_verified=True)
+    db.add_all([org_b, user_b,
+                Membership(org_id=org_b.id, user_id=user_b.id, role="admin")])
+    db.commit()
+    tok_b = create_access_token({"sub": user_b.id, "org_id": org_b.id, "role": "admin"})
+    try:
+        r = client.delete(f"/api/v1/projets/{pid}/aux-layers/{layer_id}",
+                          headers=_h(tok_b))
+        assert r.status_code == 404
+        assert db.query(ProjectAuxLayer).filter(
+            ProjectAuxLayer.id == layer_id).first() is not None
+    finally:
+        db.query(Membership).filter(Membership.org_id == org_b.id).delete(
+            synchronize_session=False)
+        db.query(User).filter(User.id == user_b.id).delete(synchronize_session=False)
+        db.query(Organization).filter(Organization.id == org_b.id).delete(
+            synchronize_session=False)
+        db.commit()
+
+    # Suppression par le bon tenant → ok, ligne + artefacts purgés
+    r = client.delete(f"/api/v1/projets/{pid}/aux-layers/{layer_id}", headers=_h(tok))
+    assert r.status_code == 200, r.text
+    assert r.json()["statut"] == "ok"
+    assert db.query(ProjectAuxLayer).filter(
+        ProjectAuxLayer.id == layer_id).first() is None
+    assert not _store().exists(cle)
+
+    # Désormais absente de la liste et en 404
+    r = client.get(f"/api/v1/projets/{pid}/aux-layers", headers=_h(tok))
+    assert not any(c["id"] == layer_id for c in r.json()["couches"])
+    assert client.get(f"/api/v1/projets/{pid}/aux-layers/{layer_id}",
+                      headers=_h(tok)).status_code == 404
+    # Double suppression → 404 (idempotent côté client, pas de 500)
+    assert client.delete(f"/api/v1/projets/{pid}/aux-layers/{layer_id}",
+                         headers=_h(tok)).status_code == 404
+
