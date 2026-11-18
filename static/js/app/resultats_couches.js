@@ -580,4 +580,34 @@ window.addEventListener('DOMContentLoaded', initSaaSNavbar);
                     }
                 });
             }
+
+            // 7. Couverture exhaustive : toute infobulle de bassin/sous-bassin
+            // non déjà enregistrée (polygones hors zone simulée ou appariement
+            // impossible) est aussi soumise à la bascule « Infobulles au
+            // survol » — sinon la fiche reste affichée et la case à cocher
+            // semble sans effet sur elle.
+            const _dejaEnregistree = function (layer) {
+                return (window._simTipLayers || []).some(function (e) { return e.layer === layer; });
+            };
+            const _couvrirInfobulles = function (grp) {
+                if (!grp || !grp.eachLayer) return;
+                grp.eachLayer(function (l) {
+                    if (_dejaEnregistree(l)) return;
+                    if (!l.getTooltip || !l.getTooltip()) return;
+                    const cur = l.getTooltip().getContent();
+                    if (!cur) return;
+                    if (!l._originalTooltip) l._originalTooltip = cur;
+                    l.unbindTooltip();
+                    window._enregistrerInfobulleSim(l, cur, {
+                        sticky: true,
+                        direction: 'left',
+                        offset: [-15, 0],
+                        opacity: 0.98,
+                        className: 'sim-bassin-tooltip'
+                    });
+                });
+            };
+            _couvrirInfobulles(couches.bassins);
+            _couvrirInfobulles(window._activeClusterLayer);
+            _couvrirInfobulles(couches.subcatchments);
         }

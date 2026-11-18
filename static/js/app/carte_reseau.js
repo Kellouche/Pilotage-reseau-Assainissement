@@ -349,6 +349,10 @@ function chargerDonneesInitiales() {
                             if (typeof window.mettreAJourIndicateurBassin === 'function') {
                                 window.mettreAJourIndicateurBassin(null, {});
                             }
+                            // Rouvrir sur le dernier bassin consulté (par projet)
+                            if (typeof window.restaurerDernierBassin === 'function') {
+                                window.restaurerDernierBassin();
+                            }
                             montrerChargement(false);
                             // Vérifier si une simulation est restaurée et réactiver les boutons si nécessaire
                             if (typeof _desactiverBoutonsHydro === 'function') {

@@ -396,7 +396,7 @@ const _TYPE_ANOMALIE_LABELS = {
     hydraulique: 'Hydraulique (surcharge/inondation)',
     terrain_remonte: 'Terrain remonté'
 };
-const _SEV_ANOMALIE_LABELS = { fort: 'Fort', moyen: 'Moyen', faible: 'Faible', info: 'Info' };
+const _SEV_ANOMALIE_LABELS = { fort: 'Critique', moyen: 'Modéré', faible: 'Faible', info: 'Info' };
 const _COULEUR_SEV = { fort: '#ef4444', moyen: '#f59e0b', faible: '#fb923c', info: '#38bdf8' };
 const _ICONE_TYPE_ANOMALIE = {
     contre_pente: 'fa-arrow-up',
@@ -515,7 +515,8 @@ function afficherProfilLong(data) {
             const _types = Object.entries((_sa && _sa.types_majeurs) || {})
                 .map(([t, c]) => `${_libelleTypeAnomalie(t)} ×${c}`)
                 .join(', ');
-            _txtAnom.textContent = `${_nf} anomalie(s) forte(s), ${_nm} moyenne(s)` +
+            _txtAnom.textContent = `${_nf} anomalie(s) critique(s) — avérée(s) par les données/SWMM, ` +
+                `${_nm} modérée(s) — risque(s) à surveiller` +
                 (_types ? ` — ${_types}` : '') +
                 `. Survolez les jalons ◆ sur le graphique.`;
             _resAnom.style.display = 'flex';
@@ -1060,21 +1061,44 @@ window.initProfilLongDraggable = _initProfilLongDraggable;
  * Construit l'icône Leaflet d'un marqueur d'anomalie : forme/couleur par
  * type, teinte par sévérité.
  */
-function _iconeNoeudAnomaliesProfil(liste) {
-    // Badges empilés en colonne, superposés, ancrés en bas sur le regard —
-    // taille réduite (18 px) pour rester lisible sur le tronçon.
+function _iconeNoeudAnomaliesProfil(liste, taille) {
+    // Badges empilés en colonne, superposés, ancrés en bas sur le regard.
+    // La taille suit le zoom (recalcul au zoomend) : les badges grossissent
+    // et rétrécissent avec la carte comme les autres ouvrages.
+    const t = taille || 18;
+    const pas = Math.round(t * 0.66); // chevauchement vertical des badges
     const badges = liste.map((a, i) => {
         const couleur = _couleurSeverite(a.severite);
         const icone = _ICONE_TYPE_ANOMALIE[a.type] || 'fa-exclamation';
-        const marge = i === 0 ? '0' : '-6px';
-        return `<div style="width:18px;height:18px;border-radius:50%;background:rgba(15,23,42,0.92);border:1.5px solid ${couleur};display:flex;align-items:center;justify-content:center;box-shadow:0 0 6px ${couleur}77;margin-top:${marge};"><i class="fas ${icone}" style="color:${couleur};font-size:9px;"></i></div>`;
+        const marge = i === 0 ? '0' : `-${Math.round(t * 0.34)}px`;
+        return `<div style="width:${t}px;height:${t}px;border-radius:50%;background:rgba(15,23,42,0.92);border:${Math.max(1, Math.round(t / 12))}px solid ${couleur};display:flex;align-items:center;justify-content:center;box-shadow:0 0 6px ${couleur}77;margin-top:${marge};"><i class="fas ${icone}" style="color:${couleur};font-size:${Math.round(t / 2)}px;"></i></div>`;
     }).join('');
-    const h = 18 + Math.max(0, liste.length - 1) * 12 + 2;
+    const h = t + Math.max(0, liste.length - 1) * pas + 2;
+    const w = t + 8;
     return L.divIcon({
         className: 'anomalie-profil-marker',
         html: `<div style="display:flex;flex-direction:column;align-items:center;">${badges}</div>`,
-        iconSize: [26, h],
-        iconAnchor: [13, h]
+        iconSize: [w, h],
+        iconAnchor: [Math.round(w / 2), h]
+    });
+}
+
+/** Taille des badges d'anomalie selon le zoom courant (12→30 px). */
+function _tailleBadgeAnomalie(zoom) {
+    return Math.min(30, Math.max(12, Math.round(18 * Math.pow(2, (zoom - 15) / 4))));
+}
+/** Rayon des points de regard selon le zoom (4→9 px). */
+function _rayonPointAnomalie(zoom) {
+    return Math.min(9, Math.max(4, Math.round(2 + zoom * 0.28)));
+}
+/** Ré-applique tailles et rayons après un changement de zoom. */
+function _adapterBadgesAnomaliesProfil(map, group) {
+    const z = map.getZoom();
+    const t = _tailleBadgeAnomalie(z);
+    const r = _rayonPointAnomalie(z);
+    group.eachLayer(function (l) {
+        if (l._anomaliesListe) l.setIcon(_iconeNoeudAnomaliesProfil(l._anomaliesListe, t));
+        if (l._noeudAnomalie) l.setRadius(r);
     });
 }
 
@@ -1129,25 +1153,31 @@ function _afficherAnomaliesSurCarte(data) {
     }
 
     // Regards du profil (point coloré par la pire anomalie du nœud)
+    const _rInit = _rayonPointAnomalie(map.getZoom());
     noeuds.forEach(n => {
-        L.circleMarker(n.ll, {
-            radius: 5, color: '#0f172a', weight: 2,
+        const cm = L.circleMarker(n.ll, {
+            radius: _rInit, color: '#0f172a', weight: 2,
             fillColor: n.sev ? _couleurSeverite(n.sev) : '#94a3b8',
             fillOpacity: 0.95, pane: 'anomaliesProfilPane'
-        }).bindTooltip(`<b>Regard ${n.id}</b>`, { direction: 'top' })
-          .addTo(group);
+        }).bindTooltip(`<b>Regard ${n.id}</b>`, { direction: 'top' });
+        cm._noeudAnomalie = true;
+        cm.addTo(group);
     });
 
-    // Marqueurs d'anomalies : un marqueur par nœud, icônes empilées en
-    // colonne superposée (type + sévérité), ancrées sur le regard.
+    // Marqueurs d'anomalies : un marqueur par nœud, badges empilés en
+    // colonne superposée (type + sévérité), ancrés sur le regard. La taille
+    // suit le zoom ; l'infobulle ne liste que les types d'anomalies.
+    const _tInit = _tailleBadgeAnomalie(map.getZoom());
     anomalies.forEach(an => {
-        L.marker(an.ll, {
-            icon: _iconeNoeudAnomaliesProfil(an.anList),
+        const mk = L.marker(an.ll, {
+            icon: _iconeNoeudAnomaliesProfil(an.anList, _tInit),
             pane: 'anomaliesProfilPane'
         }).bindTooltip(
-            `<b>Regard ${an.node}</b><br>` + an.anList.map(a => _etatAnomalie(a)).join('<br>'),
+            `<b>Regard ${an.node}</b><br>` + an.anList.map(a => _libelleTypeAnomalie(a.type)).join('<br>'),
             { direction: 'top' }
-        ).addTo(group);
+        );
+        mk._anomaliesListe = an.anList;
+        mk.addTo(group);
     });
 
     group.addTo(map);
@@ -1156,6 +1186,10 @@ function _afficherAnomaliesSurCarte(data) {
     // (tuiles natives z19) tout en gardant tout le tronçon visible.
     const bounds = L.latLngBounds(latlngs);
     map.fitBounds(bounds, { padding: [40, 40], maxZoom: 19 });
+
+    // Badges et points réactifs au zoom (taille recalculée à chaque zoomend)
+    const _onZoom = function () { _adapterBadgesAnomaliesProfil(map, group); };
+    map.on('zoomend', _onZoom);
 
     // --- Persistance : la couche reste affichée au pan/zoom ---
     // Elle ne disparaît que sur action explicite : « Quitter » du menu
@@ -1175,7 +1209,7 @@ function _afficherAnomaliesSurCarte(data) {
     map.on('click', _onClick);
 
     window._anomaliesProfil = {
-        layer: group, data: data, onCtx: _onCtx, onClick: _onClick
+        layer: group, data: data, onCtx: _onCtx, onClick: _onClick, onZoom: _onZoom
     };
 }
 
@@ -1190,6 +1224,7 @@ function _retirerAnomaliesProfil() {
         if (st.layer) map.removeLayer(st.layer);
         if (st.onCtx) map.off('contextmenu', st.onCtx);
         if (st.onClick) map.off('click', st.onClick);
+        if (st.onZoom) map.off('zoomend', st.onZoom);
     }
     _menuAnomaliesProfilHide();
     window._anomaliesProfil = null;

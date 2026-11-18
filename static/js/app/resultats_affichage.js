@@ -64,6 +64,10 @@ window._ajouterItemInfobullesSim = function (menu) {
         ev.stopPropagation();
         window._basculerInfobullesSim();
         _rendu();
+        // Fermer le menu après bascule : l'état (☑/☐) est relu à la
+        // prochaine ouverture — évite un menu qui reste affiché.
+        if (typeof _masquerMenuInfobullesSim === 'function') _masquerMenuInfobullesSim();
+        if (typeof _menuAnomaliesProfilHide === 'function') _menuAnomaliesProfilHide();
     };
     menu.appendChild(item);
     return item;
@@ -94,8 +98,8 @@ function _afficherMenuInfobullesSim(domEvent) {
         const _hide = function (ev) {
             if (menu.contains(ev.target)) return;
             _masquerMenuInfobullesSim();
-            document.removeEventListener('click', _hide, true);
         };
+        menu._hideHandler = _hide;
         document.addEventListener('click', _hide, true);
         const _esc = function (ev) { if (ev.key === 'Escape') _masquerMenuInfobullesSim(); };
         document.addEventListener('keydown', _esc);
@@ -107,6 +111,9 @@ function _masquerMenuInfobullesSim() {
     if (window._menuInfobullesSim) {
         if (window._menuInfobullesSim._escHandler) {
             document.removeEventListener('keydown', window._menuInfobullesSim._escHandler);
+        }
+        if (window._menuInfobullesSim._hideHandler) {
+            document.removeEventListener('click', window._menuInfobullesSim._hideHandler, true);
         }
         window._menuInfobullesSim.remove();
         window._menuInfobullesSim = null;
@@ -124,6 +131,8 @@ function _masquerMenuInfobullesSim() {
             // le menu contextuel carte (case à cocher Infobulles au clic droit).
             window._simTipLayers = [];
             window._simCtxActif = true;
+            if (typeof _masquerMenuInfobullesSim === 'function') _masquerMenuInfobullesSim();
+            if (typeof _menuAnomaliesProfilHide === 'function') _menuAnomaliesProfilHide();
             if (!window._simCtxBound) {
                 window._simCtxBound = true;
                 const _mapCtx = window.carte || window.map;

@@ -458,6 +458,17 @@
             _selectedClusterId = (clusterId === null || clusterId === undefined || clusterId === '') ? null : String(clusterId);
             window.mettreAJourIndicateurBassin(_selectedClusterId);
 
+            // Mémoriser le dernier bassin ouvert, cloisonné par projet —
+            // permet à l'application de se rouvrir sur le même bassin.
+            try {
+                const _pn = (window._rawNetworkData && (window._rawNetworkData.project_name || window._rawNetworkData.project_id)) || null;
+                if (_selectedClusterId) {
+                    localStorage.setItem('drainpilot_dernier_bassin', JSON.stringify({ projet: _pn, cluster: _selectedClusterId }));
+                } else {
+                    localStorage.removeItem('drainpilot_dernier_bassin');
+                }
+            } catch (e) {}
+
             // Synchroniser le dropdown si l'appel vient du clic carte
             const sel = document.getElementById('bassin-select');
             if (sel && sel.value !== (_selectedClusterId || '')) {
@@ -567,6 +578,42 @@
                 });
             }
         }
+
+        /**
+         * Restaure le dernier bassin ouvert au chargement du réseau.
+         * Cloisonné par projet : un bassin d'un autre projet/organisation
+         * n'est jamais restauré. Sans effet si le cluster n'existe plus.
+         */
+        window.restaurerDernierBassin = function () {
+            try {
+                const brut = localStorage.getItem('drainpilot_dernier_bassin');
+                if (!brut) return;
+                const d = JSON.parse(brut);
+                if (!d || !d.cluster) return;
+                const projetCourant = (window._rawNetworkData && (window._rawNetworkData.project_name || window._rawNetworkData.project_id)) || null;
+                if (d.projet && projetCourant && String(d.projet) !== String(projetCourant)) return;
+                const cid = String(d.cluster);
+
+                // Le cluster doit exister dans le réseau fraîchement chargé
+                let existe = false;
+                const sel = document.getElementById('bassin-select');
+                if (sel) {
+                    for (let i = 0; i < sel.options.length; i++) {
+                        if (sel.options[i].value === cid) { existe = true; break; }
+                    }
+                }
+                if (!existe && window._clustersData) {
+                    existe = !!(window._clustersData[cid] || window._clustersData[Number(cid)]);
+                }
+                if (!existe) return;
+
+                highlightCluster(cid, window._activeClusterLayer || (typeof couches !== 'undefined' ? couches.bassins : null));
+                const gl = window._activeClusterLayer || (typeof couches !== 'undefined' ? couches.bassins : null);
+                if (gl && gl.getBounds && gl.getBounds().isValid()) {
+                    carte.fitBounds(gl.getBounds(), { padding: [50, 50], maxZoom: 17 });
+                }
+            } catch (e) {}
+        };
 
         function peuplerDropdownBassins(geojsonData, clusterLayer) {
             const sel = document.getElementById('bassin-select');

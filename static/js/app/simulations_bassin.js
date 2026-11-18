@@ -443,6 +443,13 @@
             if (chk) chk.checked = !!p.dwf_actif;
         }
 
+        // Altimétrie terrain : refléter l'état persisté — sinon une
+        // simulation modifiée perd silencieusement son mode altimétrique.
+        if (p.altimetrie_terrain !== undefined) {
+            const chkAlt = document.getElementById('sim-chk-altimetrie-terrain');
+            if (chkAlt) chkAlt.checked = !!p.altimetrie_terrain;
+        }
+
         window.fermerModalSimulationsBassin();
         if (typeof window.ouvrirModalSimulation === 'function') {
             window.ouvrirModalSimulation(true);
