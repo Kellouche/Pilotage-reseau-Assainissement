@@ -488,6 +488,56 @@
     }
 
     /**
+     * Collecte récursive des fichiers d'un FileSystemDirectoryHandle
+     * (File System Access API) en objets File exploitables par auxScanDossier.
+     */
+    async function _lireDossierFS(dirHandle, prefix, out) {
+        for await (const h of dirHandle.values()) {
+            if (h.kind === 'file') {
+                try {
+                    const f = await h.getFile();
+                    // Chemin relatif synthétique : 1er segment = nom du dossier
+                    // choisi (utilisé pour l'affichage « 📂 dossier »).
+                    // Best effort : si le File est non extensible, on garde
+                    // quand même le fichier (nomDossier retombera sur f.name).
+                    try {
+                        Object.defineProperty(f, 'webkitRelativePath',
+                            { value: `${prefix}/${h.name}`, configurable: true });
+                    } catch (e2) { /* non bloquant */ }
+                    out.push(f);
+                } catch (e) { /* fichier illisible : ignoré */ }
+            } else if (h.kind === 'directory') {
+                await _lireDossierFS(h, `${prefix}/${h.name}`, out);
+            }
+        }
+    }
+
+    /**
+     * Sélection du dossier de couches SIG.
+     * File System Access API (Chrome/Edge) : sélecteur de dossier natif,
+     * SANS le dialogue « importer N fichiers » imposé par webkitdirectory.
+     * Fallback : input webkitdirectory (dialogue navigateur inévitable).
+     */
+    window.choisirDossierSIG = async function () {
+        if (window.showDirectoryPicker) {
+            try {
+                const dir = await showDirectoryPicker({ mode: 'read' });
+                const fichiers = [];
+                await _lireDossierFS(dir, dir.name, fichiers);
+                if (fichiers.length) {
+                    auxScanDossier(fichiers);
+                }
+                return;
+            } catch (e) {
+                // Annulation utilisateur ou API indisponible → fallback
+                if (e && e.name === 'AbortError') return;
+            }
+        }
+        const inp = document.getElementById('aux-file');
+        if (inp) inp.click();
+    };
+
+    /**
      * Appelée dès que l'utilisateur a choisi un dossier.
      * Indexe tous les fichiers SIG, exclut ceux déjà importés, puis affiche
      * la liste à cocher (multisélection).

@@ -40,7 +40,7 @@ Flux : (1) Dossier sélectionné → scan SHP → (2) Cochage du SHP voulu →
                     </label>
 
                     <!-- Zone cliquable stylisée -->
-                    <label id="aux-folder-btn" style="display:flex; align-items:center; gap:12px; cursor:pointer;
+                    <div id="aux-folder-btn" onclick="choisirDossierSIG()" style="display:flex; align-items:center; gap:12px; cursor:pointer;
                            background:#0f172a; border:2px dashed rgba(14,165,233,0.4); border-radius:10px;
                            padding:14px 16px; transition: border-color .2s;"
                            onmouseover="this.style.borderColor='rgba(14,165,233,0.8)'"
@@ -55,10 +55,11 @@ Flux : (1) Dossier sélectionné → scan SHP → (2) Cochage du SHP voulu →
                                 Formats directs aussi acceptés : <code>.gpkg .geojson .zip</code>
                             </div>
                         </div>
-                        <!-- Input caché — sélection du dossier entier -->
-                        <input type="file" id="aux-file" webkitdirectory multiple style="display:none;"
-                               onchange="auxScanDossier(this.files)">
-                    </label>
+                    </div>
+                    <!-- Input caché — fallback navigateurs sans File System Access API
+                         (webkitdirectory déclenche le dialogue natif « importer N fichiers ») -->
+                    <input type="file" id="aux-file" webkitdirectory multiple style="display:none;"
+                           onchange="auxScanDossier(this.files)">
                 </div>
 
                 <!-- ── ÉTAPE 2 : Liste des SHP détectés ───────────────────── -->
