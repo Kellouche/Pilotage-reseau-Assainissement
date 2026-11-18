@@ -75,6 +75,12 @@
         quitterModePochoir();
         const menu = $id('menu-pochoir');
         if (menu) menu.style.display = 'none';
+        // Nouvelle zone : invalider tout stencil précédent
+        if (P.stencilLayer && carte() && carte().hasLayer(P.stencilLayer)) {
+            carte().removeLayer(P.stencilLayer);
+        }
+        P.stencilLayer = null;
+        P.stencilGeoJSON = null;
         const m = carte();
         if (!m) return;
         P.mode = mode;
@@ -117,7 +123,6 @@
         if (P.handlers.key) document.removeEventListener('keydown', P.handlers.key);
         _effacerDessin();
         P.mode = null;
-        P.stencilGeoJSON = null;
         const btn = $id('btn-pochoir');
         if (btn) btn.classList.remove('active');
         const el = $id('cluster-status');
