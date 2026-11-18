@@ -47,6 +47,23 @@ Objet : Barre d'outils flottante d'édition hydraulique et sectorisation manuell
             <button class="tool-btn tool-tip" id="btn-sim-historique" data-tip="Historique des simulations du bassin (exécuter / modifier / supprimer)" onclick="ouvrirModalSimulationsBassinDepuisToolbar()">
                 <i class="fas fa-history" style="color: #a78bfa;"></i>
             </button>
+            <!-- Pochoir : extraction thématique par zone (menu 2 modes) -->
+            <div style="position: relative;">
+                <button class="tool-btn tool-tip" id="btn-pochoir" data-tip="Extraction par pochoir (shp + gpkg)" onclick="basculerMenuPochoir(event)">
+                    <i class="fas fa-vector-square" style="color: #a78bfa;"></i>
+                </button>
+                <div id="menu-pochoir" style="display:none; position:absolute; right:0; top:calc(100% + 6px); background:#1e293b; border:1px solid rgba(255,255,255,0.15); border-radius:10px; box-shadow:0 12px 32px rgba(0,0,0,0.5); min-width:230px; z-index:4000; overflow:hidden;">
+                    <div style="padding:8px 12px;font-size:0.68rem;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;">Zone du pochoir</div>
+                    <button onclick="choisirModePochoir('bassin'); basculerMenuPochoir()" style="display:flex;align-items:center;gap:10px;width:100%;background:transparent;border:none;color:#e2e8f0;padding:9px 12px;cursor:pointer;font-size:0.8rem;text-align:left;">
+                        <i class="fas fa-mouse-pointer" style="color:#38bdf8;width:16px;"></i>
+                        <span><b>Bassin SIG</b><br><small style="color:#94a3b8;">Cliquer un bassin versant d'une couche importée</small></span>
+                    </button>
+                    <button onclick="choisirModePochoir('dessin'); basculerMenuPochoir()" style="display:flex;align-items:center;gap:10px;width:100%;background:transparent;border:none;color:#e2e8f0;padding:9px 12px;cursor:pointer;font-size:0.8rem;text-align:left;border-top:1px solid rgba(255,255,255,0.08);">
+                        <i class="fas fa-draw-polygon" style="color:#f59e0b;width:16px;"></i>
+                        <span><b>Dessin libre</b><br><small style="color:#94a3b8;">Tracer le polygone point par point</small></span>
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 
