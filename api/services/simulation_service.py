@@ -1205,6 +1205,19 @@ def resoudre_simulation_courante(
     candidats = q.order_by(
         Simulation.created_at.desc(), Simulation.id.desc()).limit(80).all()
 
+    # Préférer les simulations produites par la version GPKG courante du
+    # projet : même identité de bassin mais provenance la plus fraîche —
+    # une sim d'une version antérieure n'est servie qu'à défaut de
+    # simulation sur la version affichée (tri stable : created_at DESC
+    # reste l'ordre à l'intérieur de chaque groupe).
+    _vid_courante = getattr(proj, "gpkg_version_id", None)
+    if _vid_courante is not None:
+        _vid_txt = str(_vid_courante)
+        candidats = sorted(
+            candidats,
+            key=lambda s: str(getattr(s, "gpkg_version_id", "") or "") == _vid_txt,
+            reverse=True)
+
     for sim in candidats:
         if (cluster_id is not None or bassin_ref is not None
                 or exutoire_noeud is not None):
@@ -1230,8 +1243,28 @@ def resoudre_simulation_courante(
         # des simulations). Le nom du bassin, quand il est connu, doit
         # aussi correspondre : les cluster_id sont réattribués à chaque
         # sectorisation et une ancienne sim peut porter un id recyclé.
+        #
+        # EXCEPTION identités stables : quand la ligne Simulation porte
+        # EXACTEMENT le bassin_ref ou l'exutoire_noeud demandé, la base
+        # fait foi — les garde-fous meta (cluster_id positionnel recyclé,
+        # nom de bassin) ne s'appliquent qu'aux correspondances faibles.
+        # Le même exutoire peut être renommé entre versions du réseau
+        # (« Chorfa » vs « Chorfa zone 2 (STEP) ») sans changer d'identité.
         if (cluster_id is not None or exutoire_noeud is not None
                 or bassin_ref is not None):
+            _match_stable = False
+            if (bassin_ref is not None and sim.bassin_ref
+                    and str(sim.bassin_ref).strip().lower()
+                    == str(bassin_ref).strip().lower()):
+                _match_stable = True
+            if (exutoire_noeud is not None and sim.exutoire_noeud
+                    and str(sim.exutoire_noeud).strip().lower()
+                    == str(exutoire_noeud).strip().lower()):
+                _match_stable = True
+        else:
+            _match_stable = False
+        if (cluster_id is not None or exutoire_noeud is not None
+                or bassin_ref is not None) and not _match_stable:
             _meta = data.get("meta") or {}
             _meta_cid = str(_meta.get("cluster_id") or "").strip().lower()
             _cibles_cid = set()
