@@ -297,11 +297,15 @@
             entrees.forEach(entree => {
                 const meta = entree.meta || entree;
                 if (!meta || !meta.id) return;
-                const visible = !!(entree.groupe && carte() && carte().hasLayer(entree.groupe));
+                // Cochée par défaut : la modale liste les sources candidates à
+                // l'extraction — une couche décochée par inadvertance (ex. topo
+                // 'sans_altitude' jamais affichée à l'écran donc visible=false)
+                // était silencieusement omise du livrable. L'utilisateur peut
+                // toujours décocher une source qu'il ne veut pas extraire.
                 const lab = document.createElement('label');
                 lab.style.cssText = 'display:flex;align-items:center;gap:10px;padding:7px 10px;background:#0f172a;border:1px solid rgba(255,255,255,0.08);border-radius:8px;cursor:pointer;';
                 lab.innerHTML =
-                    `<input type="checkbox" class="pochoir-aux-cb" data-id="${meta.id}" ${visible ? 'checked' : ''} style="accent-color:#8b5cf6;width:15px;height:15px;">` +
+                    `<input type="checkbox" class="pochoir-aux-cb" data-id="${meta.id}" checked style="accent-color:#8b5cf6;width:15px;height:15px;">` +
                     `<span style="font-size:0.8rem;color:#e2e8f0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${meta.nom || meta.id}</span>` +
                     `<span style="font-size:0.65rem;color:#64748b;">${meta.nb_features != null ? meta.nb_features + ' objets' : ''}</span>`;
                 cont.appendChild(lab);
