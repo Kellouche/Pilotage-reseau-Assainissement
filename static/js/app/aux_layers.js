@@ -177,7 +177,7 @@
                 <input type="checkbox" id="aux-f-${c.id}" ${estTopo ? 'checked' : ''}>
                 <span class="layer-indicator" style="background:${couleur}; border-radius:50%; width:9px; height:9px;"></span>
                 <span style="font-size:0.75rem; color:#cbd5e1; flex:1; min-width:90px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${c.nom} — ${lib} — ${c.nb_features} entités">${c.nom}</span>
-                <span style="font-size:0.62rem; color:#64748b;">${lib} · ${c.nb_features}</span>
+                <span style="font-size:0.62rem; color:#64748b;">${c.nb_features} objets</span>
                 ${estTopo ? `<button type="button" class="aux-sonde-btn" data-id="${c.id}" title="Sonde altimétrique : activer puis cliquer sur la carte pour lire la cote terrain (recliquer pour désactiver)" style="background:rgba(148,163,184,0.15); border:1px solid rgba(148,163,184,0.35); color:#cbd5e1; border-radius:5px; padding:1px 6px; font-size:0.65rem; cursor:pointer;">⌖ sonde</button>
                 <button type="button" class="aux-suspects-btn" data-id="${c.id}" title="File de revue P1 : conduites dont le sens d'écoulement est suspect au regard du terrain" style="background:rgba(245,158,11,0.15); border:1px solid rgba(245,158,11,0.4); color:#fbbf24; border-radius:5px; padding:1px 6px; font-size:0.65rem; cursor:pointer;">⇄ écoulement</button>` : ''}
             `;

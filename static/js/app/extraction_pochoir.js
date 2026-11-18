@@ -51,7 +51,7 @@
         const m = $id('menu-pochoir');
         if (!m) return;
         const ouvrir = m.style.display === 'none';
-        m.style.display = ouvrir ? 'block' : 'none';
+        m.style.display = ouvrir ? 'flex' : 'none';
         if (ouvrir && !P._docClose) {
             P._docClose = true;
             document.addEventListener('click', _fermerMenuDoc);
@@ -73,6 +73,8 @@
     window.choisirModePochoir = function (mode) {
         if (P.mode === mode) { quitterModePochoir(); return; }
         quitterModePochoir();
+        const menu = $id('menu-pochoir');
+        if (menu) menu.style.display = 'none';
         const m = carte();
         if (!m) return;
         P.mode = mode;
@@ -152,6 +154,17 @@
         return false;
     }
 
+    /**
+     * Traversée récursive des couches Leaflet : L.geoJSON ajoute un
+     * FeatureGroup comme ENFANT unique du layerGroup — eachLayer seul
+     * ne descend pas jusqu'aux features (d'où les « aucun bassin »).
+     */
+    function _parcourirFeatures(layer, cb) {
+        if (!layer) return;
+        if (layer.feature && layer.feature.geometry) { cb(layer); return; }
+        if (layer.eachLayer) layer.eachLayer(enfant => _parcourirFeatures(enfant, cb));
+    }
+
     /** Cherche la première feature polygone de couche auxiliaire sous le clic. */
     function _featureSousClic(latlng) {
         const aux = window.AUX_LAYERS;
@@ -161,7 +174,7 @@
             const groupe = entree && entree.groupe;
             if (!groupe || !groupe.eachLayer) continue;
             let trouve = null;
-            groupe.eachLayer(l => {
+            _parcourirFeatures(groupe, l => {
                 if (trouve) return;
                 const f = l.feature;
                 const g = f && f.geometry;
@@ -285,7 +298,7 @@
                 lab.innerHTML =
                     `<input type="checkbox" class="pochoir-aux-cb" data-id="${meta.id}" ${visible ? 'checked' : ''} style="accent-color:#8b5cf6;width:15px;height:15px;">` +
                     `<span style="font-size:0.8rem;color:#e2e8f0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${meta.nom || meta.id}</span>` +
-                    `<span style="font-size:0.65rem;color:#64748b;">${meta.type || ''}</span>`;
+                    `<span style="font-size:0.65rem;color:#64748b;">${meta.nb_features != null ? meta.nb_features + ' objets' : ''}</span>`;
                 cont.appendChild(lab);
             });
             const n = cont.children.length;
