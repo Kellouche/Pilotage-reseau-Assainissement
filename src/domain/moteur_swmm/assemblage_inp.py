@@ -154,7 +154,28 @@ def assembler_modele_inp_impl(
             sb_gdf = None
 
     if sb_gdf is None or sb_gdf.empty:
-        sb_gdf = gh_local.generer_sous_bassins(regards, canalisations)
+        # Projets issus d'une extraction par pochoir : clipper les
+        # sous-bassins Voronoï à la couche 'pochoir' (bassin versant
+        # étudié) plutôt qu'à l'enveloppe de buffers, qui déborde du
+        # bassin puisque les objets sont exportés entiers.
+        emprise_bassin = None
+        try:
+            _layers = gpd.list_layers(str(gpkg_path))["name"].tolist()
+            _pochoir_layer = next((l for l in _layers if "pochoir" in l.lower()), None)
+            if _pochoir_layer:
+                _pg = gpd.read_file(str(gpkg_path), layer=_pochoir_layer)
+                if isinstance(_pg, gpd.GeoDataFrame) and not _pg.empty:
+                    _crs_ref = regards.crs if regards.crs is not None else _pg.crs
+                    if _pg.crs is None:
+                        _pg = _pg.set_crs(_crs_ref)
+                    elif _crs_ref is not None and str(_pg.crs) != str(_crs_ref):
+                        _pg = _pg.to_crs(_crs_ref)
+                    emprise_bassin = _pg.union_all()
+        except Exception as e_emp:
+            logger.warning(f"[assemblage_inp] Emprise pochoir illisible: {e_emp}")
+            emprise_bassin = None
+        sb_gdf = gh_local.generer_sous_bassins(
+            regards, canalisations, emprise_bassin=emprise_bassin)
     swmm_sec = gh_local.formater_sections_swmm(sb_gdf, rain_gage_name="RG1")
 
     # Génération des sections

@@ -131,20 +131,20 @@ def test_extraction_reseau_shp_gpkg(db, org_projet_reseau):
     assert r.status_code == 200, r.text
     ex = r.json()["extraction"]
     assert ex["statut"] == "ok"
-    assert ex["stats"]["reseau_regard"] == 2
-    assert ex["stats"]["reseau_conduite"] == 1
+    assert ex["stats"]["reseau_regards"] == 2
+    assert ex["stats"]["reseau_canalisations"] == 1
     assert ex["url_download"].startswith("/api/v1/artifacts/download")
 
     zf = _lire_zip(ex["url_download"], tok)
     noms = zf.namelist()
     # Shapefiles thématiques (côté .shp)
-    assert "bassin_test_regard.shp" in noms
-    assert "bassin_test_conduite.shp" in noms
+    assert "bassin_test_regards.shp" in noms
+    assert "bassin_test_canalisations.shp" in noms
     assert "bassin_test.gpkg" in noms
     assert "manifeste.json" in noms
 
     manifeste = json.loads(zf.read("manifeste.json").decode("utf-8"))
-    assert manifeste["stats"]["reseau_regard"] == 2
+    assert manifeste["stats"]["reseau_regards"] == 2
     assert manifeste["pochoir"]["type"] == "Polygon"
 
     # Le gpkg contient le pochoir + les 2 thèmes
@@ -154,7 +154,7 @@ def test_extraction_reseau_shp_gpkg(db, org_projet_reseau):
         tmp_gpkg = tf.name
     couches = _gpd.list_layers(tmp_gpkg)["name"].tolist()
     assert "pochoir" in couches
-    assert "regard" in couches and "conduite" in couches
+    assert "regards" in couches and "canalisations" in couches
 
     # Aucune couche vide dans le gpkg (régression 'Error adding field fid')
     import sqlite3
@@ -281,14 +281,14 @@ def test_extraction_fusion_themes_homonymes(db, tmp_path):
         assert r.status_code == 200, r.text
         ex = r.json()["extraction"]
         # 1 (canalisations) + 1 (conduites) = 2 conduites cumulées
-        assert ex["stats"]["reseau_conduite"] == 2
+        assert ex["stats"]["reseau_canalisations"] == 2
         assert ex["nb_objets"] == sum(ex["stats"].values())
 
         zf = _lire_zip(ex["url_download"], ctx["token"])
         noms = zf.namelist()
         # Un seul shp de thème conduite (pas de conduite_2)
-        assert "fusion_conduite.shp" in noms
-        assert "fusion_conduite_2.shp" not in noms
+        assert "fusion_canalisations.shp" in noms
+        assert "fusion_canalisations_2.shp" not in noms
 
         import sqlite3
         with tempfile.NamedTemporaryFile(suffix=".gpkg", delete=False) as tf:
@@ -297,10 +297,66 @@ def test_extraction_fusion_themes_homonymes(db, tmp_path):
         conn = sqlite3.connect(tmp_g)
         couches = [r[0] for r in conn.execute(
             "SELECT table_name FROM gpkg_contents WHERE data_type='features'")]
-        assert "conduite" in couches and "conduite_2" not in couches
-        n = conn.execute('SELECT COUNT(*) FROM "conduite"').fetchone()[0]
-        assert n == 2, f"conduite gpkg = {n} ligne(s), attendu 2"
+        assert "canalisations" in couches and "canalisations_2" not in couches
+        n = conn.execute('SELECT COUNT(*) FROM "canalisations"').fetchone()[0]
+        assert n == 2, f"canalisations gpkg = {n} ligne(s), attendu 2"
         conn.close()
+        Path(tmp_g).unlink(missing_ok=True)
+    finally:
+        _supprimer_contexte(db, ctx)
+
+
+def test_extraction_conserve_crs_source_utm(db, tmp_path):
+    """Le gpkg extrait conserve le CRS projeté source (EPSG:32631).
+
+    Régression critique : forcer EPSG:4326 cassait le Voronoï —
+    generer_sous_bassins fait pt.buffer(35 m) en supposant des mètres ;
+    en degrés, l'enveloppe couvre ~3 500 km (« rectangle » + étirements).
+    """
+    sfx = _uid()
+    gpkg = tmp_path / "reseau_utm.gpkg"
+    # Coordonnées UTM 31N autour de Chlef (~1.30E, 36.15N)
+    regards = gpd.GeoDataFrame(
+        {"Code": ["R_IN", "R_MID", "R_OUT"]},
+        geometry=[Point(347500, 4002500), Point(347600, 4002600),
+                  Point(347700, 4002700)],
+        crs="EPSG:32631",
+    )
+    regards.to_file(str(gpkg), layer="regards", driver="GPKG")
+    canas = gpd.GeoDataFrame(
+        {"Code": ["C_IN"]},
+        geometry=[LineString([(347500, 4002500), (347600, 4002600)])],
+        crs="EPSG:32631",
+    )
+    canas.to_file(str(gpkg), layer="canalisations", driver="GPKG", mode="a")
+    ctx = _creer_contexte(db, gpkg, sfx)
+    try:
+        # Pochoir soumis en EPSG:4326 (GeoJSON Leaflet) couvrant la zone
+        poly4326 = {"type": "Polygon", "coordinates": [
+            [[1.30, 36.15], [1.31, 36.15], [1.31, 36.16],
+             [1.30, 36.16], [1.30, 36.15]]]}
+        client = TestClient(app)
+        r = client.post(
+            f"/api/v1/projets/{ctx['proj'].id}/extraction-pochoir",
+            json={"nom": "UTM", "geojson": poly4326,
+                  "inclure_reseau": True, "aux_layer_ids": []},
+            headers=_h(ctx["token"]),
+        )
+        assert r.status_code == 200, r.text
+        ex = r.json()["extraction"]
+        assert ex["manifeste"]["crs_sortie"] == "EPSG:32631"
+        assert ex["stats"]["reseau_regards"] == 3
+        assert ex["stats"]["reseau_canalisations"] == 1
+
+        zf = _lire_zip(ex["url_download"], ctx["token"])
+        with tempfile.NamedTemporaryFile(suffix=".gpkg", delete=False) as tf:
+            tf.write(zf.read("utm.gpkg"))
+            tmp_g = tf.name
+        g = gpd.read_file(tmp_g, layer="regards", rows=1)
+        assert str(g.crs) == "EPSG:32631", f"CRS extrait = {g.crs}"
+        # le pochoir est stocké dans le même CRS métrique
+        gp = gpd.read_file(tmp_g, layer="pochoir", rows=1)
+        assert str(gp.crs) == "EPSG:32631"
         Path(tmp_g).unlink(missing_ok=True)
     finally:
         _supprimer_contexte(db, ctx)
@@ -361,7 +417,7 @@ def test_extraction_gpkg_avec_colonne_fid(db, tmp_path):
             n = conn.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0]
             assert n > 0, f"couche gpkg vide : {t}"
         # la valeur fid source est préservée sous fid_attribut
-        cols = [r[1] for r in conn.execute("PRAGMA table_info(conduite)")]
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(canalisations)")]
         assert "fid_attribut" in cols
         conn.close()
         Path(tmp_g).unlink(missing_ok=True)

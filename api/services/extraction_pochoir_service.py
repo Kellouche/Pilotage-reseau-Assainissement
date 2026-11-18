@@ -39,14 +39,17 @@ logger = logging.getLogger(__name__)
 
 WGS84 = "EPSG:4326"
 
-# Thème canonique par nom de couche GPKG projet (singulier, nom de fichier)
+# Thème canonique par nom de couche GPKG projet.
+# SORTIE AU PLURIEL : les conventions de l'application (affichage
+# main.py KEYWORDS, graphe_reseau, valider_gpkg) attendent les noms
+# pluriels des gpkg projets (Regards_*, Canalisations_*, Rejets_*).
 _THEMES_RESEAU = {
-    "regards": "regard",
-    "canalisations": "conduite",
-    "conduites": "conduite",
-    "rejets": "rejet",
-    "sous_bassins": "sous_bassin",
-    "bassins": "bassin",
+    "regards": "regards",
+    "canalisations": "canalisations",
+    "conduites": "canalisations",
+    "rejets": "rejets",
+    "sous_bassins": "sous_bassins",
+    "bassins": "bassins",
 }
 
 
@@ -65,8 +68,8 @@ _UUID_SUFFIX = re.compile(
 
 def _theme_reseau(layer_name: str) -> str:
     """Thème canonique : retire le suffixe UUID des couches GPKG projet
-    (canalisations_860f298d_… → conduite) et gère les variantes
-    (canalisations_desaffecte → conduite_desaffecte)."""
+    (Canalisations_860f298d_… → canalisations) et gère les variantes
+    (canalisations_desaffecte → canalisations_desaffecte)."""
     cle = _slug(layer_name)
     cle = _UUID_SUFFIX.sub("", cle)
     if cle in _THEMES_RESEAU:
@@ -93,12 +96,41 @@ def _valider_polygone(geojson_geom: Dict[str, Any]) -> Polygon:
     return geom
 
 
-def _gdf_en_4326(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+def _gdf_en_crs(gdf: gpd.GeoDataFrame, crs: str) -> gpd.GeoDataFrame:
+    """Reprojette (ou affecte) le gdf vers le CRS cible."""
     if gdf.crs is None:
-        gdf = gdf.set_crs(WGS84)
-    elif str(gdf.crs) != WGS84:
-        gdf = gdf.to_crs(WGS84)
+        return gdf.set_crs(crs)
+    if str(gdf.crs) != str(crs):
+        return gdf.to_crs(crs)
     return gdf
+
+
+def _reproj_polygone(geom, src_crs: str, dst_crs: str):
+    """Reprojette une géométrie shapely d'un CRS vers un autre."""
+    if src_crs == dst_crs:
+        return geom
+    gs = gpd.GeoSeries([geom], crs=src_crs)
+    return gs.to_crs(dst_crs).iloc[0]
+
+
+def _crs_source_gpkg(gpkg_path) -> Optional[str]:
+    """CRS de la première couche lisible du gpkg projet (ex. EPSG:32631).
+
+    CRITIQUE : le gpkg extrait DOIT conserver le CRS source — les
+    pipelines hydrologiques (Voronoï, buffers en mètres) supposent un
+    CRS projeté ; forcer EPSG:4326 produit des enveloppes de 35
+    DEGRÉS (~3 500 km) et des sous-bassins aberrants."""
+    try:
+        for layer in gpd.list_layers(str(gpkg_path))["name"]:
+            try:
+                g = gpd.read_file(str(gpkg_path), layer=layer, rows=1)
+            except Exception:
+                continue
+            if isinstance(g, gpd.GeoDataFrame) and g.crs is not None:
+                return str(g.crs)
+    except Exception:
+        pass
+    return None
 
 
 def _filtrer(gdf: gpd.GeoDataFrame, pochoir: Polygon) -> gpd.GeoDataFrame:
@@ -131,12 +163,16 @@ def _fusionner_par_theme(entrees: List[Tuple[str, gpd.GeoDataFrame]]
         if len(gdfs) == 1:
             resultat.append((theme, gdfs[0]))
             continue
+        # Normalise tous les gdf sur le CRS du premier (même thème =
+        # même famille d'objets ; un gpkg peut mélanger les CRS)
+        crs_ref = gdfs[0].crs or WGS84
+        gdfs_norm = [_gdf_en_crs(g, str(crs_ref)) for g in gdfs]
         try:
             fusion = gpd.GeoDataFrame(
-                pd.concat(gdfs, ignore_index=True), crs=WGS84)
+                pd.concat(gdfs_norm, ignore_index=True), crs=str(crs_ref))
         except Exception as e:
             logger.warning("[pochoir] fusion thème %s impossible (%s) — couches séparées", theme, e)
-            resultat.extend((theme, g) for g in gdfs)
+            resultat.extend((theme, g) for g in gdfs_norm)
             continue
         types_geom = {str(t) for t in fusion.geometry.geom_type.unique()}
         if len(types_geom) <= 1:
@@ -205,6 +241,15 @@ def extraire_par_pochoir(
     if inclure_reseau and gpkg_path is None:
         raise ValueError("Aucun réseau chargé : impossible d'extraire le projet.")
 
+    # CRS de sortie = CRS du gpkg source (projeté, ex. EPSG:32631).
+    # JAMAIS forcé en EPSG:4326 : les pipelines hydrologiques
+    # (buffers en mètres, diagramme de Voronoï) exigent un CRS
+    # métrique — en degrés, une enveloppe de 35 « unités » couvre
+    # ~3 500 km et produit des sous-bassins aberrants.
+    crs_sortie = (_crs_source_gpkg(gpkg_path)
+                  if (inclure_reseau and gpkg_path) else None) or WGS84
+    pochoir_sortie = _reproj_polygone(pochoir, WGS84, crs_sortie)
+
     stats: Dict[str, int] = {}
     themes: List[Tuple[str, gpd.GeoDataFrame]] = []  # (theme_slug, gdf filtré)
 
@@ -221,8 +266,8 @@ def extraire_par_pochoir(
                 continue
             if not isinstance(gdf, gpd.GeoDataFrame):
                 continue  # table non spatiale (log_*) — pas de géométrie
-            gdf = _gdf_en_4326(gdf)
-            extrait = _filtrer(gdf, pochoir)
+            gdf = _gdf_en_crs(gdf, crs_sortie)
+            extrait = _filtrer(gdf, pochoir_sortie)
             theme = _theme_reseau(layer_name)
             cle_stat = f"reseau_{theme}"
             stats[cle_stat] = stats.get(cle_stat, 0) + len(extrait)
@@ -248,11 +293,14 @@ def extraire_par_pochoir(
             if couche is None:
                 continue  # hors version courante → invisible, ignorée
             try:
-                gdf = _gdf_en_4326(lire_gdf_couche(couche.id, couche.storage_key))
+                gdf = lire_gdf_couche(couche.id, couche.storage_key)
             except Exception as e:
                 logger.warning("[pochoir] couche satellite illisible %s : %s", lid, e)
                 continue
-            extrait = _filtrer(gdf, pochoir)
+            if not isinstance(gdf, gpd.GeoDataFrame):
+                continue
+            gdf = _gdf_en_crs(gdf, crs_sortie)
+            extrait = _filtrer(gdf, pochoir_sortie)
             theme = f"sat_{_slug(couche.nom)}"
             cle_stat = f"sat_{theme[4:]}"
             stats[cle_stat] = stats.get(cle_stat, 0) + len(extrait)
@@ -275,10 +323,13 @@ def extraire_par_pochoir(
         gpkg_sortie = td_path / f"{nom_base}.gpkg"
         noms_utilises: Dict[str, int] = {}
 
-        # Le polygone pochoir en premier : traçabilité de la zone
+        # Le polygone pochoir en premier : traçabilité de la zone.
+        # Stocké dans le CRS de sortie (métrique) pour rester cohérent
+        # avec les autres couches — le manifeste conserve le GeoJSON
+        # EPSG:4326 d'origine.
         gdf_pochoir = gpd.GeoDataFrame(
             {"type": ["pochoir"], "nom": [nom_propre]},
-            geometry=[pochoir], crs=WGS84,
+            geometry=[pochoir_sortie], crs=crs_sortie,
         )
         premier = True
         for theme, gdf in [("pochoir", gdf_pochoir)] + themes:
@@ -290,7 +341,7 @@ def extraire_par_pochoir(
             try:
                 gdf = _prep_gdf_ecriture(gdf)
                 if gdf.crs is None:
-                    gdf = gdf.set_crs(WGS84)
+                    gdf = gdf.set_crs(crs_sortie)
                 gdf.to_file(str(gpkg_sortie), layer=nom_couche, driver="GPKG",
                             mode="w" if premier else "a")
                 premier = False
@@ -311,6 +362,7 @@ def extraire_par_pochoir(
         manifeste = {
             "nom": nom_propre,
             "date": datetime.now(timezone.utc).isoformat(),
+            "crs_sortie": crs_sortie,
             "pochoir": geojson_geom,
             "stats": stats,
             "couches": [t for t, _ in themes],

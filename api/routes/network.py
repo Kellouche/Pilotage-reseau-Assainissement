@@ -830,8 +830,30 @@ def get_network_subcatchments(
     regards_gdf = gpd.read_file(str(gpkg_path), layer=regard_layer)
     canalisations_gdf = gpd.read_file(str(gpkg_path), layer=pipe_layer) if pipe_layer else gpd.GeoDataFrame()
 
+    # Projets issus d'une extraction par pochoir : la couche 'pochoir'
+    # délimite le bassin versant étudié — les sous-bassins Voronoï sont
+    # alors clipés à cette emprise (et non à l'enveloppe de buffers,
+    # qui déborde du bassin puisque les objets sont exportés entiers).
+    emprise_bassin = None
+    pochoir_layer = next(
+        (l for l in layers if 'pochoir' in l.lower()), None)
+    if pochoir_layer:
+        try:
+            pg = gpd.read_file(str(gpkg_path), layer=pochoir_layer)
+            if isinstance(pg, gpd.GeoDataFrame) and not pg.empty:
+                if pg.crs is None and regards_gdf.crs is not None:
+                    pg = pg.set_crs(regards_gdf.crs)
+                elif pg.crs is not None and regards_gdf.crs is not None \
+                        and str(pg.crs) != str(regards_gdf.crs):
+                    pg = pg.to_crs(regards_gdf.crs)
+                emprise_bassin = pg.union_all()
+        except Exception as e:
+            print(f"[subcatchments] Emprise pochoir illisible: {e}", flush=True)
+            emprise_bassin = None
+
     gh = GenerateurHydrologie()
-    subcatchments = gh.generer_sous_bassins(regards_gdf, canalisations_gdf)
+    subcatchments = gh.generer_sous_bassins(
+        regards_gdf, canalisations_gdf, emprise_bassin=emprise_bassin)
 
     if subcatchments.empty:
         return {
