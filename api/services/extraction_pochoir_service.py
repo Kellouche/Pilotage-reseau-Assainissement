@@ -58,9 +58,23 @@ def _slug(nom: str) -> str:
     return s or "couche"
 
 
+_UUID_SUFFIX = re.compile(
+    r"_[0-9a-f]{8}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{12}$")
+
+
 def _theme_reseau(layer_name: str) -> str:
+    """Thème canonique : retire le suffixe UUID des couches GPKG projet
+    (canalisations_860f298d_… → conduite) et gère les variantes
+    (canalisations_desaffecte → conduite_desaffecte)."""
     cle = _slug(layer_name)
-    return _THEMES_RESEAU.get(cle, cle)
+    cle = _UUID_SUFFIX.sub("", cle)
+    if cle in _THEMES_RESEAU:
+        return _THEMES_RESEAU[cle]
+    for prefix, theme in _THEMES_RESEAU.items():
+        if cle.startswith(prefix + "_"):
+            suffixe = cle[len(prefix) + 1:]
+            return f"{theme}_{suffixe}"
+    return cle
 
 
 def _valider_polygone(geojson_geom: Dict[str, Any]) -> Polygon:
