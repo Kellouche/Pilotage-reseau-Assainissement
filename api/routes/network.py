@@ -17,7 +17,12 @@ from pathlib import Path
 from api.database import get_db
 from api import schemas, crud
 from api.models import Project, Organization
-from api.core.security import get_tenant_context, get_tenant_context_optional, TenantContext
+from api.core.security import (
+    get_tenant_context,
+    get_tenant_context_optional,
+    require_role,
+    TenantContext,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -59,15 +64,17 @@ def list_regards(
     limit: int = Query(100, ge=1, le=1000),
     commune: Optional[str] = None,
     cluster_id: Optional[int] = None,
+    ctx: TenantContext = Depends(require_role("viewer")),
     db: Session = Depends(get_db)
 ):
-    """Liste des regards avec filtres optionnels."""
+    """Liste des regards avec filtres optionnels cloisonnés par organisation."""
     regards = crud.get_regards(
         db=db,
         skip=skip,
         limit=limit,
         commune=commune,
-        cluster_id=cluster_id
+        cluster_id=cluster_id,
+        org_id=ctx.org_id,
     )
     total = len(regards)  # Pour POC, on compte simplement
     return {
@@ -79,22 +86,32 @@ def list_regards(
 
 
 @router.get("/regards/{regard_id}", response_model=schemas.RegardResponse)
-def get_regard(regard_id: int, db: Session = Depends(get_db)):
-    """Détail d'un regard par ID."""
-    regard = crud.get_regard(db, regard_id)
+def get_regard(
+    regard_id: int,
+    ctx: TenantContext = Depends(require_role("viewer")),
+    db: Session = Depends(get_db)
+):
+    """Détail d'un regard par ID (stealth 404 si hors organisation)."""
+    regard = crud.get_regard(db, regard_id, org_id=ctx.org_id)
     if not regard:
-        raise HTTPException(status_code=404, detail="Regard non trouvé")
+        raise HTTPException(status_code=404, detail="Ressource introuvable")
     return regard.to_dict()
 
 
 @router.post("/regards", response_model=schemas.RegardResponse, status_code=status.HTTP_201_CREATED)
-def create_regard(regard: schemas.RegardCreate, user_id: str = "system", db: Session = Depends(get_db)):
-    """Crée un nouveau regard."""
+def create_regard(
+    regard: schemas.RegardCreate,
+    ctx: TenantContext = Depends(require_role("engineer")),
+    db: Session = Depends(get_db)
+):
+    """Crée un nouveau regard pour l'organisation active."""
+    user_id = ctx.user.id if ctx.user else str(ctx.actor.id)
     try:
         regard_obj = crud.create_regard(
             db=db,
             regard_data=regard.dict(),
-            user_id=user_id
+            user_id=user_id,
+            org_id=ctx.org_id,
         )
         return regard_obj.to_dict()
     except ValueError as e:
@@ -107,18 +124,20 @@ from api.websocket import manager
 async def update_regard(
     regard_id: str,
     update: schemas.RegardUpdate,
-    user_id: str = "system",
+    ctx: TenantContext = Depends(require_role("engineer")),
     db: Session = Depends(get_db)
 ):
-    """Met à jour partiellement un regard."""
+    """Met à jour partiellement un regard appartenant à l'organisation."""
+    user_id = ctx.user.id if ctx.user else str(ctx.actor.id)
     updated = crud.update_regard(
         db=db,
         regard_id=regard_id,
         update_data=update.dict(exclude_unset=True),
-        user_id=user_id
+        user_id=user_id,
+        org_id=ctx.org_id,
     )
     if not updated:
-        raise HTTPException(status_code=404, detail="Regard non trouvé")
+        raise HTTPException(status_code=404, detail="Ressource introuvable")
         
     msg = f"Objet : Regard {updated.code or updated.id} modifié par {user_id} [{updated.longitude},{updated.latitude}]"
     await manager.broadcast(msg)
@@ -127,11 +146,16 @@ async def update_regard(
 
 
 @router.delete("/regards/{regard_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_regard(regard_id: int, user_id: str = "system", db: Session = Depends(get_db)):
-    """Supprime un regard."""
-    success = crud.delete_regard(db, regard_id, user_id=user_id)
+def delete_regard(
+    regard_id: int,
+    ctx: TenantContext = Depends(require_role("engineer")),
+    db: Session = Depends(get_db)
+):
+    """Supprime un regard de l'organisation."""
+    user_id = ctx.user.id if ctx.user else str(ctx.actor.id)
+    success = crud.delete_regard(db, regard_id, user_id=user_id, org_id=ctx.org_id)
     if not success:
-        raise HTTPException(status_code=404, detail="Regard non trouvé")
+        raise HTTPException(status_code=404, detail="Ressource introuvable")
     return None
 
 
@@ -144,39 +168,47 @@ def list_conduites(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     cluster_id: Optional[int] = None,
+    ctx: TenantContext = Depends(require_role("viewer")),
     db: Session = Depends(get_db)
 ):
-    """Liste des canalisations."""
+    """Liste des canalisations cloisonnées par organisation."""
     conduites = crud.get_canalisations(
         db=db,
         skip=skip,
         limit=limit,
-        cluster_id=cluster_id
+        cluster_id=cluster_id,
+        org_id=ctx.org_id,
     )
     return conduites  # Retourne objets ORM directly, Pydantic gère via orm_mode
 
 
 @router.get("/conduites/{conduite_id}", response_model=schemas.CanalisationResponse)
-def get_conduite(conduite_id: int, db: Session = Depends(get_db)):
-    """Détail d'une canalisation."""
-    conduite = crud.get_canalisation(db, conduite_id)
+def get_conduite(
+    conduite_id: int,
+    ctx: TenantContext = Depends(require_role("viewer")),
+    db: Session = Depends(get_db)
+):
+    """Détail d'une canalisation (stealth 404 si hors organisation)."""
+    conduite = crud.get_canalisation(db, conduite_id, org_id=ctx.org_id)
     if not conduite:
-        raise HTTPException(status_code=404, detail="Canalisation non trouvée")
+        raise HTTPException(status_code=404, detail="Ressource introuvable")
     return conduite.to_dict()
 
 
 @router.post("/conduites", response_model=schemas.CanalisationResponse, status_code=status.HTTP_201_CREATED)
 def create_conduite(
     conduite: schemas.CanalisationCreate,
-    user_id: str = "system",
+    ctx: TenantContext = Depends(require_role("engineer")),
     db: Session = Depends(get_db)
 ):
-    """Crée une nouvelle canalisation."""
+    """Crée une nouvelle canalisation pour l'organisation active."""
+    user_id = ctx.user.id if ctx.user else str(ctx.actor.id)
     try:
         conduite_obj = crud.create_canalisation(
             db=db,
             canalisation_data=conduite.dict(),
-            user_id=user_id
+            user_id=user_id,
+            org_id=ctx.org_id,
         )
         return conduite_obj.to_dict()
     except ValueError as e:
@@ -187,18 +219,20 @@ def create_conduite(
 async def update_conduite(
     conduite_id: str,
     update: schemas.CanalisationUpdate,
-    user_id: str = "system",
+    ctx: TenantContext = Depends(require_role("engineer")),
     db: Session = Depends(get_db)
 ):
-    """Met à jour une canalisation."""
+    """Met à jour une canalisation de l'organisation."""
+    user_id = ctx.user.id if ctx.user else str(ctx.actor.id)
     updated = crud.update_canalisation(
         db=db,
         canalisation_id=conduite_id,
         update_data=update.dict(exclude_unset=True),
-        user_id=user_id
+        user_id=user_id,
+        org_id=ctx.org_id,
     )
     if not updated:
-        raise HTTPException(status_code=404, detail="Canalisation non trouvée")
+        raise HTTPException(status_code=404, detail="Ressource introuvable")
         
     msg = f"Objet : Conduite {updated.fid or updated.id} modifiée par {user_id} [0.0,0.0]"
     await manager.broadcast(msg)
@@ -207,11 +241,16 @@ async def update_conduite(
 
 
 @router.delete("/conduites/{conduite_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_conduite(conduite_id: int, user_id: str = "system", db: Session = Depends(get_db)):
-    """Supprime une canalisation."""
-    success = crud.delete_canalisation(db, conduite_id, user_id=user_id)
+def delete_conduite(
+    conduite_id: int,
+    ctx: TenantContext = Depends(require_role("engineer")),
+    db: Session = Depends(get_db)
+):
+    """Supprime une canalisation de l'organisation."""
+    user_id = ctx.user.id if ctx.user else str(ctx.actor.id)
+    success = crud.delete_canalisation(db, conduite_id, user_id=user_id, org_id=ctx.org_id)
     if not success:
-        raise HTTPException(status_code=404, detail="Canalisation non trouvée")
+        raise HTTPException(status_code=404, detail="Ressource introuvable")
     return None
 
 
@@ -220,17 +259,22 @@ def delete_conduite(conduite_id: int, user_id: str = "system", db: Session = Dep
 # ============================================================
 
 @router.get("/rejets", response_model=List[schemas.RejetResponse])
-def list_rejets(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """Liste des rejets (exutoires)."""
+def list_rejets(
+    skip: int = 0,
+    limit: int = 100,
+    ctx: TenantContext = Depends(require_role("viewer")),
+    db: Session = Depends(get_db)
+):
+    """Liste des rejets (exutoires) cloisonnés par organisation."""
     from api.models import Rejet
-    rejets = db.query(Rejet).offset(skip).limit(limit).all()
+    rejets = db.query(Rejet).filter(Rejet.org_id == ctx.org_id).offset(skip).limit(limit).all()
     return [r.to_dict() for r in rejets]
 
 
 @router.post("/rejets", response_model=schemas.RejetResponse, status_code=status.HTTP_201_CREATED)
 def create_rejet(
     rejet: schemas.RejetCreate,
-    user_id: str = "system",
+    ctx: TenantContext = Depends(require_role("engineer")),
     db: Session = Depends(get_db)
 ):
     """Crée un nouveau rejet."""
@@ -363,25 +407,19 @@ def list_available_datasets(
     response.headers["Expires"] = "0"
     active_project = None
     try:
-        org_id = tenant_ctx.org_id if tenant_ctx else None
-        if not org_id:
-            default_org = db.query(Organization).first()
-            org_id = default_org.id if default_org else "org_default"
-
-        proj = db.query(Project).filter(Project.org_id == org_id, Project.is_archived.is_(False)).first()
-        if not proj:
-            proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
-
-        from api.services.simulation_service import resoudre_gpkg_effectif_pour_projet
-        chemin_eff = resoudre_gpkg_effectif_pour_projet(db, proj)
-        if chemin_eff is not None:
-            active_project = {
-                "id": proj.id,
-                "name": proj.name or "Projet Réseau Actif",
-                "pipes_count": proj.pipes_count or 0,
-                "nodes_count": proj.nodes_count or 0,
-                "gpkg_path": str(chemin_eff)
-            }
+        if tenant_ctx and tenant_ctx.org_id:
+            proj = db.query(Project).filter(Project.org_id == tenant_ctx.org_id, Project.is_archived.is_(False)).first()
+            if proj:
+                from api.services.simulation_service import resoudre_gpkg_effectif_pour_projet
+                chemin_eff = resoudre_gpkg_effectif_pour_projet(db, proj)
+                if chemin_eff is not None:
+                    active_project = {
+                        "id": proj.id,
+                        "name": proj.name or "Projet Réseau Actif",
+                        "pipes_count": proj.pipes_count or 0,
+                        "nodes_count": proj.nodes_count or 0,
+                        "gpkg_path": str(chemin_eff)
+                    }
     except Exception as e:
         print(f"[datasets] Erreur extraction projet actif: {e}", flush=True)
 
@@ -391,10 +429,10 @@ def list_available_datasets(
 @router.post("/load-dataset/{dataset_id}")
 def load_benchmark_dataset(
     dataset_id: str,
-    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context_optional),
+    ctx: TenantContext = Depends(require_role("admin")),
     db: Session = Depends(get_db)
 ):
-    """Charge l'un des jeux de données officiels EPA ou de démonstration."""
+    """Charge l'un des jeux de données officiels EPA ou de démonstration pour l'organisation active."""
     ds = next((d for d in AVAILABLE_DATASETS if d["id"] == dataset_id), None)
     if not ds:
         raise HTTPException(status_code=404, detail="Jeu de données introuvable.")
@@ -403,13 +441,10 @@ def load_benchmark_dataset(
     if not target_path.exists():
         raise HTTPException(status_code=500, detail=f"Fichier réseau introuvable : {ds['gpkg_path']}")
 
-    if ds["id"] == "ville_complete" and not (tenant_ctx and tenant_ctx.user and tenant_ctx.user.is_superadmin):
+    if ds["id"] == "ville_complete" and not (ctx.user and ctx.user.is_superadmin):
         raise HTTPException(status_code=403, detail="Seul un SuperAdmin peut charger le réseau réel complet de la ville.")
 
-    org_id = tenant_ctx.org_id if tenant_ctx else None
-    if not org_id:
-        default_org = db.query(Organization).first()
-        org_id = default_org.id if default_org else "org_default"
+    org_id = ctx.org_id
 
     project = db.query(Project).filter(
         Project.org_id == org_id,
@@ -742,37 +777,23 @@ async def upload_network_gpkg(
 
 @router.get("/subcatchments")
 def get_network_subcatchments(
-    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context_optional),
+    ctx: TenantContext = Depends(require_role("viewer")),
     db: Session = Depends(get_db)
 ):
     """
     Génère et retourne les sous-bassins versants élémentaires (Subcatchments)
-    au format GeoJSON pour le réseau actif du projet.
+    au format GeoJSON pour le réseau actif du projet de l'organisation.
     """
     import json
     from src.domain.hydrologie import GenerateurHydrologie
     import geopandas as gpd
+    from api.services.simulation_service import resoudre_gpkg_effectif_pour_projet
 
-    gpkg_path = None
-    if tenant_ctx and tenant_ctx.org_id:
-        from api.services.simulation_service import resoudre_gpkg_effectif_pour_projet
-        project = db.query(Project).filter(
-            Project.org_id == tenant_ctx.org_id,
-            Project.is_archived.is_(False)
-        ).first()
-        gpkg_path = resoudre_gpkg_effectif_pour_projet(db, project)
-        if gpkg_path is None:
-            return {
-                "type": "FeatureCollection",
-                "features": [],
-                "total_area_ha": 0.0,
-                "subcatchments_count": 0,
-                "message": "Aucun réseau chargé pour ce projet."
-            }
-    else:
-        cand = Path("data/demo_reseau.gpkg")
-        if cand.exists():
-            gpkg_path = cand
+    project = db.query(Project).filter(
+        Project.org_id == ctx.org_id,
+        Project.is_archived.is_(False)
+    ).first()
+    gpkg_path = resoudre_gpkg_effectif_pour_projet(db, project) if project else None
 
     if gpkg_path is None or not gpkg_path.exists():
         return {
@@ -780,7 +801,7 @@ def get_network_subcatchments(
             "features": [],
             "total_area_ha": 0.0,
             "subcatchments_count": 0,
-            "message": "Aucun fichier GeoPackage disponible."
+            "message": "Aucun réseau chargé pour ce projet."
         }
 
     # Vérification cache rapide sur disque
@@ -876,7 +897,7 @@ def get_network_subcatchments(
 
 @router.get("/orphelins/geojson")
 def get_network_orphelins_geojson(
-    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context_optional),
+    ctx: TenantContext = Depends(require_role("viewer")),
     db: Session = Depends(get_db)
 ):
     """
@@ -885,23 +906,16 @@ def get_network_orphelins_geojson(
     """
     import json
     import geopandas as gpd
+    from api.services.simulation_service import resoudre_gpkg_effectif_pour_projet
 
-    gpkg_path = None
-    if tenant_ctx and tenant_ctx.org_id:
-        from api.services.simulation_service import resoudre_gpkg_effectif_pour_projet
-        project = db.query(Project).filter(
-            Project.org_id == tenant_ctx.org_id,
-            Project.is_archived.is_(False)
-        ).first()
-        gpkg_path = resoudre_gpkg_effectif_pour_projet(db, project)
+    project = db.query(Project).filter(
+        Project.org_id == ctx.org_id,
+        Project.is_archived.is_(False)
+    ).first()
+    gpkg_path = resoudre_gpkg_effectif_pour_projet(db, project) if project else None
 
     if not gpkg_path or not gpkg_path.exists():
-        cand = Path("uploads/a66e32ad-f32b-4529-acc3-7a6026eb5a8a/network_Assainissement_Ville.gpkg")
-        if cand.exists():
-            gpkg_path = cand
-
-    if not gpkg_path or not gpkg_path.exists():
-        raise HTTPException(status_code=404, detail="Aucun projet actif trouvé")
+        raise HTTPException(status_code=404, detail="Ressource introuvable")
 
     # 1. Vérifier si elements_orphelins.geojson existe
     orph_json_p = gpkg_path.parent / "elements_orphelins.geojson"
@@ -924,7 +938,7 @@ def get_network_orphelins_geojson(
 
 @router.get("/export/inp")
 def export_network_inp(
-    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context_optional),
+    ctx: TenantContext = Depends(require_role("viewer")),
     db: Session = Depends(get_db)
 ):
     """Exporte l'intégralité du réseau actif au format standard EPA SWMM 5.2 (.inp) avec le nom du réseau."""
@@ -932,34 +946,20 @@ def export_network_inp(
     import re
     import unicodedata
     from src.domain.moteur_swmm import MoteurSWMM
-
-    gpkg_path = None
-    project_name = None
     from api.services.simulation_service import resoudre_gpkg_effectif_pour_projet
-    if tenant_ctx and tenant_ctx.org_id:
-        project = db.query(Project).filter(
-            Project.org_id == tenant_ctx.org_id,
-            Project.is_archived.is_(False)
-        ).first()
-        if project:
-            project_name = project.name
-            gpkg_path = resoudre_gpkg_effectif_pour_projet(db, project)
 
-    if not gpkg_path or not gpkg_path.exists():
-        project = db.query(Project).filter(Project.is_archived.is_(False)).first()
-        if project:
-            if not project_name:
-                project_name = project.name
-            gpkg_path = resoudre_gpkg_effectif_pour_projet(db, project)
+    project = db.query(Project).filter(
+        Project.org_id == ctx.org_id,
+        Project.is_archived.is_(False)
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Ressource introuvable")
 
+    gpkg_path = resoudre_gpkg_effectif_pour_projet(db, project)
     if not gpkg_path or not gpkg_path.exists():
-        cand = Path("data/demo_reseau.gpkg")
-        if cand.exists():
-            gpkg_path = cand
-            project_name = "demo_reseau"
+        raise HTTPException(status_code=404, detail="Ressource introuvable")
 
-    if not gpkg_path or not gpkg_path.exists():
-        raise HTTPException(status_code=404, detail="Aucun réseau hydraulique actif trouvé pour l'export.")
+    project_name = project.name
 
     # 1. Si le fichier .inp original existe à côté du GPKG, le renvoyer directement (100% fidèle et instantané)
     original_inp = gpkg_path.with_suffix(".inp")

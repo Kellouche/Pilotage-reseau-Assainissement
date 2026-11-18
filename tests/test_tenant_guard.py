@@ -25,8 +25,6 @@ KNOWN_PENDING_SURFACES = {
     # Routeurs à protéger (J2 - J6)
     ("DELETE", "/api/v1/clusters/manual-basin/{bassin_id}"),
     ("DELETE", "/api/v1/mnt/cache"),
-    ("DELETE", "/api/v1/network/conduites/{conduite_id}"),
-    ("DELETE", "/api/v1/network/regards/{regard_id}"),
     ("DELETE", "/api/v1/qualite/cache"),
     ("GET", "/api/v1/clusters"),
     ("GET", "/api/v1/clusters/manual-basin"),
@@ -41,11 +39,6 @@ KNOWN_PENDING_SURFACES = {
     ("GET", "/api/v1/layers"),
     ("GET", "/api/v1/mnt/cache/status"),
     ("GET", "/api/v1/mnt/statut"),
-    ("GET", "/api/v1/network/conduites"),
-    ("GET", "/api/v1/network/conduites/{conduite_id}"),
-    ("GET", "/api/v1/network/regards"),
-    ("GET", "/api/v1/network/regards/{regard_id}"),
-    ("GET", "/api/v1/network/rejets"),
     ("GET", "/api/v1/qualite/cache/status"),
     ("GET", "/api/v1/qualite/diagnostic"),
     ("GET", "/api/v1/qualite/scores-bassins"),
@@ -57,8 +50,6 @@ KNOWN_PENDING_SURFACES = {
     ("GET", "/api/v1/terrain/incidents"),
     ("GET", "/api/v1/terrain/inspections"),
     ("GET", "/api/v1/terrain/inspections/{object_type}/{object_id}"),
-    ("PATCH", "/api/v1/network/conduites/{conduite_id}"),
-    ("PATCH", "/api/v1/network/regards/{regard_id}"),
     ("PATCH", "/api/v1/terrain/incidents/{incident_id}"),
     ("POST", "/api/v1/clusters/graph/rebuild"),
     ("POST", "/api/v1/clusters/manual-basin"),
@@ -67,9 +58,6 @@ KNOWN_PENDING_SURFACES = {
     ("POST", "/api/v1/corrections/automatique"),
     ("POST", "/api/v1/corrections/manuel/{fid}"),
     ("POST", "/api/v1/mnt/analyser-bassins"),
-    ("POST", "/api/v1/network/conduites"),
-    ("POST", "/api/v1/network/regards"),
-    ("POST", "/api/v1/network/rejets"),
     ("POST", "/api/v1/qualite/export-csv"),
     ("POST", "/api/v1/qualite/valider-incremental"),
     ("POST", "/api/v1/simulations/pluviometrie/bms-preview"),
@@ -79,10 +67,6 @@ KNOWN_PENDING_SURFACES = {
     ("POST", "/api/v1/terrain/inspections"),
     ("WS", "/api/v1/jobs/ws/{job_id}"),
     # Routes en contexte optionnel à basculer en contexte obligatoire (§3.3)
-    ("POST", "/api/v1/network/load-dataset/{dataset_id}"),
-    ("GET", "/api/v1/network/subcatchments"),
-    ("GET", "/api/v1/network/orphelins/geojson"),
-    ("GET", "/api/v1/network/export/inp"),
     ("GET", "/api/v1/qualite/analyse"),
     ("GET", "/api/v1/qualite/anomalies/{type_anomalie}"),
     ("GET", "/api/v1/qualite/scores"),
@@ -207,8 +191,8 @@ def test_no_unlisted_unprotected_routes():
 
 
 def test_pending_surfaces_count_ceiling():
-    """Le nombre de surfaces en attente ne doit jamais dépasser le plafond initial (68)."""
-    assert len(KNOWN_PENDING_SURFACES) <= 68
+    """Le nombre de surfaces en attente ne doit jamais dépasser le plafond (52 après J2)."""
+    assert len(KNOWN_PENDING_SURFACES) <= 52
 
 
 def test_tenant_enforcement_fail_closed_mode():
