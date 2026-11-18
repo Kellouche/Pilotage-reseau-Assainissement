@@ -164,6 +164,11 @@ async def upload_aux_layer(
                         colonne_z=couche.colonne_z or colonne_z,
                     )
                     couche.statut = "ok"
+                    # Persister la colonne d'altitude effectivement utilisée
+                    # (explicite ou auto-détectée par valeurs) pour traçabilité.
+                    if meta_grille and meta_grille.get("colonne_z"):
+                        couche.colonne_z = meta_grille["colonne_z"]
+                        resultat["colonne_z"] = meta_grille["colonne_z"]
                     db.commit()
                     resultat["grille_altimetrie"] = meta_grille
                     # Artefact dérivé : cote terrain + pente par regard (SHP.md §7)

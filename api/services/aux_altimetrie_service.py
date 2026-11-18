@@ -68,6 +68,51 @@ def _crs_metric(gdf: gpd.GeoDataFrame):
     return f"EPSG:326{zone:02d}", zone
 
 
+_COLONNE_COORD_REGEX = re.compile(
+    r"(^|_)(lat|latitude|lon|long|lng|coordx|coordy|coord|x|y)(_|$)", re.IGNORECASE)
+
+
+def _detecter_colonne_z_par_valeurs(gdf: gpd.GeoDataFrame) -> Tuple[Optional[np.ndarray], Optional[str]]:
+    """
+    Fallback : détecte la colonne d'altitude par plausibilité des VALEURS quand
+    aucun nom de champ ne correspond au regex (ex. Field1..Field5 de TOPO CHLEF).
+
+    Critères :
+      - couverture numérique > 50 % des entités ;
+      - plage d'altitude plausible en mètres (exclut les coordonnées projetées
+        UTM ~1e5-1e7 et les identifiants géants) ;
+      - nom n'évoquant pas une coordonnée (lat/lon/x/y/coord…) ;
+      - score = cardinalité (valeurs continues type MNT) + bonus décimales.
+    Retourne (tableau z, nom_colonne) ou (None, None) si aucun candidat clair.
+    """
+    n = len(gdf)
+    if n == 0:
+        return None, None
+    best_score = -1.0
+    best_col = None
+    best_z = None
+    for col in gdf.columns:
+        if col == "geometry":
+            continue
+        if _COLONNE_COORD_REGEX.search(str(col)):
+            continue
+        cand = pd_to_float(gdf[col].values)
+        fin = cand[np.isfinite(cand)]
+        if fin.size < max(3, int(0.5 * n)):
+            continue
+        # Plage altitude plausible (m) : exclut coordonnées projetées et IDs.
+        if float(np.abs(fin).max()) > 9000.0 or float(fin.min()) < -600.0:
+            continue
+        nun = len(np.unique(fin))
+        has_dec = bool(np.any(np.abs(fin - np.round(fin)) > 1e-6))
+        score = float(nun) + (float(n) * 0.5 if has_dec else 0.0)
+        if score > best_score:
+            best_score, best_col, best_z = score, str(col), cand
+    if best_col is None:
+        return None, None
+    return best_z, best_col
+
+
 def _extraire_xyz(gdf: gpd.GeoDataFrame, colonne_z: Optional[str]) -> Tuple[np.ndarray, str]:
     """
     Extrait (x_utm, y_utm, z) des entités.
@@ -102,6 +147,10 @@ def _extraire_xyz(gdf: gpd.GeoDataFrame, colonne_z: Optional[str]) -> Tuple[np.n
                         z = cand
                         nom_z = str(col)
                         break
+            # Fallback : détection par plausibilité des valeurs (champs à nom
+            # générique type Field1..Field5) quand le nom ne matche pas.
+            if z is None:
+                z, nom_z = _detecter_colonne_z_par_valeurs(gdf)
 
     if z is None:
         raise ValueError(

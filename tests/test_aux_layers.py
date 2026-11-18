@@ -537,8 +537,10 @@ def test_endpoint_sans_altitude_colonne_z(db, org_projet, tmp_path):
     pid = org_projet["proj"].id
     tok = org_projet["token"]
 
-    # GeoJSON avec colonne non détectable (nom générique 'valeur')
+    # GeoJSON sans aucune colonne d'altitude exploitable : 'valeur' contient
+    # des codes hors plage altitude (>9000 m) et 'nom' est non numérique.
     gdf = _topo_gdf(n=10).rename(columns={"Field4": "valeur"})
+    gdf["valeur"] = 50000.0
     f = tmp_path / "topo.geojson"
     _ecrire_fichier(gdf, f, "geojson")
     with open(f, "rb") as fh:
@@ -552,6 +554,26 @@ def test_endpoint_sans_altitude_colonne_z(db, org_projet, tmp_path):
     r = client.get(f"/api/v1/projets/{pid}/aux-layers/{couche['id']}/elevation?lng=1.3&lat=36.17",
                    headers=_h(tok))
     assert r.status_code == 422
+
+
+def test_endpoint_auto_detection_colonne_z_par_valeurs(db, org_projet, tmp_path):
+    """Colonne à nom générique ('valeur') portant des cotes plausibles →
+    auto-détection par valeurs, statut ok, colonne_z renseignée."""
+    client = TestClient(app)
+    pid = org_projet["proj"].id
+    tok = org_projet["token"]
+
+    gdf = _topo_gdf(n=10).rename(columns={"Field4": "valeur"})
+    f = tmp_path / "topo.geojson"
+    _ecrire_fichier(gdf, f, "geojson")
+    with open(f, "rb") as fh:
+        r = client.post(f"/api/v1/projets/{pid}/aux-layers",
+                        files=[("files", ("topo.geojson", fh, "application/geo+json"))],
+                        data={"type": "altimetrie_points"}, headers=_h(tok))
+    assert r.status_code == 200, r.text
+    couche = r.json()["couche"]
+    assert couche["statut"] == "ok"
+    assert couche["colonne_z"] == "valeur"
 
 
 def test_terrain_aux_pour_profil(db, org_projet):
