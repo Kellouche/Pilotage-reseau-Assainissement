@@ -1,10 +1,25 @@
+﻿# -*- coding: utf-8 -*-
+# =============================================================================
+# ARCHIVE LEGACY — NE PAS LANCER — NE PAS MODIFIER
+# =============================================================================
+# Ce fichier a été archivé le 2026-11-18 dans le cadre du lot A1+D0
+# (isolation multi-tenant, référence dossier : docs/LOT_A1_D0_ISOLATION_MULTITENANT.md).
+#
+# RAISON : API Flask parallèle non authentifiée exposant 7 routes identiques
+# à l'API FastAPI (api/main.py), dont /api/v1/layers, /api/v1/manual-basin
+# et /api/v1/cluster, lisant et écrivant les mêmes fichiers de données sans
+# aucun contrôle d'organisation (fuite multi-tenant démontrée, §2.1 Fuite 4).
+#
+# Point d'entrée officiel : api/main.py (FastAPI, port 5001)
+# Documentation : docs/09_ENDPOINTS_DOCUMENTATION.md
+# =============================================================================
 """
 ================================================================================
 Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
 Auteur : Dr Abdelhakim KELLOUCHE
-Date de création : 2026-04-20
+Date de crÃ©ation : 2026-04-20
 Date de modification : 2026-11-08
-Objet : Point d'entrée serveur pour le déploiement conteneurisé
+Objet : Point d'entrÃ©e serveur pour le dÃ©ploiement conteneurisÃ©
 ================================================================================
 """
 
@@ -76,14 +91,14 @@ def get_carte():
 
 @app.route('/tunnel')
 def get_tunnel():
-    """Sert l'interface du tunnel en 4 étapes"""
+    """Sert l'interface du tunnel en 4 Ã©tapes"""
     return render_template('tunnel.html')
 
 @app.route('/api/v1/layers')
 def api_layers():
     global _DATA_CACHE
     if _DATA_CACHE is None:
-        print("[SERVER] Chargement initial des données...")
+        print("[SERVER] Chargement initial des donnÃ©es...")
         _DATA_CACHE = charger_donnees()
     return jsonify(_DATA_CACHE)
 
@@ -100,7 +115,7 @@ def api_delete_manual_basin(bassin_id):
 
 @app.route('/api/v1/cluster')
 def api_cluster():
-    """Détecte les bassins urbains exclusifs (sans chevauchement)."""
+    """DÃ©tecte les bassins urbains exclusifs (sans chevauchement)."""
     global _GLOBAL_GRAPH
     try:
         # Graphe en cache
@@ -113,7 +128,7 @@ def api_cluster():
         if G is None or len(G.nodes()) == 0:
             return jsonify({"type": "FeatureCollection", "features": []})
 
-        # Importer les fonctions de détection de bassins
+        # Importer les fonctions de dÃ©tection de bassins
         from src.domain.detecteur_clusters import (
             trouver_exutoires_physiques,
             partitionner_bassins_hydrauliques,
@@ -123,12 +138,12 @@ def api_cluster():
         # Identifier les exutoires physiques
         exutoires = trouver_exutoires_physiques(G)
         if not exutoires:
-            logger.warning("[cluster] Aucun exutoire physique trouvé")
+            logger.warning("[cluster] Aucun exutoire physique trouvÃ©")
             return jsonify({"type": "FeatureCollection", "features": []})
 
-        # ── Partition hydraulique : bassins exclusifs sans inclusion ──────
-        #    Conforme à la littérature : chaque bassin draine vers son exutoire,
-        #    pas de chevauchement, pas d'inclusion, série et parallèle gérés.
+        # â”€â”€ Partition hydraulique : bassins exclusifs sans inclusion â”€â”€â”€â”€â”€â”€
+        #    Conforme Ã  la littÃ©rature : chaque bassin draine vers son exutoire,
+        #    pas de chevauchement, pas d'inclusion, sÃ©rie et parallÃ¨le gÃ©rÃ©s.
         bassins, nb_orphelines, _ = partitionner_bassins_hydrauliques(G, exutoires)
 
         all_features = []
@@ -137,11 +152,11 @@ def api_cluster():
             if not edges:
                 continue
 
-            # Calculer le polygone du bassin à partir des arêtes
+            # Calculer le polygone du bassin Ã  partir des arÃªtes
             from src.domain.detecteur_clusters import calculer_bassin_polygon
             bassin_hull = calculer_bassin_polygon(edges, G=G)
 
-            # Déterminer le nom du bassin depuis les données de la zone drainée
+            # DÃ©terminer le nom du bassin depuis les donnÃ©es de la zone drainÃ©e
             nom_bassin = determiner_nom_bassin(edges, G, exutoire_info=info)
 
             cluster_geojson = construire_geojson_cluster(
@@ -164,11 +179,11 @@ def api_cluster():
                         feat["properties"]["exutoire_type"] = info.get("type", "")
                 all_features.extend(cluster_geojson["features"])
 
-        # 4. Intégrer les bassins manuels
+        # 4. IntÃ©grer les bassins manuels
         manual_bassins = charger_bassins_manuels()
         for mb in manual_bassins:
             conduit_ids = mb.get("conduits", [])
-            # Retrouver les arêtes correspondantes dans le graphe
+            # Retrouver les arÃªtes correspondantes dans le graphe
             edges_manual = set()
             for u, v, attrs in G.edges(data=True):
                 if attrs.get("conduit_id") in conduit_ids or attrs.get("fid") in conduit_ids:
@@ -179,8 +194,8 @@ def api_cluster():
                 hull = calculer_bassin_polygon(edges_manual, G=G)
                 info_ex = mb.get("exutoire") or {"nom": mb.get("nom", "Manuel"), "type": "manuel"}
                 
-                # Réutiliser construire_geojson_cluster
-                # Note: noeud_exutoire pour un bassin manuel peut être extrait de l'info exutoire
+                # RÃ©utiliser construire_geojson_cluster
+                # Note: noeud_exutoire pour un bassin manuel peut Ãªtre extrait de l'info exutoire
                 noeud_ex = None
                 if mb.get("exutoire") and mb["exutoire"].get("latlng"):
                     ll = mb["exutoire"]["latlng"]
@@ -201,7 +216,7 @@ def api_cluster():
                             feat["properties"]["exutoire_type"] = info_ex.get("type", "manuel")
                     all_features.extend(mb_geojson["features"])
 
-        logger.info(f"[cluster] {len(bassins)} auto + {len(manual_bassins)} manuels générés")
+        logger.info(f"[cluster] {len(bassins)} auto + {len(manual_bassins)} manuels gÃ©nÃ©rÃ©s")
         return jsonify({
             "type": "FeatureCollection", 
             "features": all_features,
@@ -219,3 +234,4 @@ def health():
 if __name__ == '__main__':
     print(f"[SERVER] GPKG: {GPKG_PATH}")
     app.run(debug=True, host='0.0.0.0', port=5000)
+

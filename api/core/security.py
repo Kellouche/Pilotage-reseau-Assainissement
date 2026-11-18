@@ -10,6 +10,7 @@ Objet : Utilitaires de chiffrement, tokens sécurisés et protection CSRF/XSS
 """
 
 import logging
+import os
 from typing import Optional, Tuple, Any, Callable
 from fastapi import Request, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -22,6 +23,21 @@ from api.core.auth import decode_token, authenticate_api_key
 from api.core.quotas import check_feature_access
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Mode d'application du tenant — fail-closed (lot A1, 2026-11-18)
+# Valeurs acceptées : "strict" (défaut, production) | "audit" (observation)
+# Toute autre valeur (dont "false", "0", "off") lève RuntimeError au démarrage.
+# NE PAS ajouter de valeur permissive : ce flag sera retiré après A2.
+# ---------------------------------------------------------------------------
+_TENANT_ENFORCEMENT_MODES = {"strict", "audit"}
+TENANT_ENFORCEMENT = os.getenv("TENANT_ENFORCEMENT", "strict").strip().lower()
+if TENANT_ENFORCEMENT not in _TENANT_ENFORCEMENT_MODES:
+    raise RuntimeError(
+        f"[A1] TENANT_ENFORCEMENT invalide : {TENANT_ENFORCEMENT!r}. "
+        f"Valeurs acceptées : {_TENANT_ENFORCEMENT_MODES}. "
+        "Un démarrage avec une valeur permissive rouvrirait les 68 surfaces isolées."
+    )
 
 security_bearer = HTTPBearer(auto_error=False)
 
@@ -82,8 +98,7 @@ def get_tenant_context(
         token = auth_creds.credentials.strip()
     elif "access_token" in request.cookies:
         token = request.cookies.get("access_token")
-    elif "refresh_token" in request.cookies:
-        token = request.cookies.get("refresh_token")
+    # A1 : le cookie refresh_token n'est plus accepté comme access token.
 
     if not token:
         raise HTTPException(
@@ -104,18 +119,17 @@ def get_tenant_context(
         role = "admin" if "admin" in api_key.scopes else "engineer" if "write" in api_key.scopes else "viewer"
         return TenantContext(actor=api_key, org=org, role=role, is_api_key=True)
 
-    # 2. Cas Jeton JWT Utilisateur (avec fallback refresh token)
+    # 2. Cas Jeton JWT Utilisateur
     payload = decode_token(token)
-    if not payload:
-        # Fallback si le jeton access a expiré mais le cookie refresh est valide
-        ref_cookie = request.cookies.get("refresh_token")
-        if ref_cookie:
-            payload = decode_token(ref_cookie)
+    # A1 : suppression du fallback refresh_token — un refresh_token en Bearer
+    # ne doit pas accorder l'accès aux routes protégées (voir §4.1 règle 6).
 
-    if not payload or payload.get("type") not in ("access", "refresh"):
+    # A1 : un refresh_token ne doit pas être accepté comme jeton d'accès.
+    # Seul le type "access" est autorisé sur les routes protégées.
+    if not payload or payload.get("type") != "access":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Jeton JWT invalide ou expiré.",
+            detail="Jeton JWT invalide ou expiré. Utilisez un access_token, pas un refresh_token.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 

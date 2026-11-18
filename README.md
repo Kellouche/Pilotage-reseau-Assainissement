@@ -89,11 +89,13 @@ pip install -r requirements.txt
 
 ## Utilisation
 
-### Visualisation interactive
+### Lancer la plateforme (API FastAPI)
 
 ```bash
-python server.py
-# ouvrir http://localhost:5000
+# Point d'entrée unique — NE PAS utiliser server.py (archivé dans legacy/)
+python run_server.py
+# ou : uvicorn api.main:app --host 0.0.0.0 --port 5001 --reload
+# Interfaces : http://localhost:5001/cockpit  http://localhost:5001/carte
 ```
 
 ### Tests
