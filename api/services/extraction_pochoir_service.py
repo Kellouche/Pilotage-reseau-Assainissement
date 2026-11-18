@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import geopandas as gpd
+import pandas as pd
 from shapely.geometry import Polygon, shape
 from sqlalchemy.orm import Session
 
@@ -107,6 +108,62 @@ def _filtrer(gdf: gpd.GeoDataFrame, pochoir: Polygon) -> gpd.GeoDataFrame:
     return gdf[gdf.geometry.notna() & gdf.intersects(pochoir)].copy()
 
 
+def _fusionner_par_theme(entrees: List[Tuple[str, gpd.GeoDataFrame]]
+                         ) -> List[Tuple[str, gpd.GeoDataFrame]]:
+    """Regroupe les gdf par thème en une seule couche par thème.
+
+    Plusieurs couches sources peuvent mapper sur le même thème
+    (canalisations + conduites → conduite) : on les concatène pour
+    produire un unique {nom}_conduite.shp / couche gpkg 'conduite'.
+    Si un thème mélange des types de géométrie (le shapefile n'en
+    supporte qu'un), on éclate en sous-couches theme_<type>."""
+    par_theme: Dict[str, List[gpd.GeoDataFrame]] = {}
+    ordre: List[str] = []
+    for theme, gdf in entrees:
+        if theme not in par_theme:
+            par_theme[theme] = []
+            ordre.append(theme)
+        par_theme[theme].append(gdf)
+
+    resultat: List[Tuple[str, gpd.GeoDataFrame]] = []
+    for theme in ordre:
+        gdfs = par_theme[theme]
+        if len(gdfs) == 1:
+            resultat.append((theme, gdfs[0]))
+            continue
+        try:
+            fusion = gpd.GeoDataFrame(
+                pd.concat(gdfs, ignore_index=True), crs=WGS84)
+        except Exception as e:
+            logger.warning("[pochoir] fusion thème %s impossible (%s) — couches séparées", theme, e)
+            resultat.extend((theme, g) for g in gdfs)
+            continue
+        types_geom = {str(t) for t in fusion.geometry.geom_type.unique()}
+        if len(types_geom) <= 1:
+            resultat.append((theme, fusion))
+        else:
+            _court = {"point": "point", "linestring": "line",
+                      "polygon": "polygone", "multipoint": "points",
+                      "multilinestring": "lines", "multipolygon": "polygones"}
+            for gt, sous in fusion.groupby(fusion.geometry.geom_type):
+                suffixe = _court.get(str(gt).lower(), str(gt).lower())
+                resultat.append((f"{theme}_{suffixe}", sous))
+    return resultat
+
+
+def _prep_gdf_ecriture(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Colonnes à renommer avant écriture GPKG : 'fid' est le nom
+    réservé de la clé primaire GeoPackage — une colonne attribut
+    'fid' fait échouer to_file ('Error adding field fid') et laisse
+    une couche vide dans gpkg_contents."""
+    if "fid" in gdf.columns:
+        if "fid_attribut" in gdf.columns:
+            gdf = gdf.drop(columns=["fid"])
+        else:
+            gdf = gdf.rename(columns={"fid": "fid_attribut"})
+    return gdf
+
+
 def _ecrire_shp(gdf: gpd.GeoDataFrame, chemin_shp: Path) -> List[Path]:
     """Écrit un shapefile (shp+shx+dbf+prj+…) et retourne les fichiers créés.
     Le chemin DOIT finir par .shp : sans extension, GDAL crée un dossier
@@ -158,13 +215,17 @@ def extraire_par_pochoir(
         couches = gpd.list_layers(str(gpkg_path))["name"].tolist()
         for layer_name in couches:
             try:
-                gdf = _gdf_en_4326(gpd.read_file(str(gpkg_path), layer=layer_name))
+                gdf = gpd.read_file(str(gpkg_path), layer=layer_name)
             except Exception as e:
                 logger.warning("[pochoir] couche réseau illisible %s : %s", layer_name, e)
                 continue
+            if not isinstance(gdf, gpd.GeoDataFrame):
+                continue  # table non spatiale (log_*) — pas de géométrie
+            gdf = _gdf_en_4326(gdf)
             extrait = _filtrer(gdf, pochoir)
             theme = _theme_reseau(layer_name)
-            stats[f"reseau_{theme}"] = len(extrait)
+            cle_stat = f"reseau_{theme}"
+            stats[cle_stat] = stats.get(cle_stat, 0) + len(extrait)
             if len(extrait):
                 themes.append((theme, extrait))
 
@@ -193,9 +254,13 @@ def extraire_par_pochoir(
                 continue
             extrait = _filtrer(gdf, pochoir)
             theme = f"sat_{_slug(couche.nom)}"
-            stats[f"sat_{theme[4:]}"] = len(extrait)
+            cle_stat = f"sat_{theme[4:]}"
+            stats[cle_stat] = stats.get(cle_stat, 0) + len(extrait)
             if len(extrait):
                 themes.append((theme, extrait))
+
+    # Un thème = une couche en sortie (fusion des sources homonymes)
+    themes = _fusionner_par_theme(themes)
 
     # ---------------------------------------------------------------
     # 3. Assemblage : shp par thème + gpkg fusionné + manifeste → zip
@@ -223,6 +288,7 @@ def extraire_par_pochoir(
             noms_utilises[base_nom] = n + 1
             nom_couche = base_nom if n == 0 else f"{base_nom}_{n + 1}"
             try:
+                gdf = _prep_gdf_ecriture(gdf)
                 if gdf.crs is None:
                     gdf = gdf.set_crs(WGS84)
                 gdf.to_file(str(gpkg_sortie), layer=nom_couche, driver="GPKG",
@@ -237,7 +303,7 @@ def extraire_par_pochoir(
         for theme, gdf in themes:
             shp_base = td_path / f"{nom_base}_{theme}.shp"
             try:
-                _ecrire_shp(gdf, shp_base)
+                _ecrire_shp(_prep_gdf_ecriture(gdf), shp_base)
             except Exception as e:
                 logger.warning("[pochoir] shp %s non écrit : %s", theme, e)
                 continue
@@ -267,7 +333,7 @@ def extraire_par_pochoir(
         cle_zip = ArtifactStore.build_key(org_id, project_id, f"{prefixe_store}/{zip_path.name}")
         store.put_file(cle_zip, zip_path, content_type="application/zip")
 
-    nb_objets = sum(1 for k in stats if not k.startswith("pochoir"))
+    nb_objets = sum(stats.values())
     return {
         "statut": "ok",
         "extraction_id": eid,

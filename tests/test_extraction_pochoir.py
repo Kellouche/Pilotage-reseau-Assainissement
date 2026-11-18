@@ -8,6 +8,7 @@ fusionné + pochoir, manifeste, étanchéité org/projet, géométrie invalide.
 
 import io
 import json
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -55,13 +56,8 @@ def _creer_gpkg_reseau(chemin: Path):
     canas.to_file(str(chemin), layer="canalisations", driver="GPKG", mode="a")
 
 
-@pytest.fixture
-def org_projet_reseau(db, tmp_path):
-    """Org + projet avec GPKG réseau + utilisateur admin."""
-    sfx = _uid()
-    gpkg = tmp_path / "reseau.gpkg"
-    _creer_gpkg_reseau(gpkg)
-
+def _creer_contexte(db, gpkg: Path, sfx: str):
+    """Org + user admin + projet pointant sur le gpkg donné."""
     org = Organization(id=f"pox_{sfx}", name="Org Pochoir", slug=f"org-pox-{sfx}")
     user = User(id=f"pou_{sfx}", email=f"pox_{sfx}@test.dz",
                 password_hash=hash_password("PoxPass2026!"),
@@ -73,8 +69,12 @@ def org_projet_reseau(db, tmp_path):
     db.add_all([org, user, mem, proj])
     db.commit()
     token = create_access_token({"sub": user.id, "org_id": org.id, "role": "admin"})
-    yield {"org": org, "proj": proj, "user": user, "token": token,
-           "gpkg": gpkg, "sfx": sfx}
+    return {"org": org, "proj": proj, "user": user, "token": token,
+            "gpkg": gpkg, "sfx": sfx}
+
+
+def _supprimer_contexte(db, ctx):
+    proj, org, user = ctx["proj"], ctx["org"], ctx["user"]
     db.query(ProjectAuxLayer).filter(ProjectAuxLayer.project_id == proj.id).delete(
         synchronize_session=False)
     db.query(Project).filter(Project.id == proj.id).delete(synchronize_session=False)
@@ -82,6 +82,17 @@ def org_projet_reseau(db, tmp_path):
     db.query(User).filter(User.id == user.id).delete(synchronize_session=False)
     db.query(Organization).filter(Organization.id == org.id).delete(synchronize_session=False)
     db.commit()
+
+
+@pytest.fixture
+def org_projet_reseau(db, tmp_path):
+    """Org + projet avec GPKG réseau + utilisateur admin."""
+    sfx = _uid()
+    gpkg = tmp_path / "reseau.gpkg"
+    _creer_gpkg_reseau(gpkg)
+    ctx = _creer_contexte(db, gpkg, sfx)
+    yield ctx
+    _supprimer_contexte(db, ctx)
 
 
 def _h(token):
@@ -144,6 +155,15 @@ def test_extraction_reseau_shp_gpkg(db, org_projet_reseau):
     couches = _gpd.list_layers(tmp_gpkg)["name"].tolist()
     assert "pochoir" in couches
     assert "regard" in couches and "conduite" in couches
+
+    # Aucune couche vide dans le gpkg (régression 'Error adding field fid')
+    import sqlite3
+    conn = sqlite3.connect(tmp_gpkg)
+    for (t,) in conn.execute(
+            "SELECT table_name FROM gpkg_contents WHERE data_type='features'"):
+        n = conn.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0]
+        assert n > 0, f"couche gpkg vide : {t}"
+    conn.close()
 
 
 def test_extraction_geometrie_invalide(db, org_projet_reseau):
@@ -235,3 +255,115 @@ def test_extraction_couche_satellite(db, org_projet_reseau, tmp_path):
     cles_sat = [k for k in ex["stats"] if k.startswith("sat_")]
     assert cles_sat, f"stats sans thème satellite : {ex['stats']}"
     assert ex["stats"][cles_sat[0]] == 2
+
+
+def test_extraction_fusion_themes_homonymes(db, tmp_path):
+    """canalisations + conduites → un seul thème 'conduite' fusionné,
+    stats cumulées (régression : stats écrasées + shp/gpkg dupliqués)."""
+    sfx = _uid()
+    gpkg = tmp_path / "reseau_multi.gpkg"
+    _creer_gpkg_reseau(gpkg)
+    extra = gpd.GeoDataFrame(
+        {"Code": ["C2_IN"]},
+        geometry=[LineString([(1, 1), (2, 2)])],
+        crs="EPSG:4326",
+    )
+    extra.to_file(str(gpkg), layer="conduites", driver="GPKG", mode="a")
+    ctx = _creer_contexte(db, gpkg, sfx)
+    try:
+        client = TestClient(app)
+        r = client.post(
+            f"/api/v1/projets/{ctx['proj'].id}/extraction-pochoir",
+            json={"nom": "Fusion", "geojson": POLYGONE,
+                  "inclure_reseau": True, "aux_layer_ids": []},
+            headers=_h(ctx["token"]),
+        )
+        assert r.status_code == 200, r.text
+        ex = r.json()["extraction"]
+        # 1 (canalisations) + 1 (conduites) = 2 conduites cumulées
+        assert ex["stats"]["reseau_conduite"] == 2
+        assert ex["nb_objets"] == sum(ex["stats"].values())
+
+        zf = _lire_zip(ex["url_download"], ctx["token"])
+        noms = zf.namelist()
+        # Un seul shp de thème conduite (pas de conduite_2)
+        assert "fusion_conduite.shp" in noms
+        assert "fusion_conduite_2.shp" not in noms
+
+        import sqlite3
+        with tempfile.NamedTemporaryFile(suffix=".gpkg", delete=False) as tf:
+            tf.write(zf.read("fusion.gpkg"))
+            tmp_g = tf.name
+        conn = sqlite3.connect(tmp_g)
+        couches = [r[0] for r in conn.execute(
+            "SELECT table_name FROM gpkg_contents WHERE data_type='features'")]
+        assert "conduite" in couches and "conduite_2" not in couches
+        n = conn.execute('SELECT COUNT(*) FROM "conduite"').fetchone()[0]
+        assert n == 2, f"conduite gpkg = {n} ligne(s), attendu 2"
+        conn.close()
+        Path(tmp_g).unlink(missing_ok=True)
+    finally:
+        _supprimer_contexte(db, ctx)
+
+
+def test_prep_gdf_renomme_colonne_fid():
+    """'fid' est réservé GPKG : la colonne attribut est renommée."""
+    from api.services.extraction_pochoir_service import _prep_gdf_ecriture
+    gdf = gpd.GeoDataFrame(
+        {"fid": [1, 2], "Code": ["A", "B"]},
+        geometry=[Point(0, 0), Point(1, 1)], crs="EPSG:4326")
+    out = _prep_gdf_ecriture(gdf)
+    assert "fid" not in out.columns
+    assert "fid_attribut" in out.columns
+    assert out["fid_attribut"].tolist() == [1, 2]
+
+
+def test_extraction_gpkg_avec_colonne_fid(db, tmp_path):
+    """Un gpkg source avec colonne attribut 'fid' (cas réel des imports
+    SHP) ne doit plus produire de couches vides dans le gpkg extrait."""
+    import sqlite3
+    sfx = _uid()
+    gpkg = tmp_path / "reseau_fid.gpkg"
+    _creer_gpkg_reseau(gpkg)
+    conn = sqlite3.connect(str(gpkg))
+    # Reproduit la structure réelle : pk renommée fid_1, 'fid' devient
+    # une colonne attribut ordinaire (héritée d'imports SHP)
+    for table in ("canalisations", "regards"):
+        conn.execute(f'ALTER TABLE "{table}" RENAME COLUMN fid TO fid_1')
+        # DEFAULT évite les triggers rtree (UPDATE → ST_IsEmpty absent)
+        conn.execute(f'ALTER TABLE "{table}" ADD COLUMN fid INTEGER DEFAULT 42')
+    conn.commit()
+    conn.close()
+
+    # Sanity : geopandas relit bien la colonne fid comme attribut
+    gcheck = gpd.read_file(str(gpkg), layer="canalisations")
+    if "fid" not in gcheck.columns:
+        pytest.skip("pyogrio n'expose pas la colonne 'fid' comme attribut")
+
+    ctx = _creer_contexte(db, gpkg, sfx)
+    try:
+        client = TestClient(app)
+        r = client.post(
+            f"/api/v1/projets/{ctx['proj'].id}/extraction-pochoir",
+            json={"nom": "FidTest", "geojson": POLYGONE,
+                  "inclure_reseau": True, "aux_layer_ids": []},
+            headers=_h(ctx["token"]),
+        )
+        assert r.status_code == 200, r.text
+        ex = r.json()["extraction"]
+        zf = _lire_zip(ex["url_download"], ctx["token"])
+        with tempfile.NamedTemporaryFile(suffix=".gpkg", delete=False) as tf:
+            tf.write(zf.read("fidtest.gpkg"))
+            tmp_g = tf.name
+        conn = sqlite3.connect(tmp_g)
+        for (t,) in conn.execute(
+                "SELECT table_name FROM gpkg_contents WHERE data_type='features'"):
+            n = conn.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0]
+            assert n > 0, f"couche gpkg vide : {t}"
+        # la valeur fid source est préservée sous fid_attribut
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(conduite)")]
+        assert "fid_attribut" in cols
+        conn.close()
+        Path(tmp_g).unlink(missing_ok=True)
+    finally:
+        _supprimer_contexte(db, ctx)
