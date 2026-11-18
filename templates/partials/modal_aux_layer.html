@@ -2,13 +2,15 @@
 ================================================================================
 Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
 Objet : Modale d'import d'une couche SIG « satellite » (SHP.md) — action
-        explicite de l'utilisateur : fichier + type déclarés manuellement.
+        explicite de l'utilisateur.
+Flux : (1) Dossier sélectionné → scan SHP → (2) Cochage du SHP voulu →
+        (3) Envoi automatique SHP + sidecars au serveur.
 ================================================================================
 -->
 
     <!-- Modal Import Couche SIG Satellite -->
     <div id="modal-aux-layer" onclick="if(event.target === this) fermerModalAuxLayer();" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(6px); z-index: 3100; align-items: center; justify-content: center;">
-        <div style="background: #1e293b; color: #f8fafc; border-radius: 16px; width: 94%; max-width: 560px; max-height: 92vh; display: flex; flex-direction: column; border: 1px solid rgba(255, 255, 255, 0.15); box-shadow: 0 25px 50px rgba(0, 0, 0, 0.6); overflow: hidden;">
+        <div style="background: #1e293b; color: #f8fafc; border-radius: 16px; width: 94%; max-width: 580px; max-height: 92vh; display: flex; flex-direction: column; border: 1px solid rgba(255, 255, 255, 0.15); box-shadow: 0 25px 50px rgba(0, 0, 0, 0.6); overflow: hidden;">
 
             <!-- En-tête -->
             <div style="background: #0f172a; padding: 16px 24px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); display: flex; justify-content: space-between; align-items: center; gap: 12px;">
@@ -18,7 +20,7 @@ Objet : Modale d'import d'une couche SIG « satellite » (SHP.md) — action
                     </div>
                     <div>
                         <h5 style="margin: 0; font-weight: 700; font-size: 1.05rem;">Importer une couche SIG</h5>
-                        <small style="color: #94a3b8;">Couche satellite — indépendante du réseau (SHP.md)</small>
+                        <small style="color: #94a3b8;">Couche satellite — indépendante du réseau</small>
                     </div>
                 </div>
                 <button onclick="fermerModalAuxLayer()" style="background: transparent; border: none; color: #94a3b8; font-size: 24px; cursor: pointer; line-height: 1;">&times;</button>
@@ -27,64 +29,112 @@ Objet : Modale d'import d'une couche SIG « satellite » (SHP.md) — action
             <!-- Corps -->
             <div style="padding: 20px 24px; overflow-y: auto; flex: 1;">
 
+                <!-- Statut / messages -->
                 <div id="aux-upload-statut" style="display:none; margin-bottom: 14px; font-size: 0.82rem; padding: 8px 12px; border-radius: 8px;"></div>
 
-                <div style="margin-bottom: 14px;">
+                <!-- ── ÉTAPE 1 : Sélection du dossier ─────────────────────── -->
+                <div style="margin-bottom: 16px;">
                     <label style="font-size: 0.78rem; color: #cbd5e1; display: block; margin-bottom: 6px; font-weight: 600;">
-                        <i class="fas fa-file-upload me-1"></i> Fichier
+                        <i class="fas fa-folder-open me-1" style="color:#38bdf8;"></i>
+                        Étape 1 — Pointez le dossier contenant vos fichiers SIG
                     </label>
-                    <input type="file" id="aux-file" multiple accept=".shp,.shx,.dbf,.prj,.cpg,.gpkg,.geojson,.json,.zip"
-                           style="width: 100%; font-size: 0.8rem; padding: 8px; background: #0f172a; color: #f8fafc; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px;">
-                    <div style="font-size: 0.7rem; color: #64748b; margin-top: 4px;">
-                        <b>Shapefile</b> : sélectionnez le <code>.shp</code> <b>avec tous ses sidecars</b>
-                        (<code>.shx .dbf .prj .cpg</code>) — ou un <code>.zip</code> contenant le jeu complet.
-                        Formats aussi acceptés : .gpkg, .geojson. Limite 200 Mo.
+
+                    <!-- Zone cliquable stylisée -->
+                    <label id="aux-folder-btn" style="display:flex; align-items:center; gap:12px; cursor:pointer;
+                           background:#0f172a; border:2px dashed rgba(14,165,233,0.4); border-radius:10px;
+                           padding:14px 16px; transition: border-color .2s;"
+                           onmouseover="this.style.borderColor='rgba(14,165,233,0.8)'"
+                           onmouseout="this.style.borderColor='rgba(14,165,233,0.4)'">
+                        <i class="fas fa-folder-open" style="font-size:1.6rem; color:#38bdf8; flex-shrink:0;"></i>
+                        <div>
+                            <div id="aux-folder-label" style="font-size:0.85rem; color:#94a3b8; font-style:italic;">
+                                Cliquez ici pour choisir un dossier…
+                            </div>
+                            <div style="font-size:0.68rem; color:#475569; margin-top:3px;">
+                                Le système détecte automatiquement les <code>.shp</code> et leurs sidecars. Cochez-en plusieurs pour un import groupé.
+                                Formats directs aussi acceptés : <code>.gpkg .geojson .zip</code>
+                            </div>
+                        </div>
+                        <!-- Input caché — sélection du dossier entier -->
+                        <input type="file" id="aux-file" webkitdirectory multiple style="display:none;"
+                               onchange="auxScanDossier(this.files)">
+                    </label>
+                </div>
+
+                <!-- ── ÉTAPE 2 : Liste des SHP détectés ───────────────────── -->
+                <div id="aux-shp-liste" style="display:none; margin-bottom: 16px;">
+                    <label style="font-size: 0.78rem; color: #34d399; display: flex; align-items:center; gap:6px; margin-bottom: 8px; font-weight: 600;">
+                        <i class="fas fa-list-check"></i>
+                        Étape 2 — Cochez les fichiers à importer
+                    </label>
+                    <div id="aux-shp-items"
+                         style="background: #0f172a; border: 1px solid rgba(52,211,153,0.3);
+                                border-radius: 8px; padding: 4px; max-height: 210px; overflow-y: auto;">
                     </div>
                 </div>
 
-                <div style="margin-bottom: 14px;">
-                    <label style="font-size: 0.78rem; color: #cbd5e1; display: block; margin-bottom: 6px; font-weight: 600;">
-                        <i class="fas fa-tags me-1"></i> Type de couche <span style="color:#f59e0b;">*</span>
-                    </label>
-                    <select id="aux-type" onchange="auxMajChampZ()"
-                            style="width: 100%; font-size: 0.82rem; padding: 8px; background: #0f172a; color: #f8fafc; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px;">
-                        <option value="altimetrie_points">Altimétrie (points cotés)</option>
-                        <option value="bv_officiel">Bassins versants officiels</option>
-                        <option value="metrologie">Points de métrologie</option>
-                        <option value="autre">Autre couche SIG</option>
-                    </select>
-                </div>
+                <!-- ── ÉTAPE 3 : Options (visibles après scan) ────────────── -->
+                <div id="aux-options-bloc" style="display:none;">
 
-                <div id="aux-champ-z" style="margin-bottom: 14px;">
-                    <label style="font-size: 0.78rem; color: #cbd5e1; display: block; margin-bottom: 6px; font-weight: 600;">
-                        <i class="fas fa-mountain me-1"></i> Colonne d'altitude (si non détectable)
-                    </label>
-                    <input type="text" id="aux-colonne-z" placeholder="ex. Field4, Z, ALTITUDE…"
-                           style="width: 100%; font-size: 0.82rem; padding: 8px; background: #0f172a; color: #f8fafc; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px;">
-                    <div style="font-size: 0.7rem; color: #64748b; margin-top: 4px;">
-                        La grille IDW n'est construite que pour « Altimétrie ». Laissez vide pour l'auto-détection.
+                    <div style="margin-bottom: 14px;">
+                        <label style="font-size: 0.78rem; color: #cbd5e1; display: block; margin-bottom: 6px; font-weight: 600;">
+                            <i class="fas fa-tags me-1"></i> Type de couche <span style="color:#f59e0b;">*</span>
+                        </label>
+                        <select id="aux-type" onchange="auxMajChampZ()"
+                                style="width: 100%; font-size: 0.82rem; padding: 8px; background: #0f172a; color: #f8fafc;
+                                       border: 1px solid rgba(255,255,255,0.15); border-radius: 8px;">
+                            <option value="altimetrie_points">Altimétrie (points cotés)</option>
+                            <option value="bv_officiel">Bassins versants officiels</option>
+                            <option value="metrologie">Points de métrologie</option>
+                            <option value="autre">Autre couche SIG</option>
+                        </select>
                     </div>
+
+                    <div id="aux-champ-z" style="margin-bottom: 14px;">
+                        <label style="font-size: 0.78rem; color: #cbd5e1; display: block; margin-bottom: 6px; font-weight: 600;">
+                            <i class="fas fa-mountain me-1"></i> Colonne d'altitude (si non détectable)
+                        </label>
+                        <input type="text" id="aux-colonne-z" placeholder="ex. Field4, Z, ALTITUDE…"
+                               style="width: 100%; font-size: 0.82rem; padding: 8px; background: #0f172a; color: #f8fafc;
+                                      border: 1px solid rgba(255,255,255,0.15); border-radius: 8px;">
+                        <div style="font-size: 0.7rem; color: #64748b; margin-top: 4px;">
+                            La grille IDW n'est construite que pour « Altimétrie ». Laissez vide pour l'auto-détection.
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 6px;">
+                        <label style="font-size: 0.78rem; color: #cbd5e1; display: block; margin-bottom: 6px; font-weight: 600;">
+                            <i class="fas fa-signature me-1"></i> Nom affiché (optionnel)
+                        </label>
+                        <input type="text" id="aux-nom" placeholder="Nom de la couche sur la carte"
+                               style="width: 100%; font-size: 0.82rem; padding: 8px; background: #0f172a; color: #f8fafc;
+                                      border: 1px solid rgba(255,255,255,0.15); border-radius: 8px;">
+                    </div>
+
                 </div>
 
-                <div style="margin-bottom: 6px;">
-                    <label style="font-size: 0.78rem; color: #cbd5e1; display: block; margin-bottom: 6px; font-weight: 600;">
-                        <i class="fas fa-signature me-1"></i> Nom affiché (optionnel)
-                    </label>
-                    <input type="text" id="aux-nom" placeholder="Nom de la couche sur la carte"
-                           style="width: 100%; font-size: 0.82rem; padding: 8px; background: #0f172a; color: #f8fafc; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px;">
-                </div>
-
-                <div style="font-size: 0.72rem; color: #94a3b8; background: rgba(14,165,233,0.08); border: 1px solid rgba(14,165,233,0.25); border-radius: 8px; padding: 8px 12px; margin-top: 10px;">
+                <!-- Note d'isolation -->
+                <div style="font-size: 0.72rem; color: #94a3b8; background: rgba(14,165,233,0.08);
+                            border: 1px solid rgba(14,165,233,0.25); border-radius: 8px;
+                            padding: 8px 12px; margin-top: 10px;">
                     <i class="fas fa-info-circle me-1"></i>
-                    La couche est stockée <b>séparément</b> du réseau : elle ne modifie ni le GeoPackage projet, ni les calculs SWMM, et peut être retirée sans trace.
+                    La couche est stockée <b>séparément</b> du réseau : elle ne modifie ni le GeoPackage projet,
+                    ni les calculs SWMM, et peut être retirée sans trace.
                 </div>
 
             </div>
 
             <!-- Pied -->
-            <div style="padding: 14px 24px; border-top: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: flex-end; gap: 10px; background: #0f172a;">
-                <button onclick="fermerModalAuxLayer()" style="background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #cbd5e1; padding: 8px 18px; border-radius: 8px; cursor: pointer; font-size: 0.82rem;">Annuler</button>
-                <button id="btn-aux-upload" onclick="envoyerCoucheAux()" style="background: linear-gradient(135deg, #0ea5e9, #0369a1); border: none; color: white; padding: 8px 22px; border-radius: 8px; cursor: pointer; font-size: 0.82rem; font-weight: 700;">
+            <div style="padding: 14px 24px; border-top: 1px solid rgba(255,255,255,0.1);
+                        display: flex; justify-content: flex-end; gap: 10px; background: #0f172a;">
+                <button onclick="fermerModalAuxLayer()"
+                        style="background: transparent; border: 1px solid rgba(255,255,255,0.2);
+                               color: #cbd5e1; padding: 8px 18px; border-radius: 8px;
+                               cursor: pointer; font-size: 0.82rem;">Annuler</button>
+                <button id="btn-aux-upload" onclick="envoyerCoucheAux()" disabled
+                        style="background: linear-gradient(135deg, #0ea5e9, #0369a1); border: none;
+                               color: white; padding: 8px 22px; border-radius: 8px; cursor: not-allowed;
+                               font-size: 0.82rem; font-weight: 700; opacity: 0.4; transition: opacity .2s, cursor .2s;">
                     <i class="fas fa-upload me-1"></i> Importer
                 </button>
             </div>

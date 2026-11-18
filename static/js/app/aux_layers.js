@@ -11,8 +11,46 @@
         couches: {},          // layer_id -> {meta, groupe, visible, sondeActive}
         sondeLayerId: null,   // layer_id de la couche en mode sonde
         _moveendBind: false,
-        _chargement: false
+        _chargement: false,
+        nomsImportes: new Set(),  // basenames (sans ext.) des fichiers déjà importés
+        _listeChargee: false
     };
+
+    // Palette + motifs de traits : chaque couche satellite reçoit un style
+    // distinct et STABLE (dérivé du layer_id) — teinte et pointillé se
+    // distinguent d'une couche à l'autre sans collision avec le réseau.
+    const PALETTE_AUX = ['#38bdf8', '#34d399', '#fbbf24', '#f87171', '#a78bfa',
+        '#f472b6', '#22d3ee', '#a3e635', '#fb923c', '#e879f9', '#facc15', '#4ade80'];
+    const DASH_AUX = [null, '7,4', '2,4', '10,4,2,4', '4,2', '12,4,3,4', '1,4'];
+
+    function _hashStr(s) {
+        let h = 2166136261;
+        const str = String(s || '');
+        for (let i = 0; i < str.length; i++) {
+            h ^= str.charCodeAt(i);
+            h = Math.imul(h, 16777619);
+        }
+        return h >>> 0;
+    }
+
+    /** Style stable par couche : couleur + pointillé dérivés du layer_id. */
+    function _styleCouche(meta) {
+        if (meta._styleAux) return meta._styleAux;
+        const h = _hashStr(meta.id || meta.nom || '');
+        meta._styleAux = {
+            couleur: PALETTE_AUX[h % PALETTE_AUX.length],
+            dash: DASH_AUX[(h >>> 8) % DASH_AUX.length],
+            poids: 1.4 + ((h >>> 16) % 3) * 0.5
+        };
+        return meta._styleAux;
+    }
+
+    /** Basename normalisé (minuscules, sans extension) pour comparer fichiers. */
+    function _baseSansExt(nom) {
+        const n = String(nom || '');
+        const i = n.lastIndexOf('.');
+        return (i >= 0 ? n.slice(0, i) : n).toLowerCase();
+    }
 
     const TYPE_LIBELLES = {
         altimetrie_points: 'Altimétrie',
@@ -60,22 +98,28 @@
     // Style par type de couche
     // ------------------------------------------------------------------
     function styleFeature(couche, feature) {
-        const couleur = TYPE_COULEURS[couche.type] || '#a78bfa';
+        const st = _styleCouche(couche);
         const t = (couche.geom_type || '').toLowerCase();
         if (t.includes('polygon') || t.includes('multipolygon')) {
-            return { color: couleur, weight: 1.5, fillColor: couleur, fillOpacity: 0.12 };
+            return {
+                color: st.couleur, weight: st.poids, dashArray: st.dash || null,
+                fillColor: st.couleur, fillOpacity: 0.10
+            };
         }
-        return null; // points → pointToLayer
+        // Lignes / autres géométries vectorielles
+        return {
+            color: st.couleur, weight: st.poids, dashArray: st.dash || null, opacity: 0.9
+        };
     }
 
     function pointToLayer(couche, feature, latlng) {
-        const couleur = TYPE_COULEURS[couche.type] || '#a78bfa';
+        const st = _styleCouche(couche);
         const estTopo = couche.type === 'altimetrie_points';
         return L.circleMarker(latlng, {
             radius: estTopo ? 1.6 : 4,
-            color: estTopo ? '#64748b' : couleur,
+            color: estTopo ? '#64748b' : st.couleur,
             weight: estTopo ? 0.5 : 1.5,
-            fillColor: estTopo ? '#94a3b8' : couleur,
+            fillColor: estTopo ? '#94a3b8' : st.couleur,
             fillOpacity: estTopo ? 0.55 : 0.9
         });
     }
@@ -97,9 +141,13 @@
         try {
             const d = await fetchJSON(`/api/v1/projets/${encodeURIComponent(pid)}/aux-layers`);
             AUX.couches = {};
+            AUX.nomsImportes = new Set();
             (d.couches || []).forEach(c => {
                 AUX.couches[c.id] = { meta: c, groupe: L.layerGroup(), visible: false, charge: false };
+                // Basename du fichier source → exclusion de la liste d'import
+                if (c.fichier_source) AUX.nomsImportes.add(_baseSansExt(c.fichier_source));
             });
+            AUX._listeChargee = true;
             rendreListe(d.couches || []);
         } catch (e) {
             console.warn('[aux_layers] liste indisponible :', e.message);
@@ -118,7 +166,8 @@
         }
         if (vide) vide.style.display = 'none';
         couches.forEach(c => {
-            const couleur = TYPE_COULEURS[c.type] || '#a78bfa';
+            const st = _styleCouche(c);
+            const couleur = (c.type === 'altimetrie_points') ? TYPE_COULEURS[c.type] : st.couleur;
             const lib = TYPE_LIBELLES[c.type] || 'SIG';
             const estTopo = c.type === 'altimetrie_points' && c.statut === 'ok';
             const div = document.createElement('div');
@@ -292,89 +341,335 @@
     // ------------------------------------------------------------------
     // Import (modale)
     // ------------------------------------------------------------------
+    // ── État interne du scan dossier ────────────────────────────────────────
+    // _auxDossierIndex : basename -> { shp, sidecars, autres }
+    // _auxEntrees      : éléments affichables { cle, genre, ok, deja, entry, fichier }
+    // _auxSelectionnes : Set des « cle » cochées (multisélection)
+    let _auxDossierIndex = {};
+    let _auxEntrees = [];
+    let _auxSelectionnes = new Set();
+
     window.ouvrirModalAuxLayer = function () {
         const m = document.getElementById('modal-aux-layer');
         if (!m) return;
-        document.getElementById('aux-upload-statut').style.display = 'none';
+        // Réinitialisation complète à chaque ouverture
+        _auxDossierIndex = {};
+        _auxEntrees = [];
+        _auxSelectionnes = new Set();
+        const statut = document.getElementById('aux-upload-statut');
+        if (statut) statut.style.display = 'none';
+        const liste = document.getElementById('aux-shp-liste');
+        if (liste) liste.style.display = 'none';
+        const opts = document.getElementById('aux-options-bloc');
+        if (opts) opts.style.display = 'none';
+        const btn = document.getElementById('btn-aux-upload');
+        if (btn) { btn.disabled = true; btn.style.opacity = '0.4'; btn.style.cursor = 'not-allowed'; }
+        const lbl = document.getElementById('aux-folder-label');
+        if (lbl) lbl.textContent = 'Cliquez ici pour choisir un dossier…';
+        const fileEl = document.getElementById('aux-file');
+        if (fileEl) fileEl.value = '';
         m.style.display = 'flex';
     };
+
     window.fermerModalAuxLayer = function () {
         const m = document.getElementById('modal-aux-layer');
         if (m) m.style.display = 'none';
     };
+
     window.auxMajChampZ = function () {
-        const type = document.getElementById('aux-type').value;
+        const type = document.getElementById('aux-type');
         const wrap = document.getElementById('aux-champ-z');
-        if (wrap) wrap.style.display = (type === 'altimetrie_points') ? 'block' : 'none';
+        if (wrap && type) wrap.style.display = (type.value === 'altimetrie_points') ? 'block' : 'none';
+    };
+
+    /** Active/désactive les options et le bouton Importer selon la sélection. */
+    function _majEtatSelectionAux() {
+        const opts = document.getElementById('aux-options-bloc');
+        const btn  = document.getElementById('btn-aux-upload');
+        const n = _auxSelectionnes.size;
+        if (opts) {
+            opts.style.display = n ? 'block' : 'none';
+            if (n) window.auxMajChampZ();
+        }
+        if (btn) {
+            const act = n > 0;
+            btn.disabled = !act;
+            btn.style.opacity = act ? '1' : '0.4';
+            btn.style.cursor = act ? 'pointer' : 'not-allowed';
+        }
+    }
+
+    /**
+     * Rend la liste des fichiers cochables : exclut les fichiers déjà
+     * importés (basename présent côté serveur), affiche un compteur de
+     * masquage, et câble les cases à cocher (multisélection).
+     */
+    function _rendreItemsAux() {
+        const itemsEl = document.getElementById('aux-shp-items');
+        const listeEl = document.getElementById('aux-shp-liste');
+        if (!itemsEl) return;
+        // Purger la sélection des entrées devenues invalides
+        _auxEntrees.forEach(e => { if (e.deja || !e.ok) _auxSelectionnes.delete(e.cle); });
+        const dispo = _auxEntrees.filter(e => !e.deja);
+        const nbMasques = _auxEntrees.length - dispo.length;
+
+        itemsEl.innerHTML = '';
+        if (!dispo.length) {
+            itemsEl.innerHTML = '<div style="color:#94a3b8;font-size:0.8rem;padding:8px;">' +
+                (nbMasques
+                    ? `Tous les fichiers SIG reconnus de ce dossier sont déjà importés (${nbMasques} masqué${nbMasques > 1 ? 's' : ''}).`
+                    : 'Aucun shapefile ni fichier SIG reconnu dans ce dossier.') +
+                '</div>';
+        } else {
+            dispo.forEach(e => {
+                const label = document.createElement('label');
+                label.style.cssText = 'display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:pointer;border-radius:6px;transition:background .15s;';
+                label.onmouseover = () => { label.style.background = 'rgba(56,189,248,0.07)'; };
+                label.onmouseout = () => { label.style.background = 'transparent'; };
+
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.checked = _auxSelectionnes.has(e.cle);
+                cb.disabled = !e.ok;
+                cb.title = e.ok ? '' : 'Sidecars requis manquants (.shx/.dbf)';
+                cb.style.cssText = 'accent-color:#0ea5e9;width:16px;height:16px;cursor:pointer;flex-shrink:0;';
+                cb.addEventListener('change', () => {
+                    if (cb.checked) _auxSelectionnes.add(e.cle); else _auxSelectionnes.delete(e.cle);
+                    _majEtatSelectionAux();
+                });
+
+                const info = document.createElement('div');
+                info.style.cssText = 'flex:1;min-width:0;';
+                const nomDiv = document.createElement('div');
+                nomDiv.style.cssText = 'font-size:0.82rem;font-weight:600;color:#f1f5f9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+                nomDiv.textContent = e.nom;
+                const metaDiv = document.createElement('div');
+                metaDiv.style.cssText = 'font-size:0.68rem;color:#64748b;';
+                const badge = document.createElement('span');
+                badge.style.color = e.ok ? '#34d399' : '#f59e0b';
+                badge.textContent = e.ok
+                    ? (e.genre === 'direct' ? `✔ ${String(e.ext || '').toUpperCase()}` : `✔ ${e.nbSidecars} sidecar(s)`)
+                    : '⚠ sidecars manquants';
+                metaDiv.append(`${(e.taille / 1024).toFixed(1)} Ko  ·  `, badge);
+                info.appendChild(nomDiv);
+                info.appendChild(metaDiv);
+
+                label.appendChild(cb);
+                label.appendChild(info);
+                itemsEl.appendChild(label);
+            });
+
+            if (nbMasques) {
+                const note = document.createElement('div');
+                note.style.cssText = 'font-size:0.7rem;color:#64748b;padding:6px 8px 2px;';
+                note.textContent = `— ${nbMasques} fichier${nbMasques > 1 ? 's' : ''} déjà importé${nbMasques > 1 ? 's' : ''} masqué${nbMasques > 1 ? 's' : ''} —`;
+                itemsEl.appendChild(note);
+            }
+        }
+
+        // Auto-coche si un seul fichier importable
+        const importables = dispo.filter(e => e.ok);
+        if (importables.length === 1 && !_auxSelectionnes.size) {
+            _auxSelectionnes.add(importables[0].cle);
+            const cb = itemsEl.querySelector('input[type=checkbox]:not(:disabled)');
+            if (cb) cb.checked = true;
+        }
+
+        if (listeEl) listeEl.style.display = 'block';
+        _majEtatSelectionAux();
+    }
+
+    /**
+     * Appelée dès que l'utilisateur a choisi un dossier.
+     * Indexe tous les fichiers SIG, exclut ceux déjà importés, puis affiche
+     * la liste à cocher (multisélection).
+     */
+    window.auxScanDossier = async function (fileList) {
+        _auxDossierIndex = {};
+        _auxEntrees = [];
+        _auxSelectionnes = new Set();
+
+        const allFiles = Array.from(fileList);
+        if (!allFiles.length) return;
+
+        // S'assurer que la liste des couches importées est à jour — sinon
+        // les fichiers déjà présents ne pourraient pas être exclus.
+        if (AUX.projectId && !AUX._listeChargee) {
+            try { await chargerListeCouches(); } catch (e) { /* best effort */ }
+        }
+
+        // Libellé dossier
+        const premierChemin = allFiles[0].webkitRelativePath || allFiles[0].name;
+        const nomDossier = premierChemin.split('/')[0] || '(dossier)';
+        const lbl = document.getElementById('aux-folder-label');
+        if (lbl) lbl.textContent = `📂 ${nomDossier}  — ${allFiles.length} fichier(s) trouvé(s)`;
+
+        // Index par nom de base (sans extension, insensible à la casse)
+        allFiles.forEach(f => {
+            const nomComplet = f.name;
+            const ext = nomComplet.slice(nomComplet.lastIndexOf('.')).toLowerCase();
+            const base = nomComplet.slice(0, nomComplet.lastIndexOf('.')).toLowerCase();
+
+            if (!_auxDossierIndex[base]) {
+                _auxDossierIndex[base] = { shp: null, sidecars: [], autres: [] };
+            }
+            if (ext === '.shp') {
+                _auxDossierIndex[base].shp = f;
+            } else if (['.shx', '.dbf', '.prj', '.cpg', '.sbn', '.sbx', '.qpj'].includes(ext)) {
+                _auxDossierIndex[base].sidecars.push(f);
+            } else {
+                _auxDossierIndex[base].autres.push(f);
+            }
+        });
+
+        // Couches directes (gpkg, geojson, zip) sans shp
+        const directes = allFiles.filter(f => {
+            const ext = f.name.slice(f.name.lastIndexOf('.')).toLowerCase();
+            return ['.gpkg', '.geojson', '.json', '.zip'].includes(ext);
+        });
+
+        // Shapefiles détectés
+        const shapefiles = Object.values(_auxDossierIndex).filter(e => e.shp !== null);
+
+        // Construit les entrées affichables (déjà importé = exclu du rendu)
+        shapefiles.forEach(entry => {
+            const f = entry.shp;
+            const base = f.name.slice(0, f.name.lastIndexOf('.')).toLowerCase();
+            const manquants = ['.shx', '.dbf'].filter(scn =>
+                !entry.sidecars.some(sc => sc.name.toLowerCase().endsWith(scn))
+            );
+            _auxEntrees.push({
+                cle: 'shp:' + base,
+                cleComp: base,
+                genre: 'shp',
+                ok: manquants.length === 0,
+                deja: AUX.nomsImportes.has(base),
+                nom: f.name,
+                taille: f.size,
+                nbSidecars: entry.sidecars.length,
+                entry: entry
+            });
+        });
+
+        directes.forEach(f => {
+            const baseComp = _baseSansExt(f.name);
+            const ext = f.name.slice(f.name.lastIndexOf('.')).toLowerCase();
+            _auxEntrees.push({
+                cle: 'direct:' + f.name,
+                cleComp: baseComp,
+                genre: 'direct',
+                ok: true,
+                deja: AUX.nomsImportes.has(baseComp),
+                nom: f.name,
+                taille: f.size,
+                ext: ext,
+                fichier: f
+            });
+        });
+
+        _rendreItemsAux();
     };
 
     window.envoyerCoucheAux = async function () {
-        const fileEl = document.getElementById('aux-file');
         const statutEl = document.getElementById('aux-upload-statut');
-        const btn = document.getElementById('btn-aux-upload');
-        if (!fileEl || !fileEl.files || !fileEl.files.length) {
+        const btn      = document.getElementById('btn-aux-upload');
+
+        const afficherErreur = msg => {
             statutEl.style.display = 'block';
+            statutEl.style.whiteSpace = 'pre-line';
             statutEl.style.background = 'rgba(248,113,113,0.12)';
             statutEl.style.color = '#fca5a5';
-            statutEl.textContent = 'Sélectionnez un fichier (.shp + sidecars, .gpkg, .geojson ou .zip).';
-            return;
-        }
-        const pid = await resoudreProjectId();
-        if (!pid) {
+            statutEl.textContent = msg;
+        };
+        const afficherInfo = (msg, ok) => {
             statutEl.style.display = 'block';
-            statutEl.style.background = 'rgba(248,113,113,0.12)';
-            statutEl.style.color = '#fca5a5';
-            statutEl.textContent = 'Aucun projet actif : chargez d\'abord un réseau.';
+            statutEl.style.whiteSpace = 'pre-line';
+            statutEl.style.background = ok ? 'rgba(52,211,153,0.12)' : 'rgba(56,189,248,0.12)';
+            statutEl.style.color = ok ? '#6ee7b7' : '#7dd3fc';
+            statutEl.textContent = msg;
+        };
+
+        const selection = _auxEntrees.filter(e => _auxSelectionnes.has(e.cle) && !e.deja && e.ok);
+        if (!selection.length) {
+            afficherErreur("Cochez d'abord au moins un fichier à importer dans la liste.");
             return;
         }
 
-        const fd = new FormData();
-        // Shapefile : tous les fichiers sélectionnés (shp + sidecars) sous 'files'
-        Array.from(fileEl.files).forEach(f => fd.append('files', f));
-        fd.append('type', document.getElementById('aux-type').value);
-        const nom = document.getElementById('aux-nom').value.trim();
-        if (nom) fd.append('nom', nom);
-        const cz = document.getElementById('aux-colonne-z').value.trim();
-        if (cz) fd.append('colonne_z', cz);
+        const pid = await resoudreProjectId();
+        if (!pid) { afficherErreur("Aucun projet actif : chargez d'abord un réseau."); return; }
+
+        const type    = document.getElementById('aux-type').value;
+        const nomBase = (document.getElementById('aux-nom').value || '').trim();
+        const cz      = (document.getElementById('aux-colonne-z').value || '').trim();
+        const multi   = selection.length > 1;
 
         btn.disabled = true;
+        btn.style.opacity = '0.6';
+        btn.style.cursor  = 'not-allowed';
         btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Import en cours…';
-        statutEl.style.display = 'block';
-        statutEl.style.background = 'rgba(56,189,248,0.12)';
-        statutEl.style.color = '#7dd3fc';
-        statutEl.textContent = 'Import et indexation en cours — les grosses couches (topo) peuvent prendre quelques instants…';
 
-        try {
-            // fetch brut : FormData → ne pas fixer Content-Type
-            const r = await fetch(`/api/v1/projets/${encodeURIComponent(pid)}/aux-layers`, {
-                method: 'POST',
-                credentials: 'include',
-                headers: authHeaders(),
-                body: fd
-            });
-            const j = await r.json().catch(() => ({}));
-            if (!r.ok) throw new Error(j.detail || r.statusText);
+        const resultats = [];
+        for (let i = 0; i < selection.length; i++) {
+            const e = selection[i];
+            afficherInfo(`Import ${i + 1}/${selection.length} — « ${e.nom} »…`, false);
 
-            const c = j.couche || {};
-            statutEl.style.background = 'rgba(52,211,153,0.12)';
-            statutEl.style.color = '#6ee7b7';
-            statutEl.textContent = `Couche « ${c.nom} » importée : ${c.nb_features} entités` +
-                (c.grille_altimetrie ? ` — grille IDW ${c.grille_altimetrie.resolution_m} m, ${c.grille_altimetrie.nb_points} points cotés.` : '') +
-                (j.avertissement ? ` ⚠ ${j.avertissement}` : '');
+            const fd = new FormData();
+            if (e.genre === 'direct') {
+                fd.append('files', e.fichier);
+            } else {
+                fd.append('files', e.entry.shp);
+                e.entry.sidecars.forEach(sc => fd.append('files', sc));
+            }
+            fd.append('type', type);
+            const nomEnvoye = multi ? (nomBase ? `${nomBase} — ${e.nom}` : '') : nomBase;
+            if (nomEnvoye) fd.append('nom', nomEnvoye);
+            if (cz) fd.append('colonne_z', cz);
 
-            fileEl.value = '';
-            document.getElementById('aux-nom').value = '';
-            document.getElementById('aux-colonne-z').value = '';
-            await chargerListeCouches();
-        } catch (e) {
-            statutEl.style.background = 'rgba(248,113,113,0.12)';
-            statutEl.style.color = '#fca5a5';
-            statutEl.textContent = 'Échec de l\'import : ' + e.message;
-        } finally {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-upload me-1"></i> Importer';
+            try {
+                const r = await fetch(`/api/v1/projets/${encodeURIComponent(pid)}/aux-layers`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: authHeaders(),
+                    body: fd
+                });
+                const j = await r.json().catch(() => ({}));
+                if (!r.ok) throw new Error(j.detail || r.statusText);
+                resultats.push({ cle: e.cle, ok: true, nom: (j.couche && j.couche.nom) || e.nom, avert: j.avertissement || null });
+            } catch (err) {
+                resultats.push({ cle: e.cle, ok: false, nom: e.nom, err: err.message });
+            }
         }
+
+        const nbOk = resultats.filter(r => r.ok).length;
+        const lignes = resultats.map(r => r.ok ? `✔ ${r.nom}` : `✖ ${r.nom} — ${r.err}`);
+        const avert = resultats.map(r => r.avert).filter(Boolean);
+        afficherInfo(
+            `${nbOk}/${selection.length} couche${selection.length > 1 ? 's' : ''} importée${nbOk > 1 ? 's' : ''}\n` +
+            lignes.join('\n') +
+            (avert.length ? `\n⚠ ${avert.join(' | ')}` : ''),
+            nbOk === selection.length
+        );
+
+        // Réinitialisation + rafraîchissement : les fichiers importés
+        // disparaissent de la liste à la prochaine ouverture/actualisation.
+        _auxSelectionnes.clear();
+        document.getElementById('aux-nom').value       = '';
+        document.getElementById('aux-colonne-z').value = '';
+        try { await chargerListeCouches(); } catch (e) {}
+        _auxEntrees.forEach(e => { e.deja = AUX.nomsImportes.has(e.cleComp); });
+        _rendreItemsAux();
+
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor  = 'pointer';
+        btn.innerHTML = '<i class="fas fa-upload me-1"></i> Importer';
     };
+
+    // Compat ascendante : plus utilisé par la liste (cases à cocher),
+    // conservé au cas où un autre appel existerait.
+    window.auxSelectionnerShp = function () { /* remplacé par les écouteurs directs */ };
+
+
 
     // ------------------------------------------------------------------
     // File de revue P1 : suspects de sens d'écoulement (lecture seule)
