@@ -124,6 +124,15 @@ function _masquerMenuInfobullesSim() {
         // POINTS 2 & 3 : COUCHES RÉSULTATS SWMM 5.2
         // ==========================================
         window.afficherResultatsSimulation = function(data) {
+            // Garde anti-récursion : l'affichage chaîne highlightCluster →
+            // gererAffichageSimulationPourBassin → ré-affiche les résultats,
+            // ce qui bouclait indéfiniment (« Maximum call stack size
+            // exceeded ») dès qu'un bassin avec simulation en cache était
+            // sélectionné pendant le rendu. Le drapeau est levé le temps de
+            // l'exécution synchrone puis relâché au tick suivant.
+            if (window._affichageSimEnCours) return;
+            window._affichageSimEnCours = true;
+            setTimeout(function () { window._affichageSimEnCours = false; }, 0);
             if (!data || !data.conduit_results || !data.node_results) return;
             window._dernierResultatSimulation = data;
 
