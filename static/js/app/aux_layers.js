@@ -853,6 +853,30 @@
         }
     }
 
+    /**
+     * Réinitialise le contexte projet des couches satellites : retire les
+     * couches affichées de l'ancien projet, invalide le projectId caché et
+     * recharge la liste. Appelé à chaque chargement d'un réseau/projet —
+     * garantit qu'une couche importée dans un projet n'apparaît jamais
+     * dans un autre.
+     */
+    window.auxReinitialiserProjet = async function () {
+        const m = carte();
+        Object.values(AUX.couches).forEach(c => {
+            try { if (m && m.hasLayer(c.groupe)) m.removeLayer(c.groupe); } catch (e) {}
+        });
+        desactiverSonde();
+        AUX.couches = {};
+        AUX.projectId = null;
+        AUX._listeChargee = false;
+        AUX.nomsImportes = new Set();
+        const cont = document.getElementById('aux-layers-list');
+        if (cont) cont.innerHTML = '';
+        const vide = document.getElementById('aux-layers-vide');
+        if (vide) vide.style.display = 'block';
+        await chargerListeCouches();
+    };
+
     // ------------------------------------------------------------------
     // Initialisation
     // ------------------------------------------------------------------

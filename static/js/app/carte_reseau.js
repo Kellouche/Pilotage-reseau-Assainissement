@@ -40,6 +40,12 @@ function chargerDonneesInitiales() {
                 .then(d => {
                     console.log('Données:', d.compteurs);
                     window._rawNetworkData = d;
+                    // Couches SIG satellites : réinitialiser le contexte projet
+                    // (sinon les couches de l'ancien projet restent visibles et
+                    // le projectId caché interroge le mauvais projet).
+                    if (typeof window.auxReinitialiserProjet === 'function') {
+                        window.auxReinitialiserProjet();
+                    }
                     if (d.project_name) {
                         const lbl = document.getElementById('topbar-project-label');
                         if (lbl) lbl.textContent = d.project_name;
