@@ -221,6 +221,25 @@ window.reinitialiserAffichageSimulation = function() {
                                 ...(data.kpis || {})
                             });
                         }
+                        // Synchroniser la sélection de bassin sur l'identité
+                        // RÉELLE de la simulation restaurée : meta.cluster_id
+                        // peut être dans l'espace exutoire (ex.
+                        // « 0_rejets_346980 ») — on le traduit en cluster_id
+                        // positionnel via les data-* du dropdown. Sans cela,
+                        // le bassin précédemment sélectionné (ex. petit
+                        // « Chorfa » 0,63 ha) garderait les étiquettes d'un
+                        // autre bassin que celui dont les couches sont
+                        // affichées.
+                        const _cidSim = (typeof window._optionBassinPourMetaSim === 'function')
+                            ? window._optionBassinPourMetaSim(data.meta) : null;
+                        if (_cidSim) {
+                            if (typeof highlightCluster === 'function') {
+                                highlightCluster(_cidSim, window._activeClusterLayer || (typeof couches !== 'undefined' ? couches.bassins : null));
+                            }
+                            if (typeof afficherResultatsSimulation === 'function') {
+                                afficherResultatsSimulation(data);
+                            }
+                        }
                     } else {
                         reinitialiserAffichageSimulation();
                     }

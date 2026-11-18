@@ -244,11 +244,29 @@
                                         zoomerSurBassin(cid, clusterLayer, bnds);
                                     });
 
+                                    // Le bassin est « simulé » si une simulation
+                                    // lui correspond par IDENTITÉ STABLE
+                                    // (cluster_id / exutoire / bassin_ref) —
+                                    // meta.cluster_id est souvent dans l'espace
+                                    // exutoire, jamais comparé textuellement.
+                                    const _estBassinSimule = (fc) => {
+                                        if (layer._isSimulatedBassin === true) return true;
+                                        const _ok = (sim) => sim && sim.meta && sim.status !== 'failed'
+                                            && (typeof window._simCorrespondAuBassin === 'function'
+                                                ? window._simCorrespondAuBassin(sim, fc)
+                                                : String(sim.meta.cluster_id) === fc);
+                                        if (_ok(window._dernierResultatSimulation)) return true;
+                                        if (window._simulationsCache) {
+                                            for (const _k of Object.keys(window._simulationsCache)) {
+                                                if (_ok(window._simulationsCache[_k])) return true;
+                                            }
+                                        }
+                                        return false;
+                                    };
+
                                     layer.on('mouseover', function() {
                                         const fCid = String(feature.properties.cluster_id);
-                                        const isSimule = (layer._isSimulatedBassin === true) ||
-                                            (window._dernierResultatSimulation && window._dernierResultatSimulation.meta && String(window._dernierResultatSimulation.meta.cluster_id) === fCid) ||
-                                            (window._simulationsCache && window._simulationsCache[fCid] && window._simulationsCache[fCid].status === 'success');
+                                        const isSimule = _estBassinSimule(fCid);
 
                                         if (isSimule) {
                                             this.setStyle({ color: '#0284c7', weight: 3.5, fillColor: '#38bdf8', fillOpacity: 0.32, dashArray: '7, 4' });
@@ -260,9 +278,7 @@
                                     });
                                     layer.on('mouseout', function() {
                                         const fCid = String(feature.properties.cluster_id);
-                                        const isSimule = (layer._isSimulatedBassin === true) ||
-                                            (window._dernierResultatSimulation && window._dernierResultatSimulation.meta && String(window._dernierResultatSimulation.meta.cluster_id) === fCid) ||
-                                            (window._simulationsCache && window._simulationsCache[fCid] && window._simulationsCache[fCid].status === 'success');
+                                        const isSimule = _estBassinSimule(fCid);
 
                                         if (isSimule) {
                                             this.setStyle({ color: '#0284c7', weight: 3.5, fillColor: '#38bdf8', fillOpacity: 0.20, dashArray: '7, 4' });

@@ -132,12 +132,17 @@
                     }
                 }
                 if (!trouve && nomMeta) {
+                    // Repli par nom toléré UNIQUEMENT si un seul bassin
+                    // porte ce nom — les homonymes (« Chorfa ») rendraient
+                    // la correspondance ambiguë et potentiellement fausse.
+                    const _homonymes = [];
                     for (const opt of bSel.options) {
                         const txt = String(opt.textContent || '').trim().toLowerCase();
                         if (txt === nomMeta || txt.startsWith(nomMeta + ' ') || txt.startsWith(nomMeta + '(')) {
-                            trouve = opt.value; break;
+                            _homonymes.push(opt.value);
                         }
                     }
+                    if (_homonymes.length === 1) trouve = _homonymes[0];
                 }
                 if (trouve) return { historyId: trouve, optionValue: trouve };
             }

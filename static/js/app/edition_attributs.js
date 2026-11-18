@@ -166,8 +166,14 @@
                 longueur = bassinProperties.longueur_totale_m !== undefined ? bassinProperties.longueur_totale_m : longueur;
             }
             // Synchronisation stricte avec la simulation active si ce bassin est le périmètre simulé
+            // (identité stable : meta.cluster_id peut être dans l'espace exutoire,
+            // ex. « 0_rejets_346980 » — jamais une comparaison textuelle au cluster_id)
             let displaySurf = (bassinProperties && bassinProperties.surface_ha !== undefined && bassinProperties.surface_ha !== null) ? bassinProperties.surface_ha : null;
-            if (window._dernierResultatSimulation && window._dernierResultatSimulation.meta && String(window._dernierResultatSimulation.meta.cluster_id) === String(clusterId)) {
+            const _simOk = window._dernierResultatSimulation && window._dernierResultatSimulation.meta
+                && (typeof window._simCorrespondAuBassin === 'function'
+                    ? window._simCorrespondAuBassin(window._dernierResultatSimulation, clusterId)
+                    : String(window._dernierResultatSimulation.meta.cluster_id) === String(clusterId));
+            if (_simOk) {
                 if (window._dernierResultatSimulation.meta.conduits_count !== undefined) {
                     nb = window._dernierResultatSimulation.meta.conduits_count;
                 }

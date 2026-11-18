@@ -1,0 +1,1530 @@
+{
+  "contexte": {
+    "org_id": "a66e32ad-f32b-4529-acc3-7a6026eb5a8a",
+    "project_id": "e05fae32-c544-4380-9db9-8915f4cecfdb",
+    "gpkg": "data\\.gpkg_cache\\a494746651c077859ed83e8bdc198db5c160a75d6e31416d55982ffef43163b9.gpkg",
+    "nb_bassins": 122,
+    "nb_simulations_db": 123
+  },
+  "balayage_b": {
+    "total_bassins": 122,
+    "total_sims_retournees": 65,
+    "bassins_avec_sims": 22,
+    "bassins_sans_sims": 100,
+    "flags_contamination": [],
+    "divergences_service": [],
+    "detail_bassins": [
+      {
+        "cluster_id": 1,
+        "exutoire_id": "12",
+        "bassin_ref": "exutoire:12",
+        "nom": "Nouvelle ville hassania",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 2,
+        "exutoire_id": "15",
+        "bassin_ref": "exutoire:15",
+        "nom": "Camp",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 3,
+        "exutoire_id": "16_rejets_350730",
+        "bassin_ref": "exutoire:16_rejets_350730",
+        "nom": "Rejet bettegar",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 4,
+        "exutoire_id": "19",
+        "bassin_ref": "exutoire:19",
+        "nom": "Rejet Lbatimat",
+        "nb_simulations": 1,
+        "simulations": [
+          {
+            "id": "39a96893-d567-4dce-820d-08355f12aac7",
+            "name": "SWMM_Assainissement_Ville_19_pluie_decennale",
+            "exutoire_noeud": "19",
+            "bassin_ref": "exutoire:19"
+          }
+        ]
+      },
+      {
+        "cluster_id": 5,
+        "exutoire_id": "20_rejets_350751",
+        "bassin_ref": "exutoire:20_rejets_350751",
+        "nom": "Lgaz",
+        "nb_simulations": 4,
+        "simulations": [
+          {
+            "id": "def44946-4632-4da0-ba25-cf1b16b97eee",
+            "name": "SWMM_Assainissement_Ville_20_rejets_350751_pluie_biennale",
+            "exutoire_noeud": "20_rejets_350751",
+            "bassin_ref": "exutoire:20_rejets_350751"
+          },
+          {
+            "id": "fd6f5bf7-aa41-4b99-9fd4-2c1aa9bcd89d",
+            "name": "SWMM_Assainissement_Ville_20_rejets_350751_pluie_biennale",
+            "exutoire_noeud": "20_rejets_350751",
+            "bassin_ref": "exutoire:20_rejets_350751"
+          },
+          {
+            "id": "495ef1e8-0e57-47ad-ba7f-48464460c819",
+            "name": "SWMM_Assainissement_Ville_20_rejets_350751_personnalise",
+            "exutoire_noeud": "20_rejets_350751",
+            "bassin_ref": "exutoire:20_rejets_350751"
+          },
+          {
+            "id": "266fa0f0-e05f-440d-b29f-b7b4fde17c64",
+            "name": "SWMM_Assainissement_Ville_20_rejets_350751_personnalise",
+            "exutoire_noeud": "20_rejets_350751",
+            "bassin_ref": "exutoire:20_rejets_350751"
+          }
+        ]
+      },
+      {
+        "cluster_id": 6,
+        "exutoire_id": "21_rejets_350726",
+        "bassin_ref": "exutoire:21_rejets_350726",
+        "nom": "Chlachliya",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 7,
+        "exutoire_id": "2",
+        "bassin_ref": "exutoire:2",
+        "nom": "Bensouna",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 8,
+        "exutoire_id": "23",
+        "bassin_ref": "exutoire:23",
+        "nom": "Bensouna 2",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 9,
+        "exutoire_id": "24",
+        "bassin_ref": "exutoire:24",
+        "nom": "Meknassa",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 10,
+        "exutoire_id": "5",
+        "bassin_ref": "exutoire:5",
+        "nom": "Ovoide",
+        "nb_simulations": 1,
+        "simulations": [
+          {
+            "id": "165b3d7a-4a7b-4bda-86df-d12ecf57f229",
+            "name": "SWMM_Assainissement_Ville_5_pluie_biennale",
+            "exutoire_noeud": "5",
+            "bassin_ref": "exutoire:5"
+          }
+        ]
+      },
+      {
+        "cluster_id": 11,
+        "exutoire_id": "6",
+        "bassin_ref": "exutoire:6",
+        "nom": "Belle vue",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 12,
+        "exutoire_id": "8_rejets_346731",
+        "bassin_ref": "exutoire:8_rejets_346731",
+        "nom": "Rempois chorfa",
+        "nb_simulations": 4,
+        "simulations": [
+          {
+            "id": "238d8cb6-546d-416a-a8f9-5256072e0b07",
+            "name": "SWMM_Assainissement_Ville_8_rejets_346731_pluie_decennale",
+            "exutoire_noeud": "8_rejets_346731",
+            "bassin_ref": "exutoire:8_rejets_346731"
+          },
+          {
+            "id": "1aeb9c63-76f7-4e4d-825d-8f13d0277653",
+            "name": "SWMM_Assainissement_Ville_8_rejets_346731_pluie_biennale",
+            "exutoire_noeud": "8_rejets_346731",
+            "bassin_ref": "exutoire:8_rejets_346731"
+          },
+          {
+            "id": "fb8e0de1-ba70-4621-be78-bb0a934cf312",
+            "name": "SWMM_Assainissement_Ville_8_rejets_346731_pluie_biennale",
+            "exutoire_noeud": "8_rejets_346731",
+            "bassin_ref": "exutoire:8_rejets_346731"
+          },
+          {
+            "id": "73952987-7885-4e23-a661-67ef14fa3a78",
+            "name": "SWMM_Assainissement_Ville_8_rejets_346731_pluie_biennale",
+            "exutoire_noeud": "8_rejets_346731",
+            "bassin_ref": "exutoire:8_rejets_346731"
+          }
+        ]
+      },
+      {
+        "cluster_id": 13,
+        "exutoire_id": "11_rejets_349157",
+        "bassin_ref": "exutoire:11_rejets_349157",
+        "nom": "A Coté de la cémitiére",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 14,
+        "exutoire_id": "14_rejets_349629",
+        "bassin_ref": "exutoire:14_rejets_349629",
+        "nom": "Carmella",
+        "nb_simulations": 2,
+        "simulations": [
+          {
+            "id": "531c97be-559d-4ca0-abf1-fa366405c4bf",
+            "name": "SWMM_Assainissement_Ville_14_rejets_349629_pluie_cinquantennale",
+            "exutoire_noeud": "14_rejets_349629",
+            "bassin_ref": "exutoire:14_rejets_349629"
+          },
+          {
+            "id": "b088a801-3d42-460b-a1ca-854bc9525d46",
+            "name": "SWMM_Assainissement_Ville_14_rejets_349629_pluie_biennale",
+            "exutoire_noeud": "14_rejets_349629",
+            "bassin_ref": "exutoire:14_rejets_349629"
+          }
+        ]
+      },
+      {
+        "cluster_id": 15,
+        "exutoire_id": "1",
+        "bassin_ref": "exutoire:1",
+        "nom": "Prison",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 16,
+        "exutoire_id": "3",
+        "bassin_ref": "exutoire:3",
+        "nom": "Kefafsa ( Terrains Agricoles )",
+        "nb_simulations": 1,
+        "simulations": [
+          {
+            "id": "0b7d805a-7f35-4d4b-8e3a-9efcd80a387b",
+            "name": "SWMM_Assainissement_Ville_3_pluie_decennale",
+            "exutoire_noeud": "3",
+            "bassin_ref": "exutoire:3"
+          }
+        ]
+      },
+      {
+        "cluster_id": 17,
+        "exutoire_id": "9_rejets_350308",
+        "bassin_ref": "exutoire:9_rejets_350308",
+        "nom": "9_rejets_350308",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 18,
+        "exutoire_id": "13",
+        "bassin_ref": "exutoire:13",
+        "nom": "Hai Houria",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 19,
+        "exutoire_id": "25",
+        "bassin_ref": "exutoire:25",
+        "nom": "Olympique",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 20,
+        "exutoire_id": "7_rejets_350685",
+        "bassin_ref": "exutoire:7_rejets_350685",
+        "nom": "DVO",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 21,
+        "exutoire_id": "26_rejets_350712",
+        "bassin_ref": "exutoire:26_rejets_350712",
+        "nom": "Parc enjen",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 22,
+        "exutoire_id": "17",
+        "bassin_ref": "exutoire:17",
+        "nom": "Chorfa",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 23,
+        "exutoire_id": "27_rejets_354543",
+        "bassin_ref": "exutoire:27_rejets_354543",
+        "nom": "Kefafsa opgi",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 24,
+        "exutoire_id": "28",
+        "bassin_ref": "exutoire:28",
+        "nom": "Kefafsa",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 25,
+        "exutoire_id": "31_rejets_352881",
+        "bassin_ref": "exutoire:31_rejets_352881",
+        "nom": "31_rejets_352881",
+        "nb_simulations": 2,
+        "simulations": [
+          {
+            "id": "4c1781de-9fbb-4d0e-805b-119e3d0c3042",
+            "name": "SWMM_Assainissement_Ville_31_rejets_352881_pluie_biennale",
+            "exutoire_noeud": "31_rejets_352881",
+            "bassin_ref": "exutoire:31_rejets_352881"
+          },
+          {
+            "id": "8f135b11-9758-40b5-9515-d5d5088c23a3",
+            "name": "SWMM_Assainissement_Ville_31_rejets_352881_pluie_decennale",
+            "exutoire_noeud": "31_rejets_352881",
+            "bassin_ref": "exutoire:31_rejets_352881"
+          }
+        ]
+      },
+      {
+        "cluster_id": 26,
+        "exutoire_id": "120",
+        "bassin_ref": "exutoire:120",
+        "nom": "La zone d'activité Ouled Mohamed",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 27,
+        "exutoire_id": "29_rejets_353540",
+        "bassin_ref": "exutoire:29_rejets_353540",
+        "nom": "Ouled Mohamed",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 28,
+        "exutoire_id": "32_rejets_347904",
+        "bassin_ref": "exutoire:32_rejets_347904",
+        "nom": "32_rejets_347904",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 29,
+        "exutoire_id": "37",
+        "bassin_ref": "exutoire:37",
+        "nom": "Usine poulet",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 30,
+        "exutoire_id": "38_rejets_351353",
+        "bassin_ref": "exutoire:38_rejets_351353",
+        "nom": "Mosalaha",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 31,
+        "exutoire_id": "39",
+        "bassin_ref": "exutoire:39",
+        "nom": "Sra bossiyar",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 32,
+        "exutoire_id": "40",
+        "bassin_ref": "exutoire:40",
+        "nom": "RN 19",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 33,
+        "exutoire_id": "35",
+        "bassin_ref": "exutoire:35",
+        "nom": "Hay Cherifi - Oued Tsighaouat",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 34,
+        "exutoire_id": "36",
+        "bassin_ref": "exutoire:36",
+        "nom": "Hay Cherifi",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 35,
+        "exutoire_id": "41",
+        "bassin_ref": "exutoire:41",
+        "nom": "Sra bossiyar",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 36,
+        "exutoire_id": "18_rejets_345073",
+        "bassin_ref": "exutoire:18_rejets_345073",
+        "nom": "18_rejets_345073",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 37,
+        "exutoire_id": "32_rejets_348127",
+        "bassin_ref": "exutoire:32_rejets_348127",
+        "nom": "32_rejets_348127",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 38,
+        "exutoire_id": "0",
+        "bassin_ref": "exutoire:0",
+        "nom": "Chorfa (STEP)",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 39,
+        "exutoire_id": "0_rejets_349395",
+        "bassin_ref": "exutoire:0_rejets_349395",
+        "nom": "Oued Tsighaouat",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 40,
+        "exutoire_id": "0_rejets_349403",
+        "bassin_ref": "exutoire:0_rejets_349403",
+        "nom": "0_rejets_349403",
+        "nb_simulations": 2,
+        "simulations": [
+          {
+            "id": "e8696b05-b17e-42b3-b201-3b22253c1c3a",
+            "name": "SWMM_Assainissement_Ville_0_rejets_349403_pluie_decennale",
+            "exutoire_noeud": "0_rejets_349403",
+            "bassin_ref": "exutoire:0_rejets_349403"
+          },
+          {
+            "id": "74496ec4-29c9-4deb-9265-b7eaeca930e8",
+            "name": "SWMM_Assainissement_Ville_0_rejets_349403_pluie_decennale",
+            "exutoire_noeud": "0_rejets_349403",
+            "bassin_ref": "exutoire:0_rejets_349403"
+          }
+        ]
+      },
+      {
+        "cluster_id": 41,
+        "exutoire_id": "0_rejets_349498",
+        "bassin_ref": "exutoire:0_rejets_349498",
+        "nom": "0_rejets_349498",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 42,
+        "exutoire_id": "0_rejets_352298",
+        "bassin_ref": "exutoire:0_rejets_352298",
+        "nom": "Kefafsa",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 43,
+        "exutoire_id": "0_rejets_351354",
+        "bassin_ref": "exutoire:0_rejets_351354",
+        "nom": "0_rejets_351354",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 44,
+        "exutoire_id": "0_rejets_352141",
+        "bassin_ref": "exutoire:0_rejets_352141",
+        "nom": "Kefafsa ( Terrains Agricoles)",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 45,
+        "exutoire_id": "0_rejets_351592",
+        "bassin_ref": "exutoire:0_rejets_351592",
+        "nom": "SRA BOUSSIAR",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 46,
+        "exutoire_id": "0_rejets_346980",
+        "bassin_ref": "exutoire:0_rejets_346980",
+        "nom": "Chorfa",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 47,
+        "exutoire_id": "79_rejets_350795",
+        "bassin_ref": "exutoire:79_rejets_350795",
+        "nom": "Lgazz",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 48,
+        "exutoire_id": "70_rejets_349654",
+        "bassin_ref": "exutoire:70_rejets_349654",
+        "nom": "A coté de SP Hay Cheriff",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 49,
+        "exutoire_id": "52",
+        "bassin_ref": "exutoire:52",
+        "nom": "SR Carmella",
+        "nb_simulations": 1,
+        "simulations": [
+          {
+            "id": "d8a4e66a-e707-48d8-8fd7-a170eb02a5fe",
+            "name": "SWMM_Assainissement_Ville_52_pluie_decennale",
+            "exutoire_noeud": "52",
+            "bassin_ref": "exutoire:52"
+          }
+        ]
+      },
+      {
+        "cluster_id": 50,
+        "exutoire_id": "22",
+        "bassin_ref": "exutoire:22",
+        "nom": "Terrain a urbaniser en moyen terme 01",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 51,
+        "exutoire_id": "49",
+        "bassin_ref": "exutoire:49",
+        "nom": "Terrain a urbaniser en moyen terme 01",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 52,
+        "exutoire_id": "30_rejets_353848",
+        "bassin_ref": "exutoire:30_rejets_353848",
+        "nom": "30_rejets_353848",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 53,
+        "exutoire_id": "67",
+        "bassin_ref": "exutoire:67",
+        "nom": "Cité 60 logts",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 54,
+        "exutoire_id": "55",
+        "bassin_ref": "exutoire:55",
+        "nom": "Chorfa",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 55,
+        "exutoire_id": "53_rejets_348605",
+        "bassin_ref": "exutoire:53_rejets_348605",
+        "nom": "Prison",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 56,
+        "exutoire_id": "56",
+        "bassin_ref": "exutoire:56",
+        "nom": "Evitement de Chlef",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 57,
+        "exutoire_id": "57_rejets_347002",
+        "bassin_ref": "exutoire:57_rejets_347002",
+        "nom": "57_rejets_347002",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 58,
+        "exutoire_id": "68",
+        "bassin_ref": "exutoire:68",
+        "nom": "La cité 40",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 59,
+        "exutoire_id": "59_rejets_351030",
+        "bassin_ref": "exutoire:59_rejets_351030",
+        "nom": "RN 19",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 60,
+        "exutoire_id": "60_rejets_350785",
+        "bassin_ref": "exutoire:60_rejets_350785",
+        "nom": "RN 19",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 61,
+        "exutoire_id": "61",
+        "bassin_ref": "exutoire:61",
+        "nom": "Hay Beteggeour",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 62,
+        "exutoire_id": "62_rejets_349982",
+        "bassin_ref": "exutoire:62_rejets_349982",
+        "nom": "Hay El Amel",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 63,
+        "exutoire_id": "64_rejets_350080",
+        "bassin_ref": "exutoire:64_rejets_350080",
+        "nom": "Guellal",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 64,
+        "exutoire_id": "58_rejets_346243",
+        "bassin_ref": "exutoire:58_rejets_346243",
+        "nom": "58_rejets_346243",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 65,
+        "exutoire_id": "71",
+        "bassin_ref": "exutoire:71",
+        "nom": "Bassin 65",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 66,
+        "exutoire_id": "72",
+        "bassin_ref": "exutoire:72",
+        "nom": "Bassin 66",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 67,
+        "exutoire_id": "69",
+        "bassin_ref": "exutoire:69",
+        "nom": "Aoubed",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 68,
+        "exutoire_id": "73_rejets_354197",
+        "bassin_ref": "exutoire:73_rejets_354197",
+        "nom": "RN 19",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 69,
+        "exutoire_id": "74",
+        "bassin_ref": "exutoire:74",
+        "nom": "RN 19",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 70,
+        "exutoire_id": "66",
+        "bassin_ref": "exutoire:66",
+        "nom": "RN 19",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 71,
+        "exutoire_id": "75",
+        "bassin_ref": "exutoire:75",
+        "nom": "RN 19",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 72,
+        "exutoire_id": "65_rejets_349947",
+        "bassin_ref": "exutoire:65_rejets_349947",
+        "nom": "Cité Brochery",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 73,
+        "exutoire_id": "63",
+        "bassin_ref": "exutoire:63",
+        "nom": "RN 19",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 74,
+        "exutoire_id": "76_rejets_350040",
+        "bassin_ref": "exutoire:76_rejets_350040",
+        "nom": "76_rejets_350040",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 75,
+        "exutoire_id": "78_rejets_353757",
+        "bassin_ref": "exutoire:78_rejets_353757",
+        "nom": "Zone 8",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 76,
+        "exutoire_id": "81_rejets_351954",
+        "bassin_ref": "exutoire:81_rejets_351954",
+        "nom": "RN 4",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 77,
+        "exutoire_id": "368",
+        "bassin_ref": "exutoire:368",
+        "nom": "Zone 08",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 78,
+        "exutoire_id": "10003_rejets_345019",
+        "bassin_ref": "exutoire:10003_rejets_345019",
+        "nom": "10003_rejets_345019",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 79,
+        "exutoire_id": "76",
+        "bassin_ref": "exutoire:76",
+        "nom": "CITE  500 LOGTS",
+        "nb_simulations": 1,
+        "simulations": [
+          {
+            "id": "75ea5b7c-02b1-4c1a-aa65-97f88f62f5fd",
+            "name": "SWMM_Assainissement_Ville_76_pluie_decennale",
+            "exutoire_noeud": "76",
+            "bassin_ref": "exutoire:76"
+          }
+        ]
+      },
+      {
+        "cluster_id": 80,
+        "exutoire_id": "4",
+        "bassin_ref": "exutoire:4",
+        "nom": "Bensouna",
+        "nb_simulations": 1,
+        "simulations": [
+          {
+            "id": "ebb0bfa4-1818-4690-88ee-f013d6167ea7",
+            "name": "SWMM_Assainissement_Ville_4_pluie_decennale",
+            "exutoire_noeud": "4",
+            "bassin_ref": "exutoire:4"
+          }
+        ]
+      },
+      {
+        "cluster_id": 81,
+        "exutoire_id": "6_ouvrages_speciaux_350330",
+        "bassin_ref": "exutoire:6_ouvrages_speciaux_350330",
+        "nom": "6_ouvrages_speciaux_350330",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 82,
+        "exutoire_id": "7_ouvrages_speciaux_348167",
+        "bassin_ref": "exutoire:7_ouvrages_speciaux_348167",
+        "nom": "7_ouvrages_speciaux_348167",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 83,
+        "exutoire_id": "8_ouvrages_speciaux_347072",
+        "bassin_ref": "exutoire:8_ouvrages_speciaux_347072",
+        "nom": "Eaux unitaire",
+        "nb_simulations": 2,
+        "simulations": [
+          {
+            "id": "8aed8f79-2433-45e9-a05a-c5d486a3c270",
+            "name": "SWMM_Assainissement_Ville_8_ouvrages_speciaux_347072_pluie_decennale",
+            "exutoire_noeud": "8_ouvrages_speciaux_347072",
+            "bassin_ref": "exutoire:8_ouvrages_speciaux_347072"
+          },
+          {
+            "id": "a453b269-0f6d-4da5-8005-340069f4b9ef",
+            "name": "SWMM_Assainissement_Ville_8_ouvrages_speciaux_347072_pluie_decennale",
+            "exutoire_noeud": "8_ouvrages_speciaux_347072",
+            "bassin_ref": "exutoire:8_ouvrages_speciaux_347072"
+          }
+        ]
+      },
+      {
+        "cluster_id": 84,
+        "exutoire_id": "10_ouvrages_speciaux_350176",
+        "bassin_ref": "exutoire:10_ouvrages_speciaux_350176",
+        "nom": "Eaux unitaire",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 85,
+        "exutoire_id": "11_ouvrages_speciaux_349848",
+        "bassin_ref": "exutoire:11_ouvrages_speciaux_349848",
+        "nom": "11_ouvrages_speciaux_349848",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 86,
+        "exutoire_id": "10",
+        "bassin_ref": "exutoire:10",
+        "nom": "Cité olympique",
+        "nb_simulations": 4,
+        "simulations": [
+          {
+            "id": "e541deb0-8659-4146-a39f-6f8a29c3da20",
+            "name": "SWMM_Assainissement_Ville_10_pluie_decennale",
+            "exutoire_noeud": "10",
+            "bassin_ref": "exutoire:10"
+          },
+          {
+            "id": "3946bd3c-5fb9-4d36-8b7b-5ac9b9376239",
+            "name": "SWMM_Assainissement_Ville_10_pluie_cinquantennale",
+            "exutoire_noeud": "10",
+            "bassin_ref": "exutoire:10"
+          },
+          {
+            "id": "e98b9758-3be2-4c80-ad28-1ead6b5d5c78",
+            "name": "SWMM_Assainissement_Ville_10_pluie_centennale",
+            "exutoire_noeud": "10",
+            "bassin_ref": "exutoire:10"
+          },
+          {
+            "id": "83dd24bc-78d7-4f1d-9dff-3edf20c7c5dd",
+            "name": "SWMM_Assainissement_Ville_10_pluie_centennale",
+            "exutoire_noeud": "10",
+            "bassin_ref": "exutoire:10"
+          }
+        ]
+      },
+      {
+        "cluster_id": 87,
+        "exutoire_id": "234",
+        "bassin_ref": "exutoire:234",
+        "nom": "Cite 80 Logts",
+        "nb_simulations": 1,
+        "simulations": [
+          {
+            "id": "3fccdc2e-1511-4b11-8e4d-7cac476a7f1d",
+            "name": "SWMM_Assainissement_Ville_234_pluie_decennale",
+            "exutoire_noeud": "234",
+            "bassin_ref": "exutoire:234"
+          }
+        ]
+      },
+      {
+        "cluster_id": 88,
+        "exutoire_id": "242",
+        "bassin_ref": "exutoire:242",
+        "nom": "Douanes",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 89,
+        "exutoire_id": "15_ouvrages_speciaux_354436",
+        "bassin_ref": "exutoire:15_ouvrages_speciaux_354436",
+        "nom": "15_ouvrages_speciaux_354436",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 90,
+        "exutoire_id": "20_ouvrages_speciaux_354774",
+        "bassin_ref": "exutoire:20_ouvrages_speciaux_354774",
+        "nom": "20_ouvrages_speciaux_354774",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 91,
+        "exutoire_id": "152",
+        "bassin_ref": "exutoire:152",
+        "nom": "El Kfafsa",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 92,
+        "exutoire_id": "25_ouvrages_speciaux_348883",
+        "bassin_ref": "exutoire:25_ouvrages_speciaux_348883",
+        "nom": "25_ouvrages_speciaux_348883",
+        "nb_simulations": 25,
+        "simulations": [
+          {
+            "id": "118b81cb-659d-4232-bf87-97abac7d2331",
+            "name": "SWMM_Assainissement_Ville_25_ouvrages_speciaux_348883_pluie_biennale",
+            "exutoire_noeud": "25_ouvrages_speciaux_348883",
+            "bassin_ref": "exutoire:25_ouvrages_speciaux_348883"
+          },
+          {
+            "id": "3f6586cd-34f9-4ffa-ae2f-25ea1ced468e",
+            "name": "SWMM_Assainissement_Ville_25_ouvrages_speciaux_348883_pluie_decennale",
+            "exutoire_noeud": "25_ouvrages_speciaux_348883",
+            "bassin_ref": "exutoire:25_ouvrages_speciaux_348883"
+          },
+          {
+            "id": "ab4fde5d-34bd-4e79-a528-e03e65f4b842",
+            "name": "SWMM_Assainissement_Ville_25_ouvrages_speciaux_348883_pluie_decennale",
+            "exutoire_noeud": "25_ouvrages_speciaux_348883",
+            "bassin_ref": "exutoire:25_ouvrages_speciaux_348883"
+          },
+          {
+            "id": "d5b5c52d-b6b0-400d-9f5e-09d4c6bd1153",
+            "name": "SWMM_Assainissement_Ville_25_ouvrages_speciaux_348883_pluie_decennale",
+            "exutoire_noeud": "25_ouvrages_speciaux_348883",
+            "bassin_ref": "exutoire:25_ouvrages_speciaux_348883"
+          },
+          {
+            "id": "6c9a2b72-5977-437d-89de-ba34e3c62259",
+            "name": "SWMM_25_ouvrages_speciaux_348883_1_pluie_decennale",
+            "exutoire_noeud": "",
+            "bassin_ref": ""
+          },
+          {
+            "id": "ef7ef1b3-d1e4-433a-bd20-1acc35eec147",
+            "name": "SWMM_25_ouvrages_speciaux_348883_1_pluie_decennale",
+            "exutoire_noeud": "",
+            "bassin_ref": ""
+          },
+          {
+            "id": "d9329f05-d172-4f80-9fec-8d0308dea2e7",
+            "name": "SWMM_25_ouvrages_speciaux_348883_1_pluie_decennale",
+            "exutoire_noeud": "",
+            "bassin_ref": ""
+          },
+          {
+            "id": "647154b4-b965-44d7-970e-395cc1a0230a",
+            "name": "SWMM_25_ouvrages_speciaux_348883_1_bms_alerte",
+            "exutoire_noeud": "",
+            "bassin_ref": ""
+          },
+          {
+            "id": "e90d5d99-11a6-4ae9-a878-70d10e1325ee",
+            "name": "SWMM_25_ouvrages_speciaux_348883_1_bms_alerte",
+            "exutoire_noeud": "",
+            "bassin_ref": ""
+          },
+          {
+            "id": "a6d6bb05-214d-4cc3-8945-b43a5f10b1e6",
+            "name": "SWMM_25_ouvrages_speciaux_348883_1_bms_alerte",
+            "exutoire_noeud": "",
+            "bassin_ref": ""
+          },
+          {
+            "id": "c5cc2807-5d1d-4b4a-a982-2109a0a82f0b",
+            "name": "SWMM_25_ouvrages_speciaux_348883_1_bms_alerte",
+            "exutoire_noeud": "",
+            "bassin_ref": ""
+          },
+          {
+            "id": "837e98a7-19f8-4c21-a4a1-145d5fe91b0e",
+            "name": "SWMM_25_ouvrages_speciaux_348883_1_bms_alerte",
+            "exutoire_noeud": "",
+            "bassin_ref": ""
+          },
+          {
+            "id": "2642ec20-ed0a-42ac-bece-257c0b0bdb92",
+            "name": "SWMM_25_ouvrages_speciaux_348883_1_bms_alerte",
+            "exutoire_noeud": "",
+            "bassin_ref": ""
+          },
+          {
+            "id": "26f9bb44-b5da-47db-91d6-7d704cea8b48",
+            "name": "SWMM_25_ouvrages_speciaux_348883_1_bms_alerte",
+            "exutoire_noeud": "",
+            "bassin_ref": ""
+          },
+          {
+            "id": "ab8f2c2c-591c-48d7-a997-c11cae772002",
+            "name": "SWMM_25_ouvrages_speciaux_348883_1_bms_alerte",
+            "exutoire_noeud": "",
+            "bassin_ref": ""
+          },
+          {
+            "id": "1b0e947c-7823-49a0-8cad-24d7133b3469",
+            "name": "SWMM_25_ouvrages_speciaux_348883_1_bms_alerte",
+            "exutoire_noeud": "",
+            "bassin_ref": ""
+          },
+          {
+            "id": "ee5a3404-d08b-4fcc-8766-3ae2f12fd6d8",
+            "name": "SWMM_25_ouvrages_speciaux_348883_1_bms_alerte",
+            "exutoire_noeud": "",
+            "bassin_ref": ""
+          },
+          {
+            "id": "274f4b47-81d3-4bdd-8897-46070d1e3585",
+            "name": "SWMM_25_ouvrages_speciaux_348883_1_bms_alerte",
+            "exutoire_noeud": "",
+            "bassin_ref": ""
+          },
+          {
+            "id": "42b706ad-c738-40fc-9215-ffd66d34995e",
+            "name": "SWMM_25_ouvrages_speciaux_348883_1_bms_alerte",
+            "exutoire_noeud": "",
+            "bassin_ref": ""
+          },
+          {
+            "id": "01d0fa57-08a0-47b4-b4b2-cbee7c08d693",
+            "name": "SWMM_25_ouvrages_speciaux_348883_1_pluie_decennale",
+            "exutoire_noeud": "",
+            "bassin_ref": ""
+          },
+          {
+            "id": "fa7a77ff-b5dd-410a-abaa-75a706f07148",
+            "name": "SWMM_25_ouvrages_speciaux_348883_1_bms_alerte",
+            "exutoire_noeud": "",
+            "bassin_ref": ""
+          },
+          {
+            "id": "107fca68-4d72-4cc4-89b3-b1f4e329abed",
+            "name": "SWMM_25_ouvrages_speciaux_348883_1_bms_alerte",
+            "exutoire_noeud": "",
+            "bassin_ref": ""
+          },
+          {
+            "id": "454fe663-d324-4a23-86e4-b5c4377549a2",
+            "name": "SWMM_25_ouvrages_speciaux_348883_1_bms_alerte",
+            "exutoire_noeud": "",
+            "bassin_ref": ""
+          },
+          {
+            "id": "7b728dc0-8efd-4347-ab22-28c6a58dcf14",
+            "name": "SWMM_25_ouvrages_speciaux_348883_1_pluie_decennale",
+            "exutoire_noeud": "",
+            "bassin_ref": ""
+          },
+          {
+            "id": "8c0aa837-b982-4cab-b891-6f3ce415d884",
+            "name": "SWMM_25_ouvrages_speciaux_348883_1_pluie_decennale",
+            "exutoire_noeud": "",
+            "bassin_ref": ""
+          }
+        ]
+      },
+      {
+        "cluster_id": 93,
+        "exutoire_id": "246",
+        "bassin_ref": "exutoire:246",
+        "nom": "Zone 04",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 94,
+        "exutoire_id": "27_ouvrages_speciaux_349853",
+        "bassin_ref": "exutoire:27_ouvrages_speciaux_349853",
+        "nom": "27_ouvrages_speciaux_349853",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 95,
+        "exutoire_id": "166",
+        "bassin_ref": "exutoire:166",
+        "nom": "Hassania nouvelle ville",
+        "nb_simulations": 1,
+        "simulations": [
+          {
+            "id": "9f864cb4-dbf9-432b-b84c-e9aa54b61643",
+            "name": "SWMM_Assainissement_Ville_166_pluie_decennale",
+            "exutoire_noeud": "166",
+            "bassin_ref": "exutoire:166"
+          }
+        ]
+      },
+      {
+        "cluster_id": 96,
+        "exutoire_id": "171",
+        "bassin_ref": "exutoire:171",
+        "nom": "AADL 1500 Hassania",
+        "nb_simulations": 1,
+        "simulations": [
+          {
+            "id": "63426ae9-55c3-4a53-8b52-4f9f622b5d53",
+            "name": "SWMM_Assainissement_Ville_171_pluie_decennale",
+            "exutoire_noeud": "171",
+            "bassin_ref": "exutoire:171"
+          }
+        ]
+      },
+      {
+        "cluster_id": 97,
+        "exutoire_id": "183",
+        "bassin_ref": "exutoire:183",
+        "nom": "5_ouvrages_speciaux_345116",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 98,
+        "exutoire_id": "31692",
+        "bassin_ref": "exutoire:31692",
+        "nom": "9_ouvrages_speciaux_345101",
+        "nb_simulations": 1,
+        "simulations": [
+          {
+            "id": "3e42d4f6-8809-46d1-b3af-ee7bf984ba64",
+            "name": "SWMM_Assainissement_Ville_31692_pluie_decennale",
+            "exutoire_noeud": "31692",
+            "bassin_ref": "exutoire:31692"
+          }
+        ]
+      },
+      {
+        "cluster_id": 99,
+        "exutoire_id": "254",
+        "bassin_ref": "exutoire:254",
+        "nom": "La zone d'activité Ouled Mohamed",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 100,
+        "exutoire_id": "1682",
+        "bassin_ref": "exutoire:1682",
+        "nom": "CITE BROCHERY",
+        "nb_simulations": 2,
+        "simulations": [
+          {
+            "id": "c7867777-ee69-4eac-a9fd-8880b129d6f0",
+            "name": "SWMM_Assainissement_Ville_1682_pluie_decennale",
+            "exutoire_noeud": "1682",
+            "bassin_ref": "exutoire:1682"
+          },
+          {
+            "id": "fc1b6e09-f4cb-4b62-ba19-fcc4e2cfaa56",
+            "name": "SWMM_Assainissement_Ville_1682_pluie_decennale",
+            "exutoire_noeud": "1682",
+            "bassin_ref": "exutoire:1682"
+          }
+        ]
+      },
+      {
+        "cluster_id": 101,
+        "exutoire_id": "30_ouvrages_speciaux_351607",
+        "bassin_ref": "exutoire:30_ouvrages_speciaux_351607",
+        "nom": "30_ouvrages_speciaux_351607",
+        "nb_simulations": 4,
+        "simulations": [
+          {
+            "id": "dffcca11-d4f5-42a8-a650-21c9f949417e",
+            "name": "SWMM_Assainissement_Ville_30_ouvrages_speciaux_351607_pluie_decennale",
+            "exutoire_noeud": "30_ouvrages_speciaux_351607",
+            "bassin_ref": "exutoire:30_ouvrages_speciaux_351607"
+          },
+          {
+            "id": "4e2dc33d-127a-4e24-aedc-d531937cbf26",
+            "name": "SWMM_Assainissement_Ville_30_ouvrages_speciaux_351607_pluie_centennale",
+            "exutoire_noeud": "30_ouvrages_speciaux_351607",
+            "bassin_ref": "exutoire:30_ouvrages_speciaux_351607"
+          },
+          {
+            "id": "a725e031-de9c-4049-bda3-5b03344cd5c3",
+            "name": "SWMM_Assainissement_Ville_30_ouvrages_speciaux_351607_pluie_decennale",
+            "exutoire_noeud": "30_ouvrages_speciaux_351607",
+            "bassin_ref": "exutoire:30_ouvrages_speciaux_351607"
+          },
+          {
+            "id": "9f1e95ad-d7c1-401f-a4fb-253a5814f7c6",
+            "name": "SWMM_Assainissement_Ville_30_ouvrages_speciaux_351607_pluie_biennale",
+            "exutoire_noeud": "30_ouvrages_speciaux_351607",
+            "bassin_ref": "exutoire:30_ouvrages_speciaux_351607"
+          }
+        ]
+      },
+      {
+        "cluster_id": 102,
+        "exutoire_id": "31_ouvrages_speciaux_351422",
+        "bassin_ref": "exutoire:31_ouvrages_speciaux_351422",
+        "nom": "31_ouvrages_speciaux_351422",
+        "nb_simulations": 3,
+        "simulations": [
+          {
+            "id": "5ce976c4-979b-4fe5-8bdd-a35380d026e9",
+            "name": "SWMM_Assainissement_Ville_31_ouvrages_speciaux_351422_pluie_biennale",
+            "exutoire_noeud": "31_ouvrages_speciaux_351422",
+            "bassin_ref": "exutoire:31_ouvrages_speciaux_351422"
+          },
+          {
+            "id": "968a0570-3533-4c0c-a117-a650e87261e1",
+            "name": "SWMM_Assainissement_Ville_31_ouvrages_speciaux_351422_pluie_decennale",
+            "exutoire_noeud": "31_ouvrages_speciaux_351422",
+            "bassin_ref": "exutoire:31_ouvrages_speciaux_351422"
+          },
+          {
+            "id": "8e15cccf-e1a9-4c0f-848a-d67d3ba731f4",
+            "name": "SWMM_Assainissement_Ville_31_ouvrages_speciaux_351422_pluie_decennale",
+            "exutoire_noeud": "31_ouvrages_speciaux_351422",
+            "bassin_ref": "exutoire:31_ouvrages_speciaux_351422"
+          }
+        ]
+      },
+      {
+        "cluster_id": 103,
+        "exutoire_id": "59_ouvrages_speciaux_346010",
+        "bassin_ref": "exutoire:59_ouvrages_speciaux_346010",
+        "nom": "59_ouvrages_speciaux_346010",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 104,
+        "exutoire_id": "62_ouvrages_speciaux_346195",
+        "bassin_ref": "exutoire:62_ouvrages_speciaux_346195",
+        "nom": "62_ouvrages_speciaux_346195",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 105,
+        "exutoire_id": "50_ouvrages_speciaux_349039",
+        "bassin_ref": "exutoire:50_ouvrages_speciaux_349039",
+        "nom": "50_ouvrages_speciaux_349039",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 106,
+        "exutoire_id": "55_ouvrages_speciaux_348207",
+        "bassin_ref": "exutoire:55_ouvrages_speciaux_348207",
+        "nom": "55_ouvrages_speciaux_348207",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 107,
+        "exutoire_id": "60_ouvrages_speciaux_347932",
+        "bassin_ref": "exutoire:60_ouvrages_speciaux_347932",
+        "nom": "60_ouvrages_speciaux_347932",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 108,
+        "exutoire_id": "57_ouvrages_speciaux_351163",
+        "bassin_ref": "exutoire:57_ouvrages_speciaux_351163",
+        "nom": "57_ouvrages_speciaux_351163",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 109,
+        "exutoire_id": "56_ouvrages_speciaux_347830",
+        "bassin_ref": "exutoire:56_ouvrages_speciaux_347830",
+        "nom": "56_ouvrages_speciaux_347830",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 110,
+        "exutoire_id": "61_ouvrages_speciaux_346243",
+        "bassin_ref": "exutoire:61_ouvrages_speciaux_346243",
+        "nom": "61_ouvrages_speciaux_346243",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 111,
+        "exutoire_id": "63_ouvrages_speciaux_346539",
+        "bassin_ref": "exutoire:63_ouvrages_speciaux_346539",
+        "nom": "63_ouvrages_speciaux_346539",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 112,
+        "exutoire_id": "64_ouvrages_speciaux_346940",
+        "bassin_ref": "exutoire:64_ouvrages_speciaux_346940",
+        "nom": "64_ouvrages_speciaux_346940",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 113,
+        "exutoire_id": "67_ouvrages_speciaux_346766",
+        "bassin_ref": "exutoire:67_ouvrages_speciaux_346766",
+        "nom": "67_ouvrages_speciaux_346766",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 114,
+        "exutoire_id": "65_ouvrages_speciaux_346710",
+        "bassin_ref": "exutoire:65_ouvrages_speciaux_346710",
+        "nom": "65_ouvrages_speciaux_346710",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 115,
+        "exutoire_id": "76_ouvrages_speciaux_353941",
+        "bassin_ref": "exutoire:76_ouvrages_speciaux_353941",
+        "nom": "76_ouvrages_speciaux_353941",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 116,
+        "exutoire_id": "16_ouvrages_speciaux_348548",
+        "bassin_ref": "exutoire:16_ouvrages_speciaux_348548",
+        "nom": "16_ouvrages_speciaux_348548",
+        "nb_simulations": 1,
+        "simulations": [
+          {
+            "id": "2c55088e-7c36-4799-8127-8d8d297e6876",
+            "name": "SWMM_Assainissement_Ville_16_ouvrages_speciaux_348548_pluie_decennale",
+            "exutoire_noeud": "16_ouvrages_speciaux_348548",
+            "bassin_ref": "exutoire:16_ouvrages_speciaux_348548"
+          }
+        ]
+      },
+      {
+        "cluster_id": 117,
+        "exutoire_id": "SR_HH02",
+        "bassin_ref": "exutoire:SR_HH02",
+        "nom": "Hay Houria N°02",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 118,
+        "exutoire_id": "SR_HH01",
+        "bassin_ref": "exutoire:SR_HH01",
+        "nom": "Hay Houria N°01",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 119,
+        "exutoire_id": "434",
+        "bassin_ref": "exutoire:434",
+        "nom": "Carmella",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 120,
+        "exutoire_id": "SR_CH",
+        "bassin_ref": "exutoire:SR_CH",
+        "nom": "SR Cherfa",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 121,
+        "exutoire_id": "SR_HC",
+        "bassin_ref": "exutoire:SR_HC",
+        "nom": "SR Hay  Cherifi",
+        "nb_simulations": 0,
+        "simulations": []
+      },
+      {
+        "cluster_id": 122,
+        "exutoire_id": "0_step_348155",
+        "bassin_ref": "exutoire:0_step_348155",
+        "nom": "La cité (STEP)",
+        "nb_simulations": 0,
+        "simulations": []
+      }
+    ]
+  },
+  "scenarios_c": {
+    "Numérique faible '1'": {
+      "cluster_id": 15,
+      "exutoire_id": "1",
+      "bassin_nom": "Prison",
+      "timeseries": {
+        "http_code": 404,
+        "status": "HTTP_ERROR",
+        "steps": 0
+      },
+      "bassin": {
+        "http_code": 200,
+        "status": "success",
+        "cluster_nom": null
+      }
+    },
+    "Numérique faible '3'": {
+      "cluster_id": 16,
+      "exutoire_id": "3",
+      "bassin_nom": "Kefafsa ( Terrains Agricoles )",
+      "timeseries": {
+        "http_code": 404,
+        "status": "HTTP_ERROR",
+        "steps": 0
+      },
+      "bassin": {
+        "http_code": 200,
+        "status": "none",
+        "cluster_nom": null
+      }
+    },
+    "Chaîne '8_rejets_346731'": {
+      "cluster_id": 12,
+      "exutoire_id": "8_rejets_346731",
+      "bassin_nom": "Rempois chorfa",
+      "timeseries": {
+        "http_code": 200,
+        "status": "SUCCESS",
+        "steps": 61
+      },
+      "bassin": {
+        "http_code": 200,
+        "status": "success",
+        "cluster_nom": "Rempois chorfa"
+      }
+    },
+    "Numérique élevé '234'": {
+      "cluster_id": 87,
+      "exutoire_id": "234",
+      "bassin_nom": "Cite 80 Logts",
+      "timeseries": {
+        "http_code": 200,
+        "status": "SUCCESS",
+        "steps": 61
+      },
+      "bassin": {
+        "http_code": 200,
+        "status": "success",
+        "cluster_nom": "Cite 80 Logts"
+      }
+    },
+    "Sans aucune simulation": {
+      "cluster_id": 2,
+      "exutoire_id": "15",
+      "bassin_nom": "Camp",
+      "timeseries": {
+        "http_code": 404,
+        "status": "HTTP_ERROR",
+        "steps": 0
+      },
+      "bassin": {
+        "http_code": 200,
+        "status": "success",
+        "cluster_nom": null
+      }
+    },
+    "frontend_history_animation": {
+      "simulation_id": "73952987-7885-4e23-a661-67ef14fa3a78",
+      "name": "SWMM_Assainissement_Ville_8_rejets_346731_pluie_biennale",
+      "has_timeseries": true,
+      "steps": 61,
+      "verdict": "PASS"
+    },
+    "cas_limite_bettegar_kefafsa": {
+      "verdict": "N/A (aucune sim bettegar)"
+    }
+  },
+  "robustesse_d": {
+    "list_simulations": {
+      "status": 200,
+      "count": 100,
+      "verdict": "PASS"
+    },
+    "timeseries_sans_filtre": {
+      "status": 200,
+      "steps": 61,
+      "verdict": "PASS"
+    },
+    "collision_12": {
+      "ident_exutoire_12": {
+        "nom": "Nouvelle ville hassania",
+        "exutoire_id": "12",
+        "bassin_ref": "exutoire:12"
+      },
+      "ident_positionnel_12": {
+        "nom": "Rempois chorfa",
+        "exutoire_id": "8_rejets_346731",
+        "bassin_ref": "exutoire:8_rejets_346731"
+      },
+      "verdict": "PASS"
+    },
+    "stealth_404": {
+      "historique_nb_sims": 0,
+      "bassin_status": "none",
+      "timeseries_http": 404,
+      "verdict": "PASS"
+    }
+  },
+  "hydraulique_e": {
+    "equations_touchees": false,
+    "solver_swmm_touche": false,
+    "verdict": "PASS"
+  }
+}

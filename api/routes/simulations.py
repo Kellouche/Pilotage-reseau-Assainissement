@@ -862,6 +862,20 @@ def _signaler_mismatch_version_gpkg(data: Dict[str, Any], ctx: Any, proj: Any) -
                 meta["gpkg_version_mismatch"] = True
                 meta["gpkg_version_sim_id"] = str(vid_sim)
                 meta["gpkg_version_courante_id"] = str(vid_projet)
+        # Identité métier stable de la simulation : le frontend doit
+        # distinguer les bassins homonymes et les espaces d'identifiants
+        # (cluster_id positionnel vs exutoire_noeud / bassin_ref) — sans
+        # ces champs, un nom seul ne suffit jamais à identifier un bassin.
+        sim = getattr(ctx, "simulation", None) if ctx is not None else None
+        if sim is not None:
+            meta = data.setdefault("meta", {})
+            if isinstance(meta, dict):
+                _bref = getattr(sim, "bassin_ref", None)
+                _ex = getattr(sim, "exutoire_noeud", None)
+                if _bref:
+                    meta["bassin_ref"] = str(_bref)
+                if _ex:
+                    meta["exutoire_noeud"] = str(_ex)
     except Exception:
         pass
 

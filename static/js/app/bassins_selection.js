@@ -138,6 +138,101 @@
             return cidStr ? `Bassin ${cidStr}` : 'Tous les bassins';
         }
 
+        // Identité stable d'un bassin du réseau affiché : exutoire_id et
+        // bassin_ref résolus depuis le dropdown (#bassin-select porte
+        // data-exutoire-id / data-bassin-ref) ou les propriétés GeoJSON.
+        // Le NOM d'un bassin n'est jamais une identité : plusieurs bassins
+        // homonymes (« Chorfa ») coexistent dans un même réseau.
+        function _identiteBassinStable(cidStr) {
+            const cid = (cidStr === null || cidStr === undefined) ? '' : String(cidStr).trim();
+            if (!cid) return { exutoireId: '', basinRef: '' };
+            const sel = document.getElementById('bassin-select');
+            if (sel) {
+                for (const opt of sel.options) {
+                    if (String(opt.value) === cid) {
+                        return {
+                            exutoireId: String(opt.dataset.exutoireId || '').trim().toLowerCase(),
+                            basinRef: String(opt.dataset.bassinRef || '').trim().toLowerCase()
+                        };
+                    }
+                }
+            }
+            const p = window._bassinProperties && window._bassinProperties[cid];
+            if (p) {
+                const ex = (p.exutoire_id !== undefined && p.exutoire_id !== null)
+                    ? String(p.exutoire_id).trim().toLowerCase() : '';
+                const br = p.bassin_ref ? String(p.bassin_ref).trim().toLowerCase()
+                    : (ex ? 'exutoire:' + ex : '');
+                return { exutoireId: ex, basinRef: br };
+            }
+            return { exutoireId: '', basinRef: '' };
+        }
+
+        // La simulation `sim` appartient-elle au bassin `cidStr` ?
+        // Correspondance par IDENTITÉ STABLE uniquement : cluster_id
+        // positionnel exact, exutoire_id ou bassin_ref. meta.cluster_id
+        // d'une simulation ciblée est dans l'espace exutoire
+        // (ex. « 0_rejets_346980 »), pas dans l'espace cluster_id.
+        function _simCorrespondAuBassin(sim, cidStr) {
+            const m = sim && sim.meta;
+            const cid = (cidStr === null || cidStr === undefined) ? '' : String(cidStr).trim();
+            if (!m || !cid) return false;
+            const cidLow = cid.toLowerCase();
+            const mCid = String(m.cluster_id !== undefined && m.cluster_id !== null ? m.cluster_id : '').trim().toLowerCase();
+            if (!mCid) return false;
+            if (mCid === cidLow) return true;
+            const exSim = new Set();
+            const refSim = new Set();
+            for (const v of [m.exutoire_noeud, m.exutoire_id, m.bassin_ref]) {
+                const s = (v === undefined || v === null) ? '' : String(v).trim().toLowerCase();
+                if (!s) continue;
+                if (s.indexOf('exutoire:') === 0) refSim.add(s); else exSim.add(s);
+            }
+            exSim.add(mCid);                    // meta.cluster_id peut être un exutoire
+            refSim.add('exutoire:' + mCid);
+            const idB = _identiteBassinStable(cid);
+            if (idB.exutoireId && exSim.has(idB.exutoireId)) return true;
+            if (idB.bassinRef) {
+                if (refSim.has(idB.bassinRef)) return true;
+                const nu = idB.bassinRef.indexOf('exutoire:') === 0
+                    ? idB.bassinRef.slice(9) : idB.bassinRef;
+                if (exSim.has(nu)) return true;
+            }
+            return false;
+        }
+        window._simCorrespondAuBassin = _simCorrespondAuBassin;
+
+        // Retrouve l'option #bassin-select (cluster_id positionnel) qui
+        // correspond à la simulation dont la meta porte un identifiant
+        // potentiellement dans l'espace exutoire. Retourne null si aucune
+        // correspondance ou si plusieurs bassins candidats existent
+        // (jamais de devinette entre homonymes).
+        window._optionBassinPourMetaSim = function(meta) {
+            const sel = document.getElementById('bassin-select');
+            if (!sel || !meta) return null;
+            const mid = String(meta.cluster_id !== undefined && meta.cluster_id !== null ? meta.cluster_id : '').trim().toLowerCase();
+            const mEx = String(meta.exutoire_noeud || meta.exutoire_id || '').trim().toLowerCase();
+            const mRef = String(meta.bassin_ref || '').trim().toLowerCase();
+            const cibles = new Set([mid, mEx, mRef].filter(Boolean));
+            if (!cibles.size) return null;
+            let trouve = null;
+            let ambigue = false;
+            for (const opt of sel.options) {
+                if (!opt.value) continue;
+                const v = String(opt.value).trim().toLowerCase();
+                const ex = String(opt.dataset.exutoireId || '').trim().toLowerCase();
+                const br = String(opt.dataset.bassinRef || '').trim().toLowerCase();
+                const brNu = br.indexOf('exutoire:') === 0 ? br.slice(9) : br;
+                const ok = cibles.has(v) || cibles.has(ex) || cibles.has(br) || cibles.has(brNu)
+                    || cibles.has('exutoire:' + v);
+                if (ok) {
+                    if (trouve !== null && trouve !== opt.value) { ambigue = true; break; }
+                    trouve = opt.value;
+                }
+            }
+            return ambigue ? null : trouve;
+        };
+
         window.mettreAJourIndicateurBassin = function(clusterId, state = {}) {
             const topPill = document.getElementById('topbar-bassin-pill');
             const topIcon = document.getElementById('topbar-bassin-icon');
@@ -175,18 +270,19 @@
             if (_aDebits && (state.status === 'simulated' || state.status === 'success' || state.conduit_results)) {
                 simActive = state;
             } else if (cidStr) {
+                // Correspondance par identité stable uniquement : le nom
+                // du bassin ne suffit pas (homonymes « Chorfa »…).
                 const lastSim = window._dernierResultatSimulation;
-                if (lastSim && lastSim.meta) {
-                    const mId = String(lastSim.meta.cluster_id !== undefined && lastSim.meta.cluster_id !== null ? lastSim.meta.cluster_id : '');
-                    const mNom = String(lastSim.meta.bassin_nom || lastSim.meta.cluster_nom || '');
-                    if (mId === cidStr || mNom === cidStr || (window._bassinNoms && (window._bassinNoms[cidStr] === mNom || window._bassinNoms[cidStr] === mId))) {
-                        simActive = lastSim;
-                    }
+                if (lastSim && lastSim.meta && _simCorrespondAuBassin(lastSim, cidStr)) {
+                    simActive = lastSim;
                 }
                 if (!simActive && window._simulationsCache) {
-                    simActive = window._simulationsCache[cidStr];
-                    if (!simActive && window._bassinNoms && window._bassinNoms[cidStr]) {
-                        simActive = window._simulationsCache[window._bassinNoms[cidStr]];
+                    for (const _k of Object.keys(window._simulationsCache)) {
+                        const _cand = window._simulationsCache[_k];
+                        if (_cand && _cand.status !== 'failed' && _simCorrespondAuBassin(_cand, cidStr)) {
+                            simActive = _cand;
+                            break;
+                        }
                     }
                 }
             }
@@ -238,16 +334,17 @@
                 // Badge de fiabilité du modèle (agent garde-fou hydraulicien)
                 let _simFiab = simActive;
                 if (!_fiabiliteDepuisSimulation(_simFiab) && cidStr) {
-                    _simFiab = (window._simulationsCache && (window._simulationsCache[cidStr] || (window._bassinNoms && window._simulationsCache[window._bassinNoms[cidStr]]))) || null;
+                    if (window._simulationsCache) {
+                        for (const _k of Object.keys(window._simulationsCache)) {
+                            const _cand = window._simulationsCache[_k];
+                            if (_cand && _simCorrespondAuBassin(_cand, cidStr)) { _simFiab = _cand; break; }
+                        }
+                    }
                     // Repli sur la dernière simulation seulement si elle
                     // correspond bien à ce bassin (éviter un verdict étranger).
-                    if (!_simFiab && window._dernierResultatSimulation && window._dernierResultatSimulation.meta) {
-                        const _lm = window._dernierResultatSimulation.meta;
-                        const _lmId = String(_lm.cluster_id !== undefined && _lm.cluster_id !== null ? _lm.cluster_id : '');
-                        const _lmNom = String(_lm.bassin_nom || _lm.cluster_nom || '');
-                        if (_lmId === cidStr || _lmNom === cidStr || (window._bassinNoms && window._bassinNoms[cidStr] === _lmNom)) {
-                            _simFiab = window._dernierResultatSimulation;
-                        }
+                    if (!_simFiab && window._dernierResultatSimulation
+                            && _simCorrespondAuBassin(window._dernierResultatSimulation, cidStr)) {
+                        _simFiab = window._dernierResultatSimulation;
                     }
                 }
                 _majBadgeFiabiliteTopbar(
@@ -361,20 +458,18 @@
             const nomBassin = (window._bassinNoms && window._bassinNoms[cidStr]) || cidStr;
 
             // 1. Vérifier si la simulation actuellement affichée correspond déjà à ce bassin
-            if (window._dernierResultatSimulation && window._dernierResultatSimulation.meta) {
-                const m = window._dernierResultatSimulation.meta;
-                const mCid = String(m.cluster_id !== undefined && m.cluster_id !== null ? m.cluster_id : '');
+            //    (identité stable : cluster_id / exutoire / bassin_ref — jamais le nom)
+            if (window._dernierResultatSimulation && _simCorrespondAuBassin(window._dernierResultatSimulation, cidStr)) {
+                const m = window._dernierResultatSimulation.meta || {};
                 const mNom = String(m.bassin_nom || m.cluster_nom || '');
-                if (mCid === cidStr || mNom === cidStr || mNom === nomBassin || (nomBassin && mNom.toLowerCase() === nomBassin.toLowerCase())) {
-                    if (leg) {
-                        leg.classList.add('active-legend');
-                        leg.style.display = 'block';
-                    }
-                    if (legTitle) {
-                        legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> SWMM 5.2 — ${mNom || nomBassin}`;
-                    }
-                    return;
+                if (leg) {
+                    leg.classList.add('active-legend');
+                    leg.style.display = 'block';
                 }
+                if (legTitle) {
+                    legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> SWMM 5.2 — ${mNom || nomBassin}`;
+                }
+                return;
             }
 
             // 2. Nettoyage immédiat : ne jamais laisser flotter la simulation d'un autre bassin
@@ -387,9 +482,22 @@
             }
 
             // 3. Vérifier si ce bassin a une simulation dans le cache client
+            //    (identité stable — la clé « nom » du cache est ambiguë entre
+            //    bassins homonymes, on vérifie toujours meta avant d'accepter)
             let cached = null;
             if (window._simulationsCache) {
-                cached = window._simulationsCache[cidStr] || (nomBassin && window._simulationsCache[nomBassin]);
+                const _direct = window._simulationsCache[cidStr] || (nomBassin && window._simulationsCache[nomBassin]);
+                if (_direct && _simCorrespondAuBassin(_direct, cidStr)) {
+                    cached = _direct;
+                } else {
+                    for (const _k of Object.keys(window._simulationsCache)) {
+                        const _cand = window._simulationsCache[_k];
+                        if (_cand && _cand.status === 'success' && _simCorrespondAuBassin(_cand, cidStr)) {
+                            cached = _cand;
+                            break;
+                        }
+                    }
+                }
             }
 
             if (cached && cached.status === 'success' && cached.conduit_results && Object.keys(cached.conduit_results).length > 0) {
@@ -565,9 +673,11 @@
                             dashArray: '5, 4'
                         });
                     } else if (fCid === _selectedClusterId) {
-                        const isSim = (layer._isSimulatedBassin === true) ||
-                            (window._dernierResultatSimulation && window._dernierResultatSimulation.meta && String(window._dernierResultatSimulation.meta.cluster_id) === fCid) ||
-                            (window._simulationsCache && window._simulationsCache[fCid] && window._simulationsCache[fCid].status === 'success');
+                        const isSim = (layer._isSimulatedBassin === true) || _simCorrespondAuBassin(window._dernierResultatSimulation, fCid)
+                            || (window._simulationsCache && Object.keys(window._simulationsCache).some(_k => {
+                                const _c = window._simulationsCache[_k];
+                                return _c && _c.status === 'success' && _simCorrespondAuBassin(_c, fCid);
+                            }));
                         if (isSim) {
                             // Bassin simulé : maintien impératif de la teinte bleu ciel
                             layer.setStyle({ color: '#0284c7', fillColor: '#38bdf8', fillOpacity: 0.20, weight: 3.5, dashArray: '7, 4' });
