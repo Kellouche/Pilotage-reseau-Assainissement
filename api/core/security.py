@@ -51,6 +51,45 @@ ROLE_HIERARCHY = {
     "super_admin": 40,
 }
 
+# ---------------------------------------------------------------------------
+# Allowlist publique officielle (Lot A1 — §4.4)
+# Seules ces surfaces sont autorisées à répondre sans dépendance tenant.
+# Toute autre surface doit obligatoirement résoudre le contexte d'organisation.
+# ---------------------------------------------------------------------------
+PUBLIC_ALLOWLIST = {
+    # Pages HTML
+    ("GET", "/"),
+    ("GET", "/login"),
+    ("GET", "/register"),
+    ("GET", "/logout"),
+    ("GET", "/favicon.ico"),
+    ("GET", "/tarifs"),
+    ("GET", "/pricing"),
+    ("GET", "/map"),
+    ("GET", "/cockpit"),
+    ("GET", "/carte"),
+    ("GET", "/tunnel"),
+    ("GET", "/qualite"),
+    # Santé et métadonnées d'API
+    ("GET", "/health"),
+    ("GET", "/api/info"),
+    # Documentation OpenAPI
+    ("GET", "/openapi.json"),
+    ("GET", "/docs"),
+    ("GET", "/docs/oauth2-redirect"),
+    ("GET", "/redoc"),
+    # Authentification publique
+    ("POST", "/api/v1/auth/register"),
+    ("POST", "/api/v1/auth/login"),
+    ("POST", "/api/v1/auth/refresh"),
+    ("POST", "/api/v1/auth/logout"),
+    ("GET", "/api/v1/auth/check-email"),
+    ("POST", "/api/v1/auth/verify-email"),
+    ("POST", "/api/v1/auth/resend-code"),
+    # Catalogue de démonstration public (statique)
+    ("GET", "/api/v1/network/datasets"),
+}
+
 
 def has_sufficient_role(current_role: str, required_role: str) -> bool:
     """Vérifie si current_role dispose d'au moins les privilèges de required_role."""
