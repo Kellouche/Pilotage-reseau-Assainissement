@@ -777,6 +777,7 @@ async def upload_network_gpkg(
 
 @router.get("/subcatchments")
 def get_network_subcatchments(
+    snapshot: Optional[str] = None,
     ctx: TenantContext = Depends(require_role("viewer")),
     db: Session = Depends(get_db)
 ):
@@ -788,12 +789,22 @@ def get_network_subcatchments(
     from src.domain.hydrologie import GenerateurHydrologie
     import geopandas as gpd
     from api.services.simulation_service import resoudre_gpkg_effectif_pour_projet
+    from api.services.gpkg_versions import (
+        resoudre_snapshot_pour_lecture, GpkgSimulationError)
 
     project = db.query(Project).filter(
         Project.org_id == ctx.org_id,
         Project.is_archived.is_(False)
     ).first()
-    gpkg_path = resoudre_gpkg_effectif_pour_projet(db, project) if project else None
+    gpkg_path = None
+    if project is not None:
+        try:
+            snap_ctx = resoudre_snapshot_pour_lecture(db, project, snapshot)
+            gpkg_path = snap_ctx["path"]
+        except GpkgSimulationError:
+            if snapshot:
+                raise HTTPException(status_code=404, detail="Ressource introuvable")
+            gpkg_path = resoudre_gpkg_effectif_pour_projet(db, project)
 
     if gpkg_path is None or not gpkg_path.exists():
         return {

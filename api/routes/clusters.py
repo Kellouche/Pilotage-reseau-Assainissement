@@ -222,7 +222,8 @@ def recalculate_all_clusters(
     background_tasks: BackgroundTasks,
     ctx: TenantContext = Depends(require_role("admin")),
     db: Session = Depends(get_db),
-    persist: bool = True
+    persist: bool = True,
+    snapshot: Optional[str] = None
 ):
     """Reconstruit tous les clusters en bassins exclusifs (sans chevauchement) pour l'organisation.
 
@@ -232,12 +233,24 @@ def recalculate_all_clusters(
     """
     chemin_gpkg = None
     from api.services.simulation_service import resoudre_gpkg_effectif_pour_projet
+    from api.services.gpkg_versions import (
+        resoudre_snapshot_pour_lecture, GpkgSimulationError)
     project = db.query(Project).filter(
         Project.org_id == ctx.org_id,
         Project.is_archived.is_(False)
     ).first()
     if project:
-        chemin = resoudre_gpkg_effectif_pour_projet(db, project)
+        try:
+            snap_ctx = resoudre_snapshot_pour_lecture(db, project, snapshot)
+            chemin = snap_ctx["path"]
+            # Snapshot archivé = consultation stricte : jamais de purge ni
+            # réécriture des clusters du projet (INV-4 lecture seule).
+            if snapshot and not snap_ctx.get("est_version_courante"):
+                persist = False
+        except GpkgSimulationError:
+            if snapshot:
+                raise HTTPException(status_code=404, detail="Ressource introuvable")
+            chemin = resoudre_gpkg_effectif_pour_projet(db, project)
         if chemin is not None:
             chemin_gpkg = str(chemin)
 

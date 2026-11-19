@@ -110,6 +110,23 @@ def _noeuds_valides_projet(db: Session, proj: Project) -> Set[str]:
     return _contexte_noeuds(db, proj)[0]
 
 
+def _filtre_snapshot_apports(db: Session, proj: Project, snapshot: Optional[str]):
+    """
+    Retourne (version_id, sha256) du snapshot demandé, ou (None, None) si
+    `snapshot` est absent (comportement historique : tous les apports du
+    projet). Snapshot explicite introuvable -> GpkgSimulationError.
+    """
+    if not snapshot or not str(snapshot).strip():
+        return None, None
+    from api.services.gpkg_versions import (
+        resoudre_snapshot_pour_lecture, GpkgSimulationError)
+    try:
+        ctx = resoudre_snapshot_pour_lecture(db, proj, snapshot)
+    except GpkgSimulationError as e:
+        raise HTTPException(status_code=404, detail="Ressource introuvable") from e
+    return ctx.get("version_id"), ctx.get("sha256")
+
+
 def _valider_noeud(db: Session, proj: Project, node_id: str) -> str:
     """Normalise et valide node_id contre le GPKG du projet. Retourne l'id canonique."""
     from src.domain.moteur_swmm.constants import _clean_node_id
@@ -162,14 +179,29 @@ def lister_apports(
     project_id: Optional[str] = Query(None),
     node_id: Optional[str] = Query(None),
     actif_seulement: bool = Query(False),
+    snapshot: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     tenant: TenantContext = Depends(get_tenant_context),
 ):
-    """Liste les apports DWF du projet (bornés à l'organisation du tenant)."""
+    """
+    Liste les apports DWF du projet (bornés à l'organisation du tenant).
+    `snapshot` (optionnel) : n'affiche que les apports estampillés pour ce
+    snapshot GPKG — un apport d'une autre version réseau n'est jamais
+    restitué dans une vue d'archive (pas de mélange d'espaces d'IDs).
+    """
     proj = _resoudre_projet(db, tenant, project_id)
+    snap_vid, snap_sha = _filtre_snapshot_apports(db, proj, snapshot)
     q = db.query(ApportDwf).filter(
         ApportDwf.org_id == tenant.org_id,
         ApportDwf.project_id == proj.id)
+    if snap_vid or snap_sha:
+        from sqlalchemy import or_
+        clauses = []
+        if snap_vid:
+            clauses.append(ApportDwf.gpkg_version_id == snap_vid)
+        if snap_sha:
+            clauses.append(ApportDwf.gpkg_sha256 == snap_sha)
+        q = q.filter(or_(*clauses))
     if node_id:
         from src.domain.moteur_swmm.constants import _clean_node_id
         q = q.filter(ApportDwf.node_id == _clean_node_id(node_id))
@@ -181,11 +213,33 @@ def lister_apports(
 @router.get("/noeuds")
 def lister_noeuds_disponibles(
     project_id: Optional[str] = Query(None),
+    snapshot: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     tenant: TenantContext = Depends(get_tenant_context),
 ):
-    """Liste les identifiants de nœuds valides du GPKG du projet (aide à la saisie)."""
+    """Liste les identifiants de nœuds valides du GPKG du projet (aide à la saisie).
+
+    `snapshot` : lit les nœuds du snapshot demandé (version archivée) au
+    lieu de la version courante — la vue archive voit SON réseau.
+    """
     proj = _resoudre_projet(db, tenant, project_id)
+    if snapshot and str(snapshot).strip():
+        from api.services.gpkg_versions import (
+            resoudre_snapshot_pour_lecture, GpkgSimulationError)
+        try:
+            snap_ctx = resoudre_snapshot_pour_lecture(db, proj, snapshot)
+        except GpkgSimulationError:
+            raise HTTPException(status_code=404, detail="Ressource introuvable")
+        gpkg_path = Path(snap_ctx["path"])
+        layers = gpd.list_layers(str(gpkg_path))["name"].tolist()
+        regard_layer = next((l for l in layers if "regard" in l.lower()), None)
+        if not regard_layer:
+            raise HTTPException(status_code=422, detail="Couche 'regards' absente du snapshot.")
+        regards = gpd.read_file(str(gpkg_path), layer=regard_layer, columns=["Code"])
+        from src.domain.moteur_swmm.constants import _clean_node_id
+        noeuds = sorted({_clean_node_id(c) for c in regards.get("Code", [])} - {""})
+        return {"project_id": proj.id, "noeuds": noeuds, "count": len(noeuds),
+                "snapshot_sha256": snap_ctx.get("sha256")}
     noeuds = sorted(_noeuds_valides_projet(db, proj))
     return {"project_id": proj.id, "noeuds": noeuds, "count": len(noeuds)}
 

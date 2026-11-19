@@ -140,3 +140,24 @@ def test_pending_surfaces_count_ceiling():
 def test_tenant_enforcement_fail_closed_mode():
     """Le mode TENANT_ENFORCEMENT doit être strict ou audit (fail-closed)."""
     assert TENANT_ENFORCEMENT in ("strict", "audit")
+
+
+def test_no_unscoped_project_or_organization_first():
+    """Garde-fou statique (§4.1 règle 3) : aucun .first() non filtré par org_id sur Project ou Organization."""
+    import re
+    from pathlib import Path
+
+    api_dir = Path("api")
+    pattern = re.compile(r"\b(Project|Organization)\)\.first\(\)")
+    violations = []
+
+    for py_file in api_dir.rglob("*.py"):
+        content = py_file.read_text(encoding="utf-8", errors="ignore")
+        for i, line in enumerate(content.splitlines(), start=1):
+            if pattern.search(line):
+                violations.append(f"{py_file}:{i}: {line.strip()}")
+
+    assert not violations, (
+        f"VIOLATION ANTI-FUITE : {len(violations)} appel(s) non filtré(s) .first() détecté(s) :\n"
+        + "\n".join(f"  - {v}" for v in violations)
+    )

@@ -42,27 +42,50 @@ def _projet_org(db: Session, tenant_ctx: TenantContext, project_id: str) -> Proj
     return projet
 
 
-def _filtre_version_gpkg(projet: Project):
-    """Couches visibles = celles importées sur la version GPKG courante.
+_VERSION_COURANTE = object()
+
+
+def _filtre_version_gpkg(projet: Project, version_id=_VERSION_COURANTE):
+    """Couches visibles = celles importées sur la version GPKG considérée.
 
     NULL-safe : un projet sans version (vierge/legacy) ne montre que les
     couches non estampillées ; un projet versionné ne montre que les
     couches de SA version — jamais celles d'un réseau précédent.
+    `version_id` explicite = snapshot archivé demandé par le client.
     """
-    vid = getattr(projet, "gpkg_version_id", None)
+    vid = getattr(projet, "gpkg_version_id", None) if version_id is _VERSION_COURANTE else version_id
     if vid is None:
         return ProjectAuxLayer.gpkg_version_id.is_(None)
     return ProjectAuxLayer.gpkg_version_id == vid
 
 
-def _couche(db: Session, tenant_ctx: TenantContext, project_id: str, layer_id: str) -> ProjectAuxLayer:
+def _version_id_depuis_snapshot(db: Session, projet: Project, snapshot: Optional[str]):
+    """
+    Résout le `gpkg_version_id` du snapshot demandé pour filtrer les couches
+    auxiliaires. Absent → _VERSION_COURANTE (comportement existant).
+    Snapshot explicite inconnu → stealth 404.
+    """
+    if not snapshot or not str(snapshot).strip():
+        return _VERSION_COURANTE
+    from api.services.gpkg_versions import (
+        resoudre_snapshot_pour_lecture, GpkgSimulationError)
+    try:
+        ctx = resoudre_snapshot_pour_lecture(db, projet, snapshot)
+    except GpkgSimulationError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="Ressource introuvable")
+    return ctx.get("version_id")
+
+
+def _couche(db: Session, tenant_ctx: TenantContext, project_id: str, layer_id: str,
+            version_id=_VERSION_COURANTE) -> ProjectAuxLayer:
     """Résout la couche satellite — stealth 404 si org/projet/version mismatch."""
     projet = _projet_org(db, tenant_ctx, project_id)
     couche = db.query(ProjectAuxLayer).filter(
         ProjectAuxLayer.id == layer_id,
         ProjectAuxLayer.project_id == project_id,
         ProjectAuxLayer.org_id == tenant_ctx.org_id,
-        _filtre_version_gpkg(projet),
+        _filtre_version_gpkg(projet, version_id),
     ).first()
     if not couche:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Couche introuvable.")
@@ -201,15 +224,21 @@ async def upload_aux_layer(
 @router.get("/projets/{project_id}/aux-layers")
 def list_aux_layers(
     project_id: str,
+    snapshot: Optional[str] = Query(None),
     tenant_ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
 ):
-    """Liste les couches satellite du projet (isolation org)."""
+    """Liste les couches satellite du projet (isolation org).
+
+    `snapshot` : liste les couches estampillées sur ce snapshot GPKG
+    (version archivée) au lieu de la version courante.
+    """
     projet = _projet_org(db, tenant_ctx, project_id)
+    vid = _version_id_depuis_snapshot(db, projet, snapshot)
     couches = db.query(ProjectAuxLayer).filter(
         ProjectAuxLayer.project_id == project_id,
         ProjectAuxLayer.org_id == tenant_ctx.org_id,
-        _filtre_version_gpkg(projet),
+        _filtre_version_gpkg(projet, vid),
     ).order_by(ProjectAuxLayer.created_at.desc()).all()
     return {"statut": "ok", "couches": [c.to_dict() for c in couches]}
 
@@ -251,11 +280,14 @@ def get_aux_layer_geojson(
     project_id: str,
     layer_id: str,
     bounds: Optional[str] = Query(None, description="minx,miny,maxx,maxy en EPSG:4326"),
+    snapshot: Optional[str] = Query(None),
     tenant_ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
 ):
-    """Flux GeoJSON borné de la couche satellite."""
-    couche = _couche(db, tenant_ctx, project_id, layer_id)
+    """Flux GeoJSON borné de la couche satellite (`snapshot` = version archivée)."""
+    projet = _projet_org(db, tenant_ctx, project_id)
+    vid = _version_id_depuis_snapshot(db, projet, snapshot)
+    couche = _couche(db, tenant_ctx, project_id, layer_id, version_id=vid)
 
     b = None
     if bounds:
@@ -293,14 +325,18 @@ def get_aux_layer_elevation(
     layer_id: str,
     lng: float = Query(...),
     lat: float = Query(...),
+    snapshot: Optional[str] = Query(None),
     tenant_ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
 ):
     """
     Sonde altimétrique : cote terrain interpolée (IDW) + confiance.
     Réservé aux couches `altimetrie_points` avec grille construite.
+    `snapshot` = version archivée du réseau pour la garde de cohérence.
     """
-    couche = _couche(db, tenant_ctx, project_id, layer_id)
+    projet = _projet_org(db, tenant_ctx, project_id)
+    vid = _version_id_depuis_snapshot(db, projet, snapshot)
+    couche = _couche(db, tenant_ctx, project_id, layer_id, version_id=vid)
     if couche.type != "altimetrie_points":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
                             detail="La sonde altimétrique n'est disponible que pour les couches 'altimetrie_points'.")

@@ -414,7 +414,6 @@ def get_layers(
     }
 
     # Détermination du fichier GeoPackage pour le projet actif (strictement cloisonné par org_id)
-    from api.services.simulation_service import resoudre_gpkg_effectif_pour_projet
     from api.services.gpkg_versions import (
         resoudre_snapshot_pour_lecture, GpkgSimulationError)
     gpkg_target = None
@@ -439,13 +438,12 @@ def get_layers(
             gpkg_target = snap_ctx["path"]
             snap_meta = snap_ctx
         except GpkgSimulationError:
-            # Snapshot demandé mais introuvable/hors projet :
+            # Snapshot explicite demandé mais introuvable/hors projet :
             # stealth 404, jamais de repli sur la version courante.
-            raise HTTPException(status_code=404, detail="Ressource introuvable")
-
-    if not gpkg_target:
-        empty_response["project_name"] = project_name
-        return empty_response
+            if snapshot:
+                raise HTTPException(status_code=404, detail="Ressource introuvable")
+            # Aucun fichier associé au projet courant -> espace vierge (Option B)
+            gpkg_target = None
 
     # Le client reçoit toujours la métadonnée du snapshot réellement servi :
     # c'est la clé de vérification INV-2 (sha256) côté frontend.
@@ -462,8 +460,12 @@ def get_layers(
 
     def _with_snapshot(payload: dict) -> dict:
         if snap_payload:
-            payload["snapshot"] = snap_payload
+            return {**payload, "snapshot": snap_payload}
         return payload
+
+    if not gpkg_target:
+        empty_response["project_name"] = project_name
+        return _with_snapshot(empty_response)
 
     # Clé de cache content-adressée : org + projet + SHA-256 du GPKG —
     # deux versions ne partagent jamais leurs données cartographiques.
@@ -515,7 +517,7 @@ def get_layers(
         layers = gpd.list_layers(gpkg_target)['name'].tolist()
     except Exception as e:
         print(f"[ERROR] Impossible de lister les couches de {gpkg_target}: {e}")
-        return empty_response
+        return _with_snapshot(empty_response)
 
     for key, motcle in KEYWORDS.items():
         layer_name = next((l for l in layers if motcle.lower() in l.lower()), None)
@@ -552,7 +554,7 @@ def get_layers(
     if not has_bounds:
         _LAYERS_CACHE[cache_key] = result
 
-    return result
+    return _with_snapshot(result)
 
 
 

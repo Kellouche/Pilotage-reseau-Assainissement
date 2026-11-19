@@ -895,6 +895,7 @@ def _signaler_mismatch_version_gpkg(data: Dict[str, Any], ctx: Any, proj: Any) -
 
 @router.get("/latest")
 def get_latest_simulation(
+    snapshot: Optional[str] = None,
     db: Session = Depends(get_db),
     tenant: TenantContext = Depends(get_tenant_context)
 ):
@@ -917,6 +918,74 @@ def get_latest_simulation(
     )
 
     org_id = _org_id_requete(tenant)
+
+    # Vue archive : `snapshot` = gpkg_version_id ou sha256 d'une version
+    # archivée du projet. On sert la dernière simulation DE CE snapshot —
+    # jamais la « dernière » globale qui appartient à une autre version
+    # réseau (ce serait réintroduire le mélange carte/résultats).
+    if snapshot and str(snapshot).strip():
+        from api.models import Simulation
+        from api.services.gpkg_versions import (
+            resoudre_snapshot_pour_lecture, GpkgSimulationError)
+        from api.services.simulation_service import (
+            ContexteSimulation, charger_resultat_simulation,
+            est_simulation_valide)
+        from sqlalchemy import or_
+        try:
+            proj_snap = _resoudre_projet_pour_simulation(db, org_id, None)
+        except ProjetAmbigu as _e:
+            raise HTTPException(status_code=409, detail=str(_e))
+        except ContexteSimulationIntrouvable:
+            raise HTTPException(status_code=404, detail="Ressource introuvable")
+        try:
+            snap_ctx = resoudre_snapshot_pour_lecture(db, proj_snap, snapshot)
+        except GpkgSimulationError:
+            raise HTTPException(status_code=404, detail="Ressource introuvable")
+
+        q = db.query(Simulation).filter(
+            Simulation.project_id == proj_snap.id,
+            Simulation.status == "completed",
+        )
+        if org_id:
+            q = q.filter(Simulation.org_id == org_id)
+        vid_snap = snap_ctx.get("version_id")
+        sha_snap = snap_ctx.get("sha256")
+        clauses = []
+        if vid_snap:
+            clauses.append(Simulation.gpkg_version_id == vid_snap)
+        if sha_snap:
+            clauses.append(Simulation.gpkg_sha256 == sha_snap)
+        if clauses:
+            q = q.filter(or_(*clauses))
+        sim_snap = q.order_by(
+            Simulation.created_at.desc(), Simulation.id.desc()).first()
+        if sim_snap is None:
+            return {"status": "none",
+                    "message": "Aucune simulation enregistrée pour ce snapshot réseau."}
+        data_snap = charger_resultat_simulation(sim_snap)
+        if not data_snap or not est_simulation_valide(data_snap):
+            return {"status": "none",
+                    "message": "Résultat de simulation indisponible pour ce snapshot."}
+        ctx_snap = ContexteSimulation(
+            simulation=sim_snap, project=proj_snap, data=data_snap,
+            resolution="snapshot")
+        try:
+            gpkg_snap, vmeta_snap = resoudre_gpkg_pour_simulation(
+                db, proj_snap, data_snap)
+        except GpkgSimulationError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        ctx_snap.gpkg_path = gpkg_snap
+        ctx_snap.meta_version = vmeta_snap
+        if gpkg_snap is not None:
+            data_snap["source_gpkg"] = str(gpkg_snap.resolve())
+            data_snap["project_name"] = (
+                proj_snap.name or data_snap.get("project_name")
+                or gpkg_snap.stem)
+        else:
+            data_snap["project_name"] = (
+                proj_snap.name or data_snap.get("project_name"))
+        _signaler_mismatch_version_gpkg(data_snap, ctx_snap, proj_snap)
+        return _construire_reponse_simulation(data_snap, cached=True)
 
     ctx = None
     try:
@@ -1881,14 +1950,19 @@ def get_profil_en_long(
 
     if ctx is not None:
         sim_data = ctx.data or {}
-        # Topologie = réseau actuellement affiché (gpkg_effectif), pas le
-        # snapshot du seul bassin simulé : un profil doit pouvoir être tracé
-        # sur N'IMPORTE QUEL regard du réseau visible. Les résultats HGL de
-        # sim_data restent indexés par code de regard (stable entre versions) —
-        # ils s'appliquent aux nœuds couverts par la simulation, les autres
-        # restants en lecture topographique seule.
-        active_gpkg = gpkg_effectif if (gpkg_effectif and gpkg_effectif.exists()) else (
-            ctx.gpkg_path if (ctx.gpkg_path and ctx.gpkg_path.exists()) else None)
+        # Option A — topologie = LE SNAPSHOT GPKG qui a produit la simulation
+        # (ctx.gpkg_path, résolu par resoudre_gpkg_pour_simulation avec
+        # vérification SHA-256). La HGL et la géométrie décrivent alors le
+        # MÊME réseau par construction : fini la jointure « code de regard
+        # censé stable entre versions » qui produisait des profils hybrids
+        # silencieusement faux. Un profil reste traçable sur tout nœud du
+        # snapshot ; les nœuds hors emprise de la sim restent en lecture
+        # topographique seule.
+        # Repli gpkg_effectif UNIQUEMENT si la provenance de la sim est
+        # irrésoluble (simulation legacy sans empreinte) — cas dégradé
+        # documenté, jamais pour une sim à provenance vérifiable.
+        active_gpkg = ctx.gpkg_path if (ctx.gpkg_path and ctx.gpkg_path.exists()) else (
+            gpkg_effectif if (gpkg_effectif and gpkg_effectif.exists()) else None)
     elif proj is not None and gpkg_effectif and gpkg_effectif.exists():
         # Repli legacy : simulation sans ligne DB (ancien cache disque) —
         # uniquement si le projet est vérifiable (3D.6).
@@ -2936,6 +3010,7 @@ def rechercher_element_reseau(
     q: str,
     project_id: Optional[str] = None,
     limite: int = 20,
+    snapshot: Optional[str] = None,
     db: Session = Depends(get_db),
     tenant: TenantContext = Depends(get_tenant_context),
 ):
@@ -2959,7 +3034,19 @@ def rechercher_element_reseau(
         if project_id:
             raise HTTPException(status_code=404, detail="Projet introuvable ou non autorisé.")
         proj = None
-    gpkg_effectif = _resoudre_gpkg_effectif_pour_projet(db, proj)
+    gpkg_effectif = None
+    if proj is not None:
+        try:
+            from api.services.gpkg_versions import (
+                resoudre_snapshot_pour_lecture, GpkgSimulationError)
+            snap_ctx = resoudre_snapshot_pour_lecture(db, proj, snapshot)
+            gpkg_effectif = snap_ctx["path"]
+        except GpkgSimulationError:
+            if snapshot:
+                raise HTTPException(status_code=404, detail="Ressource introuvable")
+            gpkg_effectif = _resoudre_gpkg_effectif_pour_projet(db, proj)
+    if gpkg_effectif is None:
+        gpkg_effectif = _resoudre_gpkg_effectif_pour_projet(db, proj)
     if gpkg_effectif is None:
         gpkg_effectif = _gpkg_demo_autorise()
     if gpkg_effectif is None or not gpkg_effectif.exists():
