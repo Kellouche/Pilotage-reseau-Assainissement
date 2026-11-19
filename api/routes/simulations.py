@@ -782,7 +782,8 @@ def run_native_swmm_simulation(
                     logger.info(
                         "Simulation existante réutilisée (hash %s, sim %s) — aucun recalcul",
                         param_hash, _s.id)
-                    return _construire_reponse_simulation(_data, cached=True)
+                    return _construire_reponse_simulation(
+                        _data, cached=True, simulation_id=_s.id)
         except Exception as _dedup_err:
             logger.warning("Déduplication param_hash impossible : %s", _dedup_err)
 
@@ -985,7 +986,8 @@ def get_latest_simulation(
             data_snap["project_name"] = (
                 proj_snap.name or data_snap.get("project_name"))
         _signaler_mismatch_version_gpkg(data_snap, ctx_snap, proj_snap)
-        return _construire_reponse_simulation(data_snap, cached=True)
+        return _construire_reponse_simulation(
+            data_snap, cached=True, simulation_id=sim_snap.id)
 
     ctx = None
     try:
@@ -1045,7 +1047,9 @@ def get_latest_simulation(
         data["project_name"] = project_name or data.get("project_name")
 
     _signaler_mismatch_version_gpkg(data, ctx, proj)
-    return _construire_reponse_simulation(data, cached=True)
+    return _construire_reponse_simulation(
+        data, cached=True,
+        simulation_id=(ctx.simulation.id if ctx is not None and ctx.simulation is not None else None))
 
 
 @router.get("/bassin/{cluster_id}")
@@ -1125,7 +1129,9 @@ def get_bassin_simulation(
             data["source_gpkg"] = str(gpkg_sim.resolve())
             data["project_name"] = project_name or gpkg_sim.stem
             _signaler_mismatch_version_gpkg(data, ctx, proj)
-            return _construire_reponse_simulation(data, cached=True)
+            return _construire_reponse_simulation(
+                data, cached=True,
+                simulation_id=(ctx.simulation.id if ctx.simulation is not None else None))
 
     # 2. Repli legacy : résolution non ambiguë du projet puis scan disque
     #    sur le GPKG effectif (compatibilité anciennes simulations sans ligne DB).
@@ -3155,6 +3161,7 @@ def get_simulation_timeseries(
     cluster_id: Optional[Union[int, str]] = None,
     exutoire_noeud: Optional[str] = None,
     bassin_ref: Optional[str] = None,
+    simulation_id: Optional[str] = None,
     db: Session = Depends(get_db),
     tenant: TenantContext = Depends(get_tenant_context),
 ):
@@ -3212,16 +3219,28 @@ def get_simulation_timeseries(
     # Repli « dernière simulation » UNIQUEMENT sans filtre bassin : avec un
     # filtre demandé, servir les séries d'un autre bassin produirait
     # des link_id sans correspondance (carte entièrement verte).
-    _a_filtre = bool(cluster_id is not None or exutoire_noeud or bassin_ref)
-    _essais = [filtres] if _a_filtre else [filtres, {}]
-    for f in _essais:
+    # simulation_id explicite = LA simulation affichée par le client :
+    # prioritaire sur tout filtre bassin (évite de servir les séries d'une
+    # sim d'une autre version réseau que le snapshot affiché).
+    if simulation_id:
         try:
             ctx = resoudre_simulation_courante(
-                db, org_id=org_id, resoudre_gpkg=False, **f)
+                db, org_id=org_id, resoudre_gpkg=False,
+                simulation_id=simulation_id)
             sim_data = ctx.data or {}
-            break
-        except (ContexteSimulationIntrouvable, ProjetAmbigu):
-            continue
+        except (ContexteSimulationIntrouvable, ProjetAmbigu) as _e_ts:
+            raise HTTPException(status_code=404, detail="Ressource introuvable")
+    else:
+        _a_filtre = bool(cluster_id is not None or exutoire_noeud or bassin_ref)
+        _essais = [filtres] if _a_filtre else [filtres, {}]
+        for f in _essais:
+            try:
+                ctx = resoudre_simulation_courante(
+                    db, org_id=org_id, resoudre_gpkg=False, **f)
+                sim_data = ctx.data or {}
+                break
+            except (ContexteSimulationIntrouvable, ProjetAmbigu):
+                continue
 
     # 1. Séries temporelles déjà présentes dans le résultat persisté
     if sim_data and _est_simulation_valide(sim_data):
@@ -3304,7 +3323,9 @@ def get_simulation_resultat(
     if ctx.project is not None and getattr(ctx.project, "name", None):
         data["project_name"] = ctx.project.name
     _signaler_mismatch_version_gpkg(data, ctx, ctx.project)
-    return _construire_reponse_simulation(data, cached=True)
+    return _construire_reponse_simulation(
+        data, cached=True,
+        simulation_id=(ctx.simulation.id if ctx.simulation is not None else simulation_id))
 
 
 @router.get("/{simulation_id}", response_model=schemas.SimulationResponse)

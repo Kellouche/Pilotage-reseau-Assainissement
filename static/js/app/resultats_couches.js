@@ -137,7 +137,9 @@ window.addEventListener('DOMContentLoaded', initSaaSNavbar);
             const token = localStorage.getItem('swmm_access_token');
             const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
 
-            fetch('/api/v1/network/subcatchments', { headers, credentials: 'include' })
+            var _urlSub = '/api/v1/network/subcatchments';
+            if (typeof window._urlAvecSnapshot === 'function') _urlSub = window._urlAvecSnapshot(_urlSub);
+            fetch(_urlSub, { headers, credentials: 'include' })
                 .then(r => r.json())
                 .then(fc => {
                     couches.subcatchments.clearLayers();

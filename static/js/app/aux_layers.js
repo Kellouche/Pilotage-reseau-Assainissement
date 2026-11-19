@@ -139,7 +139,9 @@
         const pid = await resoudreProjectId();
         if (!pid) { rendreListe([]); return; }
         try {
-            const d = await fetchJSON(`/api/v1/projets/${encodeURIComponent(pid)}/aux-layers`);
+            var _urlAux = `/api/v1/projets/${encodeURIComponent(pid)}/aux-layers`;
+            if (typeof window._urlAvecSnapshot === 'function') _urlAux = window._urlAvecSnapshot(_urlAux);
+            const d = await fetchJSON(_urlAux);
             AUX.couches = {};
             AUX.nomsImportes = new Set();
             (d.couches || []).forEach(c => {
@@ -220,8 +222,9 @@
             return;
         }
         const b = boundsCourants();
-        const url = `/api/v1/projets/${encodeURIComponent(AUX.projectId)}/aux-layers/${meta.id}/geojson` +
+        var url = `/api/v1/projets/${encodeURIComponent(AUX.projectId)}/aux-layers/${meta.id}/geojson` +
             (b ? `?bounds=${b}` : '');
+        if (typeof window._urlAvecSnapshot === 'function') url = window._urlAvecSnapshot(url);
         try {
             const d = await fetchJSON(url);
             const seq = couche.seq = (couche.seq || 0) + 1;
@@ -347,9 +350,9 @@
         if (!layerId || !AUX.projectId) return;
         const { lat, lng } = e.latlng;
         try {
-            const r = await fetchJSON(
-                `/api/v1/projets/${encodeURIComponent(AUX.projectId)}/aux-layers/${layerId}/elevation?lng=${lng}&lat=${lat}`
-            );
+            var _urlElev = `/api/v1/projets/${encodeURIComponent(AUX.projectId)}/aux-layers/${layerId}/elevation?lng=${lng}&lat=${lat}`;
+            if (typeof window._urlAvecSnapshot === 'function') _urlElev = window._urlAvecSnapshot(_urlElev);
+            const r = await fetchJSON(_urlElev);
             const confCouleur = { haute: '#34d399', moyenne: '#fbbf24', faible: '#f87171', aucune: '#94a3b8' }[r.confiance] || '#94a3b8';
             const html = r.statut === 'ok'
                 ? `<b>Cote terrain estimée : ${r.z_terrain_m} m</b><br>

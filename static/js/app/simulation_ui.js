@@ -395,7 +395,7 @@ window.dessinerRaccordementsOrphelinsSurCarte = function() {
                 info.projetId = ap.id;
                 const pid = `project_id=${encodeURIComponent(ap.id)}`;
                 const [apports, recon] = await Promise.all([
-                    fetch(`/api/v1/apports?${pid}&actif_seulement=true`, j).then(r => r.ok ? r.json() : []),
+                    fetch((typeof window._urlAvecSnapshot === 'function' ? window._urlAvecSnapshot(`/api/v1/apports?${pid}&actif_seulement=true`) : `/api/v1/apports?${pid}&actif_seulement=true`), j).then(r => r.ok ? r.json() : []),
                     fetch(`/api/v1/apports/a-reconcilier?${pid}`, j).then(r => r.ok ? r.json() : null),
                 ]);
                 const actifs = Array.isArray(apports) ? apports : [];

@@ -300,6 +300,13 @@ async function chargerDonneesTimeSlider() {
         if (_cidBassin) _qsParams.push(`cluster_id=${encodeURIComponent(_cidBassin)}`);
         if (_exutoire) _qsParams.push(`exutoire_noeud=${encodeURIComponent(_exutoire)}`);
         if (_bassinRef) _qsParams.push(`bassin_ref=${encodeURIComponent(_bassinRef)}`);
+        // simulation_id de la sim AFFICHÉE : le slider doit animer ces
+        // séries, pas « la plus récente du contexte » (risque de servir
+        // les link_id d'une sim d'un autre snapshot réseau).
+        const _simAff = (window._dernierResultatSimulation && window._dernierResultatSimulation.simulation_id)
+            || (window._dernierResultatSimulation && window._dernierResultatSimulation.meta && window._dernierResultatSimulation.meta.simulation_id)
+            || '';
+        if (_simAff) _qsParams.push(`simulation_id=${encodeURIComponent(_simAff)}`);
         const _qs = _qsParams.length ? `?${_qsParams.join('&')}` : '';
         const resp = await fetch('/api/v1/simulations/timeseries' + _qs);
         if (!resp.ok) {

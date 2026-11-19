@@ -192,7 +192,9 @@
         const seq = ++_seq;
         const box = _box();
         if (!box) return;
-        fetch(`/api/v1/simulations/recherche-element?q=${encodeURIComponent(requete)}`)
+        var _urlRecherche = `/api/v1/simulations/recherche-element?q=${encodeURIComponent(requete)}`;
+        if (typeof window._urlAvecSnapshot === 'function') _urlRecherche = window._urlAvecSnapshot(_urlRecherche);
+        fetch(_urlRecherche)
             .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
             .then(data => {
                 if (seq !== _seq) return;

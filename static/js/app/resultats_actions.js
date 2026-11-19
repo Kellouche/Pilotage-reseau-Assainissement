@@ -194,10 +194,19 @@ window.reinitialiserAffichageSimulation = function() {
         // POINT 3 : PERSISTANCE & RE-AFFICHAGE SANS RECALCUL
         // ==========================================
         window.chargerDerniereSimulation = function() {
+            // Pendant une bascule de snapshot (vue archive), ne pas
+            // restaurer la « dernière » simulation : le résultat affiché
+            // est celui explicitement choisi par l'utilisateur — le laisser
+            // faire rebouclerait carte ↔ résultats entre deux versions.
+            if (window._chargementSnapshotEnCours) return;
             const token = localStorage.getItem('swmm_access_token');
             const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
 
-            fetch('/api/v1/simulations/latest', { headers, credentials: 'include' })
+            var _urlLatest = '/api/v1/simulations/latest';
+            if (typeof window._urlAvecSnapshot === 'function') {
+                _urlLatest = window._urlAvecSnapshot(_urlLatest);
+            }
+            fetch(_urlLatest, { headers, credentials: 'include' })
                 .then(r => r.json())
                 .then(data => {
                     if (data && data.status === 'success' && data.conduit_results && Object.keys(data.conduit_results).length > 0) {

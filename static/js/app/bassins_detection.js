@@ -144,7 +144,9 @@
             couches.bassins.clearLayers();
             
             // Appeler l'API de détection des clusters
-            return fetch('/api/v1/clusters/recalculate-all?persist=false', { method: 'POST' })
+            var _urlRecalc = '/api/v1/clusters/recalculate-all?persist=false';
+            if (typeof window._urlAvecSnapshot === 'function') _urlRecalc = window._urlAvecSnapshot(_urlRecalc);
+            return fetch(_urlRecalc, { method: 'POST' })
                 .then(response => {
                     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                     return response.json();

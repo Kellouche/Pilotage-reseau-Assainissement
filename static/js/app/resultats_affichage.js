@@ -123,7 +123,7 @@ function _masquerMenuInfobullesSim() {
 // ==========================================
         // POINTS 2 & 3 : COUCHES RÉSULTATS SWMM 5.2
         // ==========================================
-        window.afficherResultatsSimulation = function(data) {
+        window._afficherResultatsSimulationNu = function(data) {
             // Garde anti-récursion : l'affichage chaîne highlightCluster →
             // gererAffichageSimulationPourBassin → ré-affiche les résultats,
             // ce qui bouclait indéfiniment (« Maximum call stack size
@@ -629,3 +629,38 @@ function _masquerMenuInfobullesSim() {
                 activerActionsSimulation(true);
             }
         };
+
+
+/**
+ * Point d'entrée public des résultats de simulation.
+ * Quand le module contexte_spatial.js est chargé (cockpit), la vue est
+ * synchronisée sur le snapshot producteur AVANT tout rendu (INV-1/INV-2).
+ * Sinon (tests unitaires JS, pages autonomes), alias direct du rendu.
+ */
+if (typeof window._syncContexteAvecResultat === 'function') {
+    window.afficherResultatsSimulation = function (data) {
+        if (!data) return;
+        window._syncContexteAvecResultat(data).then(function (res) {
+            if (res && res.ok === false) {
+                if (typeof window._notifierMismatchSnapshot === 'function') {
+                    window._notifierMismatchSnapshot();
+                }
+                return;
+            }
+            if (typeof window._afficherResultatsSimulationNu === 'function') {
+                window._afficherResultatsSimulationNu(data);
+            }
+        }).catch(function (e) {
+            console.warn('[contexte-spatial] sync résultat impossible :', e);
+            if (typeof window._afficherResultatsSimulationNu === 'function') {
+                window._afficherResultatsSimulationNu(data);
+            }
+        });
+    };
+} else {
+    window.afficherResultatsSimulation = function (data) {
+        if (typeof window._afficherResultatsSimulationNu === 'function') {
+            window._afficherResultatsSimulationNu(data);
+        }
+    };
+}

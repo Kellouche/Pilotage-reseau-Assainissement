@@ -9,6 +9,15 @@
  */
 
 function chargerDonneesInitiales() {
+            // Promesse de fin de chargement : utilisée par le contexte
+            // spatial pour attendre la bascule de snapshot avant de rendre
+            // les résultats d'une simulation archivée.
+            let _resolverChargement = null;
+            window._promesseChargementReseau = new Promise(function(res) { _resolverChargement = res; });
+            window._resolverChargementReseau = function() {
+                if (_resolverChargement) { _resolverChargement(); _resolverChargement = null; }
+            };
+
             // Montrer l'overlay de chargement bloquant : il reste affiché
             // jusqu'à la fin réelle de la sectorisation (failsafe 15 min).
             montrerChargement(true, 'Chargement du projet et du réseau…', 15 * 60 * 1000);
@@ -35,11 +44,28 @@ function chargerDonneesInitiales() {
             // Désactiver les boutons d'animation et d'analyse hydrologique au chargement d'un nouveau réseau
             _desactiverBoutonsHydro();
 
-            fetch('/api/v1/layers')
-                .then(r => r.json())
+            var _urlLayers = '/api/v1/layers';
+            if (window._snapshotEnAttente) {
+                _urlLayers += (_urlLayers.indexOf('?') >= 0 ? '&' : '?')
+                    + 'snapshot=' + encodeURIComponent(window._snapshotEnAttente);
+            }
+            fetch(_urlLayers)
+                .then(r => {
+                    if (!r.ok) {
+                        // Snapshot archivé introuvable : ne jamais retomber
+                        // silencieusement sur le réseau courant (INV-1).
+                        throw new Error('Snapshot réseau indisponible (HTTP ' + r.status + ')');
+                    }
+                    return r.json();
+                })
                 .then(d => {
                     console.log('Données:', d.compteurs);
                     window._rawNetworkData = d;
+                    // Contexte spatial : le snapshot réellement servi fait
+                    // foi pour toutes les vérifications INV-2 en aval.
+                    if (typeof window._majContexteDepuisLayers === 'function') {
+                        window._majContexteDepuisLayers(d);
+                    }
                     // Couches SIG satellites : réinitialiser le contexte projet
                     // (sinon les couches de l'ancien projet restent visibles et
                     // le projectId caché interroge le mauvais projet).
@@ -62,6 +88,7 @@ function chargerDonneesInitiales() {
                     const totalObj = d.compteurs ? Object.values(d.compteurs).reduce((a, b) => a + b, 0) : 0;
                     if (d.is_empty || totalObj === 0) {
                         montrerChargement(false);
+                        if (window._resolverChargementReseau) window._resolverChargementReseau();
                         document.getElementById('stat-total').textContent = '0';
                         document.getElementById('mini-stats').innerHTML = '<span style="color: #f59e0b;"><i class="fas fa-info-circle me-1"></i> Projet vierge (aucun réseau)</span>';
                         document.getElementById('modal-project-status').textContent = 'Aucun réseau chargé — Espace de travail vierge';
@@ -360,6 +387,7 @@ function chargerDonneesInitiales() {
                                 window.restaurerDernierBassin();
                             }
                             montrerChargement(false);
+                            if (window._resolverChargementReseau) window._resolverChargementReseau();
                             // Vérifier si une simulation est restaurée et réactiver les boutons si nécessaire
                             if (typeof _desactiverBoutonsHydro === 'function') {
                                 setTimeout(() => _desactiverBoutonsHydro(), 500);
@@ -370,6 +398,7 @@ function chargerDonneesInitiales() {
                             chargerDerniereSimulation();
                         }
                         montrerChargement(false);
+                        if (window._resolverChargementReseau) window._resolverChargementReseau();
                         // Vérifier si une simulation est restaurée et réactiver les boutons si nécessaire
                         if (typeof _desactiverBoutonsHydro === 'function') {
                             setTimeout(() => _desactiverBoutonsHydro(), 500);
@@ -380,6 +409,7 @@ function chargerDonneesInitiales() {
                     console.error('Erreur:', e);
                     document.getElementById('mini-stats').textContent = 'Erreur chargement';
                     montrerChargement(false); // Masquer l'overlay même en cas d'erreur
+                    if (window._resolverChargementReseau) window._resolverChargementReseau();
                 });
         }
 

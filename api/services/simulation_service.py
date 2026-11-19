@@ -731,7 +731,8 @@ def executer_moteur_swmm(
     return corriger_pic_depuis_timeseries(resultat)
 
 
-def construire_reponse_simulation(resultat: Dict[str, Any], cached: bool = False) -> Dict[str, Any]:
+def construire_reponse_simulation(resultat: Dict[str, Any], cached: bool = False,
+                                  simulation_id: Optional[str] = None) -> Dict[str, Any]:
     """Structure la réponse standardisée renvoyée au frontend."""
     message = (
         "Résultats restaurés instantanément depuis la sauvegarde (paramètres de simulation inchangés)."
@@ -742,6 +743,7 @@ def construire_reponse_simulation(resultat: Dict[str, Any], cached: bool = False
         "status": "success",
         "cached": cached,
         "message": message,
+        "simulation_id": simulation_id or resultat.get("simulation_id"),
         "meta": resultat.get("meta", {}),
         "provenance": resultat.get("provenance"),
         "kpis": {

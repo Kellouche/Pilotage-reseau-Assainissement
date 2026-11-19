@@ -199,7 +199,9 @@ function appliquerPermissionsDwf() {
 // ---------------------------------------------------------------------------
 async function chargerApportsDwf() {
     const pid = DWF.projectId ? `?project_id=${encodeURIComponent(DWF.projectId)}` : '';
-    DWF.apports = await dwfFetch(`/api/v1/apports${pid}`);
+    var _urlApports = `/api/v1/apports${pid}`;
+    if (typeof window._urlAvecSnapshot === 'function') _urlApports = window._urlAvecSnapshot(_urlApports);
+    DWF.apports = await dwfFetch(_urlApports);
     if (!Array.isArray(DWF.apports)) DWF.apports = [];
 }
 
@@ -221,7 +223,9 @@ async function chargerProfilsDwf() {
 
 async function chargerNoeudsDwf() {
     const pid = DWF.projectId ? `?project_id=${encodeURIComponent(DWF.projectId)}` : '';
-    const res = await dwfFetch(`/api/v1/apports/noeuds${pid}`);
+    var _urlNoeuds = `/api/v1/apports/noeuds${pid}`;
+    if (typeof window._urlAvecSnapshot === 'function') _urlNoeuds = window._urlAvecSnapshot(_urlNoeuds);
+    const res = await dwfFetch(_urlNoeuds);
     DWF.noeuds = (res && Array.isArray(res.noeuds)) ? res.noeuds : [];
     const dl = document.getElementById('dwf-liste-noeuds');
     if (dl) dl.innerHTML = DWF.noeuds.map(n => `<option value="${dwfEchapper(n)}">`).join('');

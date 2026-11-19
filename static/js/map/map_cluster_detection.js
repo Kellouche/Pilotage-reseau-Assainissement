@@ -63,7 +63,9 @@
         setStatus(statusDiv, 'Recherche des bassins hydrauliques...');
 
         try {
-            const response = await fetch('/api/v1/clusters/recalculate-all?persist=false', { method: 'POST' });
+            var _urlRecalc = '/api/v1/clusters/recalculate-all?persist=false';
+            if (typeof window._urlAvecSnapshot === 'function') _urlRecalc = window._urlAvecSnapshot(_urlRecalc);
+            const response = await fetch(_urlRecalc, { method: 'POST' });
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
