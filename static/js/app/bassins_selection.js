@@ -600,7 +600,12 @@
 
         function highlightCluster(clusterId, geojsonLayer) {
             _selectedClusterId = (clusterId === null || clusterId === undefined || clusterId === '') ? null : String(clusterId);
+            window._selectedClusterId = _selectedClusterId;
             window.mettreAJourIndicateurBassin(_selectedClusterId);
+            // Sous-bassins Voronoï : refiltrer surfaces/ha sur le bassin choisi
+            if (typeof window.filtrerSousBassinsPourBassin === 'function') {
+                window.filtrerSousBassinsPourBassin(_selectedClusterId);
+            }
 
             // Mémoriser le dernier bassin ouvert, cloisonné par projet —
             // permet à l'application de se rouvrir sur le même bassin.

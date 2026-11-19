@@ -133,29 +133,29 @@ window.addEventListener('DOMContentLoaded', initSaaSNavbar);
         // ==========================================
         // POINT 1 : SECTORISATION SURFACES VORONOÏ
         // ==========================================
-        window.chargerEtAfficherSousBassins = function() {
-            const token = localStorage.getItem('swmm_access_token');
-            const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+        // FC brut des sous-bassins Voronoï (réseau entier) — conservé pour
+        // pouvoir refiltrer par bassin sélectionné sans nouvel appel API.
+        window._sousBassinsFC = null;
 
-            var _urlSub = '/api/v1/network/subcatchments';
-            if (typeof window._urlAvecSnapshot === 'function') _urlSub = window._urlAvecSnapshot(_urlSub);
-            fetch(_urlSub, { headers, credentials: 'include' })
-                .then(r => r.json())
-                .then(fc => {
-                    couches.subcatchments.clearLayers();
-                    if (!fc || !fc.features || fc.features.length === 0) {
-                        return;
-                    }
-                    
-                    const count = fc.subcatchments_count || fc.features.length;
-                    const totArea = (fc.total_area_ha || 0).toFixed(2);
-                    const nbBv = (window._clustersData && (window._clustersData.clusters_crees || (window._clustersData.resultats && window._clustersData.resultats.length))) || null;
-                    const bvPrefix = nbBv ? `${nbBv} BV • ` : '';
-                    const bvSuffix = nbBv ? ` (${nbBv} bassins d'exutoires)` : '';
-                    const badge = document.getElementById('badge-subcatchments-count');
-                    if (badge) badge.innerText = `${bvPrefix}${count} SB (${totArea} ha)`;
-                    const legend = document.getElementById('subcatchments-legend');
-                    if (legend) legend.innerHTML = `Surface drainée : <b>${totArea} ha</b> sur <b>${count} sous-bassins</b>${bvSuffix}.`;
+        // Rend le FC fourni (total ou filtré par bassin) : badge, légende,
+        // calques Leaflet. `estFiltre` = vue « bassin sélectionné ».
+        window._rendreSousBassins = function(fc, estFiltre) {
+            couches.subcatchments.clearLayers();
+            if (!fc || !fc.features || fc.features.length === 0) {
+                return;
+            }
+
+            const count = fc.subcatchments_count || fc.features.length;
+            const totArea = (fc.total_area_ha || 0).toFixed(2);
+            const nbBv = (window._clustersData && (window._clustersData.clusters_crees || (window._clustersData.resultats && window._clustersData.resultats.length))) || null;
+            const bvPrefix = (!estFiltre && nbBv) ? `${nbBv} BV • ` : '';
+            const bvSuffix = (!estFiltre && nbBv) ? ` (${nbBv} bassins d'exutoires)` : '';
+            const badge = document.getElementById('badge-subcatchments-count');
+            if (badge) badge.innerText = `${bvPrefix}${count} SB (${totArea} ha)`;
+            const legend = document.getElementById('subcatchments-legend');
+            if (legend) legend.innerHTML = estFiltre
+                ? `Surface drainée du bassin sélectionné : <b>${totArea} ha</b> sur <b>${count} sous-bassins</b>.`
+                : `Surface drainée : <b>${totArea} ha</b> sur <b>${count} sous-bassins</b>${bvSuffix}.`;
 
                     L.geoJSON(fc, {
                         pane: 'voronoiPane',
@@ -210,6 +210,102 @@ window.addEventListener('DOMContentLoaded', initSaaSNavbar);
                             });
                         }
                     }).addTo(couches.subcatchments);
+        };
+
+        /**
+         * Filtre les sous-bassins Voronoï pour le bassin sélectionné :
+         * un SB appartient au bassin si son exutoire (`outlet`) est un
+         * nœud (u/v) des conduites du cluster affiché. clusterId = null
+         * → vue réseau complet. Si l'appartenance est indéterminable
+         * (bassin manuel sans edges cluster), on conserve la vue totale.
+         */
+        window.filtrerSousBassinsPourBassin = function(clusterId) {
+            const fc = window._sousBassinsFC;
+            if (!fc || !fc.features || !fc.features.length) return;
+            const cid = (clusterId === null || clusterId === undefined || clusterId === '') ? null : String(clusterId);
+            if (!cid) {
+                window._rendreSousBassins(fc, false);
+                return;
+            }
+            // Jointure SB ↔ bassin : les deux portent `id_bassin`
+            // (ex. cluster id_bassin=6 « Zone 04 » ↔ SB id_bassin=6.0).
+            // L'`outlet` d'un SB est son propre nœud d'exutoire — il ne
+            // doit PAS être comparé aux nœuds du bassin.
+            const idsBassins = new Set();
+            const exutoiresBassins = new Set();
+            // cid peut être positionnel (« 3 »), « exutoire:<id> » ou une
+            // basin_ref — on accepte les trois espaces d'identité.
+            const cidExutoire = cid.toLowerCase().startsWith('exutoire:')
+                ? cid.slice('exutoire:'.length) : '';
+            const gl = window._activeClusterLayer || (typeof couches !== 'undefined' ? couches.bassins : null);
+            if (gl && gl.eachLayer) {
+                gl.eachLayer(function(layer) {
+                    const ft = layer.feature;
+                    if (!ft || !ft.properties) return;
+                    const pr = ft.properties;
+                    const match = String(pr.cluster_id) === cid
+                        || (cidExutoire && String(pr.exutoire_id) === cidExutoire)
+                        || String(pr.bassin_ref || '') === cid
+                        || String(pr.bassin_ref || '') === ('exutoire:' + cidExutoire);
+                    if (!match) return;
+                    // Seules les features « bassin » portent id_bassin /
+                    // exutoire_id (les marqueurs exutoire et conduites
+                    // du même cluster_id n'ont pas id_bassin).
+                    if (pr.id_bassin !== undefined && pr.id_bassin !== null && pr.id_bassin !== '') {
+                        idsBassins.add(Number(pr.id_bassin));
+                    }
+                    if (pr.exutoire_id !== undefined && pr.exutoire_id !== null && pr.exutoire_id !== '') {
+                        exutoiresBassins.add(String(pr.exutoire_id));
+                    }
+                });
+            }
+            if (!idsBassins.size && !exutoiresBassins.size) {
+                // Calque cluster pas encore chargé (ordre de chargement) :
+                // une seule reprise différée, sinon vue réseau complet.
+                if (!window._filtreSbRetry) {
+                    window._filtreSbRetry = true;
+                    setTimeout(function() {
+                        window._filtreSbRetry = false;
+                        window.filtrerSousBassinsPourBassin(clusterId);
+                    }, 4000);
+                }
+                window._rendreSousBassins(fc, false);
+                return;
+            }
+            const feats = fc.features.filter(function(f) {
+                const p = f.properties || {};
+                const ibOk = p.id_bassin !== undefined && p.id_bassin !== null && p.id_bassin !== ''
+                    && idsBassins.has(Number(p.id_bassin));
+                const exOk = p.exutoire_id !== undefined && p.exutoire_id !== null
+                    && String(p.exutoire_id) !== 'orphelin'
+                    && exutoiresBassins.has(String(p.exutoire_id));
+                return ibOk || exOk;
+            });
+            const aire = feats.reduce(function(acc, f) {
+                return acc + (parseFloat(f.properties && f.properties.area_ha) || 0);
+            }, 0);
+            window._rendreSousBassins({
+                type: 'FeatureCollection',
+                features: feats,
+                subcatchments_count: feats.length,
+                total_area_ha: Math.round(aire * 10000) / 10000
+            }, true);
+        };
+
+        window.chargerEtAfficherSousBassins = function() {
+            const token = localStorage.getItem('swmm_access_token');
+            const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+            var _urlSub = '/api/v1/network/subcatchments';
+            if (typeof window._urlAvecSnapshot === 'function') _urlSub = window._urlAvecSnapshot(_urlSub);
+            fetch(_urlSub, { headers, credentials: 'include' })
+                .then(r => r.json())
+                .then(fc => {
+                    window._sousBassinsFC = fc;
+                    window._rendreSousBassins(fc, false);
+                    if (window._selectedClusterId) {
+                        window.filtrerSousBassinsPourBassin(window._selectedClusterId);
+                    }
                 })
                 .catch(err => console.warn('Erreur chargement sous-bassins:', err));
         };

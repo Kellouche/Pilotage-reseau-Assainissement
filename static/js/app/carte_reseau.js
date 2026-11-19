@@ -49,7 +49,11 @@ function chargerDonneesInitiales() {
                 _urlLayers += (_urlLayers.indexOf('?') >= 0 ? '&' : '?')
                     + 'snapshot=' + encodeURIComponent(window._snapshotEnAttente);
             }
-            fetch(_urlLayers)
+            const _tokenLayers = localStorage.getItem('swmm_access_token');
+            fetch(_urlLayers, {
+                credentials: 'include',
+                headers: _tokenLayers ? { 'Authorization': 'Bearer ' + _tokenLayers } : {}
+            })
                 .then(r => {
                     if (!r.ok) {
                         // Snapshot archivé introuvable : ne jamais retomber
@@ -170,7 +174,7 @@ function chargerDonneesInitiales() {
                             </div>
                             <div style="margin-bottom: 3px;"><b>Adresse / Voie :</b> <span style="color: #0f172a; font-weight: 600;">${voie}</span></div>
                             <div style="margin-bottom: 3px;"><b>Zone collecte :</b> ${zc}</div>
-                            ${seuilVal ? `<div style="margin-bottom: 3px;"><b>Seuil de crête (H<sub>s</sub>) :</b> <span style="color: #d97706; font-weight: 800;">${seuilVal} m</span></div>` : ''}
+                            ${seuilVal ? `<div style="margin-bottom: 3px;"><b>Seuil de crête (H&#8347;) :</b> <span style="color: #d97706; font-weight: 800;">${seuilVal} m</span></div>` : ''}
                             <div style="font-size: 11px; color: #64748b; margin-top: 4px;">N° Ouvrage / Code : ${code}</div>
                         </div>`;
                     }
