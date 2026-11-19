@@ -444,6 +444,26 @@ function toggleToolbarCollapse(e) {
     localStorage.setItem('drainpilot_toolbar_collapsed', isCollapsed ? '1' : '0');
 }
 
+/**
+ * Maintient la toolbar dans le viewport : les positions persistées
+ * (localStorage / etatBureau) datent d'écrans plus grands — sans
+ * bornage, la barre devient invisible quand la fenêtre rétrécit.
+ */
+window._bornerToolbarViewport = function(toolbar) {
+    if (!toolbar) return;
+    const rect = toolbar.getBoundingClientRect();
+    if (!rect.width || !rect.height) return; // masquée : rien à borner
+    const maxLeft = Math.max(8, window.innerWidth - rect.width - 8);
+    const maxTop = Math.max(52, window.innerHeight - rect.height - 8);
+    const left = Math.min(Math.max(rect.left, 8), maxLeft);
+    const top = Math.min(Math.max(rect.top, 52), maxTop);
+    if (left !== rect.left || top !== rect.top) {
+        toolbar.style.left = left + 'px';
+        toolbar.style.top = top + 'px';
+        toolbar.style.right = 'auto';
+    }
+};
+
 function initDraggableToolbar() {
     const toolbar = document.getElementById('main-edit-toolbar');
     const handle = document.getElementById('toolbar-drag-handle');
@@ -465,9 +485,20 @@ function initDraggableToolbar() {
                 toolbar.style.top = `${pos.top}px`;
                 toolbar.style.left = `${pos.left}px`;
                 toolbar.style.right = 'auto';
+                window._bornerToolbarViewport(toolbar);
             }
         } catch (err) {}
     }
+
+    // Bornage initial : couvre aussi le cas sans position sauvegardée
+    // (left: 320px du CSS peut déborder sur fenêtre étroite).
+    window._bornerToolbarViewport(toolbar);
+
+    // Fenêtre redimensionnée : ramener la toolbar dans le viewport
+    // (positions persistées d'un écran plus grand).
+    window.addEventListener('resize', function() {
+        window._bornerToolbarViewport(toolbar);
+    });
 
     let isDragging = false;
     let startX = 0, startY = 0;
@@ -701,9 +732,15 @@ window.restaurerEtatBureau = function(reseauId) {
             const icon = document.getElementById('icon-collapse-toolbar');
             if (icon) icon.className = etat.toolbar.collapsed ? 'fas fa-chevron-right' : 'fas fa-chevron-left';
             if (etat.toolbar.x !== undefined) {
-                toolbar.style.left = etat.toolbar.x + 'px';
-                toolbar.style.top = etat.toolbar.y + 'px';
+                // Borner la position mémorisée à la fenêtre courante :
+                // une position sauvegardée sur un grand écran ne doit
+                // pas rendre la toolbar invisible sur petit écran.
+                const _maxX = Math.max(8, window.innerWidth - 60);
+                const _maxY = Math.max(52, window.innerHeight - 60);
+                toolbar.style.left = Math.min(Math.max(Number(etat.toolbar.x) || 8, 8), _maxX) + 'px';
+                toolbar.style.top = Math.min(Math.max(Number(etat.toolbar.y) || 52, 52), _maxY) + 'px';
                 toolbar.style.right = 'auto';
+                window._bornerToolbarViewport(toolbar);
             }
         }
     }
