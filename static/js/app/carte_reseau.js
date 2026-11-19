@@ -464,6 +464,27 @@ window._bornerToolbarViewport = function(toolbar) {
     }
 };
 
+/**
+ * Position « automatique » de la toolbar : accrochée au bord du
+ * panneau d'ingénierie (ou au bord gauche si le panneau est replié),
+ * comme la légende Leaflet qui suit le redimensionnement de la carte.
+ * Utilisée tant que l'utilisateur n'a pas déplacé la barre à la main.
+ */
+window._positionAutoToolbar = function(toolbar) {
+    if (!toolbar) return;
+    const ws = document.getElementById('app-workspace');
+    const replie = ws && ws.classList.contains('sidebar-collapsed');
+    toolbar.style.left = (replie ? 16 : 330) + 'px';
+    toolbar.style.top = '70px';
+    toolbar.style.right = 'auto';
+    window._bornerToolbarViewport(toolbar);
+};
+
+/** Vrai si l'utilisateur a déplacé la toolbar manuellement. */
+window._toolbarPositionPersonnalisee = function(toolbar) {
+    return !!(toolbar && toolbar.dataset.positionManuelle === '1');
+};
+
 function initDraggableToolbar() {
     const toolbar = document.getElementById('main-edit-toolbar');
     const handle = document.getElementById('toolbar-drag-handle');
@@ -476,12 +497,14 @@ function initDraggableToolbar() {
         if (icon) icon.className = 'fas fa-chevron-right';
     }
 
-    // Restaurer la position si mémorisée
+    // Restaurer la position si mémorisée (elle ne l'est qu'après un
+    // déplacement manuel → la toolbar reste alors en mode « personnel »).
     const savedPos = localStorage.getItem('drainpilot_toolbar_pos');
     if (savedPos) {
         try {
             const pos = JSON.parse(savedPos);
             if (pos.top && pos.left) {
+                toolbar.dataset.positionManuelle = '1';
                 toolbar.style.top = `${pos.top}px`;
                 toolbar.style.left = `${pos.left}px`;
                 toolbar.style.right = 'auto';
@@ -490,15 +513,27 @@ function initDraggableToolbar() {
         } catch (err) {}
     }
 
-    // Bornage initial : couvre aussi le cas sans position sauvegardée
-    // (left: 320px du CSS peut déborder sur fenêtre étroite).
-    window._bornerToolbarViewport(toolbar);
-
-    // Fenêtre redimensionnée : ramener la toolbar dans le viewport
-    // (positions persistées d'un écran plus grand).
-    window.addEventListener('resize', function() {
+    // Position initiale : ancrage automatique au panneau (coordonnées
+    // relatives) sauf si une position manuelle a été mémorisée.
+    if (!window._toolbarPositionPersonnalisee(toolbar)) {
+        window._positionAutoToolbar(toolbar);
+    } else {
         window._bornerToolbarViewport(toolbar);
-    });
+    }
+
+    // Redimensionnement / repli du panneau : la toolbar non déplacée à la
+    // main suit le layout (comme la légende) ; la toolbar déplacée manuellement
+    // est seulement ramenée dans le viewport.
+    const _surResizeToolbar = function() {
+        if (window._toolbarPositionPersonnalisee(toolbar)) {
+            window._bornerToolbarViewport(toolbar);
+        } else {
+            window._positionAutoToolbar(toolbar);
+        }
+    };
+    window.addEventListener('resize', _surResizeToolbar);
+    // Le repli du panneau d'ingénierie dispatche un 'resize' sur document.
+    document.addEventListener('resize', _surResizeToolbar);
 
     let isDragging = false;
     let startX = 0, startY = 0;
@@ -549,7 +584,9 @@ function initDraggableToolbar() {
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
 
-        // Mémoriser la position
+        // Mémoriser la position — à partir de cet instant la toolbar est
+        // en mode « position manuelle » et ne suit plus le layout.
+        toolbar.dataset.positionManuelle = '1';
         const rect = toolbar.getBoundingClientRect();
         localStorage.setItem('drainpilot_toolbar_pos', JSON.stringify({
             top: Math.round(rect.top),
@@ -656,7 +693,9 @@ window.sauvegarderEtatBureau = function(reseauId) {
         etat.toolbar = {
             visible: toolbar.style.display !== 'none',
             collapsed: toolbar.classList.contains('collapsed'),
-            x: r.left, y: r.top
+            x: r.left, y: r.top,
+            personnalisee: window._toolbarPositionPersonnalisee
+                ? window._toolbarPositionPersonnalisee(toolbar) : false
         };
     }
 
@@ -731,16 +770,19 @@ window.restaurerEtatBureau = function(reseauId) {
             else toolbar.classList.remove('collapsed');
             const icon = document.getElementById('icon-collapse-toolbar');
             if (icon) icon.className = etat.toolbar.collapsed ? 'fas fa-chevron-right' : 'fas fa-chevron-left';
-            if (etat.toolbar.x !== undefined) {
-                // Borner la position mémorisée à la fenêtre courante :
-                // une position sauvegardée sur un grand écran ne doit
-                // pas rendre la toolbar invisible sur petit écran.
+            if (etat.toolbar.x !== undefined && etat.toolbar.personnalisee) {
+                // Position manuelle : bornée à la fenêtre courante.
+                toolbar.dataset.positionManuelle = '1';
                 const _maxX = Math.max(8, window.innerWidth - 60);
                 const _maxY = Math.max(52, window.innerHeight - 60);
                 toolbar.style.left = Math.min(Math.max(Number(etat.toolbar.x) || 8, 8), _maxX) + 'px';
                 toolbar.style.top = Math.min(Math.max(Number(etat.toolbar.y) || 52, 52), _maxY) + 'px';
                 toolbar.style.right = 'auto';
                 window._bornerToolbarViewport(toolbar);
+            } else if (etat.toolbar.visible !== false) {
+                // Position automatique : recalée sur le panneau d'ingénierie.
+                delete toolbar.dataset.positionManuelle;
+                window._positionAutoToolbar(toolbar);
             }
         }
     }
