@@ -23,6 +23,7 @@ from typing import List, Optional, Dict, Any
 from api.database import get_db
 from api import schemas, crud
 from api.models import Project
+from api.core.security import get_tenant_context, require_role, TenantContext
 
 logger = logging.getLogger(__name__)
 
@@ -127,21 +128,29 @@ def get_graph_status():
 
 
 @router.get("", response_model=schemas.ClusterListResponse)
-def list_clusters(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """Liste tous les clusters."""
-    clusters = crud.get_clusters(db=db, skip=skip, limit=limit)
-    total = db.query(crud.Cluster).count()
+def list_clusters(
+    skip: int = 0,
+    limit: int = 100,
+    ctx: TenantContext = Depends(require_role("viewer")),
+    db: Session = Depends(get_db)
+):
+    """Liste tous les clusters de l'organisation active."""
+    clusters = crud.get_clusters(db=db, skip=skip, limit=limit, org_id=ctx.org_id)
+    total = db.query(crud.Cluster).filter(crud.Cluster.org_id == ctx.org_id).count()
     return {"clusters": clusters, "total": total}
 
 
 @router.get("/status")
-def get_cluster_status():
+def get_cluster_status(ctx: TenantContext = Depends(require_role("viewer"))):
     """Statut du cache du graphe."""
     return {"graph_cache": _GRAPH_STATUS}
 
 
 @router.post("/graph/rebuild")
-def rebuild_graph_cache(background_tasks: BackgroundTasks):
+def rebuild_graph_cache(
+    background_tasks: BackgroundTasks,
+    ctx: TenantContext = Depends(require_role("admin"))
+):
     """Reconstruit le cache du graphe (utile après modification des données)."""
     _reset_graph_cache()
     # Pré-chauffer le graphe en arrière-plan pour ne pas bloquer le client
@@ -150,18 +159,25 @@ def rebuild_graph_cache(background_tasks: BackgroundTasks):
 
 
 @router.get("/recalculate-all", include_in_schema=False)
-def recalculate_all_clusters_async_precedence(background_tasks: BackgroundTasks):
+def recalculate_all_clusters_async_precedence(
+    background_tasks: BackgroundTasks,
+    ctx: TenantContext = Depends(require_role("admin"))
+):
     """Schedule recalculation before the generic cluster-id route can match."""
     background_tasks.add_task(_calculate_clusters_background)
     return {"status": "scheduled"}
 
 
 @router.get("/{cluster_id}", response_model=schemas.ClusterResponse)
-def get_cluster(cluster_id: int, db: Session = Depends(get_db)):
-    """Détail d'un cluster."""
-    cluster = crud.get_cluster(db, cluster_id)
+def get_cluster(
+    cluster_id: int,
+    ctx: TenantContext = Depends(require_role("viewer")),
+    db: Session = Depends(get_db)
+):
+    """Détail d'un cluster (stealth 404 si hors organisation)."""
+    cluster = crud.get_cluster(db, cluster_id, org_id=ctx.org_id)
     if not cluster:
-        raise HTTPException(status_code=404, detail="Cluster non trouvé")
+        raise HTTPException(status_code=404, detail="Ressource introuvable")
     return cluster
 
 
@@ -169,47 +185,31 @@ def get_cluster(cluster_id: int, db: Session = Depends(get_db)):
 def recalculate_all_clusters(
     request: Request,
     background_tasks: BackgroundTasks,
+    ctx: TenantContext = Depends(require_role("admin")),
     db: Session = Depends(get_db),
     persist: bool = True
 ):
-    """Reconstruit tous les clusters en bassins exclusifs (sans chevauchement).
+    """Reconstruit tous les clusters en bassins exclusifs (sans chevauchement) pour l'organisation.
 
     Par défaut: exécution synchrone (POST) - retourne le résultat.
     Pour les appels GET (interface/rafraîchissement), voir /recalculate-all (GET) qui programme un job en arrière-plan.
     Le paramètre persist=false permet à l'interface carte de recalculer sans écrire en base, évitant les verrous SQLite.
     """
-    user = _get_current_user_from_request(request, db)
     chemin_gpkg = None
     from api.services.simulation_service import resoudre_gpkg_effectif_pour_projet
-    if user:
-        primary_membership = user.memberships[0] if user.memberships else None
-        if primary_membership:
-            project = db.query(Project).filter(
-                Project.org_id == primary_membership.org_id,
-                Project.is_archived.is_(False)
-            ).first()
-            chemin = resoudre_gpkg_effectif_pour_projet(db, project)
-            if chemin is not None:
-                chemin_gpkg = str(chemin)
-
-    if not chemin_gpkg:
-        proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
-        chemin = resoudre_gpkg_effectif_pour_projet(db, proj)
+    project = db.query(Project).filter(
+        Project.org_id == ctx.org_id,
+        Project.is_archived.is_(False)
+    ).first()
+    if project:
+        chemin = resoudre_gpkg_effectif_pour_projet(db, project)
         if chemin is not None:
             chemin_gpkg = str(chemin)
 
+    if not chemin_gpkg:
+        raise HTTPException(status_code=404, detail="Ressource introuvable")
+
     return _calculate_clusters_sync(db, persist=persist, chemin_gpkg=chemin_gpkg)
-
-
-@router.get("/recalculate-all")
-def recalculate_all_clusters_async(background_tasks: BackgroundTasks):
-    """Schedule cluster recalculation as a background task and return 202.
-
-    Ceci évite de bloquer le client pour les opérations longues et résout le problème
-    d'appels GET depuis le front qui provoquaient une 422.
-    """
-    background_tasks.add_task(_calculate_clusters_background)
-    return {"status": "scheduled"}
 
 
 # Helpers
@@ -751,29 +751,37 @@ def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional
 
 
 @router.post("/{cluster_id}/recalculate")
-def recalculate_cluster(cluster_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    """Recalcule un cluster spécifique."""
-    cluster = crud.get_cluster(db, cluster_id)
+def recalculate_cluster(
+    cluster_id: int,
+    background_tasks: BackgroundTasks,
+    ctx: TenantContext = Depends(require_role("engineer")),
+    db: Session = Depends(get_db)
+):
+    """Recalcule un cluster spécifique de l'organisation."""
+    cluster = crud.get_cluster(db, cluster_id, org_id=ctx.org_id)
     if not cluster:
-        raise HTTPException(status_code=404, detail="Cluster non trouvé")
+        raise HTTPException(status_code=404, detail="Ressource introuvable")
     raise HTTPException(status_code=501, detail="À implémenter")
 
 
 @router.get("/{cluster_id}/geojson")
-def export_cluster_geojson(cluster_id: int, request: Request = None, db: Session = Depends(get_db)):
-    """Export d'un cluster au format GeoJSON avec ordre topologique."""
+def export_cluster_geojson(
+    cluster_id: int,
+    request: Request = None,
+    ctx: TenantContext = Depends(require_role("viewer")),
+    db: Session = Depends(get_db)
+):
+    """Export d'un cluster au format GeoJSON avec ordre topologique (stealth 404)."""
     from src.domain.detecteur_clusters import tracer_cluster_depuis_exutoire, construire_geojson_cluster
     from src.domain.graphe_reseau import calculer_ordre_topologique
 
-    cluster = crud.get_cluster(db, cluster_id)
+    cluster = crud.get_cluster(db, cluster_id, org_id=ctx.org_id)
     if not cluster:
-        raise HTTPException(status_code=404, detail="Cluster non trouvé")
+        raise HTTPException(status_code=404, detail="Ressource introuvable")
 
-    # 3C.0 : le graphe doit être construit sur le GPKG résolu du projet
-    # (snapshot versionné), jamais sur le repli codé en dur de construire_graphe.
-    chemin_gpkg = _trouver_chemin_gpkg(db, request)
+    chemin_gpkg = _trouver_chemin_gpkg(db, org_id=ctx.org_id)
     if not chemin_gpkg:
-        raise HTTPException(status_code=404, detail="GeoPackage réseau introuvable.")
+        raise HTTPException(status_code=404, detail="Ressource introuvable")
     G = _get_graph(chemin_gpkg)
     target_node = cluster.exutoire_noeud
     node_tuple = target_node
@@ -793,28 +801,21 @@ def export_cluster_geojson(cluster_id: int, request: Request = None, db: Session
     }
 
 
-def _trouver_chemin_gpkg(db: Session, request: Optional[Request] = None) -> Optional[str]:
+def _trouver_chemin_gpkg(db: Session, org_id: Optional[str] = None, request: Optional[Request] = None) -> Optional[str]:
     """
-    Résout le chemin du GeoPackage du projet actif via le versionnement (3B/3C.0) :
+    Résout le chemin du GeoPackage du projet actif de l'organisation :
     snapshot immuable de la version courante si versionné, sinon source_gpkg_key.
     """
     from api.services.simulation_service import resoudre_gpkg_effectif_pour_projet
-    user = _get_current_user_from_request(request, db) if request else None
-    if user and user.memberships:
+    if org_id:
         proj = db.query(Project).filter(
-            Project.org_id == user.memberships[0].org_id,
+            Project.org_id == org_id,
             Project.is_archived.is_(False)
         ).first()
-        chemin = resoudre_gpkg_effectif_pour_projet(db, proj)
-        if chemin is not None:
-            return str(chemin)
-    proj = db.query(Project).filter(Project.is_archived.is_(False)).first()
-    chemin = resoudre_gpkg_effectif_pour_projet(db, proj)
-    if chemin is not None:
-        return str(chemin)
-    cand = Path("data/demo_reseau.gpkg")
-    if cand.exists():
-        return str(cand)
+        if proj:
+            chemin = resoudre_gpkg_effectif_pour_projet(db, proj)
+            if chemin is not None:
+                return str(chemin)
     return None
 
 
@@ -823,6 +824,7 @@ def get_cluster_ouvrages_proches(
     cluster_id: str,
     rayon_m: float = 45.0,
     request: Request = None,
+    ctx: TenantContext = Depends(require_role("viewer")),
     db: Session = Depends(get_db)
 ):
     """
@@ -831,9 +833,9 @@ def get_cluster_ouvrages_proches(
     Permet la validation interactive avant simulation hydrodynamique.
     """
     from src.domain.ouvrages_orphelins import detecter_ouvrages_orphelins_proches
-    chemin = _trouver_chemin_gpkg(db, request)
+    chemin = _trouver_chemin_gpkg(db, org_id=ctx.org_id)
     if not chemin:
-        raise HTTPException(status_code=404, detail="GeoPackage réseau introuvable.")
+        raise HTTPException(status_code=404, detail="Ressource introuvable")
     return detecter_ouvrages_orphelins_proches(chemin, cluster_id, rayon_max_m=rayon_m)
 
 
@@ -842,14 +844,20 @@ def get_cluster_ouvrages_proches(
 # ============================================================
 
 @router.post("/manual-basin")
-def save_cluster_manual_basin(data: Dict[str, Any]):
+def save_cluster_manual_basin(
+    data: Dict[str, Any],
+    ctx: TenantContext = Depends(require_role("admin"))
+):
     """Enregistre un bassin versant manuel tracé par l'utilisateur."""
     from src.infrastructure.persistance_manuelle import sauvegarder_bassin_manuel
     return sauvegarder_bassin_manuel(data)
 
 
 @router.delete("/manual-basin/{bassin_id}")
-def delete_cluster_manual_basin(bassin_id: str):
+def delete_cluster_manual_basin(
+    bassin_id: str,
+    ctx: TenantContext = Depends(require_role("admin"))
+):
     """Supprime un bassin versant manuel."""
     from src.infrastructure.persistance_manuelle import supprimer_bassin_manuel
     res = supprimer_bassin_manuel(bassin_id)
@@ -857,7 +865,7 @@ def delete_cluster_manual_basin(bassin_id: str):
 
 
 @router.get("/manual-basin")
-def get_cluster_manual_basins():
+def get_cluster_manual_basins(ctx: TenantContext = Depends(require_role("admin"))):
     """Liste tous les bassins versants manuels enregistrés."""
     from src.infrastructure.persistance_manuelle import charger_bassins_manuels
     return charger_bassins_manuels()

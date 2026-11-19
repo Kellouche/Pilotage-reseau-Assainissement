@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from api.database import get_db
 from api.models import Canalisation, Regard
+from api.core.security import get_tenant_context, require_role, TenantContext
 
 router = APIRouter()
 
@@ -97,13 +98,21 @@ def _unavailable_suggestion(message, source_count=0, slope=None):
 
 
 @router.post("/manuel/{fid}")
-def correction_manuelle(fid: str, data: Dict[str, Any], db: Session = Depends(get_db)):
+def correction_manuelle(
+    fid: str,
+    data: Dict[str, Any],
+    ctx: TenantContext = Depends(require_role("engineer")),
+    db: Session = Depends(get_db)
+):
     """
-    Apply a manual correction to a conduite.
+    Apply a manual correction to a conduite (stealth 404 si hors organisation).
     """
-    conduite = db.query(Canalisation).filter(Canalisation.fid == fid).first()
+    conduite = db.query(Canalisation).filter(
+        Canalisation.fid == fid,
+        Canalisation.org_id == ctx.org_id
+    ).first()
     if not conduite:
-        raise HTTPException(status_code=404, detail="Conduite non trouvee")
+        raise HTTPException(status_code=404, detail="Ressource introuvable")
 
     modifications = 0
     if "prof_fe_am" in data:
@@ -126,7 +135,10 @@ def correction_manuelle(fid: str, data: Dict[str, Any], db: Session = Depends(ge
 
 
 @router.get("/hybride/suggestable_fids")
-def suggestable_fids(db: Session = Depends(get_db)):
+def suggestable_fids(
+    ctx: TenantContext = Depends(require_role("viewer")),
+    db: Session = Depends(get_db)
+):
     """
     Returns FIDs that can have a reliable profile suggestion from both adjacent
     conduites without calling the heavy suggestion endpoint for every row.
@@ -139,7 +151,7 @@ def suggestable_fids(db: Session = Depends(get_db)):
         Canalisation.longueur,
         Canalisation.prof_fe_am,
         Canalisation.prof_fe_av,
-    ).all()
+    ).filter(Canalisation.org_id == ctx.org_id).all()
 
     prof_fe_av_by_downstream_id = {
         row.id_aval: row.prof_fe_av
@@ -168,24 +180,34 @@ def suggestable_fids(db: Session = Depends(get_db)):
 
 
 @router.get("/hybride/suggest")
-def suggestion_hybride(fid: str, anomalie_type: str, db: Session = Depends(get_db)):
+def suggestion_hybride(
+    fid: str,
+    anomalie_type: str,
+    ctx: TenantContext = Depends(require_role("viewer")),
+    db: Session = Depends(get_db)
+):
     """
     Suggest a correction from adjacent conduites and slopes observed in similar data.
     The endpoint returns no green suggestion when the result is not defensible.
     """
-    conduite = db.query(Canalisation).filter(Canalisation.fid == fid).first()
+    conduite = db.query(Canalisation).filter(
+        Canalisation.fid == fid,
+        Canalisation.org_id == ctx.org_id
+    ).first()
     if not conduite:
-        raise HTTPException(status_code=404, detail="Conduite non trouvee")
+        raise HTTPException(status_code=404, detail="Ressource introuvable")
 
     longueur = conduite.longueur
     prof_actuelle_am = conduite.prof_fe_am
     prof_actuelle_av = conduite.prof_fe_av
 
     conduite_amont = db.query(Canalisation).filter(
+        Canalisation.org_id == ctx.org_id,
         Canalisation.id != conduite.id,
         Canalisation.id_aval == conduite.id_amont,
     ).first()
     conduite_aval = db.query(Canalisation).filter(
+        Canalisation.org_id == ctx.org_id,
         Canalisation.id != conduite.id,
         Canalisation.id_amont == conduite.id_aval,
     ).first()
@@ -415,31 +437,34 @@ def suggestion_hybride(fid: str, anomalie_type: str, db: Session = Depends(get_d
 
 
 @router.get("/profile/{fid}")
-def profil_conduite(fid: str, db: Session = Depends(get_db)):
+def profil_conduite(
+    fid: str,
+    ctx: TenantContext = Depends(require_role("viewer")),
+    db: Session = Depends(get_db)
+):
     """
     Retourne les détails d'une conduite et de ses regards pour l'affichage du profil.
     """
-    print(f"[PROFILE] Request for fid={fid}")
+    q = db.query(Canalisation).filter(Canalisation.org_id == ctx.org_id)
     # Try robust lookup: exact, trimmed, numeric equivalence, LIKE
-    conduite = db.query(Canalisation).filter(Canalisation.fid == fid).first()
-    print(f"[PROFILE] initial query result: {bool(conduite)}")
+    conduite = q.filter(Canalisation.fid == fid).first()
     if not conduite:
         # try trimmed
-        conduite = db.query(Canalisation).filter(Canalisation.fid == fid.strip()).first() if isinstance(fid, str) else None
+        conduite = q.filter(Canalisation.fid == fid.strip()).first() if isinstance(fid, str) else None
     if not conduite and isinstance(fid, str) and fid.endswith('.0'):
         alt = fid[:-2]
-        conduite = db.query(Canalisation).filter(Canalisation.fid == alt).first()
+        conduite = q.filter(Canalisation.fid == alt).first()
     if not conduite:
         # try numeric-match: if fid can be float, search string representation
         try:
             fnum = float(fid)
-            conduite = db.query(Canalisation).filter(Canalisation.fid == str(fnum)).first()
+            conduite = q.filter(Canalisation.fid == str(fnum)).first()
         except Exception:
             pass
     if not conduite and isinstance(fid, str):
         # try case-insensitive like
         try:
-            conduite = db.query(Canalisation).filter(Canalisation.fid.ilike(f"%{fid}%")).first()
+            conduite = q.filter(Canalisation.fid.ilike(f"%{fid}%")).first()
         except Exception:
             pass
 
@@ -447,16 +472,18 @@ def profil_conduite(fid: str, db: Session = Depends(get_db)):
     if not conduite:
         try:
             maybe_id = int(float(str(fid)))
-            conduite = db.query(Canalisation).filter(Canalisation.id == maybe_id).first()
+            conduite = q.filter(Canalisation.id == maybe_id).first()
         except Exception:
             pass
 
     if conduite:
         regard_amont = db.query(Regard).filter(
+            Regard.org_id == ctx.org_id,
             Regard.code == conduite.id_amont
         ).first() if conduite.id_amont else None
 
         regard_aval = db.query(Regard).filter(
+            Regard.org_id == ctx.org_id,
             Regard.code == conduite.id_aval
         ).first() if conduite.id_aval else None
 
@@ -558,13 +585,19 @@ def profil_conduite(fid: str, db: Session = Depends(get_db)):
     except Exception:
         pass
 
-    raise HTTPException(status_code=404, detail="Conduite non trouvée")
+    raise HTTPException(status_code=404, detail="Ressource introuvable")
+
+
 @router.post("/automatique")
-def correction_automatique(db: Session = Depends(get_db)):
+def correction_automatique(
+    ctx: TenantContext = Depends(require_role("engineer")),
+    db: Session = Depends(get_db)
+):
     """
-    Batch repair for obvious topology issues. Kept conservative for the PoC.
+    Batch repair for obvious topology issues for the active organization.
     """
     conduites = db.query(Canalisation).filter(
+        Canalisation.org_id == ctx.org_id,
         (Canalisation.id_amont == None) | (Canalisation.id_amont == "")
     ).limit(50).all()
 

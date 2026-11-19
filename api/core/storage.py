@@ -184,20 +184,34 @@ class LocalStore(ArtifactStore):
         vers la cible. os.link() échoue avec FileExistsError si la cible existe
         → création strictement conditionnelle, sans fenêtre exists/put.
         Repli documenté si le système de fichiers ne supporte pas les liens
-        durs : re-vérification immédiate puis os.replace() (course résiduelle
-        possible sur FS sans hardlink, ex. certains montages réseau).
+        durs ou sous Windows : verrou exclusif atomique (O_CREAT | O_EXCL)
+        pour éliminer toute course concurrente lors de la publication.
         """
         try:
-            os.link(tmp_path, target)
-        except FileExistsError:
-            return False
-        except OSError:
-            if target.exists():
+            try:
+                os.link(tmp_path, target)
+                tmp_path.unlink(missing_ok=True)
+                return True
+            except FileExistsError:
                 return False
-            os.replace(tmp_path, target)
-            return True
-        tmp_path.unlink(missing_ok=True)
-        return True
+            except OSError:
+                if target.exists():
+                    return False
+                lock_file = target.with_name(f".{target.name}.lock")
+                try:
+                    fd = os.open(lock_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                    os.close(fd)
+                except (FileExistsError, OSError):
+                    return False
+                try:
+                    if target.exists():
+                        return False
+                    os.replace(tmp_path, target)
+                    return True
+                finally:
+                    lock_file.unlink(missing_ok=True)
+        finally:
+            tmp_path.unlink(missing_ok=True)
 
     def _put_bytes_si_absent(self, target: Path, data: bytes) -> bool:
         import tempfile

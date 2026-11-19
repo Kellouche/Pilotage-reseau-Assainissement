@@ -23,19 +23,8 @@ from api.core.security import PUBLIC_ALLOWLIST, TENANT_ENFORCEMENT
 # ---------------------------------------------------------------------------
 KNOWN_PENDING_SURFACES = {
     # Routeurs à protéger (J2 - J6)
-    ("DELETE", "/api/v1/clusters/manual-basin/{bassin_id}"),
     ("DELETE", "/api/v1/mnt/cache"),
     ("DELETE", "/api/v1/qualite/cache"),
-    ("GET", "/api/v1/clusters"),
-    ("GET", "/api/v1/clusters/manual-basin"),
-    ("GET", "/api/v1/clusters/recalculate-all"),
-    ("GET", "/api/v1/clusters/status"),
-    ("GET", "/api/v1/clusters/{cluster_id}"),
-    ("GET", "/api/v1/clusters/{cluster_id}/geojson"),
-    ("GET", "/api/v1/clusters/{cluster_id}/ouvrages-proches"),
-    ("GET", "/api/v1/corrections/hybride/suggest"),
-    ("GET", "/api/v1/corrections/hybride/suggestable_fids"),
-    ("GET", "/api/v1/corrections/profile/{fid}"),
     ("GET", "/api/v1/layers"),
     ("GET", "/api/v1/mnt/cache/status"),
     ("GET", "/api/v1/mnt/statut"),
@@ -51,12 +40,6 @@ KNOWN_PENDING_SURFACES = {
     ("GET", "/api/v1/terrain/inspections"),
     ("GET", "/api/v1/terrain/inspections/{object_type}/{object_id}"),
     ("PATCH", "/api/v1/terrain/incidents/{incident_id}"),
-    ("POST", "/api/v1/clusters/graph/rebuild"),
-    ("POST", "/api/v1/clusters/manual-basin"),
-    ("POST", "/api/v1/clusters/recalculate-all"),
-    ("POST", "/api/v1/clusters/{cluster_id}/recalculate"),
-    ("POST", "/api/v1/corrections/automatique"),
-    ("POST", "/api/v1/corrections/manuel/{fid}"),
     ("POST", "/api/v1/mnt/analyser-bassins"),
     ("POST", "/api/v1/qualite/export-csv"),
     ("POST", "/api/v1/qualite/valider-incremental"),
@@ -191,8 +174,8 @@ def test_no_unlisted_unprotected_routes():
 
 
 def test_pending_surfaces_count_ceiling():
-    """Le nombre de surfaces en attente ne doit jamais dépasser le plafond (52 après J2)."""
-    assert len(KNOWN_PENDING_SURFACES) <= 52
+    """Le nombre de surfaces en attente ne doit jamais dépasser le plafond (35 après J3)."""
+    assert len(KNOWN_PENDING_SURFACES) <= 35
 
 
 def test_tenant_enforcement_fail_closed_mode():
