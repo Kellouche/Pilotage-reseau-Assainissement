@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 from api.database import get_db
 from api import schemas, crud
-from api.core.security import get_tenant_context, TenantContext
+from api.core.security import get_tenant_context, TenantContext, require_role
 from api.core.jobs import create_job, update_job
 from api.models import Organization, Project
 
@@ -452,7 +452,9 @@ ValidateBufferRequest.model_rebuild()
 
 
 @router.get("/typologies-sol")
-def get_simulation_typologies_sol():
+def get_simulation_typologies_sol(
+    ctx: TenantContext = Depends(require_role("viewer"))
+):
     """Retourne la liste des typologies d'occupation du sol et leurs paramètres d'imperméabilisation."""
     from src.domain.moteur_swmm import TYPOLOGIES_OCCUPATION_SOL
     return {
@@ -471,7 +473,9 @@ def get_simulation_typologies_sol():
 
 
 @router.get("/pluviometrie/referentiel")
-def get_pluviometrie_referentiel():
+def get_pluviometrie_referentiel(
+    ctx: TenantContext = Depends(require_role("viewer"))
+):
     """Retourne le référentiel pluviométrique complet certifié (Wilayas, Stations, Métadonnées)."""
     from src.domain.referentiel_pluvio import charger_referentiel, lister_wilayas, lister_stations
     ref = charger_referentiel()
@@ -485,14 +489,20 @@ def get_pluviometrie_referentiel():
 
 
 @router.get("/pluviometrie/stations")
-def get_pluviometrie_stations(wilaya: Optional[str] = None):
+def get_pluviometrie_stations(
+    wilaya: Optional[str] = None,
+    ctx: TenantContext = Depends(require_role("viewer"))
+):
     """Retourne la liste des stations hydro-météorologiques (optionnellement filtrée par wilaya)."""
     from src.domain.referentiel_pluvio import lister_stations
     return {"stations": lister_stations(wilaya_key=wilaya)}
 
 
 @router.get("/scenarios")
-def get_simulation_scenarios(station_id: Optional[str] = "chlef_anrh_siege"):
+def get_simulation_scenarios(
+    station_id: Optional[str] = "chlef_anrh_siege",
+    ctx: TenantContext = Depends(require_role("viewer"))
+):
     """Retourne les scénarios de pluie et de sollicitation disponibles pour une station donnée."""
     from src.domain.referentiel_pluvio import generer_scenarios_swmm_pour_station, obtenir_station
     st_id = station_id or "chlef_anrh_siege"
@@ -544,7 +554,10 @@ class BMSPreviewRequest(BaseModel):
 
 
 @router.post("/pluviometrie/bms-preview")
-def preview_bms_scenario(payload: BMSPreviewRequest):
+def preview_bms_scenario(
+    payload: BMSPreviewRequest,
+    ctx: Optional[TenantContext] = Depends(require_role("viewer"))
+):
     """Génère l'hyétogramme prévisionnel et les indicateurs clés d'un BMS pour aperçu instantané."""
     from src.domain.bms_module import creer_scenario_bms
     scen = creer_scenario_bms(

@@ -11,8 +11,9 @@ Objet : Utilitaires de chiffrement, tokens sécurisés et protection CSRF/XSS
 
 import logging
 import os
-from typing import Optional, Tuple, Any, Callable
+from typing import Optional, Tuple, Any, Callable, Union
 from fastapi import Request, Depends, HTTPException, status
+from starlette.requests import HTTPConnection
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -122,7 +123,7 @@ class TenantContext:
 
 
 def get_tenant_context(
-    request: Request,
+    request: HTTPConnection,
     auth_creds: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer),
     db: Session = Depends(get_db),
 ) -> TenantContext:
@@ -131,12 +132,15 @@ def get_tenant_context(
     Priorités :
     1. Header Authorization Bearer (clé API `sp_live_...` ou JWT).
     2. Cookie de session `access_token`.
+    3. Paramètre query `token` (connexions WebSocket).
     """
     token: Optional[str] = None
     if auth_creds and auth_creds.credentials:
         token = auth_creds.credentials.strip()
     elif "access_token" in request.cookies:
         token = request.cookies.get("access_token")
+    elif "token" in request.query_params:
+        token = request.query_params.get("token")
     # A1 : le cookie refresh_token n'est plus accepté comme access token.
 
     if not token:
@@ -220,7 +224,7 @@ def get_tenant_context(
 
 
 def get_tenant_context_optional(
-    request: Request,
+    request: HTTPConnection,
     auth_creds: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer),
     db: Session = Depends(get_db),
 ) -> Optional[TenantContext]:
@@ -233,6 +237,8 @@ def get_tenant_context_optional(
         token = auth_creds.credentials.strip()
     elif "access_token" in request.cookies:
         token = request.cookies.get("access_token")
+    elif "token" in request.query_params:
+        token = request.query_params.get("token")
 
     if not token:
         return None

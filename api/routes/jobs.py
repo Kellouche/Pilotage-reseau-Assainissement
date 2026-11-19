@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSock
 from sqlalchemy.orm import Session
 
 from api.database import get_db, SessionLocal
-from api.core.security import get_tenant_context, TenantContext
+from api.core.security import get_tenant_context, TenantContext, require_role
 from api.core.jobs import get_job, list_jobs
 from api.models import Job
 
@@ -69,10 +69,15 @@ def get_job_status(
 
 
 @router.websocket("/ws/{job_id}")
-async def websocket_job_progress(websocket: WebSocket, job_id: str):
+async def websocket_job_progress(
+    websocket: WebSocket,
+    job_id: str,
+    ctx: TenantContext = Depends(require_role("viewer"))
+):
     """
     Canal WebSocket temps réel diffusant les mises à jour de progression d'un Job.
     Se ferme automatiquement dès que la tâche est terminée (completed ou failed).
+    Cloisonné strictement par organisation.
     """
     await websocket.accept()
 
@@ -84,7 +89,7 @@ async def websocket_job_progress(websocket: WebSocket, job_id: str):
         for _ in range(300):  # Maximum 150 secondes de streaming continu
             db = SessionLocal()
             try:
-                job = db.query(Job).filter(Job.id == job_id).first()
+                job = db.query(Job).filter(Job.id == job_id, Job.org_id == ctx.org_id).first()
                 if not job:
                     await websocket.send_json({"error": "Job introuvable", "status": "not_found"})
                     break

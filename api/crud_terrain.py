@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 
 from api.models_terrain import Inspection, Incident
-from api.models import AuditLog
+from api.crud import log_audit
 
 
 # ============================================================
@@ -65,16 +65,15 @@ def create_inspection(
     db.refresh(inspection)
 
     # Journal d'audit
-    log = AuditLog(
-        table_name="inspections",
-        record_id=inspection.id,
-        operation="INSERT",
-        new_values=data,
+    log_audit(
+        db=db,
+        action="terrain.inspection.create",
+        org_id=inspection.org_id,
         user_id=user_id,
-        device_id=data.get("device_id")
+        target_type="inspection",
+        target_id=str(inspection.id),
+        details={"object_type": inspection.object_type, "object_id": inspection.object_id}
     )
-    db.add(log)
-    db.commit()
 
     return inspection
 
@@ -114,16 +113,15 @@ def create_incident(
     db.refresh(incident)
 
     # Journal d'audit
-    log = AuditLog(
-        table_name="incidents",
-        record_id=incident.id,
-        operation="INSERT",
-        new_values=data,
+    log_audit(
+        db=db,
+        action="terrain.incident.create",
+        org_id=incident.org_id,
         user_id=user_id,
-        device_id=data.get("device_id")
+        target_type="incident",
+        target_id=str(incident.id),
+        details={"type_incident": incident.type_incident, "gravite": incident.gravite}
     )
-    db.add(log)
-    db.commit()
 
     return incident
 
@@ -148,15 +146,14 @@ def update_incident_status(
     db.refresh(incident)
 
     # Journal d'audit
-    log = AuditLog(
-        table_name="incidents",
-        record_id=incident.id,
-        operation="UPDATE",
-        old_values=old_values,
-        new_values={"statut": statut},
-        user_id=user_id
+    log_audit(
+        db=db,
+        action="terrain.incident.update_status",
+        org_id=incident.org_id,
+        user_id=user_id,
+        target_type="incident",
+        target_id=str(incident.id),
+        details={"old_status": old_values.get("statut"), "new_status": statut}
     )
-    db.add(log)
-    db.commit()
 
     return incident

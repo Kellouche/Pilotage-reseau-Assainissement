@@ -4,8 +4,8 @@
 Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
 Auteur : Dr Abdelhakim KELLOUCHE
 Date de création : 2026-04-20
-Date de modification : 2026-11-08
-Objet : Endpoints mobiles pour la saisie terrain d'anomalies et photos d'ouvrages
+Date de modification : 2026-11-19
+Objet : Endpoints mobiles pour la saisie terrain d'anomalies et photos d'ouvrages (Multi-Tenant)
 ================================================================================
 """
 
@@ -15,6 +15,7 @@ from typing import List, Optional
 
 from api.database import get_db
 from api import schemas_terrain, crud_terrain
+from api.core.security import require_role, TenantContext
 from api.websocket import manager
 
 router = APIRouter(prefix="/terrain", tags=["Collecte Terrain"])
@@ -26,15 +27,17 @@ router = APIRouter(prefix="/terrain", tags=["Collecte Terrain"])
 @router.post("/inspections", response_model=schemas_terrain.InspectionResponse, status_code=status.HTTP_201_CREATED)
 async def create_inspection(
     inspection: schemas_terrain.InspectionCreate,
-    user_id: Optional[str] = "agent_terrain",
+    ctx: TenantContext = Depends(require_role("engineer")),
     db: Session = Depends(get_db)
 ):
-    """Crée une nouvelle fiche d'inspection pour un équipement."""
+    """Crée une nouvelle fiche d'inspection pour un équipement (cloisonné par organisation)."""
     try:
+        actor_id = getattr(ctx.actor, "id", None) if ctx.actor else "agent_terrain"
         inspect_obj = crud_terrain.create_inspection(
             db=db,
             inspection_data=inspection.dict(),
-            user_id=user_id
+            user_id=str(actor_id or ctx.org_id),
+            org_id=ctx.org_id
         )
         
         # Diffuser une alerte de modification via WebSocket
@@ -50,23 +53,26 @@ async def create_inspection(
 def list_inspections(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
+    ctx: TenantContext = Depends(require_role("viewer")),
     db: Session = Depends(get_db)
 ):
-    """Récupère la liste de toutes les inspections terrain."""
-    return crud_terrain.get_inspections(db=db, skip=skip, limit=limit)
+    """Récupère la liste de toutes les inspections terrain de l'organisation."""
+    return crud_terrain.get_inspections(db=db, skip=skip, limit=limit, org_id=ctx.org_id)
 
 
 @router.get("/inspections/{object_type}/{object_id}", response_model=List[schemas_terrain.InspectionResponse])
 def get_inspections_for_object(
     object_type: str,
     object_id: str,
+    ctx: TenantContext = Depends(require_role("viewer")),
     db: Session = Depends(get_db)
 ):
-    """Récupère l'historique des inspections pour un équipement donné."""
+    """Récupère l'historique des inspections pour un équipement donné (cloisonné par organisation)."""
     return crud_terrain.get_inspections_by_object(
         db=db,
         object_type=object_type,
-        object_id=object_id
+        object_id=object_id,
+        org_id=ctx.org_id
     )
 
 # ============================================================
@@ -76,15 +82,17 @@ def get_inspections_for_object(
 @router.post("/incidents", response_model=schemas_terrain.IncidentResponse, status_code=status.HTTP_201_CREATED)
 async def create_incident(
     incident: schemas_terrain.IncidentCreate,
-    user_id: Optional[str] = "agent_terrain",
+    ctx: TenantContext = Depends(require_role("engineer")),
     db: Session = Depends(get_db)
 ):
-    """Signale un nouvel incident géolocalisé."""
+    """Signale un nouvel incident géolocalisé (cloisonné par organisation)."""
     try:
+        actor_id = getattr(ctx.actor, "id", None) if ctx.actor else "agent_terrain"
         inc_obj = crud_terrain.create_incident(
             db=db,
             incident_data=incident.dict(),
-            user_id=user_id
+            user_id=str(actor_id or ctx.org_id),
+            org_id=ctx.org_id
         )
         
         # Diffuser une alerte d'incident via WebSocket
@@ -100,26 +108,29 @@ async def create_incident(
 def list_incidents(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
+    ctx: TenantContext = Depends(require_role("viewer")),
     db: Session = Depends(get_db)
 ):
-    """Récupère la liste des incidents géolocalisés."""
-    return crud_terrain.get_incidents(db=db, skip=skip, limit=limit)
+    """Récupère la liste des incidents géolocalisés de l'organisation."""
+    return crud_terrain.get_incidents(db=db, skip=skip, limit=limit, org_id=ctx.org_id)
 
 
 @router.patch("/incidents/{incident_id}", response_model=schemas_terrain.IncidentResponse)
 def update_incident_status(
     incident_id: int,
     statut: str = Query(..., description="Nouveau statut de l'incident"),
-    user_id: Optional[str] = "bureau",
+    ctx: TenantContext = Depends(require_role("engineer")),
     db: Session = Depends(get_db)
 ):
-    """Met à jour le statut d'un incident géolocalisé (À traiter, En cours, Résolu)."""
+    """Met à jour le statut d'un incident géolocalisé (Stealth 404)."""
+    actor_id = getattr(ctx.actor, "id", None) if ctx.actor else "bureau"
     updated = crud_terrain.update_incident_status(
         db=db,
         incident_id=incident_id,
         statut=statut,
-        user_id=user_id
+        user_id=str(actor_id or ctx.org_id),
+        org_id=ctx.org_id
     )
     if not updated:
-        raise HTTPException(status_code=404, detail="Incident non trouvé")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ressource introuvable")
     return updated

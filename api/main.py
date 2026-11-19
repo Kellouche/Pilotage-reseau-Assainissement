@@ -31,6 +31,7 @@ from api.database import init_db, get_db, SessionLocal
 from sqlalchemy.orm import Session
 from api.models import Project
 from api import schemas, crud
+from api.core.security import require_role, TenantContext
 
 from api.routes import network, simulations, sync, clusters, qualite, corrections, terrain, mnt, audit, auth, jobs, artifacts, licensing, admin, organization, apports, garde_fou, aux_layers, extractions
 
@@ -376,11 +377,21 @@ def get_layers(
     ne_lng: Optional[float] = None,
     sw_lat: Optional[float] = None,
     sw_lng: Optional[float] = None,
+    snapshot: Optional[str] = None,
+    project_id: Optional[str] = None,
+    ctx: TenantContext = Depends(require_role("viewer")),
     db: Session = Depends(get_db),
 ):
     """
-    Retourne les données GeoJSON des couches du réseau pour le projet actif de l'utilisateur.
+    Retourne les données GeoJSON des couches du réseau pour le projet actif de l'organisation.
     Si aucun fichier de réseau n'est associé au projet, retourne un espace vierge (Option B).
+
+    `snapshot` (optionnel) : gpkg_version_id ou préfixe sha256 d'une version
+    archivée du MÊME projet — permet de consulter une simulation sur le réseau
+    qui l'a produite (jamais de substitution silencieuse : snapshot inconnu
+    → 404). Absent → version courante, comportement historique inchangé.
+    `project_id` (optionnel) : explicite le projet quand l'organisation en a
+    plusieurs (sinon repli sur le comportement historique).
     """
     global _LAYERS_CACHE, _GDF_CACHE
     has_bounds = _has_bounds(ne_lat, ne_lng, sw_lat, sw_lng)
@@ -402,53 +413,57 @@ def get_layers(
         }
     }
 
-    user = None
-    if request and db:
-        user = _get_authenticated_user(request, db)
-
-    # Détermination du fichier GeoPackage pour le projet actif
-    # 3C.0 : résolution via le versionnement (snapshot immuable si versionné)
-    # et clé de cache intégrant org/projet/SHA-256 du contenu.
+    # Détermination du fichier GeoPackage pour le projet actif (strictement cloisonné par org_id)
     from api.services.simulation_service import resoudre_gpkg_effectif_pour_projet
+    from api.services.gpkg_versions import (
+        resoudre_snapshot_pour_lecture, GpkgSimulationError)
     gpkg_target = None
+    snap_meta = None
     project_name = "Nouveau Projet"
-    cache_org_id = "anon"
+    cache_org_id = ctx.org_id
     cache_project_id = "none"
 
-    if user and db:
-        primary_membership = user.memberships[0] if user.memberships else None
-        if primary_membership:
-            cache_org_id = primary_membership.org_id
-            project = db.query(Project).filter(
-                Project.org_id == primary_membership.org_id,
-                Project.is_archived.is_(False)
-            ).first()
-            if project:
-                project_name = project.name
-                cache_project_id = project.id
-                chemin_eff = resoudre_gpkg_effectif_pour_projet(db, project)
-                if chemin_eff is not None:
-                    gpkg_target = chemin_eff
+    query = db.query(Project).filter(
+        Project.org_id == ctx.org_id,
+        Project.is_archived.is_(False)
+    )
+    if project_id:
+        query = query.filter(Project.id == project_id)
+    project = query.first()
 
-    # Si aucun réseau n'est chargé et qu'aucun utilisateur n'est connecté -> Fallback projet actif local ou démo
-    if not gpkg_target and not user and db:
-        project = db.query(Project).filter(Project.is_archived.is_(False)).first()
-        if project:
-            project_name = project.name
-            cache_project_id = project.id
-            cache_org_id = project.org_id or "anon"
-            chemin_eff = resoudre_gpkg_effectif_pour_projet(db, project)
-            if chemin_eff is not None:
-                gpkg_target = chemin_eff
-        if not gpkg_target:
-            cand = Path("data/demo_reseau.gpkg")
-            if cand.exists():
-                gpkg_target = cand
-                project_name = "Quartier Témoin (Démo)"
+    if project:
+        project_name = project.name
+        cache_project_id = project.id
+        try:
+            snap_ctx = resoudre_snapshot_pour_lecture(db, project, snapshot)
+            gpkg_target = snap_ctx["path"]
+            snap_meta = snap_ctx
+        except GpkgSimulationError:
+            # Snapshot demandé mais introuvable/hors projet :
+            # stealth 404, jamais de repli sur la version courante.
+            raise HTTPException(status_code=404, detail="Ressource introuvable")
 
     if not gpkg_target:
         empty_response["project_name"] = project_name
         return empty_response
+
+    # Le client reçoit toujours la métadonnée du snapshot réellement servi :
+    # c'est la clé de vérification INV-2 (sha256) côté frontend.
+    snap_payload = None
+    if snap_meta:
+        snap_payload = {
+            "version_id": snap_meta.get("version_id"),
+            "sha256": snap_meta.get("sha256"),
+            "est_version_courante": snap_meta.get("est_version_courante"),
+            "libelle": snap_meta.get("libelle"),
+            "nb_regards": snap_meta.get("nb_regards"),
+            "nb_conduites": snap_meta.get("nb_conduites"),
+        }
+
+    def _with_snapshot(payload: dict) -> dict:
+        if snap_payload:
+            payload["snapshot"] = snap_payload
+        return payload
 
     # Clé de cache content-adressée : org + projet + SHA-256 du GPKG —
     # deux versions ne partagent jamais leurs données cartographiques.
@@ -464,7 +479,7 @@ def get_layers(
         res = dict(_LAYERS_CACHE[cache_key])
         res["project_name"] = project_name
         res["is_empty"] = False
-        return res
+        return _with_snapshot(res)
 
     if cache_key in _GDF_CACHE and has_bounds:
         result = {"statut": "ok", "is_empty": False, "project_name": project_name, "couches": {}, "compteurs": {}}
@@ -478,7 +493,7 @@ def get_layers(
             else:
                 result["couches"][key] = {"type": "FeatureCollection", "features": []}
                 result["compteurs"][key] = 0
-        return result
+        return _with_snapshot(result)
 
     # Construction du cache pour ce GeoPackage
     import geopandas as gpd

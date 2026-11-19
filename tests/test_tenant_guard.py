@@ -16,27 +16,10 @@ from api.core.security import PUBLIC_ALLOWLIST, TENANT_ENFORCEMENT
 
 
 # ---------------------------------------------------------------------------
-# Surfaces connues en cours de migration (J2 - J7)
-# Ce registre figé garantit que :
-# 1. Aucune NOUVELLE route orpheline ne peut être ajoutée sans être bloquée par ce test.
-# 2. Chaque route migrée sera retirée de cette liste jusqu'à atteindre 0 en J7/J8.
+# Surfaces en cours de migration (Lot A1) : 0 surfaces restantes (J6)
+# 100% des surfaces applicatives sont désormais protégées par le tenant guard.
 # ---------------------------------------------------------------------------
-KNOWN_PENDING_SURFACES = {
-    # Surfaces restantes à protéger (J6)
-    ("GET", "/api/v1/layers"),
-    ("GET", "/api/v1/simulations/pluviometrie/referentiel"),
-    ("GET", "/api/v1/simulations/pluviometrie/stations"),
-    ("GET", "/api/v1/simulations/scenarios"),
-    ("GET", "/api/v1/simulations/typologies-sol"),
-    ("GET", "/api/v1/terrain/incidents"),
-    ("GET", "/api/v1/terrain/inspections"),
-    ("GET", "/api/v1/terrain/inspections/{object_type}/{object_id}"),
-    ("PATCH", "/api/v1/terrain/incidents/{incident_id}"),
-    ("POST", "/api/v1/simulations/pluviometrie/bms-preview"),
-    ("POST", "/api/v1/terrain/incidents"),
-    ("POST", "/api/v1/terrain/inspections"),
-    ("WS", "/api/v1/jobs/ws/{job_id}"),
-}
+KNOWN_PENDING_SURFACES = set()
 
 
 def _get_recursive_calls(dependant):
@@ -150,8 +133,8 @@ def test_no_unlisted_unprotected_routes():
 
 
 def test_pending_surfaces_count_ceiling():
-    """Le nombre de surfaces en attente ne doit jamais dépasser le plafond (13 après J5)."""
-    assert len(KNOWN_PENDING_SURFACES) <= 13
+    """Toutes les surfaces orphelines sont désormais éradiquées (Plafond 0 atteint en J6)."""
+    assert len(KNOWN_PENDING_SURFACES) == 0
 
 
 def test_tenant_enforcement_fail_closed_mode():
