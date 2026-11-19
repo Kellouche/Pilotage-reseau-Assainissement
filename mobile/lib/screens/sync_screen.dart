@@ -83,11 +83,15 @@ class _SyncScreenState extends State<SyncScreen> {
     }
     try {
       setState(() => syncStatus = 'downloading');
-      final delta = await syncService.getDelta(0);
+      final lastVersion = await storageService.getLastSyncVersion();
+      final delta = await syncService.getDelta(lastVersion);
+      final newVersion = delta['version'] as int? ?? lastVersion;
+      await storageService.setLastSyncVersion(newVersion);
       setState(() => lastSync = DateTime.now().toString());
       if (mounted) {
+        final count = (delta['changes'] as List?)?.length ?? 0;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Téléchargement réussi : ${delta['changes'].length} changements reçus')),
+          SnackBar(content: Text('Téléchargement réussi : $count changements reçus (v$newVersion)')),
         );
       }
     } catch (error) {
@@ -128,11 +132,31 @@ class _SyncScreenState extends State<SyncScreen> {
       })).toList();
 
       final result = await syncService.pushChanges(deviceId, formattedChanges);
-      await storageService.clearPendingChanges();
+      final accepted = result['accepted'] as int? ?? 0;
+      final rejected = result['rejected'] as int? ?? 0;
+      final newVersion = result['new_version'] as int?;
+      if (newVersion != null) {
+        await storageService.setLastSyncVersion(newVersion);
+      }
+
+      // Préservation transactionnelle : ne jamais purger aveuglément en cas de rejets
+      if (rejected == 0) {
+        await storageService.clearPendingChanges();
+      } else if (accepted > 0) {
+        final acceptedIds = pendingChanges
+            .take(accepted)
+            .map((c) => c['localId']?.toString())
+            .whereType<String>()
+            .toList();
+        if (acceptedIds.isNotEmpty) {
+          await storageService.removePendingChanges(acceptedIds);
+        }
+      }
+
       setState(() => lastSync = DateTime.now().toString());
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Envoi réussi !\nAcceptés : ${result['accepted']}\nRejetés : ${result['rejected']}')),
+          SnackBar(content: Text('Envoi terminé !\nAcceptés : $accepted\nRejetés préservés : $rejected')),
         );
       }
       await loadSettings();

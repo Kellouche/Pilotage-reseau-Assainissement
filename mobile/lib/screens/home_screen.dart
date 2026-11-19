@@ -16,6 +16,7 @@ class _HomeScreenState extends State<HomeScreen>
   String serverStatus = 'checking';
   Map<String, dynamic>? serverInfo;
   int pendingCount = 0;
+  bool isLoggedIn = false;
   late AnimationController _pulseController;
 
   @override
@@ -38,7 +39,11 @@ class _HomeScreenState extends State<HomeScreen>
   Future<void> loadSettings() async {
     try {
       final mode = await storageService.getNetworkMode();
-      setState(() => networkMode = mode);
+      final token = await storageService.getAuthToken();
+      setState(() {
+        networkMode = mode;
+        isLoggedIn = token != null && token.isNotEmpty;
+      });
 
       final changes = await storageService.getPendingChanges();
       setState(() => pendingCount = changes.length);
@@ -53,6 +58,85 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
+  Future<void> _showLoginDialog() async {
+    final emailController = TextEditingController();
+    final passwordController = TextEditingController();
+    bool loading = false;
+    String? errorMessage;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          title: const Text('Connexion Agent Terrain', style: TextStyle(color: Colors.white)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: Text(errorMessage!, style: const TextStyle(color: Colors.redAccent, fontSize: 13)),
+                ),
+              TextField(
+                controller: emailController,
+                decoration: const InputDecoration(
+                  labelText: 'Email',
+                  labelStyle: TextStyle(color: Color(0xFF94A3B8)),
+                ),
+                style: const TextStyle(color: Colors.white),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: passwordController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Mot de passe',
+                  labelStyle: TextStyle(color: Color(0xFF94A3B8)),
+                ),
+                style: const TextStyle(color: Colors.white),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Annuler', style: TextStyle(color: Colors.white70)),
+            ),
+            ElevatedButton(
+              onPressed: loading
+                  ? null
+                  : () async {
+                      setDialogState(() {
+                        loading = true;
+                        errorMessage = null;
+                      });
+                      try {
+                        await apiService.login(emailController.text.trim(), passwordController.text);
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        await loadSettings();
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Connexion réussie !')),
+                          );
+                        }
+                      } catch (e) {
+                        setDialogState(() {
+                          loading = false;
+                          errorMessage = 'Échec de connexion : identifiants invalides';
+                        });
+                      }
+                    },
+              child: loading
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text('Se connecter'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> toggleNetworkMode(bool value) async {
     final newMode = value ? 'online' : 'offline';
     setState(() => networkMode = newMode);
@@ -60,7 +144,7 @@ class _HomeScreenState extends State<HomeScreen>
 
     if (newMode == 'online') {
       checkServerStatus();
-      if (pendingCount > 0) {
+      if (pendingCount > 0 && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
               content: Text(
@@ -248,7 +332,60 @@ class _HomeScreenState extends State<HomeScreen>
                     ],
                   ),
                 ),
-                const SizedBox(height: 40),
+                const SizedBox(height: 30),
+
+                // Authentication Card (Lot D0)
+                _buildGlassCard(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            isLoggedIn ? Icons.verified_user : Icons.lock_outline,
+                            color: isLoggedIn ? Colors.greenAccent : Colors.amberAccent,
+                            size: 26,
+                          ),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                isLoggedIn ? 'Authentifié' : 'Non connecté',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              Text(
+                                isLoggedIn ? 'Jeton actif (sécurisé)' : 'Connexion requise pour sync',
+                                style: const TextStyle(
+                                  color: Color(0xFF94A3B8),
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isLoggedIn ? Colors.redAccent.withValues(alpha: 0.2) : Colors.blueAccent,
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: isLoggedIn
+                            ? () async {
+                                await storageService.clearAuthToken();
+                                await loadSettings();
+                              }
+                            : _showLoginDialog,
+                        child: Text(isLoggedIn ? 'Déconnexion' : 'Connexion'),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
 
                 // Network Mode Card
                 _buildGlassCard(

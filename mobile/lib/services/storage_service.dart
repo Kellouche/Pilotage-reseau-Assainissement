@@ -4,6 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 class StorageService {
   static const _networkModeKey = 'NETWORK_MODE';
   static const _pendingChangesKey = 'PENDING_CHANGES';
+  static const _authTokenKey = 'AUTH_TOKEN';
+  static const _lastSyncVersionKey = 'LAST_SYNC_VERSION';
 
   Future<String> getNetworkMode() async {
     final prefs = await SharedPreferences.getInstance();
@@ -13,6 +15,31 @@ class StorageService {
   Future<void> setNetworkMode(String mode) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_networkModeKey, mode);
+  }
+
+  Future<String?> getAuthToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_authTokenKey);
+  }
+
+  Future<void> setAuthToken(String token) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_authTokenKey, token);
+  }
+
+  Future<void> clearAuthToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_authTokenKey);
+  }
+
+  Future<int> getLastSyncVersion() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_lastSyncVersionKey) ?? 0;
+  }
+
+  Future<void> setLastSyncVersion(int version) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_lastSyncVersionKey, version);
   }
 
   Future<List<Map<String, dynamic>>> getPendingChanges() async {
@@ -41,6 +68,14 @@ class StorageService {
   Future<void> removePendingChange(String localId) async {
     final changes = await getPendingChanges();
     changes.removeWhere((c) => c['localId'] != localId);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_pendingChangesKey, json.encode(changes));
+  }
+
+  Future<void> removePendingChanges(List<String> localIds) async {
+    final changes = await getPendingChanges();
+    final idSet = localIds.toSet();
+    changes.removeWhere((c) => idSet.contains(c['localId']?.toString()));
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_pendingChangesKey, json.encode(changes));
   }
