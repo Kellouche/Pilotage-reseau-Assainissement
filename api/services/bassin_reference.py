@@ -139,11 +139,14 @@ def _resoudre_depuis_cache_gpkg(gpkg_path: Optional[Path], valeur: Any) -> Optio
     return None
 
 
-def _resoudre_manuel(ref: str) -> Optional[ResolutionBassin]:
+def _resoudre_manuel(ref: str, org_id: Optional[str] = None) -> Optional[ResolutionBassin]:
     """Bassins manuels M_x : résolution contextuelle, JAMAIS persistée (ID instable)."""
     try:
         from src.infrastructure.persistance_manuelle import charger_bassins_manuels
-        manuels = charger_bassins_manuels()
+        try:
+            manuels = charger_bassins_manuels(org_id=org_id)
+        except TypeError:
+            manuels = charger_bassins_manuels()
     except Exception:
         return None
     mid = ref[len(PREFIX_MANUEL):].strip()
@@ -195,11 +198,20 @@ def resoudre_bassin(
         )
 
     if ref_str.lower().startswith(PREFIX_MANUEL):
-        res = _resoudre_manuel(ref_str)
+        org_id = None
+        if network_id:
+            try:
+                from api.models import Project
+                proj = db.get(Project, network_id)
+                if proj:
+                    org_id = proj.org_id
+            except Exception:
+                pass
+        res = _resoudre_manuel(ref_str, org_id=org_id)
         if res:
             return res
         return ResolutionBassin(entree=ref_str, statut="NON_TROUVE", source="manuel",
-                                detail="Bassin manuel introuvable dans manual_overrides.json")
+                                detail="Bassin manuel introuvable dans manual_overrides")
 
     # ── Règle 2 : identifiant ORM Cluster.id (entier) ────────────────────
     try:

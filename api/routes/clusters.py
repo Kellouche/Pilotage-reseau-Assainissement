@@ -168,6 +168,41 @@ def recalculate_all_clusters_async_precedence(
     return {"status": "scheduled"}
 
 
+# ============================================================
+# BASSINS MANUELS (CRÉATION / SUPPRESSION / LECTURE)
+# Doit être déclaré avant /{cluster_id} pour éviter le piège de routing FastAPI
+# ============================================================
+
+@router.post("/manual-basin")
+def save_cluster_manual_basin(
+    data: Dict[str, Any],
+    ctx: TenantContext = Depends(require_role("admin"))
+):
+    """Enregistre un bassin versant manuel tracé par l'utilisateur pour son organisation."""
+    from src.infrastructure.persistance_manuelle import sauvegarder_bassin_manuel
+    return sauvegarder_bassin_manuel(data, org_id=ctx.org_id)
+
+
+@router.delete("/manual-basin/{bassin_id}")
+def delete_cluster_manual_basin(
+    bassin_id: str,
+    ctx: TenantContext = Depends(require_role("admin"))
+):
+    """Supprime un bassin versant manuel (isolation stricte par organisation)."""
+    from src.infrastructure.persistance_manuelle import supprimer_bassin_manuel
+    res = supprimer_bassin_manuel(bassin_id, org_id=ctx.org_id)
+    if not res:
+        raise HTTPException(status_code=404, detail="Ressource introuvable")
+    return {"status": "ok"}
+
+
+@router.get("/manual-basin")
+def get_cluster_manual_basins(ctx: TenantContext = Depends(require_role("admin"))):
+    """Liste tous les bassins versants manuels enregistrés pour l'organisation courante."""
+    from src.infrastructure.persistance_manuelle import charger_bassins_manuels
+    return charger_bassins_manuels(org_id=ctx.org_id)
+
+
 @router.get("/{cluster_id}", response_model=schemas.ClusterResponse)
 def get_cluster(
     cluster_id: int,
@@ -652,7 +687,7 @@ def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional
     try:
         from src.infrastructure.persistance_manuelle import charger_bassins_manuels
         from src.domain.detecteur_clusters import calculer_bassin_polygon, construire_geojson_cluster
-        manual_bassins = charger_bassins_manuels()
+        manual_bassins = charger_bassins_manuels(org_id=ctx.org_id)
         for mb in manual_bassins:
             conduit_ids = set(str(x) for x in mb.get("conduits", []))
             edges_manual = set()
@@ -839,34 +874,5 @@ def get_cluster_ouvrages_proches(
     return detecter_ouvrages_orphelins_proches(chemin, cluster_id, rayon_max_m=rayon_m)
 
 
-# ============================================================
-# BASSINS MANUELS (CRÉATION / SUPPRESSION / LECTURE)
-# ============================================================
 
-@router.post("/manual-basin")
-def save_cluster_manual_basin(
-    data: Dict[str, Any],
-    ctx: TenantContext = Depends(require_role("admin"))
-):
-    """Enregistre un bassin versant manuel tracé par l'utilisateur."""
-    from src.infrastructure.persistance_manuelle import sauvegarder_bassin_manuel
-    return sauvegarder_bassin_manuel(data)
-
-
-@router.delete("/manual-basin/{bassin_id}")
-def delete_cluster_manual_basin(
-    bassin_id: str,
-    ctx: TenantContext = Depends(require_role("admin"))
-):
-    """Supprime un bassin versant manuel."""
-    from src.infrastructure.persistance_manuelle import supprimer_bassin_manuel
-    res = supprimer_bassin_manuel(bassin_id)
-    return {"status": "ok" if res else "error"}
-
-
-@router.get("/manual-basin")
-def get_cluster_manual_basins(ctx: TenantContext = Depends(require_role("admin"))):
-    """Liste tous les bassins versants manuels enregistrés."""
-    from src.infrastructure.persistance_manuelle import charger_bassins_manuels
-    return charger_bassins_manuels()
 

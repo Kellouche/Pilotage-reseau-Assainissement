@@ -15,10 +15,12 @@ venv/
 
 # Logs & Temporary files
 *.log
+*.bak
 temp_test.txt
 
 # Local Data & Overrides
 data/*.json
+data/manual_overrides/
 !data/referentiel_pluviometrie_algerie.json
 data/*.sqlite
 data/*.db

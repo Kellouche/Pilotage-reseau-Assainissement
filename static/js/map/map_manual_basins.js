@@ -50,9 +50,14 @@
 
             if (!data.nom) return;
 
-            fetch('/api/v1/manual-basin', {
+            const h = { 'Content-Type': 'application/json' };
+            const tk = localStorage.getItem('swmm_access_token');
+            if (tk) h['Authorization'] = 'Bearer ' + tk;
+
+            fetch('/api/v1/clusters/manual-basin', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: h,
+                credentials: 'include',
                 body: JSON.stringify(data)
             })
             .then(r => r.json())
@@ -77,7 +82,15 @@
 
             if (!confirm('Voulez-vous vraiment supprimer ce bassin manuel ?')) return;
 
-            fetch(`/api/v1/manual-basin/${cid}`, { method: 'DELETE' })
+            const h = {};
+            const tk = localStorage.getItem('swmm_access_token');
+            if (tk) h['Authorization'] = 'Bearer ' + tk;
+
+            fetch(`/api/v1/clusters/manual-basin/${encodeURIComponent(cid)}`, {
+                method: 'DELETE',
+                headers: h,
+                credentials: 'include'
+            })
                 .then(r => r.json())
                 .then(() => {
                     alert('Bassin supprimé.');

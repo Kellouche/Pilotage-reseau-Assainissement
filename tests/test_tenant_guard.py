@@ -54,12 +54,7 @@ KNOWN_PENDING_SURFACES = {
     ("GET", "/api/v1/qualite/anomalies/{type_anomalie}"),
     ("GET", "/api/v1/qualite/scores"),
     ("GET", "/api/v1/qualite/statistiques"),
-    # Surfaces mortes / alias à supprimer (J1/J4)
-    ("DELETE", "/api/v1/manual-basin/{bassin_id}"),
-    ("GET", "/api/v1/manual-basin"),
-    ("POST", "/api/v1/manual-basin"),
-    ("WS", "/ws/jobs/{job_id}"),
-    ("WS", "/ws/sync"),
+    # Surfaces mortes / alias supprimés en J4 (Lot A1)
 }
 
 
@@ -174,8 +169,8 @@ def test_no_unlisted_unprotected_routes():
 
 
 def test_pending_surfaces_count_ceiling():
-    """Le nombre de surfaces en attente ne doit jamais dépasser le plafond (35 après J3)."""
-    assert len(KNOWN_PENDING_SURFACES) <= 35
+    """Le nombre de surfaces en attente ne doit jamais dépasser le plafond (30 après J4)."""
+    assert len(KNOWN_PENDING_SURFACES) <= 30
 
 
 def test_tenant_enforcement_fail_closed_mode():

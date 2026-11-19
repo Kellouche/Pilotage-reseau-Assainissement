@@ -124,10 +124,12 @@
     }
 
     function initNotifications() {
+        // WebSocket /ws/sync obsolète et retiré (isolation multi-tenant Lot A1)
         const syncIndicator = document.getElementById('sync-indicator');
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${wsProtocol}//${window.location.host}/ws/sync`;
-        const ws = new WebSocket(wsUrl);
+        if (syncIndicator) {
+            syncIndicator.style.display = 'none';
+        }
+        return;
 
         ws.onmessage = (event) => {
             console.log('=== NOUVELLE NOTIFICATION ===');
