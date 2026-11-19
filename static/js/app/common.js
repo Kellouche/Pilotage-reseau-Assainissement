@@ -378,27 +378,6 @@
             setTimeout(() => basculerVueCockpit('qualite'), 100);
         }
 
-        // Variables pour l'éditeur manuel
-        let editorState = {
-            active: false,
-            mode: null,
-            points: [],
-            markers: [],
-            tempPolyline: null,
-            tempPolygon: null,
-            selectedConduits: new Set(),
-            foundOutfall: null
-        };
-
-        // Activer/Désactiver le mode édition
-        document.getElementById('btn-create-bassin').onclick = function() {
-            if (editorState.active && editorState.mode === 'create') {
-                desactiverModeEdition();
-            } else {
-                activerModeEdition('create');
-            }
-        };
-
 // ==========================================
 // PANNEAU D'INGÉNIERIE PLIABLE (style tiroir)
 // ==========================================
