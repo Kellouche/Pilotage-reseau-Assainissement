@@ -212,7 +212,7 @@ window._construireHtmlCorpsInterpretation = function(simData, k, cRes, nRes, met
                             </div>
                         ` : ''}
                         <p style="font-size: 0.78rem; color: #94a3b8; margin: 0 0 12px 0; line-height: 1.4;">
-                            Diamètres cibles calculés pour garantir un taux de remplissage maximal de 80% ($Q/Q_{\\text{cap}} \\le 0.8$) lors de l'événement pluvial de pointe :
+                            Diamètres cibles calculés pour garantir un taux de remplissage maximal de 80% (Q/Q<sub>cap</sub> ≤ 0.8) lors de l'événement pluvial de pointe :
                         </p>
 
                         ${(gc.prescriptions && gc.prescriptions.length > 0) ? `

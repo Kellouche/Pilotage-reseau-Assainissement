@@ -312,7 +312,7 @@
                                             </div>
                                             <div><b>Catégorie :</b> ${typLabel}</div>
                                             <div><b>Bassin rattaché :</b> Bassin N° ${p.cluster_id || '?'}</div>
-                                            ${p.h_seuil ? `<div><b>Seuil $H_s$ :</b> <span style="color:#d97706; font-weight:700;">${p.h_seuil} m</span></div>` : ''}
+                                            ${p.h_seuil ? `<div><b>Seuil H<sub>s</sub> :</b> <span style="color:#d97706; font-weight:700;">${p.h_seuil} m</span></div>` : ''}
                                             ${p.milieu_rec ? `<div><b>Milieu récepteur :</b> ${p.milieu_rec}</div>` : ''}
                                         </div>
                                     `;

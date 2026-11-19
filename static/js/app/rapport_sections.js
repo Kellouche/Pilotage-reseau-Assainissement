@@ -232,7 +232,7 @@ window._construireHtmlRapportDiagnostic = function(simDataOrParams, metaArg, kAr
         </div>
         <div style="font-size: 7.4pt; color: #4b5563; line-height: 1.35;">
             <b>Méthodologie de transformation pluie-débit :</b>
-            Le ruissellement superficiel est généré sur chaque sous-bassin élémentaire par l'équation non linéaire du réservoir SWMM ($Q = W \cdot (d - d_p)^{5/3} \cdot S^{1/2} / n$). Les pertes initiales et continues sont simulées par la loi d'Horton ($f(t) = f_\infty + (f_0 - f_\infty)e^{-kt}$) avec rugosités de Manning $N_{imp} = 0.015\text{ s/m}^{1/3}$, $N_{perv} = 0.25\text{ s/m}^{1/3}$ et rétentions de dépressions $D_{imp} = 1.8\text{ mm}, D_{perv} = 4.5\text{ mm}$. Les hydrogrammes de ruissellement sont injectés aux regards puis propagés dans les conduites via les équations complètes de Saint-Venant 1D (Dynamic Wave).
+            Le ruissellement superficiel est généré sur chaque sous-bassin élémentaire par l'équation non linéaire du réservoir SWMM (Q = W·(d − d<sub>p</sub>)<sup>5/3</sup>·S<sup>1/2</sup>/n). Les pertes initiales et continues sont simulées par la loi d'Horton (f(t) = f<sub>∞</sub> + (f<sub>0</sub> − f<sub>∞</sub>)·e<sup>−kt</sup>) avec rugosités de Manning N<sub>imp</sub> = 0.015 s/m<sup>1/3</sup>, N<sub>perv</sub> = 0.25 s/m<sup>1/3</sup> et rétentions de dépressions D<sub>imp</sub> = 1.8 mm, D<sub>perv</sub> = 4.5 mm. Les hydrogrammes de ruissellement sont injectés aux regards puis propagés dans les conduites via les équations complètes de Saint-Venant 1D (Dynamic Wave).
         </div>
     </div>
 
