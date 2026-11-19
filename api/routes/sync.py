@@ -16,6 +16,7 @@ import json
 
 from api.database import get_db
 from api import schemas, crud, crud_terrain
+from api.core.security import require_role, TenantContext
 from api.websocket import manager
 
 router = APIRouter(prefix="/sync", tags=["Synchronisation"])
@@ -29,19 +30,20 @@ router = APIRouter(prefix="/sync", tags=["Synchronisation"])
 def get_delta(
     since_version: int = Query(..., ge=0, description="Version client actuelle"),
     tables: str = Query("regards,conduites,rejets", description="Tables à synchroniser"),
+    ctx: TenantContext = Depends(require_role("viewer")),
     db: Session = Depends(get_db)
 ):
     """
     Retourne les modifications depuis la version spécifiée.
-    Pour synchronisation descendante (server → client).
+    Pour synchronisation descendante (server → client, cloisonné par organisation).
     """
     table_list = [t.strip() for t in tables.split(",")]
     all_changes = []
     max_new_version = since_version
 
     for table in table_list:
-        # Récupérer changements depuis version+1
-        changes = crud.get_changes_since(db, table, since_version + 1)
+        # Récupérer changements depuis version+1 (strictement filtrés par org_id)
+        changes = crud.get_changes_since(db, table, since_version + 1, org_id=ctx.org_id)
         for change in changes:
             # Convertir en DeltaChange
             all_changes.append({
@@ -51,8 +53,8 @@ def get_delta(
                 "changes": change
             })
 
-        # Version max de cette table
-        table_max_version = crud.get_max_version(db, table)
+        # Version max de cette table pour l'organisation
+        table_max_version = crud.get_max_version(db, table, org_id=ctx.org_id)
         if table_max_version > max_new_version:
             max_new_version = table_max_version
 
@@ -69,13 +71,25 @@ def get_delta(
 # ============================================================
 
 import time
-from fastapi import Request
 
 _SYNC_RATE_LIMITS = {}
 SYNC_COOLDOWN_SECONDS = 5
 
-def check_rate_limit(user_id: str = "device"):
-    """Vérifie que l'utilisateur/appareil ne spam pas la synchronisation (Rate Limiting)."""
+@router.post("/push", response_model=schemas.SyncAck)
+def push_changes(
+    push: schemas.SyncPush,
+    background_tasks: BackgroundTasks,
+    ctx: TenantContext = Depends(require_role("engineer")),
+    db: Session = Depends(get_db)
+):
+    """
+    Reçoit des modifications depuis un client mobile.
+    Applique les changements avec résolution de conflits simple (cloisonné par organisation).
+    """
+    actor_id = getattr(ctx.actor, "id", None) if ctx.actor else "user"
+    user_id = str(actor_id or ctx.org_id)
+
+    # Rate limiting par utilisateur / organisation
     now = time.time()
     last_sync = _SYNC_RATE_LIMITS.get(user_id, 0)
     if now - last_sync < SYNC_COOLDOWN_SECONDS:
@@ -84,19 +98,7 @@ def check_rate_limit(user_id: str = "device"):
             detail=f"Rate limit exceeded. Please wait {SYNC_COOLDOWN_SECONDS - int(now - last_sync)}s before next sync."
         )
     _SYNC_RATE_LIMITS[user_id] = now
-    return user_id
 
-@router.post("/push", response_model=schemas.SyncAck)
-def push_changes(
-    push: schemas.SyncPush,
-    background_tasks: BackgroundTasks,
-    user_id: str = Depends(check_rate_limit),
-    db: Session = Depends(get_db)
-):
-    """
-    Reçoit des modifications depuis un client mobile.
-    Applique les changements avec résolution de conflits simple.
-    """
     accepted = 0
     rejected = 0
     conflicts = []
@@ -114,8 +116,11 @@ def push_changes(
                 continue
 
             if layer == "regards":
-                # Utiliser feature_id comme ID du regard
-                regard = crud.get_regard(db, int(change.feature_id))
+                regard = None
+                try:
+                    regard = crud.get_regard(db, int(change.feature_id), org_id=ctx.org_id)
+                except (ValueError, TypeError):
+                    regard = crud.get_regard_by_code(db, str(change.feature_id), org_id=ctx.org_id)
 
                 if regard:
                     # Update
@@ -123,35 +128,37 @@ def push_changes(
                         db=db,
                         regard_id=regard.id,
                         update_data=changes,
-                        user_id=user_id
+                        user_id=user_id,
+                        org_id=ctx.org_id
                     )
                     accepted += 1
                 else:
                     # Create
-                    crud.create_regard(db, changes, user_id=user_id)
+                    crud.create_regard(db, changes, user_id=user_id, org_id=ctx.org_id)
                     accepted += 1
 
             elif layer == "conduites":
                 canalisation = None
                 if isinstance(change.feature_id, int) or (isinstance(change.feature_id, str) and str(change.feature_id).isdigit()):
-                    canalisation = crud.get_canalisation(db, int(change.feature_id))
+                    canalisation = crud.get_canalisation(db, int(change.feature_id), org_id=ctx.org_id)
                 if not canalisation:
-                    canalisation = crud.get_canalisation_by_fid(db, str(change.feature_id))
+                    canalisation = crud.get_canalisation_by_fid(db, str(change.feature_id), org_id=ctx.org_id)
 
                 if canalisation:
                     updated = crud.update_canalisation(
                         db=db,
                         canalisation_id=canalisation.id,
                         update_data=changes,
-                        user_id=user_id
+                        user_id=user_id,
+                        org_id=ctx.org_id
                     )
                     accepted += 1
                 else:
-                    crud.create_canalisation(db, changes, user_id=user_id)
+                    crud.create_canalisation(db, changes, user_id=user_id, org_id=ctx.org_id)
                     accepted += 1
 
             elif layer == "inspections":
-                crud_terrain.create_inspection(db, changes, user_id=user_id)
+                crud_terrain.create_inspection(db, changes, user_id=user_id, org_id=ctx.org_id)
                 accepted += 1
 
             elif layer == "incidents":
@@ -160,11 +167,12 @@ def push_changes(
                         db=db,
                         incident_id=int(changes["id"]),
                         statut=changes.get("statut", "À traiter"),
-                        user_id=user_id
+                        user_id=user_id,
+                        org_id=ctx.org_id
                     )
                     accepted += 1
                 else:
-                    crud_terrain.create_incident(db, changes, user_id=user_id)
+                    crud_terrain.create_incident(db, changes, user_id=user_id, org_id=ctx.org_id)
                     accepted += 1
 
             else:
@@ -184,9 +192,9 @@ def push_changes(
             traceback.print_exc()
             rejected += 1
 
-    # Nouvelle version globale
-    new_version = crud.get_max_version(db, "regards")
-    new_version = max(new_version, crud.get_max_version(db, "conduites"))
+    # Nouvelle version globale pour cette organisation
+    new_version = crud.get_max_version(db, "regards", org_id=ctx.org_id)
+    new_version = max(new_version, crud.get_max_version(db, "conduites", org_id=ctx.org_id))
 
     print(f"Push completed: accepted={accepted}, rejected={rejected}")
 
@@ -207,7 +215,11 @@ def push_changes(
 
             if layer == "regards":
                 try:
-                    regard = crud.get_regard(db, int(feature_id))
+                    regard = None
+                    try:
+                        regard = crud.get_regard(db, int(feature_id), org_id=ctx.org_id)
+                    except (ValueError, TypeError):
+                        regard = crud.get_regard_by_code(db, str(feature_id), org_id=ctx.org_id)
                     if regard:
                         # Format: Objet : Regard [CODE] [X,Y] -- DateTime
                         coord_x = regard.longitude if regard.longitude is not None else 0.0
@@ -224,9 +236,9 @@ def push_changes(
                 try:
                     conduite = None
                     if isinstance(feature_id, int) or (isinstance(feature_id, str) and feature_id.isdigit()):
-                        conduite = crud.get_canalisation(db, int(feature_id))
+                        conduite = crud.get_canalisation(db, int(feature_id), org_id=ctx.org_id)
                     if not conduite:
-                        conduite = crud.get_canalisation_by_fid(db, str(feature_id))
+                        conduite = crud.get_canalisation_by_fid(db, str(feature_id), org_id=ctx.org_id)
 
                     if conduite:
                         import re
@@ -272,18 +284,13 @@ def push_changes(
 # SESSION SYNC (pour mobile : enregistrer dernier sync)
 # ============================================================
 
-
-
 @router.post("/session")
 def register_sync_session(
     device_id: str,
+    ctx: TenantContext = Depends(require_role("viewer")),
     db: Session = Depends(get_db)
 ):
     """Enregistre/renvoie la session de synchronisation d'un appareil."""
-    from api.models import AuditLog
-
-    # Pour POC : on retourne simplement un ack
-    # En prod : stocker device_id + last_sync dans table devices
     return {
         "device_id": device_id,
         "registered": True,

@@ -22,39 +22,20 @@ from api.core.security import PUBLIC_ALLOWLIST, TENANT_ENFORCEMENT
 # 2. Chaque route migrée sera retirée de cette liste jusqu'à atteindre 0 en J7/J8.
 # ---------------------------------------------------------------------------
 KNOWN_PENDING_SURFACES = {
-    # Routeurs à protéger (J2 - J6)
-    ("DELETE", "/api/v1/mnt/cache"),
-    ("DELETE", "/api/v1/qualite/cache"),
+    # Surfaces restantes à protéger (J6)
     ("GET", "/api/v1/layers"),
-    ("GET", "/api/v1/mnt/cache/status"),
-    ("GET", "/api/v1/mnt/statut"),
-    ("GET", "/api/v1/qualite/cache/status"),
-    ("GET", "/api/v1/qualite/diagnostic"),
-    ("GET", "/api/v1/qualite/scores-bassins"),
     ("GET", "/api/v1/simulations/pluviometrie/referentiel"),
     ("GET", "/api/v1/simulations/pluviometrie/stations"),
     ("GET", "/api/v1/simulations/scenarios"),
     ("GET", "/api/v1/simulations/typologies-sol"),
-    ("GET", "/api/v1/sync/delta"),
     ("GET", "/api/v1/terrain/incidents"),
     ("GET", "/api/v1/terrain/inspections"),
     ("GET", "/api/v1/terrain/inspections/{object_type}/{object_id}"),
     ("PATCH", "/api/v1/terrain/incidents/{incident_id}"),
-    ("POST", "/api/v1/mnt/analyser-bassins"),
-    ("POST", "/api/v1/qualite/export-csv"),
-    ("POST", "/api/v1/qualite/valider-incremental"),
     ("POST", "/api/v1/simulations/pluviometrie/bms-preview"),
-    ("POST", "/api/v1/sync/push"),
-    ("POST", "/api/v1/sync/session"),
     ("POST", "/api/v1/terrain/incidents"),
     ("POST", "/api/v1/terrain/inspections"),
     ("WS", "/api/v1/jobs/ws/{job_id}"),
-    # Routes en contexte optionnel à basculer en contexte obligatoire (§3.3)
-    ("GET", "/api/v1/qualite/analyse"),
-    ("GET", "/api/v1/qualite/anomalies/{type_anomalie}"),
-    ("GET", "/api/v1/qualite/scores"),
-    ("GET", "/api/v1/qualite/statistiques"),
-    # Surfaces mortes / alias supprimés en J4 (Lot A1)
 }
 
 
@@ -169,8 +150,8 @@ def test_no_unlisted_unprotected_routes():
 
 
 def test_pending_surfaces_count_ceiling():
-    """Le nombre de surfaces en attente ne doit jamais dépasser le plafond (30 après J4)."""
-    assert len(KNOWN_PENDING_SURFACES) <= 30
+    """Le nombre de surfaces en attente ne doit jamais dépasser le plafond (13 après J5)."""
+    assert len(KNOWN_PENDING_SURFACES) <= 13
 
 
 def test_tenant_enforcement_fail_closed_mode():

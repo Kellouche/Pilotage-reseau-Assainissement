@@ -20,7 +20,7 @@ from datetime import datetime
 
 from api.database import get_db
 from api.models import Project
-from api.core.security import get_tenant_context_optional, TenantContext
+from api.core.security import require_role, TenantContext
 from src.analyse_qualite_gpkg import analyser_qualite_gpkg
 
 router = APIRouter(prefix="/qualite", tags=["Qualité réseau"])
@@ -90,14 +90,18 @@ def get_active_project_and_gpkg(db: Session, tenant_ctx: Optional[TenantContext]
             Project.org_id == tenant_ctx.org_id,
             Project.is_archived.is_(False)
         ).first()
+        if not project:
+            return None, "Aucun réseau"
         chemin = resoudre_gpkg_effectif_pour_projet(db, project)
         if chemin is not None:
             return chemin, project.name
+        return None, project.name
 
     project = db.query(Project).filter(Project.is_archived.is_(False)).first()
-    chemin = resoudre_gpkg_effectif_pour_projet(db, project)
-    if chemin is not None:
-        return chemin, project.name
+    if project:
+        chemin = resoudre_gpkg_effectif_pour_projet(db, project)
+        if chemin is not None:
+            return chemin, project.name
 
     demo_cand = Path("data/demo_reseau.gpkg")
     if demo_cand.exists():
@@ -110,7 +114,7 @@ def get_active_project_and_gpkg(db: Session, tenant_ctx: Optional[TenantContext]
 async def analyser_qualite_reseau(
     force_refresh: bool = False,
     db: Session = Depends(get_db),
-    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context_optional)
+    ctx: TenantContext = Depends(require_role("viewer"))
 ):
     """
     Analyse complète de la qualité du réseau d'assainissement actif.
@@ -118,7 +122,7 @@ async def analyser_qualite_reseau(
     """
     global _cache_qualite
 
-    gpkg_target, project_name = get_active_project_and_gpkg(db, tenant_ctx)
+    gpkg_target, project_name = get_active_project_and_gpkg(db, ctx)
     if not gpkg_target or not gpkg_target.exists():
         raise HTTPException(
             status_code=404,
@@ -162,7 +166,10 @@ async def analyser_qualite_reseau(
 
 
 @router.get("/diagnostic", response_model=Dict[str, Any])
-async def diagnostic_tunnel():
+async def diagnostic_tunnel(
+    ctx: TenantContext = Depends(require_role("viewer")),
+    db: Session = Depends(get_db)
+):
     """
     Endpoint allégé pour le tunnel de préparation.
     Renvoie le résumé des anomalies topologiques.
@@ -171,7 +178,7 @@ async def diagnostic_tunnel():
         # Forcer la reconstruction pour avoir les anomalies fraîches
         from api.routes.clusters import _get_graph, _reset_graph_cache
         _reset_graph_cache()
-        G = _get_graph()
+        G = _get_graph(db, org_id=ctx.org_id)
         if not G:
             return {"anomalies_count": 0, "orphelins_count": 0, "anomalies": []}
             
@@ -201,7 +208,7 @@ async def diagnostic_tunnel():
 async def get_anomalies_par_type(
     type_anomalie: str,
     db: Session = Depends(get_db),
-    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context_optional)
+    ctx: TenantContext = Depends(require_role("viewer"))
 ):
     """
     Récupère les anomalies d'un type spécifique.
@@ -216,7 +223,7 @@ async def get_anomalies_par_type(
     """
     global _cache_qualite
 
-    gpkg_target, project_name = get_active_project_and_gpkg(db, tenant_ctx)
+    gpkg_target, project_name = get_active_project_and_gpkg(db, ctx)
     if (_cache_qualite["rapport"] is None or
         (gpkg_target and _cache_qualite.get("gpkg_path") != str(gpkg_target))):
         if gpkg_target and gpkg_target.exists():
@@ -249,14 +256,14 @@ async def get_anomalies_par_type(
 @router.get("/scores", response_model=Dict[str, Any])
 async def get_scores_qualite(
     db: Session = Depends(get_db),
-    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context_optional)
+    ctx: TenantContext = Depends(require_role("viewer"))
 ):
     """
     Récupère les scores de qualité calculés.
     """
     global _cache_qualite
 
-    gpkg_target, project_name = get_active_project_and_gpkg(db, tenant_ctx)
+    gpkg_target, project_name = get_active_project_and_gpkg(db, ctx)
     if (_cache_qualite["rapport"] is None or
         (gpkg_target and _cache_qualite.get("gpkg_path") != str(gpkg_target))):
         if gpkg_target and gpkg_target.exists():
@@ -276,14 +283,14 @@ async def get_scores_qualite(
 @router.get("/statistiques", response_model=Dict[str, Any])
 async def get_statistiques_reseau(
     db: Session = Depends(get_db),
-    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context_optional)
+    ctx: TenantContext = Depends(require_role("viewer"))
 ):
     """
     Récupère les statistiques globales du réseau.
     """
     global _cache_qualite
 
-    gpkg_target, project_name = get_active_project_and_gpkg(db, tenant_ctx)
+    gpkg_target, project_name = get_active_project_and_gpkg(db, ctx)
     if (_cache_qualite["rapport"] is None or
         (gpkg_target and _cache_qualite.get("gpkg_path") != str(gpkg_target))):
         if gpkg_target and gpkg_target.exists():
@@ -301,7 +308,10 @@ async def get_statistiques_reseau(
 
 
 @router.post("/valider-incremental", response_model=Dict[str, Any])
-async def valider_incremental(request: Dict[str, Any]):
+async def valider_incremental(
+    request: Dict[str, Any],
+    ctx: TenantContext = Depends(require_role("engineer"))
+):
     """Validation incrémentale sur un sous-ensemble de conduites.
 
     Corps attendu: {"ids_conduites": [1, 2, 3]}
@@ -323,7 +333,10 @@ async def valider_incremental(request: Dict[str, Any]):
 
 
 @router.get("/scores-bassins", response_model=Dict[str, Any])
-async def get_scores_qualite_par_bassin():
+async def get_scores_qualite_par_bassin(
+    db: Session = Depends(get_db),
+    ctx: TenantContext = Depends(require_role("viewer"))
+):
     """
     Calcule les scores de qualité par bassin (cluster).
     Agrège les anomalies par cluster et calcule un score par bassin.
@@ -338,14 +351,12 @@ async def get_scores_qualite_par_bassin():
         )
 
     try:
-        from api.database import SessionLocal
         from api import crud
         from sqlalchemy import text
 
-        db = SessionLocal()
         try:
-            # Récupérer tous les clusters avec leurs stats
-            clusters = db.query(crud.Cluster).all()
+            # Récupérer tous les clusters avec leurs stats (filtré par organisation)
+            clusters = db.query(crud.Cluster).filter(crud.Cluster.org_id == ctx.org_id).all()
 
             # Récupérer toutes les anomalies
             anomalies = _cache_qualite["rapport"]["anomalies"]
@@ -443,7 +454,10 @@ async def get_scores_qualite_par_bassin():
 
 
 @router.post("/export-csv")
-async def exporter_anomalies_csv(background_tasks: BackgroundTasks):
+async def exporter_anomalies_csv(
+    background_tasks: BackgroundTasks,
+    ctx: TenantContext = Depends(require_role("viewer"))
+):
     """
     Exporte les anomalies détectées au format CSV.
     L'export se fait en arrière-plan.
@@ -473,7 +487,9 @@ async def exporter_anomalies_csv(background_tasks: BackgroundTasks):
 
 
 @router.get("/cache/status")
-async def get_cache_status():
+async def get_cache_status(
+    ctx: TenantContext = Depends(require_role("viewer"))
+):
     """
     Vérifie l'état du cache d'analyse qualité.
     """
@@ -501,7 +517,9 @@ async def get_cache_status():
 
 
 @router.delete("/cache")
-async def clear_cache():
+async def clear_cache(
+    ctx: TenantContext = Depends(require_role("admin"))
+):
     """
     Vide le cache d'analyse qualité.
     """

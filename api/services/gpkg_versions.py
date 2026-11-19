@@ -229,7 +229,9 @@ def _verifier_objet_store(store: ArtifactStore, key: str, sha_attendu: str) -> N
     Un objet existant n'est jamais réécrit : s'il est corrompu, on lève une
     erreur — la réécriture silencieuse est proscrite (integrity > disponibilité).
     """
-    tmp = Path(tempfile.mkstemp(prefix="gpkg_verify_", suffix=".gpkg")[1])
+    fd, tmp_str = tempfile.mkstemp(prefix="gpkg_verify_", suffix=".gpkg")
+    os.close(fd)
+    tmp = Path(tmp_str)
     try:
         store.get_file(key, tmp)
         sha_reel = sha256_fichier(tmp)
@@ -716,3 +718,145 @@ def resoudre_version_pour_simulation(
                 "materialized_path": str(p.resolve()),
             }
     return None, {"erreur": "Aucun GeoPackage disponible pour ce projet"}
+
+
+def resoudre_snapshot_pour_lecture(
+    db: Session,
+    project: Any,
+    snapshot: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Résout le snapshot GPKG à utiliser pour une LECTURE cartographique.
+
+    `snapshot` accepte indifféremment :
+      - un gpkg_version_id (UUID) ;
+      - un sha256 complet ou préfixe (>= 8 caractères, hexadécimal) ;
+      - None / chaîne vide → version COURANTE du projet (comportement
+        historique de tous les endpoints de lecture).
+
+    Retourne un contexte normalisé :
+      {
+        "path": Path,                # fichier matérialisé (cache sha256)
+        "version_id": str|None,
+        "sha256": str|None,
+        "est_version_courante": bool,
+        "libelle": str,              # « réseau du … » / nom de fichier
+        "nb_regards": int|None,
+        "nb_conduites": int|None,
+        "storage_kind": str,
+      }
+
+    Règles strictes (jamais de substitution silencieuse) :
+      - snapshot explicite introuvable / hors projet / indisponible
+        → GpkgSimulationError (l'appelant traduit en 404/409) ;
+      - la version DOIT appartenir à (project.id, project.org_id) ;
+      - le sha retourné est TOUJOURS celui de la version résolue —
+        c'est la clé de comparaison INV-2 côté client.
+    """
+    from api.models import GpkgVersion
+
+    vid_courant = getattr(project, "gpkg_version_id", None)
+    org_id = getattr(project, "org_id", None)
+
+    # --- Snapshot explicite -------------------------------------------------
+    if snapshot and str(snapshot).strip():
+        ident = str(snapshot).strip()
+        version = None
+
+        # 1) Identifiant version (UUID) — vérifié prioritaire si format UUID
+        if len(ident) >= 32 and "-" in ident:
+            version = db.query(GpkgVersion).filter(
+                GpkgVersion.id == ident,
+                GpkgVersion.project_id == project.id,
+                GpkgVersion.org_id == org_id,
+            ).first()
+            if version is None:
+                raise GpkgSimulationError(
+                    f"Version GPKG {ident[:12]}… introuvable pour ce projet.")
+        else:
+            # 2) Empreinte SHA-256 (complète ou préfixe raisonnable)
+            empreinte = ident.lower()
+            if len(empreinte) < 8:
+                raise GpkgSimulationError(
+                    "Identifiant de snapshot trop court (sha256 >= 8 caractères).")
+            candidats = db.query(GpkgVersion).filter(
+                GpkgVersion.project_id == project.id,
+                GpkgVersion.org_id == org_id,
+                GpkgVersion.sha256.like(f"{empreinte}%"),
+            ).limit(2).all()
+            if not candidats:
+                raise GpkgSimulationError(
+                    f"Aucun snapshot GPKG ne correspond à « {ident[:16]}… » "
+                    "pour ce projet.")
+            if len(candidats) > 1:
+                raise GpkgSimulationError(
+                    "Empreinte de snapshot ambiguë — préciser davantage.")
+            version = candidats[0]
+
+        ok, raison = version_disponible(version)
+        if not ok:
+            raise GpkgSimulationError(
+                f"Snapshot GPKG indisponible : {raison}")
+        try:
+            chemin = materialiser_version(version)
+        except Exception as e:
+            raise GpkgSimulationError(
+                f"Matérialisation du snapshot impossible : {e}")
+
+        return {
+            "path": chemin,
+            "version_id": version.id,
+            "sha256": version.sha256,
+            "est_version_courante": (version.id == vid_courant),
+            "libelle": _libelle_version(version),
+            "nb_regards": version.nb_regards,
+            "nb_conduites": version.nb_conduites,
+            "storage_kind": version.storage_kind,
+        }
+
+    # --- Version courante (défaut = comportement existant) -------------------
+    chemin, meta = resoudre_version_pour_simulation(db, project)
+    if chemin is None:
+        raise GpkgSimulationError(
+            meta.get("erreur") or "Aucun GeoPackage disponible pour ce projet.")
+    # meta peut être legacy (sha256 calculé à la volée, version_id=None)
+    sha = meta.get("sha256")
+    version_id = meta.get("version_id")
+    nb_regards = nb_conduites = None
+    libelle = "réseau actuel"
+    if version_id:
+        version = db.get(GpkgVersion, version_id)
+        if version is not None:
+            nb_regards, nb_conduites = version.nb_regards, version.nb_conduites
+            libelle = _libelle_version(version)
+    elif sha:
+        libelle = f"réseau ({sha[:12]}…)"
+    return {
+        "path": chemin,
+        "version_id": version_id,
+        "sha256": sha,
+        "est_version_courante": True,
+        "libelle": libelle,
+        "nb_regards": nb_regards,
+        "nb_conduites": nb_conduites,
+        "storage_kind": meta.get("storage_kind"),
+    }
+
+
+def _libelle_version(version: Any) -> str:
+    """Libellé humain d'un snapshot : nom de fichier + date + volumes."""
+    parts = []
+    nom = getattr(version, "filename_original", None)
+    if nom:
+        parts.append(str(nom))
+    else:
+        parts.append(f"version {str(version.id)[:8]}")
+    try:
+        if getattr(version, "created_at", None) is not None:
+            parts.append(version.created_at.strftime("%d/%m/%Y"))
+    except Exception:
+        pass
+    nb_r, nb_c = getattr(version, "nb_regards", None), getattr(version, "nb_conduites", None)
+    if nb_r is not None or nb_c is not None:
+        parts.append(f"{nb_r or 0} regards / {nb_c or 0} conduites")
+    return " — ".join(parts)

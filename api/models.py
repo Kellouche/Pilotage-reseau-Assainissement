@@ -349,6 +349,7 @@ class Regard(Base):
     def to_dict(self) -> Dict[str, Any]:
         return {
             "id": self.id,
+            "org_id": self.org_id,
             "code": self.code,
             "nom_voie": self.nom_voie,
             "commune": self.commune,
@@ -401,6 +402,7 @@ class Conduite(Base):
     def to_dict(self) -> Dict[str, Any]:
         return {
             "id": self.id,
+            "org_id": self.org_id,
             "fid": self.fid,
             "nom_voie": self.nom_voie,
             "diametre": self.diametre,

@@ -8,11 +8,12 @@ Objet : Endpoints d'analyse altimétrique et découpage topographique MNT
 ================================================================================
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from typing import Dict, Any, Optional
 import os
 import logging
 from datetime import datetime
+from api.core.security import require_role, TenantContext
 
 from src.domain.extracteur_contours import (
     extract_contours_from_dem,
@@ -36,7 +37,8 @@ _cache_mnt = {
 async def analyser_bassins_mnt(
     dem_path: str,
     contour_interval: float = 10.0,
-    force_refresh: bool = False
+    force_refresh: bool = False,
+    ctx: TenantContext = Depends(require_role("engineer"))
 ):
     """
     Analyse les bassins versants à partir d'un fichier DEM (MNT).
@@ -138,7 +140,9 @@ async def analyser_bassins_mnt(
 
 
 @router.get("/cache/status")
-async def get_cache_mnt_status():
+async def get_cache_mnt_status(
+    ctx: TenantContext = Depends(require_role("viewer"))
+):
     """
     Vérifie l'état du cache d'analyse MNT.
     """
@@ -166,7 +170,9 @@ async def get_cache_mnt_status():
 
 
 @router.delete("/cache")
-async def clear_cache_mnt():
+async def clear_cache_mnt(
+    ctx: TenantContext = Depends(require_role("admin"))
+):
     """
     Vide le cache d'analyse MNT.
     """
@@ -180,7 +186,9 @@ async def clear_cache_mnt():
 
 
 @router.get("/statut")
-async def get_mnt_statut():
+async def get_mnt_statut(
+    ctx: TenantContext = Depends(require_role("viewer"))
+):
     """
     Vérifie la disponibilité des outils MNT/DEM.
     """
