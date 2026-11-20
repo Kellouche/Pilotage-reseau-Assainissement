@@ -392,7 +392,6 @@
             </div>`;
         }).join('');
     }
-    }
 
     window._rendreListeSimulations = _rendreListeSimulations;
 

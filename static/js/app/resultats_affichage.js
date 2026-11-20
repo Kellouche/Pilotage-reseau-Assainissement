@@ -710,8 +710,6 @@ function _masquerMenuInfobullesSim() {
             if (typeof activerActionsSimulation === 'function') {
                 activerActionsSimulation(true);
             }
-                activerActionsSimulation(true);
-            }
         };
 
 
