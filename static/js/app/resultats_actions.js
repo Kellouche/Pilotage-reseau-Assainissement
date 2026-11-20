@@ -15,6 +15,8 @@ window.reinitialiserAffichageSimulation = function() {
             // Contexte « infobulles » : la simulation n'est plus affichée
             window._simCtxActif = false;
             window._simTipLayers = [];
+            const _topbarDwf = document.getElementById('topbar-dwf-pill');
+            if (_topbarDwf) _topbarDwf.style.display = 'none';
             if (window._menuInfobullesSim) {
                 if (window._menuInfobullesSim._escHandler) {
                     document.removeEventListener('keydown', window._menuInfobullesSim._escHandler);

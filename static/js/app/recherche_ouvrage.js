@@ -99,12 +99,122 @@
             || (typeof carte !== 'undefined' ? carte : null);
     }
 
+    function _coordonneesRegard(nodeId) {
+        const raw = String(nodeId || '').trim();
+        const clean = raw.endsWith('.0') ? raw.slice(0, -2) : raw;
+        if (typeof couches !== 'undefined' && couches.res_regards && couches.res_regards.eachLayer) {
+            let found = null;
+            couches.res_regards.eachLayer(l => {
+                if (found) return;
+                const p = (l.feature && l.feature.properties) || {};
+                const code = String(p.Code || p.code || p.CODE || p.id || '').trim();
+                const cleanCode = code.endsWith('.0') ? code.slice(0, -2) : code;
+                if (cleanCode === clean || code === raw) {
+                    const ll = l.getLatLng ? l.getLatLng() : null;
+                    if (ll) found = { lng: ll.lng, lat: ll.lat, layer: l };
+                }
+            });
+            if (found) return found;
+        }
+        if (typeof couches !== 'undefined' && couches.regards && couches.regards.eachLayer) {
+            let found = null;
+            couches.regards.eachLayer(l => {
+                if (found) return;
+                const p = (l.feature && l.feature.properties) || {};
+                const code = String(p.Code || p.code || p.CODE || p.id || '').trim();
+                const cleanCode = code.endsWith('.0') ? code.slice(0, -2) : code;
+                if (cleanCode === clean || code === raw) {
+                    const ll = l.getLatLng ? l.getLatLng() : null;
+                    if (ll) found = { lng: ll.lng, lat: ll.lat, layer: l };
+                }
+            });
+            if (found) return found;
+        }
+        if (window._rawNetworkData && window._rawNetworkData.couches && window._rawNetworkData.couches.regards && Array.isArray(window._rawNetworkData.couches.regards.features)) {
+            for (let i = 0; i < window._rawNetworkData.couches.regards.features.length; i++) {
+                const f = window._rawNetworkData.couches.regards.features[i];
+                const p = f.properties || {};
+                const code = String(p.Code || p.code || p.CODE || p.id || '').trim();
+                const cleanCode = code.endsWith('.0') ? code.slice(0, -2) : code;
+                if ((cleanCode === clean || code === raw) && f.geometry && Array.isArray(f.geometry.coordinates)) {
+                    return { lng: f.geometry.coordinates[0], lat: f.geometry.coordinates[1], layer: null };
+                }
+            }
+        }
+        return null;
+    }
+
+    function _mettreAJourSectionDwf() {
+        const sec = document.getElementById('palette-recherche-dwf-section');
+        const list = document.getElementById('recherche-dwf-list');
+        const cpt = document.getElementById('recherche-dwf-count');
+        if (!sec || !list) return;
+
+        let injectes = [];
+        const sim = window._dernierResultatSimulation;
+        if (sim && sim.provenance && sim.provenance.apports_dwf && Array.isArray(sim.provenance.apports_dwf.injectes)) {
+            injectes = sim.provenance.apports_dwf.injectes;
+        } else if (typeof DWF !== 'undefined' && Array.isArray(DWF.apports)) {
+            const incMap = typeof incompatParApport === 'function' ? incompatParApport() : {};
+            injectes = DWF.apports.filter(a => a.actif && !incMap[a.id]);
+        }
+
+        if (!injectes || !injectes.length) {
+            sec.style.display = 'none';
+            list.innerHTML = '';
+            return;
+        }
+
+        if (cpt) cpt.textContent = injectes.length;
+        sec.style.display = 'block';
+
+        list.innerHTML = injectes.map(a => {
+            const nid = String(a.node_id != null ? a.node_id : '').trim();
+            const cleanNid = nid.endsWith('.0') ? nid.slice(0, -2) : nid;
+            const qM3s = parseFloat(a.debit_moyen_m3s || 0);
+            const qLs = (qM3s * 1000).toFixed(2);
+            const nat = _esc(a.nature || 'domestique');
+            const codeApp = a.code_apport ? _esc(a.code_apport) : '';
+            const coords = _coordonneesRegard(cleanNid);
+            const lng = coords ? coords.lng : 'null';
+            const lat = coords ? coords.lat : 'null';
+
+            return `<button type="button" onclick="window.naviguerVersRegardDwf('${cleanNid}', ${lng}, ${lat}, '${qLs}', '${nat}')"
+                title="Naviguer vers le regard ${cleanNid} (Débit: ${qLs} L/s)"
+                style="background: rgba(6,182,212,0.18); border: 1px solid #06b6d4; color: #f8fafc; border-radius: 6px; padding: 4px 9px; font-size: 0.72rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s;"
+                onmouseenter="this.style.background='rgba(6,182,212,0.35)'" onmouseleave="this.style.background='rgba(6,182,212,0.18)'">
+                <span style="font-weight: 800; color: #38bdf8;"><i class="fas fa-faucet-drip me-1"></i>Regard ${cleanNid}</span>
+                <span style="color: #34d399; font-weight: 700;">${qLs} L/s</span>
+                ${codeApp ? `<small style="color: #94a3b8; font-size: 0.67rem;">(${codeApp})</small>` : ''}
+            </button>`;
+        }).join('');
+    }
+
+    window.naviguerVersRegardDwf = function(cleanNid, lng, lat, qLs, nat) {
+        window.fermerPaletteRecherche();
+        if (lng != null && lat != null && isFinite(lng) && isFinite(lat)) {
+            centrerCarte(lng, lat, `Regard ${cleanNid} (💧 DWF ${qLs} L/s)`);
+        } else {
+            const coords = _coordonneesRegard(cleanNid);
+            if (coords && coords.lng != null && coords.lat != null) {
+                centrerCarte(coords.lng, coords.lat, `Regard ${cleanNid} (💧 DWF ${qLs} L/s)`);
+            }
+        }
+        const targetLayer = _coordonneesRegard(cleanNid);
+        if (targetLayer && targetLayer.layer && typeof targetLayer.layer.openPopup === 'function') {
+            setTimeout(() => {
+                try { targetLayer.layer.openPopup(); } catch (_) {}
+            }, 350);
+        }
+    };
+
     window.basculerPaletteRecherche = function () {
         const p = _palette();
         if (!p) return;
         const ouvrir = p.style.display === 'none';
         p.style.display = ouvrir ? 'block' : 'none';
         if (ouvrir) {
+            _mettreAJourSectionDwf();
             const inp = _input();
             if (inp) { inp.value = ''; setTimeout(() => inp.focus(), 30); }
             const b = _box();
@@ -206,6 +316,11 @@
                 box.innerHTML = res.map((it, i) => {
                     const icon = it.type === 'troncon' ? 'fa-arrows-alt-h' : 'fa-map-marker-alt';
                     const color = it.type === 'troncon' ? '#38bdf8' : '#34d399';
+                    const sim = window._dernierResultatSimulation;
+                    const dwfInj = (sim && sim.provenance && sim.provenance.apports_dwf && Array.isArray(sim.provenance.apports_dwf.injectes))
+                        ? sim.provenance.apports_dwf.injectes.find(a => String(a.node_id).trim() === String(it.id).trim() || String(a.node_id).trim() === String(it.libelle).replace(/^Regard\s*/i, '').trim())
+                        : null;
+                    const dwfBadge = dwfInj ? `<span style="font-size: 0.65rem; background: rgba(6,182,212,0.2); color: #38bdf8; border: 1px solid rgba(6,182,212,0.45); padding: 1px 6px; border-radius: 4px; font-weight: 700; margin-left: 6px;"><i class="fas fa-faucet-drip me-1"></i>DWF ${(parseFloat(dwfInj.debit_moyen_m3s || 0) * 1000).toFixed(1)} L/s</span>` : '';
                     const actions = it.type === 'troncon'
                         ? `<button class="btn-recherche-action" onclick="_rechercheProfilTroncon(${JSON.stringify(it).replace(/"/g, '&quot;')})" style="background:rgba(56,189,248,0.18);border:1px solid rgba(56,189,248,0.4);color:#38bdf8;border-radius:6px;padding:3px 10px;font-size:0.7rem;font-weight:700;cursor:pointer;">Profil</button>`
                         : `<button class="btn-recherche-action" onclick="_rechercheChoisirRegard(${JSON.stringify(it).replace(/"/g, '&quot;')},'amont')" style="background:rgba(52,211,153,0.15);border:1px solid rgba(52,211,153,0.4);color:#34d399;border-radius:6px;padding:3px 9px;font-size:0.7rem;font-weight:700;cursor:pointer;">Amont</button>
@@ -213,7 +328,7 @@
                     return `<div class="resultat-recherche-ouvrage" data-idx="${i}" style="display:flex;align-items:center;gap:8px;padding:8px 14px;cursor:pointer;" onmouseenter="this.style.background='rgba(56,189,248,0.1)'" onmouseleave="this.style.background='transparent'">
                         <i class="fas ${icon}" style="color:${color};width:16px;text-align:center;font-size:0.75rem;"></i>
                         <div style="flex:1;min-width:0;">
-                            <div style="color:#e2e8f0;font-weight:600;font-size:0.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_esc(it.libelle)}</div>
+                            <div style="color:#e2e8f0;font-weight:600;font-size:0.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_esc(it.libelle)}${dwfBadge}</div>
                             ${it.sous_titre ? `<div style="color:#64748b;font-size:0.68rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_esc(it.sous_titre)}</div>` : ''}
                         </div>
                         <button class="btn-recherche-action" onclick="event.stopPropagation();centrerDepuisRecherche(${JSON.stringify({lng: it.lng, lat: it.lat, libelle: it.libelle}).replace(/"/g, '&quot;')})" title="Centrer la carte" style="background:transparent;border:1px solid rgba(255,255,255,0.15);color:#94a3b8;border-radius:6px;padding:3px 8px;font-size:0.7rem;cursor:pointer;"><i class="fas fa-map-marker-alt"></i></button>

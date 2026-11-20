@@ -386,6 +386,19 @@ function _masquerMenuInfobullesSim() {
                 const nodesGeo = window._rawNetworkData.couches.regards;
                 const simNodesSet = new Set((data.meta && data.meta.simulated_nodes || []).map(String));
 
+                const injectesDwfMap = {};
+                const _provDwf = (data && data.provenance && data.provenance.apports_dwf)
+                    || (data && data.kpis && data.kpis.provenance ? data.kpis.provenance.apports_dwf : null);
+                if (_provDwf && Array.isArray(_provDwf.injectes)) {
+                    _provDwf.injectes.forEach(a => {
+                        if (a && a.node_id != null) {
+                            const k = String(a.node_id).trim();
+                            injectesDwfMap[k] = a;
+                            if (k.endsWith('.0')) injectesDwfMap[k.slice(0, -2)] = a;
+                        }
+                    });
+                }
+
                 L.geoJSON(nodesGeo, {
                     pane: 'swmmNodesPane',
                     filter: (feature) => {
@@ -394,7 +407,7 @@ function _masquerMenuInfobullesSim() {
                         const nid = String(rawCode).trim();
                         const cleanNid = nid.endsWith('.0') ? nid.slice(0, -2) : nid;
                         const r = nRes[cleanNid] || nRes[nid] || (cleanNid ? nRes[parseInt(cleanNid)] : null);
-                        return (r && (r.status === 'flooded' || r.status === 'surcharged')) || simNodesSet.has(cleanNid);
+                        return (r && (r.status === 'flooded' || r.status === 'surcharged')) || simNodesSet.has(cleanNid) || Boolean(injectesDwfMap[cleanNid] || injectesDwfMap[nid]);
                     },
                     pointToLayer: (feature, latlng) => {
                         const p = feature.properties || {};
@@ -404,6 +417,20 @@ function _masquerMenuInfobullesSim() {
                         const r = nRes[cleanNid] || nRes[nid] || (cleanNid ? nRes[parseInt(cleanNid)] : null);
                         const isFlooded = (r && r.status === 'flooded');
                         const isSurcharged = (r && r.status === 'surcharged');
+                        const dwfInj = injectesDwfMap[cleanNid] || injectesDwfMap[nid];
+
+                        if (dwfInj) {
+                            // Regard avec apport DWF injecté : halo cyan éclatant (#06b6d4)
+                            return L.circleMarker(latlng, {
+                                pane: 'swmmNodesPane',
+                                radius: isFlooded ? 6.5 : (isSurcharged ? 5.5 : 4.5),
+                                color: '#06b6d4',
+                                fillColor: isFlooded ? '#dc2626' : (isSurcharged ? '#ea580c' : '#0284c7'),
+                                weight: 2.8,
+                                opacity: 1,
+                                fillOpacity: 0.95
+                            });
+                        }
 
                         if (isFlooded) {
                             return L.circleMarker(latlng, {
@@ -443,6 +470,7 @@ function _masquerMenuInfobullesSim() {
                         const nid = String(rawCode).trim();
                         const cleanNid = nid.endsWith('.0') ? nid.slice(0, -2) : nid;
                         const r = nRes[cleanNid] || nRes[nid] || (cleanNid ? nRes[parseInt(cleanNid)] : null);
+                        const dwfInj = injectesDwfMap[cleanNid] || injectesDwfMap[nid];
 
                         // Interception pour le Profil en Long hydraulique (Phase 6.A)
                         // Doit être attachée même sans résultat détaillé (écoulement normal)
@@ -464,15 +492,25 @@ function _masquerMenuInfobullesSim() {
                             }
                         });
 
-                        if (!r) {
-                            window._enregistrerInfobulleSim(layer, `Regard ${cleanNid} (Écoulement normal)`, { sticky: true });
-                            return;
-                        }
-
-                        const isFlooded = (r.status === 'flooded');
-                        const isSurcharged = (r.status === 'surcharged');
+                        const isFlooded = (r && r.status === 'flooded');
+                        const isSurcharged = (r && r.status === 'surcharged');
                         const headerColor = isFlooded ? '#dc2626' : (isSurcharged ? '#ea580c' : '#0284c7');
                         const title = isFlooded ? '🚨 DÉBORDEMENT EN SURFACE (INONDATION)' : (isSurcharged ? '⚠️ MISE EN CHARGE HYDRAULIQUE' : 'ℹ️ ÉCOULEMENT NORMAL');
+
+                        const dwfSectionHtml = dwfInj ? `
+                            <div style="margin-top: 6px; padding: 6px 8px; background: rgba(6,182,212,0.12); border: 1px solid rgba(6,182,212,0.4); border-radius: 6px;">
+                                <div style="font-weight: 800; color: #38bdf8; font-size: 11px; margin-bottom: 2px;">
+                                    💧 Apport de temps sec (DWF) injecté
+                                </div>
+                                <div style="font-size: 11px; color: #f8fafc;">
+                                    Débit moyen injecté : <b style="color: #34d399;">${(parseFloat(dwfInj.debit_moyen_m3s || 0) * 1000).toFixed(2)} L/s</b> (${dwfInj.debit_moyen_m3s} m³/s)
+                                </div>
+                                <div style="font-size: 10px; color: #94a3b8; margin-top: 2px;">
+                                    Nature : <b>${dwfInj.nature || 'domestique'}</b> · Profil : <b>${dwfInj.profile_key || 'constant'}</b>
+                                    ${dwfInj.code_apport ? ` · Réf : <b style="color:#cbd5e1;">${dwfInj.code_apport}</b>` : ''}
+                                </div>
+                            </div>
+                        ` : '';
 
                         const popupHtml = `
                             <div style="font-family: inherit; font-size: 12px; min-width: 220px;">
@@ -480,6 +518,7 @@ function _masquerMenuInfobullesSim() {
                                     ${title}
                                 </div>
                                 <div style="margin-bottom: 4px;">Regard de visite : <b>${cleanNid}</b></div>
+                                ${r ? `
                                 <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
                                     <tr><td style="color:#64748b; padding:2px 0;">Mise en charge :</td><td style="font-weight:700; text-align:right;">${(r.hours_surcharged || 0).toFixed(2)} h</td></tr>
                                     ${isFlooded ? `
@@ -488,13 +527,18 @@ function _masquerMenuInfobullesSim() {
                                         <tr><td style="color:#64748b; padding:2px 0;">Volume total inondé :</td><td style="font-weight:700; text-align:right; color:#dc2626;">${(r.flood_volume_m3 && r.flood_volume_m3 > 0) ? (r.flood_volume_m3 < 1.0 ? `${Number(r.flood_volume_m3).toFixed(2)} m³ (${Math.round(r.flood_volume_m3 * 1000)} L)` : `${Number(r.flood_volume_m3).toFixed(1)} m³`) : '< 0.05 m³'}</td></tr>
                                     ` : ''}
                                 </table>
+                                ` : ''}
+                                ${dwfSectionHtml}
                             </div>
                         `;
-                        const volTooltipStr = (r.flood_volume_m3 && r.flood_volume_m3 > 0)
+                        const volTooltipStr = (r && r.flood_volume_m3 && r.flood_volume_m3 > 0)
                             ? (r.flood_volume_m3 < 1.0 ? `${Number(r.flood_volume_m3).toFixed(2)} m³` : `${Number(r.flood_volume_m3).toFixed(1)} m³`)
                             : '< 0.05 m³';
+                        const dwfTooltipExtra = dwfInj
+                            ? `<br><span style="color:#38bdf8; font-size:10.5px;">💧 Débit DWF injecté : <b>${(parseFloat(dwfInj.debit_moyen_m3s || 0) * 1000).toFixed(2)} L/s</b> (${dwfInj.nature || 'domestique'}${dwfInj.code_apport ? ' · ' + dwfInj.code_apport : ''})</span>`
+                            : '';
                         layer.bindPopup(popupHtml);
-                        window._enregistrerInfobulleSim(layer, `<b>${isFlooded ? '🚨 Débordement' : (isSurcharged ? '⚠️ Surcharge' : 'Regard')} : ${cleanNid}</b>${isFlooded ? ` (${volTooltipStr})` : ''}`, { direction: 'top', offset: [0, -6], opacity: 0.98 });
+                        window._enregistrerInfobulleSim(layer, `<b>${isFlooded ? '🚨 Débordement' : (isSurcharged ? '⚠️ Surcharge' : 'Regard')} : ${cleanNid}</b>${dwfTooltipExtra}${isFlooded ? ` (${volTooltipStr})` : ''}`, { direction: 'top', offset: [0, -6], opacity: 0.98 });
                         
                         layer.on('popupopen', function() {
                             if (window.profilLongState && window.profilLongState.active) {
@@ -504,14 +548,15 @@ function _masquerMenuInfobullesSim() {
                             }
                         });
 
-                        // Interaction de survol épurée sans bringToFront
+                        // Interaction de survol épurée avec conservation du style DWF
                         layer.on('mouseover', function() {
-                            const curR = isFlooded ? 5.5 : (isSurcharged ? 4.0 : 2.5);
-                            this.setStyle({ radius: curR + 1.8, weight: 2.2 });
+                            const curR = isFlooded ? 5.5 : (isSurcharged ? 4.0 : (dwfInj ? 4.5 : 2.5));
+                            const curW = dwfInj ? 3.4 : 2.2;
+                            this.setStyle({ radius: curR + 1.8, weight: curW });
                         });
                         layer.on('mouseout', function() {
-                            const curR = isFlooded ? 5.5 : (isSurcharged ? 4.0 : 2.5);
-                            const curW = isFlooded ? 1.5 : (isSurcharged ? 1.2 : 0.8);
+                            const curR = isFlooded ? 5.5 : (isSurcharged ? 4.0 : (dwfInj ? 4.5 : 2.5));
+                            const curW = dwfInj ? 2.8 : (isFlooded ? 1.5 : (isSurcharged ? 1.2 : 0.8));
                             this.setStyle({ radius: curR, weight: curW });
                         });
                     }
@@ -624,6 +669,43 @@ function _masquerMenuInfobullesSim() {
             if (typeof window.afficherBlocResultatsDwf === 'function') {
                 window.afficherBlocResultatsDwf(data);
             }
+
+            // Indication visible Cockpit / Topbar pour la simulation courante
+            try {
+                const dwfPill = document.getElementById('topbar-dwf-pill');
+                const dwfLabel = document.getElementById('topbar-dwf-label');
+                const provDwf = (data && data.provenance && data.provenance.apports_dwf)
+                    || (data && data.kpis && data.kpis.provenance ? data.kpis.provenance.apports_dwf : null);
+                if (dwfPill && dwfLabel) {
+                    if (provDwf) {
+                        const nInj = Array.isArray(provDwf.injectes) ? provDwf.injectes.length : 0;
+                        const nIgn = Array.isArray(provDwf.ignores) ? provDwf.ignores.length : 0;
+                        let qTot = 0;
+                        if (Array.isArray(provDwf.injectes)) {
+                            provDwf.injectes.forEach(a => {
+                                const q = parseFloat(a.debit_moyen_m3s || 0);
+                                if (isFinite(q)) qTot += q;
+                            });
+                        }
+                        const qLs = (qTot * 1000).toFixed(1);
+                        dwfPill.style.display = 'inline-flex';
+                        if (nInj > 0) {
+                            dwfLabel.innerHTML = `💧 DWF : <b>${nInj} injecté${nInj > 1 ? 's' : ''} (${qLs} L/s)</b>${nIgn > 0 ? ` <span style="color:#fbbf24; font-weight:800;">· ⚠️ ${nIgn} exclu${nIgn > 1 ? 's' : ''}</span>` : ''}`;
+                            dwfPill.style.borderColor = nIgn > 0 ? '#f59e0b' : '#06b6d4';
+                            dwfPill.style.background = nIgn > 0 ? 'rgba(245, 158, 11, 0.2)' : 'rgba(6, 182, 212, 0.16)';
+                            dwfPill.title = `Simulation SWMM avec ${nInj} apport(s) DWF injecté(s)${nIgn > 0 ? ` et ${nIgn} exclu(s)` : ''} — cliquer pour gérer`;
+                        } else {
+                            dwfLabel.innerHTML = `💧 DWF : Aucun injecté${nIgn > 0 ? ` <span style="color:#fbbf24; font-weight:800;">· ⚠️ ${nIgn} exclu${nIgn > 1 ? 's' : ''}</span>` : ''}`;
+                            dwfPill.style.borderColor = nIgn > 0 ? '#f59e0b' : '#94a3b8';
+                            dwfPill.style.background = nIgn > 0 ? 'rgba(245, 158, 11, 0.16)' : 'rgba(148, 163, 184, 0.15)';
+                            dwfPill.title = `Aucun apport DWF actif n'a été injecté dans ce calcul${nIgn > 0 ? ` (${nIgn} exclu(s))` : ''}`;
+                        }
+                    } else {
+                        dwfPill.style.display = 'none';
+                    }
+                }
+            } catch (_) {}
+
             window._dernierResultatSimulation = data;
             if (typeof activerActionsSimulation === 'function') {
                 activerActionsSimulation(true);

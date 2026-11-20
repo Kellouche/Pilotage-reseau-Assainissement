@@ -37,6 +37,12 @@ Objet : Barre supérieure de navigation SaaS, sélecteur de projet et indicateur
                 </button>
             </div>
 
+            <!-- Pill DWF de la simulation courante -->
+            <div id="topbar-dwf-pill" style="display: none; align-items: center; gap: 6px; background: rgba(6, 182, 212, 0.16); border: 1.5px solid #06b6d4; border-radius: 20px; padding: 4px 12px; font-size: 0.76rem; color: #38bdf8; font-weight: 700; cursor: pointer; margin-left: 8px; box-shadow: 0 2px 8px rgba(6, 182, 212, 0.25); transition: all 0.2s;" onclick="ouvrirModalApportsDwf()" title="Cliquer pour gérer ou inspecter les apports DWF de la simulation">
+                <i class="fas fa-faucet-drip" style="color: #38bdf8;"></i>
+                <span id="topbar-dwf-label">DWF : --</span>
+            </div>
+
             <!-- Badge discret BMS (Alerte météo spéciale ONM) -->
             <div id="topbar-bms-pill" style="display: none; align-items: center; gap: 6px; background: rgba(245, 158, 11, 0.16); border: 1.5px solid #f59e0b; border-radius: 20px; padding: 4px 12px; font-size: 0.76rem; color: #fbbf24; font-weight: 700; cursor: pointer; margin-left: 8px; box-shadow: 0 2px 8px rgba(245, 158, 11, 0.25); transition: all 0.2s;" onclick="basculerInfobulleBMS(event)" title="Cliquer pour afficher les détails du bulletin météo spécial">
                 <i class="fas fa-exclamation-triangle" style="color: #f59e0b;"></i>

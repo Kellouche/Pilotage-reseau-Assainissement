@@ -181,6 +181,7 @@ def lister_apports(
     node_id: Optional[str] = Query(None),
     actif_seulement: bool = Query(False),
     snapshot: Optional[str] = Query(None),
+    reseau_courant_seulement: bool = Query(False),
     db: Session = Depends(get_db),
     tenant: TenantContext = Depends(get_tenant_context),
 ):
@@ -189,6 +190,8 @@ def lister_apports(
     `snapshot` (optionnel) : n'affiche que les apports estampillés pour ce
     snapshot GPKG — un apport d'une autre version réseau n'est jamais
     restitué dans une vue d'archive (pas de mélange d'espaces d'IDs).
+    `reseau_courant_seulement` (optionnel) : si True, filtre sur la version
+    GPKG active du projet.
     """
     proj = _resoudre_projet(db, tenant, project_id)
     snap_vid, snap_sha = _filtre_snapshot_apports(db, proj, snapshot)
@@ -203,6 +206,8 @@ def lister_apports(
         if snap_sha:
             clauses.append(ApportDwf.gpkg_sha256 == snap_sha)
         q = q.filter(or_(*clauses))
+    elif reseau_courant_seulement and proj.gpkg_version_id:
+        q = q.filter(ApportDwf.gpkg_version_id == proj.gpkg_version_id)
     if node_id:
         from src.domain.moteur_swmm.constants import _clean_node_id
         q = q.filter(ApportDwf.node_id == _clean_node_id(node_id))
@@ -680,3 +685,53 @@ def supprimer_apport(
     db.delete(apport)
     db.commit()
     return None
+
+
+@router.post("/purger-orphelins")
+def purger_apports_orphelins(
+    project_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    tenant: TenantContext = Depends(require_role("engineer")),
+):
+    """
+    Supprime les apports DWF obsolètes dont le regard n'existe plus
+    dans la géométrie du réseau actif (noeud absent du GPKG courant).
+    """
+    proj = _resoudre_projet(db, tenant, project_id)
+    noeuds_valides = _noeuds_valides_projet(db, proj)
+
+    apports = db.query(ApportDwf).filter(
+        ApportDwf.org_id == tenant.org_id,
+        ApportDwf.project_id == proj.id,
+    ).all()
+
+    orphelins = [a for a in apports if a.node_id not in noeuds_valides]
+    deleted_info = []
+    actor_id = getattr(getattr(tenant, "actor", None), "id", None)
+
+    for a in orphelins:
+        prev = a.to_dict()
+        deleted_info.append(prev)
+        enregistrer_historique_apport(
+            db=db,
+            apport_id=a.id,
+            org_id=tenant.org_id,
+            project_id=a.project_id,
+            action="delete",
+            changed_by_id=actor_id,
+            changed_fields=["purge_orphelin"],
+            previous_state=prev,
+            new_state=None,
+        )
+        db.delete(a)
+
+    if orphelins:
+        db.commit()
+
+    return {
+        "status": "success",
+        "project_id": proj.id,
+        "supprimes_count": len(deleted_info),
+        "apports_supprimes": deleted_info,
+    }
+

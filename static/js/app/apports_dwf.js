@@ -114,7 +114,7 @@ window.ouvrirModalApportsDwf = async function() {
     DWF.recherche = '';
     const inp = document.getElementById('dwf-recherche');
     if (inp) inp.value = '';
-    definirFiltreDwf('tous');
+    definirFiltreDwf('courant');
     montrerVueDwf('liste');
     await initialiserDwf();
 };
@@ -294,11 +294,33 @@ function rendreZoneReconciliationDwf() {
         return;
     }
     zone.style.display = 'block';
-    liste.innerHTML = DWF.incompatibles.map(d => carteIncompatibiliteDwf(d)).join('');
+
+    const orphelins = DWF.incompatibles.filter(d => d.noeud_present === false);
+    const peut = DWF.peutEcrire;
+    let purgeBanner = '';
+    if (orphelins.length > 0 && peut) {
+        purgeBanner = `
+        <div style="background: rgba(239,68,68,0.12); border: 1.5px solid rgba(239,68,68,0.5); border-radius: 10px; padding: 12px 16px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <div>
+                <div style="font-weight: 800; color: #fca5a5; font-size: 0.86rem; display: flex; align-items: center; gap: 7px;">
+                    <i class="fas fa-broom" style="color: #f87171;"></i> ${orphelins.length} apport(s) d'un réseau antérieur détecté(s)
+                </div>
+                <div style="font-size: 0.74rem; color: #cbd5e1; margin-top: 3px; line-height: 1.4;">
+                    Ces apports proviennent d'une configuration antérieure et ciblent des regards inexistants dans le réseau actif. Vous pouvez les purger immédiatement en 1 clic.
+                </div>
+            </div>
+            <button onclick="purgerApportsOrphelinsDwf()" style="background: #dc2626; color: white; border: none; font-weight: 700; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 0.78rem; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(220,38,38,0.45); white-space: nowrap;">
+                <i class="fas fa-trash"></i> Purger les ${orphelins.length} apport(s) orphelin(s)
+            </button>
+        </div>`;
+    }
+
+    liste.innerHTML = purgeBanner + DWF.incompatibles.map(d => carteIncompatibiliteDwf(d)).join('');
 }
 
 function carteIncompatibiliteDwf(d) {
     const peut = DWF.peutEcrire;
+    const estOrphelin = (d.noeud_present === false);
     return `
     <div style="background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.4); border-radius: 10px; padding: 12px 14px;">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap;">
@@ -306,6 +328,7 @@ function carteIncompatibiliteDwf(d) {
                 <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 5px;">
                     <span style="font-weight: 800; color: #fca5a5; font-size: 0.9rem;"><i class="fas fa-map-marker-alt me-1"></i>${dwfEchapper(d.node_id || '—')}</span>
                     <span style="font-size: 0.68rem; background: rgba(239,68,68,0.2); color: #fca5a5; border: 1px solid rgba(239,68,68,0.4); padding: 2px 8px; border-radius: 4px; font-weight: 800;">${dwfEchapper(d.code || 'incompatible')}</span>
+                    ${estOrphelin ? `<span style="font-size: 0.68rem; background: rgba(239,68,68,0.3); color: #fca5a5; border: 1px solid rgba(239,68,68,0.6); padding: 2px 8px; border-radius: 4px; font-weight: 800;"><i class="fas fa-unlink me-1"></i>Regard absent du réseau</span>` : ''}
                 </div>
                 <div style="font-size: 0.78rem; color: #cbd5e1; line-height: 1.45;">${dwfEchapper(d.motif || '')}</div>
                 <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 5px;">
@@ -314,14 +337,41 @@ function carteIncompatibiliteDwf(d) {
                 </div>
                 <div style="font-size: 0.76rem; color: #fbbf24; margin-top: 4px;"><i class="fas fa-wrench me-1"></i>${dwfEchapper(d.action_attendue || '')}</div>
             </div>
-            ${peut ? `<button onclick="revaliderApportDwf('${dwfEchapper(d.apport_id)}')" class="btn btn-sm" style="background: #dc2626; color: white; border: none; font-weight: 700; padding: 7px 12px; border-radius: 7px; cursor: pointer; font-size: 0.76rem; white-space: nowrap;">
-                <i class="fas fa-link me-1"></i>Revalider</button>` : ''}
+            ${peut ? (estOrphelin ? `
+                <button onclick="supprimerApportDwf('${dwfEchapper(d.apport_id)}', '${dwfEchapper(d.node_id)}')" class="btn btn-sm" style="background: rgba(239,68,68,0.22); color: #fca5a5; border: 1px solid rgba(239,68,68,0.5); font-weight: 700; padding: 7px 12px; border-radius: 7px; cursor: pointer; font-size: 0.76rem; white-space: nowrap;">
+                    <i class="fas fa-trash me-1"></i>Supprimer l'apport obsolète</button>
+            ` : `
+                <button onclick="revaliderApportDwf('${dwfEchapper(d.apport_id)}')" class="btn btn-sm" style="background: #dc2626; color: white; border: none; font-weight: 700; padding: 7px 12px; border-radius: 7px; cursor: pointer; font-size: 0.76rem; white-space: nowrap;">
+                    <i class="fas fa-link me-1"></i>Revalider</button>
+            `) : ''}
         </div>
     </div>`;
 }
 
+window.purgerApportsOrphelinsDwf = async function() {
+    if (!DWF.peutEcrire) return;
+    if (!confirm('Supprimer définitivement tous les apports obsolètes dont le regard n\'existe pas dans le réseau actuel ?')) return;
+    try {
+        DWF.statut('Purge des apports obsolètes en cours…', 'info');
+        const pid = DWF.projectId ? `?project_id=${encodeURIComponent(DWF.projectId)}` : '';
+        const res = await dwfFetch(`/api/v1/apports/purger-orphelins${pid}`, { method: 'POST' });
+        await actualiserDwf();
+        DWF.statut(`${res && res.supprimes_count != null ? res.supprimes_count : 'Les'} apport(s) obsolète(s) ont été purgé(s) avec succès.`, 'ok');
+    } catch (e) {
+        DWF.statut('Erreur purge : ' + e.message, 'err');
+    }
+};
+
 function statutApportDwf(a, incMap) {
-    if (incMap[a.id]) return { label: 'Incompatible', color: '#f87171', bg: 'rgba(239,68,68,0.15)', code: incMap[a.id].code };
+    if (incMap[a.id]) {
+        const estOrph = incMap[a.id].noeud_present === false;
+        return {
+            label: estOrph ? 'Réseau antérieur' : 'Incompatible',
+            color: '#f87171',
+            bg: 'rgba(239,68,68,0.18)',
+            code: estOrph ? 'noeud_absent' : incMap[a.id].code
+        };
+    }
     if (!a.actif) return { label: 'Inactif', color: '#94a3b8', bg: 'rgba(148,163,184,0.12)' };
     if (!a.gpkg_sha256 && !a.gpkg_version_id) return { label: 'À réconcilier', color: '#fbbf24', bg: 'rgba(245,158,11,0.15)' };
     return { label: 'Actif', color: '#34d399', bg: 'rgba(16,185,129,0.15)' };
@@ -336,9 +386,14 @@ function rendreListeDwf() {
 
     let liste = DWF.apports.filter(a => {
         const st = statutApportDwf(a, incMap);
+        if (DWF.filtre === 'courant') {
+            if (st.code === 'noeud_absent') return false;
+            if (st.label === 'Incompatible') return false;
+            if (DWF.reseauCourant && DWF.reseauCourant.gpkg_version_id && a.gpkg_version_id && a.gpkg_version_id !== DWF.reseauCourant.gpkg_version_id) return false;
+        }
         if (DWF.filtre === 'actifs' && !a.actif) return false;
         if (DWF.filtre === 'inactifs' && a.actif) return false;
-        if (DWF.filtre === 'reconcilier' && st.label !== 'Incompatible' && st.label !== 'À réconcilier') return false;
+        if (DWF.filtre === 'reconcilier' && st.label !== 'Incompatible' && st.label !== 'À réconcilier' && st.label !== 'Réseau antérieur') return false;
         if (q && !String(a.node_id || '').toLowerCase().includes(q)) return false;
         return true;
     });
@@ -389,7 +444,7 @@ function carteApportDwf(a, incMap) {
                     <i class="fas ${a.actif ? 'fa-pause' : 'fa-play'} me-1"></i>${a.actif ? 'Désactiver' : 'Activer'}</button>
                 <button onclick="ouvrirFormulaireDwf('${dwfEchapper(a.id)}')" class="btn btn-sm" style="background: rgba(56,189,248,0.12); color: #38bdf8; border: 1px solid rgba(56,189,248,0.35); padding: 6px 10px; border-radius: 7px; cursor: pointer; font-size: 0.74rem; font-weight: 700;">
                     <i class="fas fa-edit me-1"></i>Modifier</button>
-                ${st.label === 'Incompatible' ? `<button onclick="revaliderApportDwf('${dwfEchapper(a.id)}')" class="btn btn-sm" style="background: rgba(239,68,68,0.15); color: #fca5a5; border: 1px solid rgba(239,68,68,0.4); padding: 6px 10px; border-radius: 7px; cursor: pointer; font-size: 0.74rem; font-weight: 700;">
+                ${(st.label === 'Incompatible' && st.code !== 'noeud_absent') ? `<button onclick="revaliderApportDwf('${dwfEchapper(a.id)}')" class="btn btn-sm" style="background: rgba(239,68,68,0.15); color: #fca5a5; border: 1px solid rgba(239,68,68,0.4); padding: 6px 10px; border-radius: 7px; cursor: pointer; font-size: 0.74rem; font-weight: 700;">
                     <i class="fas fa-link me-1"></i>Revalider</button>` : ''}
                 <button onclick="supprimerApportDwf('${dwfEchapper(a.id)}', '${dwfEchapper(a.node_id)}')" class="btn btn-sm" style="background: rgba(239,68,68,0.08); color: #f87171; border: 1px solid rgba(239,68,68,0.3); padding: 6px 10px; border-radius: 7px; cursor: pointer; font-size: 0.74rem; font-weight: 700;">
                     <i class="fas fa-trash me-1"></i></button>
