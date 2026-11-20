@@ -318,8 +318,10 @@ window.reinitialiserAffichageSimulation = function() {
                             simBassinSel.options[0].textContent = '-- Sélectionnez un bassin versant sectorisé --';
                             simBassinSel.options[0].disabled = true;
                         }
-                        if (_selectedClusterId) {
-                            simBassinSel.value = _selectedClusterId;
+                        const cidStr = _selectedClusterId ? String(_selectedClusterId) : null;
+                        const isIsole = cidStr && window._bassinsIsoleIds && window._bassinsIsoleIds.has(cidStr);
+                        if (cidStr && !isIsole) {
+                            simBassinSel.value = cidStr;
                         } else if (simBassinSel.options.length > 1) {
                             simBassinSel.selectedIndex = 1;
                         }
@@ -328,6 +330,7 @@ window.reinitialiserAffichageSimulation = function() {
                         window._clustersData.resultats.forEach(res => {
                             const cl = res.cluster || {};
                             const cid = cl.id !== undefined ? cl.id : (res.cluster_id || '');
+                            if (window._bassinsIsoleIds && window._bassinsIsoleIds.has(String(cid))) return;
                             const nom = cl.nom || res.nom || `Bassin ${cid}`;
                             const surf = cl.surface_ha ? ` (${Number(cl.surface_ha).toFixed(1)} ha)` : '';
                             const newOpt = document.createElement('option');
@@ -338,21 +341,26 @@ window.reinitialiserAffichageSimulation = function() {
                             newOpt.textContent = `${nom}${surf}`;
                             simBassinSel.appendChild(newOpt);
                         });
-                        if (_selectedClusterId) {
-                            simBassinSel.value = _selectedClusterId;
+                        const cidStr = _selectedClusterId ? String(_selectedClusterId) : null;
+                        const isIsole = cidStr && window._bassinsIsoleIds && window._bassinsIsoleIds.has(cidStr);
+                        if (cidStr && !isIsole) {
+                            simBassinSel.value = cidStr;
                         } else if (simBassinSel.options.length > 1) {
                             simBassinSel.selectedIndex = 1;
                         }
                     } else if (window._bassinNoms && Object.keys(window._bassinNoms).length > 0) {
                         simBassinSel.innerHTML = '<option value="" disabled selected>-- Sélectionnez un bassin versant sectorisé --</option>';
                         Object.keys(window._bassinNoms).forEach(cid => {
+                            if (window._bassinsIsoleIds && window._bassinsIsoleIds.has(String(cid))) return;
                             const newOpt = document.createElement('option');
                             newOpt.value = cid;
                             newOpt.textContent = `${window._bassinNoms[cid]}`;
                             simBassinSel.appendChild(newOpt);
                         });
-                        if (window._selectedClusterId) {
-                            simBassinSel.value = window._selectedClusterId;
+                        const cidStr = window._selectedClusterId ? String(window._selectedClusterId) : null;
+                        const isIsole = cidStr && window._bassinsIsoleIds && window._bassinsIsoleIds.has(cidStr);
+                        if (cidStr && !isIsole) {
+                            simBassinSel.value = cidStr;
                         } else if (simBassinSel.options.length > 1) {
                             simBassinSel.selectedIndex = 1;
                         }

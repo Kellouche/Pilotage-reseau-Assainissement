@@ -238,9 +238,13 @@
                                         }
                                         const cid = feature.properties.cluster_id;
                                         highlightCluster(cid, clusterLayer);
-                                        // Sync dropdown
-                                        const sel = document.getElementById('bassin-select');
-                                        if (sel) sel.value = String(cid);
+                                        // Sync dropdowns
+                                        if (typeof window.synchroniserSelectionBassinOuIsole === 'function') {
+                                            window.synchroniserSelectionBassinOuIsole(cid);
+                                        } else {
+                                            const sel = document.getElementById('bassin-select');
+                                            if (sel) sel.value = String(cid);
+                                        }
                                         afficherInfoBassin(cid);
                                         const bnds = (layer.getBounds && typeof layer.getBounds === 'function') ? layer.getBounds() : null;
                                         zoomerSurBassin(cid, clusterLayer, bnds);
@@ -332,8 +336,12 @@
                                         const cid = p.cluster_id;
                                         if (cid !== null && cid !== undefined) {
                                             highlightCluster(cid, clusterLayer);
-                                            const sel = document.getElementById('bassin-select');
-                                            if (sel) sel.value = String(cid);
+                                            if (typeof window.synchroniserSelectionBassinOuIsole === 'function') {
+                                                window.synchroniserSelectionBassinOuIsole(cid);
+                                            } else {
+                                                const sel = document.getElementById('bassin-select');
+                                                if (sel) sel.value = String(cid);
+                                            }
                                             afficherInfoBassin(cid);
                                             zoomerSurBassin(cid, clusterLayer);
                                         }
@@ -353,8 +361,12 @@
                                         const cid = p.cluster_id;
                                         if (cid !== null && cid !== undefined) {
                                             highlightCluster(cid, clusterLayer);
-                                            const sel = document.getElementById('bassin-select');
-                                            if (sel) sel.value = String(cid);
+                                            if (typeof window.synchroniserSelectionBassinOuIsole === 'function') {
+                                                window.synchroniserSelectionBassinOuIsole(cid);
+                                            } else {
+                                                const sel = document.getElementById('bassin-select');
+                                                if (sel) sel.value = String(cid);
+                                            }
                                             afficherInfoBassin(cid);
                                             zoomerSurBassin(cid, clusterLayer);
                                         }

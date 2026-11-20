@@ -99,7 +99,20 @@ def _identite_bassin_du_cache(gpkg_path: Optional[Path], cluster_id: str) -> dic
     def _ident(p: dict) -> dict:
         ex = p.get("exutoire_id")
         bref = p.get("bassin_ref") or (f"exutoire:{ex}" if ex else None)
-        return {"nom": p.get("nom"), "exutoire_id": ex, "bassin_ref": bref}
+        nb_reg = int(p.get("nb_regards") or 0)
+        nb_cond = int(p.get("nb_conduites") or 0)
+        surf = float(p.get("surface_ha") or 0.0)
+        est_isole = not (nb_reg > 0 or nb_cond > 2 or surf > 0.45)
+        return {
+            "nom": p.get("nom"),
+            "exutoire_id": ex,
+            "bassin_ref": bref,
+            "nb_regards": nb_reg,
+            "nb_conduites": nb_cond,
+            "surface_ha": surf,
+            "est_isole": est_isole,
+            "cluster_id": p.get("cluster_id") or p.get("id_bassin"),
+        }
 
     # EQUIVALENCE DES ESPACES D'IDENTIFIANTS :
     if prefixed:
@@ -693,6 +706,15 @@ def run_native_swmm_simulation(
         raise HTTPException(
             status_code=400,
             detail="Règle hydraulique d'ingénierie : La sectorisation préalable en bassins versants d'exutoires est obligatoire avant la simulation SWMM. Veuillez sélectionner un bassin versant à simuler."
+        )
+
+    # Garde-fou d'ingénierie hydraulique : un ouvrage isolé sans réseau collecteur ne peut pas être simulé
+    identite_bassin = _identite_bassin_du_cache(gpkg_path, cluster_id_effectif)
+    if identite_bassin and identite_bassin.get("est_isole"):
+        nom_b = identite_bassin.get("nom") or cluster_id_effectif
+        raise HTTPException(
+            status_code=422,
+            detail=f"Le bassin demandé ({nom_b}) est un ouvrage isolé sans réseau collecteur amont. Les simulations dynamiques SWMM 5.2 sont inapplicables."
         )
 
     # 1bis. LOT P1.3/P1.4 — résolution des apports DWF actifs du projet dans

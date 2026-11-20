@@ -96,6 +96,26 @@
             : 'Historique des calculs SWMM 5.2 — exécuter, modifier ou supprimer';
 
         modal.style.display = 'flex';
+
+        // Garde-fou d'ingénierie : un ouvrage isolé sans réseau collecteur amont n'a pas de simulations
+        if (!isGlobal && window._bassinsIsoleIds && window._bassinsIsoleIds.has(cidStr)) {
+            if (titre) titre.textContent = `Ouvrage isolé — ${nomBassin}`;
+            if (sousTitre) sousTitre.textContent = 'Non simulable : absence de réseau collecteur amont';
+            corps.innerHTML = `
+                <div style="text-align: center; padding: 40px 20px; color: #94a3b8;">
+                    <i class="fas fa-ban fa-3x" style="color: #f59e0b; margin-bottom: 14px;"></i>
+                    <h4 style="color: #f8fafc; margin-bottom: 8px;">Aucune simulation possible</h4>
+                    <p style="font-size: 13px; max-width: 440px; margin: 0 auto 16px auto; line-height: 1.5; color: #cbd5e1;">
+                        Cet ouvrage est un exutoire ou regard ponctuel isolé sans réseau collecteur amont. Les simulations dynamiques SWMM 5.2 ne sont pas applicables à cet élément.
+                    </p>
+                    <button type="button" onclick="fermerModalSimulationsBassin();" style="padding: 8px 18px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); color: #fff; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;">
+                        Fermer
+                    </button>
+                </div>
+            `;
+            return;
+        }
+
         corps.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:30px;"><i class="fas fa-spinner fa-spin fa-2x mb-3"></i><p>Chargement de l’historique…</p></div>';
 
         const token = localStorage.getItem('swmm_access_token');

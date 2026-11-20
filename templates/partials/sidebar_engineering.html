@@ -98,6 +98,20 @@ Objet : Panneau latéral d'ingénierie : calques réseau physique, hydrologie et
                 <div id="bassin-info" style="display: none;"></div>
             </div>
 
+            <!-- Sous-section dédiée aux ouvrages et exutoires isolés (sans réseau collecteur amont) -->
+            <div id="isoles-section" style="display: none; margin-top: 10px; border-top: 1px dashed rgba(255,255,255,0.12); padding-top: 8px;">
+                <label for="isoles-select" style="font-size: 0.75rem; color: #fbbf24; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;">
+                    <span><i class="fas fa-map-pin me-1"></i> Ouvrages & exutoires isolés :</span>
+                    <span id="badge-isoles-count" style="font-size: 0.68rem; background: rgba(245, 158, 11, 0.18); border: 1px solid rgba(245, 158, 11, 0.35); color: #fbbf24; padding: 1px 6px; border-radius: 4px; font-weight: 700;">--</span>
+                </label>
+                <select id="isoles-select" style="width: 100%; font-size: 0.82rem; padding: 6px; background: #0f172a; color: #f8fafc; border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 6px;">
+                    <option value="">-- Aucun ouvrage isolé sélectionné --</option>
+                </select>
+                <div id="isoles-info" style="display: none; margin-top: 6px; font-size: 0.72rem; color: #cbd5e1; background: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; padding: 6px 8px; border-radius: 4px; line-height: 1.35;">
+                    <span style="color: #fbbf24; font-weight: 700;"><i class="fas fa-ban me-1"></i> Non simulable :</span> Cet ouvrage ne possède aucun réseau collecteur amont modélisable sous SWMM 5.2.
+                </div>
+            </div>
+
             <div id="orphelins-export-section" style="margin-top: 8px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 6px;">
                 <a href="/api/v1/network/orphelins/geojson" target="_blank" download="elements_orphelins.geojson" style="font-size: 0.72rem; color: #f59e0b; text-decoration: none; display: flex; align-items: center; gap: 5px;">
                     <i class="fas fa-file-export"></i> Exporter les orphelins isolés (GeoJSON)

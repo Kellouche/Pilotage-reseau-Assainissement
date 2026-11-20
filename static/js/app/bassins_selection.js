@@ -335,6 +335,31 @@
                 return;
             }
 
+            // État 3bis : Ouvrage / Exutoire isolé sans réseau collecteur amont
+            const estIsole = Boolean(window._bassinsIsoleIds && window._bassinsIsoleIds.has(cidStr));
+            if (estIsole) {
+                const nomIsole = (window._bassinNoms && window._bassinNoms[cidStr]) || `Ouvrage ${cidStr}`;
+                if (topIcon) topIcon.innerHTML = '<i class="fas fa-map-pin" style="color: #fbbf24;"></i>';
+                if (topText) topText.innerHTML = `Ouvrage isolé : <span style="color: #fbbf24; font-weight: 700;">${nomIsole}</span>`;
+                if (topBadge) {
+                    topBadge.style.display = 'inline-block';
+                    topBadge.innerText = 'ISOLÉ (NON SIMULABLE)';
+                    topBadge.style.background = 'rgba(245, 158, 11, 0.2)';
+                    topBadge.style.color = '#fbbf24';
+                }
+                if (topFiab) topFiab.style.display = 'none';
+                if (topReset) topReset.style.display = 'inline-block';
+                if (typeof window.actualiserDropdownBassin === 'function') {
+                    window.actualiserDropdownBassin();
+                }
+                const legNonSim = document.getElementById('sim-floating-legend');
+                if (legNonSim) {
+                    legNonSim.classList.remove('active-legend');
+                    legNonSim.style.display = 'none';
+                }
+                return;
+            }
+
             // État 4 : Un bassin individuel est sélectionné (Extraction robuste des métadonnées)
             let nom = (window._bassinNoms && window._bassinNoms[cidStr]) ? window._bassinNoms[cidStr] : `Bassin ${cidStr}`;
             let surfHa = '';
@@ -552,6 +577,11 @@
             _selectedClusterId = null;
             const sel = document.getElementById('bassin-select');
             if (sel) sel.value = '';
+            const selIsole = document.getElementById('isoles-select');
+            if (selIsole) selIsole.value = '';
+            const infoIsole = document.getElementById('isoles-info');
+            if (infoIsole) infoIsole.style.display = 'none';
+            window._selectedIsolateId = null;
             const simSel = document.getElementById('sim-select-bassin');
             if (simSel) simSel.value = '';
             highlightCluster(null, window._activeClusterLayer || couches.bassins);
@@ -582,10 +612,14 @@
                 }
             } catch (e) {}
 
-            // Synchroniser le dropdown si l'appel vient du clic carte
-            const sel = document.getElementById('bassin-select');
-            if (sel && sel.value !== (_selectedClusterId || '')) {
-                sel.value = _selectedClusterId || '';
+            // Synchroniser les dropdowns si l'appel vient du clic carte
+            if (typeof window.synchroniserSelectionBassinOuIsole === 'function') {
+                window.synchroniserSelectionBassinOuIsole(_selectedClusterId);
+            } else {
+                const sel = document.getElementById('bassin-select');
+                if (sel && sel.value !== (_selectedClusterId || '')) {
+                    sel.value = _selectedClusterId || '';
+                }
             }
             afficherInfoBassin(_selectedClusterId);
 
@@ -730,16 +764,51 @@
             } catch (e) {}
         };
 
+        // Synchronise la sélection entre le sélecteur de bassins collecteurs
+        // et le sélecteur d'ouvrages/exutoires isolés.
+        window.synchroniserSelectionBassinOuIsole = function(cid) {
+            const sel = document.getElementById('bassin-select');
+            const selIsole = document.getElementById('isoles-select');
+            const infoIsole = document.getElementById('isoles-info');
+            const cidStr = (cid !== null && cid !== undefined) ? String(cid) : '';
+
+            if (!cidStr) {
+                if (sel) sel.value = '';
+                if (selIsole) selIsole.value = '';
+                if (infoIsole) infoIsole.style.display = 'none';
+                window._selectedIsolateId = null;
+                return;
+            }
+
+            const estIsole = Boolean(window._bassinsIsoleIds && window._bassinsIsoleIds.has(cidStr));
+
+            if (estIsole) {
+                if (sel) sel.value = '';
+                if (selIsole) selIsole.value = cidStr;
+                if (infoIsole) infoIsole.style.display = 'block';
+                window._selectedIsolateId = cidStr;
+            } else {
+                if (sel) sel.value = cidStr;
+                if (selIsole) selIsole.value = '';
+                if (infoIsole) infoIsole.style.display = 'none';
+                window._selectedIsolateId = null;
+            }
+        };
+
         function peuplerDropdownBassins(geojsonData, clusterLayer) {
             const sel = document.getElementById('bassin-select');
-            sel.innerHTML = '<option value="">-- Choisir un bassin versant --</option>';
+            const selIsole = document.getElementById('isoles-select');
+            const secIsole = document.getElementById('isoles-section');
+            const badgeIsole = document.getElementById('badge-isoles-count');
+            const infoIsole = document.getElementById('isoles-info');
+
             _bassinBounds = {};
             _bassinNoms = {};
 
             // Extraire les bassins (polygones) et construire leurs bounds
             const bassins = geojsonData.features.filter(f => f.properties && f.properties.type === 'bassin_urbain');
 
-            // Séparation en deux listes selon la présence d'un réseau collecteur amont
+            // Séparation stricte : collecteurs simulables vs ouvrages/exutoires isolés
             const collecteurs = [];
             const isoles = [];
 
@@ -760,11 +829,17 @@
 
                 // Un bassin appartient aux collecteurs s'il a au moins un regard ou conduite connectée ou surface > 0.45 ha
                 if (nbReg > 0 || nbCond > 2 || surf > 0.45) {
+                    f.properties.est_isole = false;
                     collecteurs.push(f);
                 } else {
+                    f.properties.est_isole = true;
                     isoles.push(f);
                 }
             });
+
+            window._bassinsCollecteurs = collecteurs;
+            window._bassinsIsoles = isoles;
+            window._bassinsIsoleIds = new Set(isoles.map(f => String(f.properties.cluster_id)));
 
             // Tri alphabétique strict des deux listes (par nom)
             const triAlphabetique = (a, b) => {
@@ -776,46 +851,69 @@
             collecteurs.sort(triAlphabetique);
             isoles.sort(triAlphabetique);
 
-            // Groupe 1 : Bassins versants collecteurs (réseau connecté)
-            if (collecteurs.length > 0) {
-                const grpCol = document.createElement('optgroup');
-                grpCol.label = `── Bassins versants collecteurs (${collecteurs.length}) ──`;
-                collecteurs.forEach(f => {
-                    const cid = f.properties.cluster_id;
-                    const nom = f.properties.nom || `Bassin ${cid}`;
-                    const surf = f.properties.surface_ha !== undefined ? ` (${f.properties.surface_ha} ha)` : '';
-                    const reg = (f.properties.nb_regards && f.properties.nb_regards > 0) ? ` • ${f.properties.nb_regards} reg.` : '';
-                    const opt = document.createElement('option');
-                    opt.value = cid;
-                    // Étape 3A : identifiants métier transmis à la simulation
-                    if (f.properties.bassin_ref) opt.dataset.bassinRef = f.properties.bassin_ref;
-                    if (f.properties.exutoire_id !== undefined && f.properties.exutoire_id !== null) {
-                        opt.dataset.exutoireId = f.properties.exutoire_id;
-                    }
-                    opt.textContent = `${nom}${surf}${reg}`;
-                    grpCol.appendChild(opt);
-                });
-                sel.appendChild(grpCol);
-            }
+            // 1. Peuplement du sélecteur principal (#bassin-select) — STRICTEMENT QUE LES BASSINS COLLECTEURS
+            sel.innerHTML = `<option value="">-- Choisir un bassin versant (${collecteurs.length}) --</option>`;
+            collecteurs.forEach(f => {
+                const cid = f.properties.cluster_id;
+                const nom = f.properties.nom || `Bassin ${cid}`;
+                const surf = f.properties.surface_ha !== undefined ? ` (${f.properties.surface_ha} ha)` : '';
+                const reg = (f.properties.nb_regards && f.properties.nb_regards > 0) ? ` • ${f.properties.nb_regards} reg.` : '';
+                const opt = document.createElement('option');
+                opt.value = cid;
+                if (f.properties.bassin_ref) opt.dataset.bassinRef = f.properties.bassin_ref;
+                if (f.properties.exutoire_id !== undefined && f.properties.exutoire_id !== null) {
+                    opt.dataset.exutoireId = f.properties.exutoire_id;
+                }
+                opt.textContent = `${nom}${surf}${reg}`;
+                sel.appendChild(opt);
+            });
 
-            // Groupe 2 : Exutoires & Ouvrages ponctuels isolés (sans réseau amont)
-            if (isoles.length > 0) {
-                const grpIso = document.createElement('optgroup');
-                grpIso.label = `── Exutoires et ouvrages ponctuels sans réseau (${isoles.length}) ──`;
-                isoles.forEach(f => {
-                    const cid = f.properties.cluster_id;
-                    const nom = f.properties.nom || `Bassin ${cid}`;
-                    const surf = f.properties.surface_ha !== undefined ? ` (${f.properties.surface_ha} ha)` : '';
-                    const opt = document.createElement('option');
-                    opt.value = cid;
-                    if (f.properties.bassin_ref) opt.dataset.bassinRef = f.properties.bassin_ref;
-                    if (f.properties.exutoire_id !== undefined && f.properties.exutoire_id !== null) {
-                        opt.dataset.exutoireId = f.properties.exutoire_id;
-                    }
-                    opt.textContent = `${nom}${surf} (isolé)`;
-                    grpIso.appendChild(opt);
-                });
-                sel.appendChild(grpIso);
+            // 2. Peuplement de la sous-section dédiée aux ouvrages et exutoires isolés (Option A)
+            if (selIsole && secIsole) {
+                if (isoles.length > 0) {
+                    secIsole.style.display = 'block';
+                    if (badgeIsole) badgeIsole.textContent = `${isoles.length}`;
+                    selIsole.innerHTML = `<option value="">-- Choisir un ouvrage isolé (${isoles.length}) --</option>`;
+                    isoles.forEach(f => {
+                        const cid = f.properties.cluster_id;
+                        const nom = f.properties.nom || `Ouvrage ${cid}`;
+                        const surf = f.properties.surface_ha !== undefined ? ` (${f.properties.surface_ha} ha)` : '';
+                        const opt = document.createElement('option');
+                        opt.value = cid;
+                        if (f.properties.bassin_ref) opt.dataset.bassinRef = f.properties.bassin_ref;
+                        if (f.properties.exutoire_id !== undefined && f.properties.exutoire_id !== null) {
+                            opt.dataset.exutoireId = f.properties.exutoire_id;
+                        }
+                        opt.textContent = `📍 ${nom}${surf}`;
+                        selIsole.appendChild(opt);
+                    });
+
+                    selIsole.onchange = function() {
+                        const cid = this.value;
+                        if (sel) sel.value = ''; // Réinitialiser le sélecteur de bassins collecteurs
+                        window._selectedIsolateId = cid || null;
+
+                        if (infoIsole) {
+                            infoIsole.style.display = cid ? 'block' : 'none';
+                        }
+
+                        if (!cid) {
+                            highlightCluster(null, clusterLayer);
+                            afficherInfoBassin(null);
+                            return;
+                        }
+
+                        const finalCid = cid.startsWith('M_') ? cid : parseInt(cid);
+                        highlightCluster(finalCid, clusterLayer);
+                        afficherInfoBassin(finalCid);
+                        zoomerSurBassin(finalCid, clusterLayer);
+                    };
+                } else {
+                    secIsole.style.display = 'none';
+                    selIsole.innerHTML = '<option value="">-- Aucun ouvrage isolé --</option>';
+                    if (badgeIsole) badgeIsole.textContent = '0';
+                    if (infoIsole) infoIsole.style.display = 'none';
+                }
             }
 
             // Calculer les bounds de chaque bassin depuis le layer Leaflet (si disponible)
@@ -841,14 +939,14 @@
             window._bassinBounds = _bassinBounds;
             window._bassinNoms = _bassinNoms;
 
-            // Mettre à jour dynamiquement le badge avec le nombre exact de bassins détectés
-            const totalBassins = bassins.length;
+            // Mettre à jour dynamiquement le badge avec le nombre de bassins collecteurs
+            const totalCollecteurs = collecteurs.length;
             const badge = document.getElementById('badge-subcatchments-count');
-            if (badge && totalBassins > 0) {
+            if (badge && totalCollecteurs > 0) {
                 const curText = badge.innerText || '';
                 const parts = curText.split('•');
                 const sbPart = parts.length > 1 ? parts[parts.length - 1].trim() : (curText.includes('SB') ? curText : '');
-                badge.innerText = `${totalBassins} BV${sbPart ? ' • ' + sbPart : ''}`;
+                badge.innerText = `${totalCollecteurs} BV${sbPart ? ' • ' + sbPart : ''}`;
             }
 
             // Afficher la section
@@ -857,7 +955,10 @@
             // Écouteur du dropdown unique (onchange direct pour éviter les doublons d'écouteurs)
             sel.onchange = function() {
                 const cid = this.value;
-                
+                if (selIsole) selIsole.value = '';
+                if (infoIsole) infoIsole.style.display = 'none';
+                window._selectedIsolateId = null;
+
                 // Activer le bouton supprimer SI c'est un bassin manuel
                 const btnDelete = document.getElementById('btn-delete-bassin');
                 if (btnDelete) {
@@ -875,7 +976,7 @@
                     afficherInfoBassin(null);
                     return;
                 }
-                
+
                 const finalCid = cid.startsWith('M_') ? cid : parseInt(cid);
                 highlightCluster(finalCid, clusterLayer);
                 afficherInfoBassin(finalCid);
@@ -951,6 +1052,40 @@
                         <button type="button" onclick="fermerMenuBassin(); if (typeof ouvrirModalSimulation === 'function') ouvrirModalSimulation(true);" style="width: 100%; padding: 8px 12px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); color: #38bdf8; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px;">
                             <i class="fas fa-play"></i> Configurer et lancer une simulation
                         </button>
+                    </div>
+                `;
+                return;
+            }
+
+            // 1bis. Vue Ouvrage/Exutoire isolé sans réseau collecteur amont (non simulable)
+            if (cidStr && window._bassinsIsoleIds && window._bassinsIsoleIds.has(cidStr)) {
+                const nomIsole = (window._bassinNoms && window._bassinNoms[cidStr]) || `Ouvrage ${cidStr}`;
+                const bpIsole = (window._bassinProperties && window._bassinProperties[cidStr]) || {};
+                const typOuv = bpIsole.exutoire_type ? String(bpIsole.exutoire_type).toUpperCase() : 'EXUTOIRE';
+                dropdown.innerHTML = `
+                    <div style="padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,0.1); background: rgba(245, 158, 11, 0.05);">
+                        <div style="font-weight: 800; font-size: 13px; color: #fbbf24; display: flex; align-items: center; gap: 7px;">
+                            <i class="fas fa-map-pin"></i> ${_esc(nomIsole)}
+                        </div>
+                        <div style="font-size: 11px; color: #94a3b8; margin-top: 3px;">
+                            Ouvrage ponctuel isolé (${typOuv}) · Aucun réseau collecteur amont
+                        </div>
+                    </div>
+                    <div style="padding: 12px 14px;">
+                        <div style="margin: 4px 0 14px 0; padding: 10px 12px; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 6px; font-size: 11px; color: #fbbf24; line-height: 1.45;">
+                            <div style="font-weight: 800; display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+                                <i class="fas fa-ban"></i> Non simulable sous SWMM 5.2
+                            </div>
+                            Cet élément est un exutoire ou regard ponctuel isolé ne disposant d'aucune canalisation collectrice connectée. Les calculs hydrauliques 1D (Saint-Venant) ne peuvent pas lui être appliqués.
+                        </div>
+                        <div style="display: flex; gap: 6px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.08);">
+                            <button type="button" disabled title="Simulation impossible sur un ouvrage isolé" style="flex: 1.2; padding: 6px 10px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.1); color: #64748b; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: not-allowed; display: flex; align-items: center; justify-content: center; gap: 5px;">
+                                <i class="fas fa-ban"></i> Non simulable
+                            </button>
+                            <button type="button" onclick="fermerMenuBassin(); reinitialiserSelectionBassin();" title="Revenir à la vue globale du réseau" style="flex: 0.8; padding: 6px 6px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.15); color: #cbd5e1; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;">
+                                <i class="fas fa-globe"></i> Réseau
+                            </button>
+                        </div>
                     </div>
                 `;
                 return;
@@ -1114,6 +1249,12 @@
         window.reSimulerBassin = function(clusterId) {
             const cidStr = String(clusterId || '').trim();
             if (typeof window.fermerMenuBassin === 'function') window.fermerMenuBassin();
+            if (cidStr && window._bassinsIsoleIds && window._bassinsIsoleIds.has(cidStr)) {
+                if (typeof window.showToast === 'function') {
+                    window.showToast("Cet ouvrage est un élément isolé sans réseau collecteur amont : simulation SWMM impossible.", "warning");
+                }
+                return;
+            }
             if (cidStr) {
                 const bSel = document.getElementById('bassin-select');
                 if (bSel) bSel.value = cidStr;
