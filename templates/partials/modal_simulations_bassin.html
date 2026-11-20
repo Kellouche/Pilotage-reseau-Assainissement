@@ -33,6 +33,9 @@ Objet : Modale d'historique des simulations d'un bassin versant
         <div style="background: #0f172a; padding: 12px 22px; border-top: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center; gap: 10px;">
             <span style="font-size: 0.76rem; color: #64748b;" id="sim-hist-pied">Chaque simulation peut être affichée, modifiée ou supprimée.</span>
             <div style="display: flex; gap: 8px; align-items: center;">
+                <button onclick="epurerDoublonsHistorique()" title="Nettoyer les simulations antérieures redondantes (conserve la plus récente pour chaque configuration/scénario)" style="padding: 6px 14px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; border-radius: 8px; font-size: 0.8rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                    <i class="fas fa-broom"></i> Épurer doublons
+                </button>
                 <button onclick="nouvelleSimulationDepuisHistorique()" style="padding: 6px 14px; background: linear-gradient(135deg, #0284c7, #0369a1); border: none; color: #fff; border-radius: 8px; font-size: 0.8rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px;">
                     <i class="fas fa-plus"></i> Nouvelle simulation
                 </button>

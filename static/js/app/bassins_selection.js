@@ -486,10 +486,6 @@
                 if (typeof window.mettreAJourIndicateurBassin === 'function') {
                     window.mettreAJourIndicateurBassin(cidStr, cached);
                 }
-                // Ouvrir l'historique des simulations du bassin (auto, 1×/bassin)
-                if (typeof window.ouvrirModalSimulationsBassin === 'function') {
-                    window.ouvrirModalSimulationsBassin(cidStr, true);
-                }
                 return;
             }
 
@@ -519,10 +515,6 @@
                         }
                         if (typeof window.mettreAJourIndicateurBassin === 'function') {
                             window.mettreAJourIndicateurBassin(cidStr, d);
-                        }
-                        // Ouvrir l'historique des simulations du bassin (auto, 1×/bassin)
-                        if (typeof window.ouvrirModalSimulationsBassin === 'function') {
-                            window.ouvrirModalSimulationsBassin(cidStr, true);
                         }
                     } else {
                         // Aucun calcul sauvegardé pour ce bassin : nettoyer les résultats précédents
@@ -950,11 +942,11 @@
                         </div>
                     </div>
                     <div style="padding: 12px 16px; font-size: 12px; color: #cbd5e1; line-height: 1.5;">
-                        <p style="margin: 0 0 10px 0; color: #94a3b8; font-size: 11px;">
-                            Cliquez sur un bassin sur la carte ou dans le sélecteur pour inspecter ses caractéristiques hydrauliques, ses apports DWF et ses résultats SWMM.
+                        <p style="margin: 0 0 12px 0; color: #94a3b8; font-size: 11px;">
+                            Sélectionnez un bassin versant sur la carte pour inspecter ses résultats détaillés, ou configurez et lancez une simulation.
                         </p>
-                        <button type="button" onclick="fermerMenuBassin(); ouvrirModalApportsDwf();" style="width: 100%; padding: 7px 10px; background: rgba(52,211,153,0.15); border: 1px solid rgba(52,211,153,0.4); color: #34d399; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer;">
-                            <i class="fas fa-faucet-drip me-1"></i> Gérer les apports DWF du réseau
+                        <button type="button" onclick="fermerMenuBassin(); if (typeof ouvrirModalSimulation === 'function') ouvrirModalSimulation(true);" style="width: 100%; padding: 8px 12px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); color: #38bdf8; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px;">
+                            <i class="fas fa-play"></i> Configurer et lancer une simulation
                         </button>
                     </div>
                 `;
@@ -1090,15 +1082,41 @@
                     ${diagBlock}
 
                     <div style="display: flex; gap: 6px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); margin-top: 8px;">
-                        <button type="button" onclick="fermerMenuBassin(); ouvrirSimulationOuHistorique();" style="flex: 1; padding: 6px 10px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer;">
-                            <i class="fas fa-play me-1"></i> ${simActive ? 'Re-simuler' : 'Simuler'}
+                        <button type="button" onclick="reSimulerBassin('${_esc(cidStr)}');" title="Configurer et relancer une simulation pour ce bassin" style="flex: 1.2; padding: 6px 10px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;">
+                            <i class="fas fa-play"></i> ${simActive ? 'Re-simuler' : 'Simuler'}
                         </button>
-                        <button type="button" onclick="fermerMenuBassin(); reinitialiserSelectionBassin();" style="flex: 1; padding: 6px 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.15); color: #cbd5e1; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer;">
-                            <i class="fas fa-globe me-1"></i> Tous bassins
+                        <button type="button" onclick="fermerMenuBassin(); if (typeof ouvrirModalSimulationsBassin === 'function') ouvrirModalSimulationsBassin('${_esc(cidStr)}', false);" title="Consulter l'historique des calculs enregistrés pour ce bassin" style="flex: 1; padding: 6px 8px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.15); color: #94a3b8; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;">
+                            <i class="fas fa-history"></i> Historique
+                        </button>
+                        <button type="button" onclick="fermerMenuBassin(); reinitialiserSelectionBassin();" title="Revenir à la vue globale du réseau" style="flex: 0.8; padding: 6px 6px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.15); color: #cbd5e1; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;">
+                            <i class="fas fa-globe"></i> Réseau
                         </button>
                     </div>
                 </div>
             `;
+        };
+
+        /**
+         * Re-simuler un bassin : ouvre directement la modale de configuration et
+         * de lancement de simulation en pré-sélectionnant ce bassin, SANS détour
+         * par l'historique des simulations.
+         */
+        window.reSimulerBassin = function(clusterId) {
+            const cidStr = String(clusterId || '').trim();
+            if (typeof window.fermerMenuBassin === 'function') window.fermerMenuBassin();
+            if (cidStr) {
+                const bSel = document.getElementById('bassin-select');
+                if (bSel) bSel.value = cidStr;
+                const simSel = document.getElementById('sim-select-bassin');
+                if (simSel) {
+                    simSel.value = cidStr;
+                    try { simSel.dispatchEvent(new Event('change')); } catch (_) {}
+                }
+                try { window._selectedClusterId = cidStr; } catch (_) {}
+            }
+            if (typeof window.ouvrirModalSimulation === 'function') {
+                window.ouvrirModalSimulation(true);
+            }
         };
 
         // Fermeture automatique au clic extérieur

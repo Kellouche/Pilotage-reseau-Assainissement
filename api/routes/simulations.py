@@ -1344,6 +1344,14 @@ def list_bassin_simulations_historique(
 
     resultats = []
     for s in sims:
+        # Isolation stricte au réseau courant :
+        # Empêche la contamination par d'anciennes simulations d'autres réseaux
+        # partageant historiquement le même enregistrement projet (ex: Assainissement_Ville vs HAY_GAZ_HASSANIA).
+        if proj.name:
+            nom_proj_norm = proj.name.strip().lower()
+            if s.name and not s.name.lower().startswith(f"swmm_{nom_proj_norm}_"):
+                continue
+
         sk = s.summary_kpis or {}
         params = sk.get("parameters") or {}
         cid_sim = str(sk.get("cluster_id") or "").strip().lower()

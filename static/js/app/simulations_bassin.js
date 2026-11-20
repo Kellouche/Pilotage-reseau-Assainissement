@@ -294,6 +294,41 @@
             // vérifier visuellement qu'une ligne appartient bien au bassin
             // affiché (ex. exutoire:8_rejets_346731 = « Rempois chorfa »).
             const identiteBassin = s.exutoire_noeud || s.bassin_ref || '';
+
+            // Détection si c'est la simulation active actuellement visualisée
+            const estActive = window._dernierResultatSimulation && (
+                String(window._dernierResultatSimulation.id) === String(s.id) ||
+                (window._dernierResultatSimulation.meta && String(window._dernierResultatSimulation.meta.simulation_id) === String(s.id))
+            );
+            const activeBadge = estActive
+                ? `<span style="font-size:0.68rem;background:rgba(52,211,153,0.2);color:#34d399;border:1px solid #34d399;padding:1px 8px;border-radius:9999px;font-weight:800;"><i class="fas fa-check-circle me-1"></i>Active</span>`
+                : '';
+
+            // Analyse et badge DWF de la simulation
+            const provDwf = rs.provenance?.apports_dwf || (s.summary_kpis && s.summary_kpis.provenance && s.summary_kpis.provenance.apports_dwf);
+            let dwfBadge = '';
+            if (provDwf) {
+                const nInj = Array.isArray(provDwf.injectes) ? provDwf.injectes.length : 0;
+                const nIgn = Array.isArray(provDwf.ignores) ? provDwf.ignores.length : 0;
+                let qTot = 0;
+                if (Array.isArray(provDwf.injectes)) {
+                    provDwf.injectes.forEach(a => {
+                        const q = parseFloat(a.debit_moyen_m3s || 0);
+                        if (isFinite(q)) qTot += q;
+                    });
+                }
+                const qLs = (qTot * 1000).toFixed(1);
+                if (nInj > 0) {
+                    dwfBadge = `<span title="${nInj} apport(s) DWF injecté(s) (${qLs} L/s)" style="font-size:0.68rem;background:rgba(6,182,212,0.18);color:#38bdf8;border:1px solid rgba(6,182,212,0.45);padding:1px 7px;border-radius:9999px;font-weight:700;"><i class="fas fa-faucet-drip me-1"></i>DWF ${qLs} L/s (${nInj})</span>`;
+                } else if (nIgn > 0) {
+                    dwfBadge = `<span title="${nIgn} apport(s) exclu(s) hors réseau" style="font-size:0.68rem;background:rgba(245,158,11,0.18);color:#fbbf24;border:1px solid rgba(245,158,11,0.45);padding:1px 7px;border-radius:9999px;font-weight:700;">⚠️ DWF exclu (${nIgn})</span>`;
+                }
+            } else if (params.dwf_actif) {
+                dwfBadge = `<span style="font-size:0.68rem;background:rgba(6,182,212,0.15);color:#06b6d4;border:1px solid rgba(6,182,212,0.4);padding:1px 7px;border-radius:9999px;font-weight:700;"><i class="fas fa-faucet-drip me-1"></i>DWF actif</span>`;
+            } else {
+                dwfBadge = `<span style="font-size:0.68rem;background:rgba(148,163,184,0.1);color:#94a3b8;border:1px solid rgba(148,163,184,0.25);padding:1px 7px;border-radius:9999px;">Sans DWF</span>`;
+            }
+
             const statutBadge = s.status === 'completed'
                 ? '<span style="font-size:0.68rem;background:rgba(52,211,153,0.15);color:#34d399;border:1px solid rgba(52,211,153,0.4);padding:1px 7px;border-radius:9999px;font-weight:700;">terminée</span>'
                 : `<span style="font-size:0.68rem;background:rgba(148,163,184,0.15);color:#94a3b8;border:1px solid rgba(148,163,184,0.4);padding:1px 7px;border-radius:9999px;font-weight:700;">${_esc(s.status)}</span>`;
@@ -311,12 +346,17 @@
                     <i class="fas fa-trash"></i> Supprimer
                 </button>` : '';
 
+            const borderStyle = estActive ? 'border: 1px solid rgba(52,211,153,0.5); box-shadow: 0 0 10px rgba(52,211,153,0.15);' : 'border: 1px solid rgba(255,255,255,0.08);';
+
             return `
-            <div style="background:rgba(15,23,42,0.6);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:12px 14px;margin-bottom:10px;">
+            <div style="background:rgba(15,23,42,0.6);${borderStyle}border-radius:10px;padding:12px 14px;margin-bottom:10px;">
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
                     <div style="min-width:0;">
-                        <div style="font-weight:700;font-size:0.86rem;color:#f1f5f9;">${_esc(s.name || `Simulation ${i + 1}`)}</div>
-                        <div style="font-size:0.74rem;color:#94a3b8;margin-top:3px;display:flex;gap:12px;flex-wrap:wrap;">
+                        <div style="font-weight:700;font-size:0.86rem;color:#f1f5f9;display:flex;align-items:center;gap:8px;">
+                            <span style="color:#64748b;font-size:0.75rem;">#${sims.length - i}</span>
+                            <span>${_esc(s.name || `Simulation ${i + 1}`)}</span>
+                        </div>
+                        <div style="font-size:0.74rem;color:#94a3b8;margin-top:4px;display:flex;gap:12px;flex-wrap:wrap;">
                             <span><i class="fas fa-cloud-rain me-1" style="color:#38bdf8;"></i>${_esc(_scenarioLabel(s))}</span>
                             <span><i class="fas fa-clock me-1" style="color:#38bdf8;"></i>${s.duree_heures != null ? `${s.duree_heures} h` : '—'}</span>
                             <span><i class="fas fa-calendar me-1" style="color:#38bdf8;"></i>${dateStr}</span>
@@ -326,12 +366,13 @@
                         </div>
                     </div>
                     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-                        ${fiabBadge}${statutBadge}
+                        ${activeBadge}${dwfBadge}${fiabBadge}${statutBadge}
                     </div>
                 </div>
                 ${actions ? `<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">${actions}</div>` : ''}
             </div>`;
         }).join('');
+    }
     }
 
     window._rendreListeSimulations = _rendreListeSimulations;
@@ -510,6 +551,78 @@
             }).then(ok => { if (ok) _confirmerPuisSupprimer(); });
         } else if (confirm(`Supprimer définitivement « ${label} » ?\n\nCette action retire la simulation, ses résultats et ses artefacts (INP/RPT).`)) {
             _confirmerPuisSupprimer();
+        }
+    };
+
+    /**
+     * Épuration intelligente des simulations redondantes (mêmes paramètres/scénario).
+     * Conserve toujours la plus récente de chaque configuration et préserve la simulation active.
+     */
+    window.epurerDoublonsHistorique = function () {
+        const sims = (window._historiqueBassin && window._historiqueBassin.sims) || [];
+        if (sims.length <= 1) {
+            if (window.dialogueAlerte) window.dialogueAlerte("Aucun doublon à épurer pour ce bassin.", "info");
+            else alert("Aucun doublon à épurer pour ce bassin.");
+            return;
+        }
+
+        const vus = new Set();
+        const aSupprimer = [];
+
+        sims.forEach(s => {
+            const p = _paramsDe(s);
+            const provDwf = s.result_summary?.provenance?.apports_dwf || s.summary_kpis?.provenance?.apports_dwf;
+            const nInj = (provDwf && Array.isArray(provDwf.injectes)) ? provDwf.injectes.length : 0;
+            const sig = `${p.scenario_key || s.scenario_pluie}_${s.duree_heures}_${nInj}`;
+
+            const estActive = window._dernierResultatSimulation && (
+                String(window._dernierResultatSimulation.id) === String(s.id) ||
+                (window._dernierResultatSimulation.meta && String(window._dernierResultatSimulation.meta.simulation_id) === String(s.id))
+            );
+
+            if (vus.has(sig)) {
+                if (!estActive) {
+                    aSupprimer.push(s);
+                }
+            } else {
+                vus.add(sig);
+            }
+        });
+
+        if (aSupprimer.length === 0) {
+            const msg = "Toutes les simulations de la liste correspondent déjà à des configurations ou scénarios distincts.";
+            if (window.dialogueAlerte) window.dialogueAlerte(msg, "info");
+            else alert(msg);
+            return;
+        }
+
+        const actionSuppr = () => {
+            const token = localStorage.getItem('swmm_access_token');
+            const headers = {};
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            Promise.all(aSupprimer.map(s => fetch(`/api/v1/simulations/${encodeURIComponent(s.id)}`, { method: 'DELETE', headers, credentials: 'include' })))
+                .then(() => {
+                    const cidStr = window._historiqueBassin.clusterId;
+                    window.ouvrirModalSimulationsBassin(cidStr, false);
+                })
+                .catch(err => {
+                    const errTxt = "Erreur lors de l'épuration : " + err.message;
+                    if (window.dialogueAlerte) window.dialogueAlerte(errTxt, "erreur");
+                    else alert(errTxt);
+                });
+        };
+
+        if (window.dialogueConfirmer) {
+            window.dialogueConfirmer({
+                titre: "Épurer les doublons de simulation",
+                message: `Supprimer ${aSupprimer.length} simulation(s) antérieure(s) redondante(s) et ne conserver que la plus récente pour chaque configuration ?`,
+                type: "warning",
+                libelleValider: "Épurer les doublons",
+                libelleIgnorer: "Annuler"
+            }).then(ok => { if (ok) actionSuppr(); });
+        } else if (confirm(`Supprimer ${aSupprimer.length} simulation(s) redondante(s) et ne conserver que la plus récente pour chaque configuration ?`)) {
+            actionSuppr();
         }
     };
 
