@@ -77,15 +77,15 @@ body {
     position: relative;
     overflow: hidden;
     height: calc(100vh - 52px);
-}
-
-body.snapshot-archive #app-workspace {
-    height: calc(100vh - 52px - 36px);
+    width: 100%;
 }
 
 #sidebar {
     width: 320px;
     min-width: 320px;
+    max-width: 320px;
+    flex: 0 0 320px;
+    box-sizing: border-box;
     background: #0f172a;
     border-right: 1px solid rgba(255, 255, 255, 0.1);
     padding: 16px;
@@ -93,8 +93,11 @@ body.snapshot-archive #app-workspace {
     display: flex;
     flex-direction: column;
     gap: 14px;
+    z-index: 1000;
     transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1),
                 min-width 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+                max-width 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+                flex-basis 0.28s cubic-bezier(0.4, 0, 0.2, 1),
                 padding 0.28s cubic-bezier(0.4, 0, 0.2, 1),
                 border-color 0.28s ease;
 }
@@ -103,8 +106,21 @@ body.snapshot-archive #app-workspace {
 #app-workspace.sidebar-collapsed #sidebar {
     width: 0;
     min-width: 0;
+    max-width: 0;
+    flex: 0 0 0px;
     padding: 0;
     border-right-color: transparent;
+    overflow: hidden;
+}
+
+/* Espace Cartographique & Flottants (Colonne 2 étanche) */
+#carte-workspace {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    position: relative;
+    height: 100%;
     overflow: hidden;
 }
 
@@ -146,7 +162,7 @@ body.snapshot-archive #app-workspace {
 #btn-sidebar-edge {
     display: none;
     position: absolute;
-    left: 352px;
+    left: 320px;
     top: 50%;
     transform: translateY(-50%);
     z-index: 1500;
@@ -313,11 +329,11 @@ body.snapshot-archive #app-workspace {
 
 /* Barre d'outils d'édition hydraulique flottante et déplaçable (Draggable) */
 .edit-toolbar {
-    position: fixed;
-    top: 70px;
-    left: 320px;
+    position: absolute;
+    top: 14px;
+    left: 14px;
     right: auto;
-    z-index: 2000;
+    z-index: 1200;
     background: rgba(22, 33, 62, 0.95);
     backdrop-filter: blur(8px);
     padding: 6px;
@@ -329,6 +345,44 @@ body.snapshot-archive #app-workspace {
     border: 1px solid rgba(56, 189, 248, 0.3);
     user-select: none;
     transition: box-shadow 0.2s;
+}
+
+/* Décalage des contrôles de zoom Leaflet pour éviter tout conflit avec la toolbar flottante */
+#map .leaflet-top.leaflet-left {
+    top: 14px;
+    left: 65px;
+    z-index: 990;
+    transition: top 0.2s ease;
+}
+
+/* Bannière de consultation d'archive (Snapshot immuable)
+   Ancrée au sommet de la colonne cartographique (#carte-workspace) sans JAMAIS chevaucher #sidebar */
+#banniere-snapshot-archive {
+    position: relative;
+    width: 100%;
+    z-index: 1300;
+    background: linear-gradient(135deg, #78350f, #92400e);
+    color: #fef3c7;
+    padding: 7px 18px;
+    font-size: 12.5px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 2px solid #f59e0b;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    min-height: 38px;
+    box-sizing: border-box;
+    flex: 0 0 auto;
+}
+
+/* Badge Enveloppe de Criticité : toujours calé en haut à droite de l'espace cartographique */
+.map-criticality-badge {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    z-index: 1100;
+}
 }
 
 .edit-toolbar.is-dragging {

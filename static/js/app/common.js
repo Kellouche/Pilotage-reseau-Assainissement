@@ -202,8 +202,31 @@
             const el = document.getElementById('f-' + type);
             if (el) {
                 el.onchange = (e) => {
-                    if (e.target.checked) couches[type].addTo(carte);
-                    else carte.removeLayer(couches[type]);
+                    const chk = e.target.checked;
+                    if (type === 'conduites') {
+                        if (chk) {
+                            if (couches.conduites && !carte.hasLayer(couches.conduites)) couches.conduites.addTo(carte);
+                            if (window._dernierResultatSimulation && couches.res_conduites && !carte.hasLayer(couches.res_conduites)) {
+                                couches.res_conduites.addTo(carte);
+                            }
+                        } else {
+                            if (couches.conduites && carte.hasLayer(couches.conduites)) carte.removeLayer(couches.conduites);
+                            if (couches.res_conduites && carte.hasLayer(couches.res_conduites)) carte.removeLayer(couches.res_conduites);
+                        }
+                    } else if (type === 'regards') {
+                        if (chk) {
+                            if (couches.regards && !carte.hasLayer(couches.regards)) couches.regards.addTo(carte);
+                            if (window._dernierResultatSimulation && couches.res_regards && !carte.hasLayer(couches.res_regards)) {
+                                couches.res_regards.addTo(carte);
+                            }
+                        } else {
+                            if (couches.regards && carte.hasLayer(couches.regards)) carte.removeLayer(couches.regards);
+                            if (couches.res_regards && carte.hasLayer(couches.res_regards)) carte.removeLayer(couches.res_regards);
+                        }
+                    } else {
+                        if (chk) couches[type].addTo(carte);
+                        else carte.removeLayer(couches[type]);
+                    }
                 };
             }
         });
@@ -226,9 +249,9 @@
                     <div id="sim-legend-body">
                         <!-- Taux de charge conduites -->
                         <div style="font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">Charge Conduites (Q / Qmax) :</div>
-                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 2px;"><span style="display:inline-block; width:14px; height:4px; background:#3b82f6; border-radius:2px;"></span> &lt; 50% (Normal / Libre)</div>
-                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 2px;"><span style="display:inline-block; width:14px; height:4px; background:#22c55e; border-radius:2px;"></span> 50 - 80% (Modéré)</div>
-                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 2px;"><span style="display:inline-block; width:14px; height:4px; background:#eab308; border-radius:2px;"></span> 80 - 100% (Critique)</div>
+                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 2px;"><span style="display:inline-block; width:14px; height:4px; background:#06b6d4; border-radius:2px;"></span> &lt; 50% (Normal / Libre)</div>
+                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 2px;"><span style="display:inline-block; width:14px; height:4px; background:#10b981; border-radius:2px;"></span> 50 - 80% (Modéré)</div>
+                        <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 2px;"><span style="display:inline-block; width:14px; height:4px; background:#f59e0b; border-radius:2px;"></span> 80 - 100% (Critique)</div>
                         <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 8px;"><span style="display:inline-block; width:14px; height:4px; background:#ef4444; border-radius:2px;"></span> ≥ 100% (Surcharge / sous pression)</div>
 
                         <!-- Comportement des Regards -->

@@ -64,9 +64,10 @@
             const m = window._dernierResultatSimulation.meta;
             cidStr = String(m.cluster_id || m.exutoire_id || m.bassin_nom || '').trim();
         }
-        if (!cidStr) return;
-        if (auto && window._bassinModalPour === cidStr) return;
-        window._bassinModalPour = cidStr;
+
+        const isGlobal = !cidStr;
+        if (auto && window._bassinModalPour === (cidStr || '__global__')) return;
+        window._bassinModalPour = cidStr || '__global__';
 
         const modal = document.getElementById('modal-simulations-bassin');
         const corps = document.getElementById('sim-hist-corps');
@@ -74,27 +75,38 @@
         const sousTitre = document.getElementById('sim-hist-sous-titre');
         if (!modal || !corps) return;
 
-        let nomBassin = (window._bassinNoms && window._bassinNoms[cidStr]) || null;
-        if (!nomBassin && window._bassinProperties && window._bassinProperties[cidStr]) {
-            nomBassin = window._bassinProperties[cidStr].nom;
+        let nomBassin = '';
+        if (isGlobal) {
+            const pName = (window._rawNetworkData && window._rawNetworkData.project_name) || 'Réseau actif';
+            nomBassin = `Réseau complet (${pName})`;
+        } else {
+            nomBassin = (window._bassinNoms && window._bassinNoms[cidStr]) || null;
+            if (!nomBassin && window._bassinProperties && window._bassinProperties[cidStr]) {
+                nomBassin = window._bassinProperties[cidStr].nom;
+            }
+            if (!nomBassin && window._dernierResultatSimulation && window._dernierResultatSimulation.meta) {
+                nomBassin = window._dernierResultatSimulation.meta.cluster_nom || window._dernierResultatSimulation.meta.bassin_nom;
+            }
+            if (!nomBassin) nomBassin = `Bassin ${cidStr}`;
         }
-        if (!nomBassin && window._dernierResultatSimulation && window._dernierResultatSimulation.meta) {
-            nomBassin = window._dernierResultatSimulation.meta.cluster_nom || window._dernierResultatSimulation.meta.bassin_nom;
-        }
-        if (!nomBassin) nomBassin = `Bassin ${cidStr}`;
 
         if (titre) titre.textContent = `Simulations — ${nomBassin}`;
-        if (sousTitre) sousTitre.textContent = 'Historique des calculs SWMM 5.2 — exécuter, modifier ou supprimer';
+        if (sousTitre) sousTitre.textContent = isGlobal
+            ? 'Historique global des calculs SWMM 5.2 — exécuter, modifier ou supprimer'
+            : 'Historique des calculs SWMM 5.2 — exécuter, modifier ou supprimer';
 
         modal.style.display = 'flex';
         corps.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:30px;"><i class="fas fa-spinner fa-spin fa-2x mb-3"></i><p>Chargement de l’historique…</p></div>';
 
         const token = localStorage.getItem('swmm_access_token');
         const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-        fetch(`/api/v1/simulations/bassin/${encodeURIComponent(cidStr)}/historique`, { headers, credentials: 'include' })
+        const urlHist = isGlobal
+            ? '/api/v1/simulations/bassin/tous/historique'
+            : `/api/v1/simulations/bassin/${encodeURIComponent(cidStr)}/historique`;
+        fetch(urlHist, { headers, credentials: 'include' })
             .then(r => r.ok ? r.json() : Promise.reject(new Error(`Erreur ${r.status}`)))
             .then(d => {
-                window._historiqueBassin = { clusterId: cidStr, sims: (d && d.simulations) || [] };
+                window._historiqueBassin = { clusterId: cidStr, isGlobal: isGlobal, sims: (d && d.simulations) || [] };
                 _rendreListeSimulations();
             })
             .catch(err => {
@@ -264,21 +276,17 @@
 
     /**
      * Bouton toolbar : rouvre l'historique des simulations pour le bassin
-     * courant (sélectionné, sinon dernier bassin consulté / simulé).
+     * courant (sélectionné, sinon dernier bassin consulté / simulé),
+     * ou l'historique global du projet si aucun bassin n'est sélectionné.
      */
     window.ouvrirModalSimulationsBassinDepuisToolbar = function () {
         let cidStr = '';
         const bSel = document.getElementById('bassin-select');
         if (bSel && bSel.value) cidStr = String(bSel.value);
+        if (!cidStr && window._selectedClusterId) cidStr = String(window._selectedClusterId);
         if (!cidStr && window._dernierResultatSimulation && window._dernierResultatSimulation.meta) {
             const _m = window._dernierResultatSimulation.meta;
             cidStr = String(_m.cluster_id !== undefined && _m.cluster_id !== null ? _m.cluster_id : '');
-        }
-        if (!cidStr) cidStr = String(window._bassinModalPour || '');
-        if (!cidStr) {
-            if (window.dialogueAlerte) window.dialogueAlerte('Sélectionnez d’abord un bassin versant sur la carte ou dans la liste.');
-            else alert('Sélectionnez d’abord un bassin versant sur la carte ou dans la liste.');
-            return;
         }
         window.ouvrirModalSimulationsBassin(cidStr, false);
     };
@@ -406,8 +414,12 @@
      */
     window.executerSimulationHistorique = function (simId) {
         const sim = _trouverSimulation(simId);
-        const cidStr = window._historiqueBassin.clusterId;
-        if (!sim || !cidStr) return;
+        if (!sim) return;
+        let cidStr = window._historiqueBassin ? window._historiqueBassin.clusterId : '';
+        if (!cidStr && sim) {
+            const sk = sim.summary_kpis || {};
+            cidStr = sim.exutoire_noeud || sim.bassin_ref || sk.cluster_id || '';
+        }
         const corps = document.getElementById('sim-hist-corps');
 
         if (corps) {
@@ -440,7 +452,7 @@
                 }
                 // Appliquer le résultat comme un run standard
                 if (!window._simulationsCache) window._simulationsCache = {};
-                const _cid = (d.meta && d.meta.cluster_id) || cidStr;
+                const _cid = (d.meta && (d.meta.cluster_id || d.meta.exutoire_noeud || d.meta.bassin_ref)) || cidStr;
                 window._simulationsCache[String(_cid)] = d;
                 if (d.meta && d.meta.bassin_nom) window._simulationsCache[String(d.meta.bassin_nom)] = d;
                 if (d.meta && d.meta.cluster_nom) window._simulationsCache[String(d.meta.cluster_nom)] = d;
@@ -451,9 +463,10 @@
                 }
 
                 // Synchroniser le sélecteur et le focus sur le bassin de la simulation
+                const targetCid = _cid;
                 const optionValue = (typeof window._optionBassinPourMetaSim === 'function' ? window._optionBassinPourMetaSim(d.meta) : null)
-                    || (typeof _trouverOptionBassin === 'function' ? _trouverOptionBassin(_cid) : null)
-                    || _cid;
+                    || (typeof _trouverOptionBassin === 'function' ? _trouverOptionBassin(targetCid) : null)
+                    || targetCid;
 
                 if (optionValue) {
                     const bSel = document.getElementById('bassin-select');
@@ -470,7 +483,7 @@
 
                 if (typeof afficherResultatsSimulation === 'function') afficherResultatsSimulation(d);
                 if (typeof window.mettreAJourIndicateurBassin === 'function') {
-                    window.mettreAJourIndicateurBassin(optionValue || cidStr, d);
+                    window.mettreAJourIndicateurBassin(optionValue || targetCid, d);
                 }
                 window.fermerModalSimulationsBassin();
             })

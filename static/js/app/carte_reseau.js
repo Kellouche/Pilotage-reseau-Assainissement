@@ -387,6 +387,13 @@ function chargerDonneesInitiales() {
                     }
                     if (typeof window.lancerPartitionnementBassins === 'function') {
                         window.lancerPartitionnementBassins(function(clusterData) {
+                            if (window._chargementSnapshotEnCours) {
+                                // En cours de bascule de snapshot archivé : NE PAS écraser la simulation
+                                // demandée par l'ancienne dernière simulation ni réinitialiser le bassin
+                                montrerChargement(false);
+                                if (window._resolverChargementReseau) window._resolverChargementReseau();
+                                return;
+                            }
                             // 3. Charger et restituer la dernière simulation une fois les bassins tracés
                             if (window.majMessageChargement) {
                                 window.majMessageChargement('Restauration de la dernière simulation…');
@@ -411,7 +418,7 @@ function chargerDonneesInitiales() {
                             }
                         }, null, false, false);
                     } else {
-                        if (typeof chargerDerniereSimulation === 'function') {
+                        if (!window._chargementSnapshotEnCours && typeof chargerDerniereSimulation === 'function') {
                             chargerDerniereSimulation();
                         }
                         montrerChargement(false);

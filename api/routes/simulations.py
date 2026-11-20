@@ -1301,13 +1301,15 @@ def list_bassin_simulations_historique(
     # Identité métier du bassin : mêmes règles que /bassin/{cluster_id}
     identite_bassin = {}
     _cid_txt = str(cluster_id).strip()
+    is_global = _cid_txt.lower() in ("", "tous", "all", "global", "none")
     _ref_exutoire = _cid_txt.lower().startswith("exutoire:")
     _cle_recherche = _cid_txt.split(":", 1)[1] if _ref_exutoire else cluster_id
     proj = None
     try:
         proj = _resoudre_projet_pour_simulation(db, org_id, None)
-        gpkg_identite = _resoudre_gpkg_effectif_pour_projet(db, proj)
-        identite_bassin = _identite_bassin_du_cache(gpkg_identite, _cid_txt)
+        if not is_global:
+            gpkg_identite = _resoudre_gpkg_effectif_pour_projet(db, proj)
+            identite_bassin = _identite_bassin_du_cache(gpkg_identite, _cid_txt)
     except Exception as _e_ident_hist:
         logger.warning("[historique] Identité bassin non résolue pour cluster_id=%s : %s", cluster_id, _e_ident_hist)
         identite_bassin = {}
@@ -1331,33 +1333,19 @@ def list_bassin_simulations_historique(
         _cid_txt if _ref_exutoire else None)
     nom_demande = identite_bassin.get("nom")
 
-    # Cibles de correspondance — ESPACES D'IDENTITÉ DISTINCTS.
-    # Comparer kpis.cluster_id (espace positionnel / placeholder des
-    # anciennes simulations) avec un exutoire ou un basin_ref contaminait
-    # l'historique : ex. l'exutoire « 1 » de Prison matchait les 47 sims
-    # legacy cluster_id=1 des AUTRES réseaux (« Quartier Témoin »,
-    # « ReseauTest »…). Chaque champ de simulation n'est donc comparé
-    # qu'à sa propre cible :
-    #   - s.exutoire_noeud  ↔ exutoire_demande
-    #   - s.bassin_ref      ↔ bassin_ref_demande
-    #   - kpis.cluster_id / parameters.cluster_id ↔ positionnels +
-    #     identifiants stables NON purement numériques (« 8_rejets_346731 »)
-    #   - nom de la sim     ↔ nom_demande (corroboration legacy)
-    _identite_stable = bool(exutoire_demande or bassin_ref_demande)
-    _cibles_exo = {str(exutoire_demande).strip().lower()} if exutoire_demande else set()
-    _cibles_bref = {str(bassin_ref_demande).strip().lower()} if bassin_ref_demande else set()
-    _cibles_pos = set()
-    if not _identite_stable:
-        # Repli sans identité stable : positionnels seuls (meilleur effort).
-        _cibles_pos = {
-            str(cluster_id).strip().lower(),
-            str(_cle_recherche).strip().lower(),
-        }
-    # kpis.cluster_id : avec identité stable, seuls les identifiants
-    # stables NON purement numériques sont acceptés — un numérique
-    # (« 1 », « 234 ») est ambigu avec les cluster_id positionnels et les
-    # placeholders des anciennes simulations d'autres réseaux.
-    _cibles_kpi = {v for v in (_cibles_exo | _cibles_bref | _cibles_pos) if v and not v.isdigit()}
+    # Cibles de correspondance d'identifiants
+    _cibles_ids = {str(_cid_txt).strip().lower()}
+    if _cle_recherche:
+        _cibles_ids.add(str(_cle_recherche).strip().lower())
+    if exutoire_demande:
+        _cibles_ids.add(str(exutoire_demande).strip().lower())
+    if bassin_ref_demande:
+        _br = str(bassin_ref_demande).strip().lower()
+        _cibles_ids.add(_br)
+        if ":" in _br:
+            _cibles_ids.add(_br.split(":", 1)[1])
+    if identite_bassin.get("cluster_id"):
+        _cibles_ids.add(str(identite_bassin["cluster_id"]).strip().lower())
 
     sims = crud.get_simulations(
         db=db, skip=0, limit=500, org_id=org_id,
@@ -1366,33 +1354,46 @@ def list_bassin_simulations_historique(
     resultats = []
     for s in sims:
         # Isolation stricte au réseau courant :
-        # Empêche la contamination par d'anciennes simulations d'autres réseaux
-        # partageant historiquement le même enregistrement projet (ex: Assainissement_Ville vs HAY_GAZ_HASSANIA).
-        if proj.name:
+        if s.project_id and str(s.project_id) != str(proj.id):
+            continue
+        if not s.project_id and proj.name:
             nom_proj_norm = proj.name.strip().lower()
             if s.name and not s.name.lower().startswith(f"swmm_{nom_proj_norm}_"):
                 continue
+
+        if is_global:
+            resultats.append(s.to_dict())
+            if len(resultats) >= limit:
+                break
+            continue
 
         sk = s.summary_kpis or {}
         params = sk.get("parameters") or {}
         cid_sim = str(sk.get("cluster_id") or "").strip().lower()
         cid_params = (str(params.get("cluster_id") or "").strip().lower()
                       if isinstance(params, dict) else "")
-        # La corroboration par nom ne s'applique qu'aux simulations SANS
-        # identité stable : une sim estampillée exutoire/bassin_ref d'un
-        # autre bassin ne doit jamais matcher par sous-chaîne de nom
-        # (plusieurs bassins peuvent partager un nom, ex. « Chorfa »).
-        _nom_ok = bool(
-            nom_demande and s.name
-            and not s.exutoire_noeud and not s.bassin_ref
-            and nom_demande.lower() in s.name.lower())
-        ok = (
-            (cid_sim and cid_sim in _cibles_kpi)
-            or (cid_params and cid_params in _cibles_kpi)
-            or (s.bassin_ref and str(s.bassin_ref).strip().lower() in _cibles_bref)
-            or (s.exutoire_noeud and str(s.exutoire_noeud).strip().lower() in _cibles_exo)
-            or _nom_ok
-        )
+        exo_sim = str(s.exutoire_noeud or "").strip().lower()
+        bref_sim = str(s.bassin_ref or "").strip().lower()
+        bref_clean = bref_sim.split(":", 1)[1] if ":" in bref_sim else bref_sim
+
+        # Correspondance exacte par identifiant (cluster_id, exutoire_noeud, bassin_ref)
+        ok = False
+        if cid_sim and cid_sim in _cibles_ids:
+            ok = True
+        elif cid_params and cid_params in _cibles_ids:
+            ok = True
+        elif exo_sim and exo_sim in _cibles_ids:
+            ok = True
+        elif bref_sim and bref_sim in _cibles_ids:
+            ok = True
+        elif bref_clean and bref_clean in _cibles_ids:
+            ok = True
+        elif s.name and any(f"_{cid}_" in s.name.lower() or s.name.lower().endswith(f"_{cid}") for cid in _cibles_ids if cid):
+            ok = True
+        elif nom_demande and not s.exutoire_noeud and not s.bassin_ref:
+            if nom_demande.lower() in (s.name or "").lower():
+                ok = True
+
         if ok:
             resultats.append(s.to_dict())
             if len(resultats) >= limit:

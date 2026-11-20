@@ -64,6 +64,7 @@ output/
 exports/
 uploads/
 .simulation_cache/
+data/.gpkg_cache/
 *.clusters_cache.json
 *.subcatchments_cache.json
 elements_orphelins.geojson

@@ -31,8 +31,22 @@ window.reinitialiserAffichageSimulation = function() {
                 }
             }
 
-            // Conduites / regards : restaurer selon l'état de la case —
-            // jamais de re-cochage forcé (décochées par défaut).
+            // Conduites / regards : restaurer le style standard du réseau
+            if (couches.conduites) {
+                couches.conduites.eachLayer(function(l) {
+                    if (l && typeof l.setStyle === 'function') {
+                        l.setStyle({ color: '#3498db', weight: 3, opacity: 1.0 });
+                    }
+                });
+            }
+            if (couches.regards) {
+                couches.regards.eachLayer(function(l) {
+                    if (l && typeof l.setStyle === 'function') {
+                        l.setStyle({ radius: 3.5, color: '#e2e8f0', fillColor: '#e2e8f0', opacity: 1.0, fillOpacity: 0.9 });
+                    }
+                });
+            }
+
             const elCond = document.getElementById('f-conduites');
             if (elCond && elCond.checked) {
                 if (!carte.hasLayer(couches.conduites)) couches.conduites.addTo(carte);

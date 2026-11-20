@@ -181,17 +181,17 @@ function _masquerMenuInfobullesSim() {
             }
 
             // P0 — couleur dérivée du STATUT sémantique et des ratios physiques SWMM :
-            // palette normal (<50% bleu) → modéré (50-80% vert) → critique (80-100% jaune) → surcharge (≥100% rouge).
+            // palette normal (<50% cyan éclatant) → modéré (50-80% vert) → critique (80-100% ambre) → surcharge (≥100% rouge).
             const _couleurConduite = function(r) {
-                if (!r) return '#3b82f6';
+                if (!r) return '#06b6d4';
                 const qRatio = (r.flow_ratio !== undefined && r.flow_ratio !== null) ? Number(r.flow_ratio) : null;
                 const dRatio = (r.depth_ratio !== undefined && r.depth_ratio !== null) ? Number(r.depth_ratio) : null;
                 const maxRatio = Math.max(qRatio || 0, dRatio || 0);
 
                 if (r.status === 'surcharge' || maxRatio >= 1.0) return '#ef4444';
-                if (r.status === 'critique' || maxRatio >= 0.80) return '#eab308';
-                if (r.status === 'moderee' || maxRatio >= 0.50) return '#22c55e';
-                return (r.color && r.color !== '#3b82f6') ? r.color : '#3b82f6';
+                if (r.status === 'critique' || maxRatio >= 0.80) return '#f59e0b';
+                if (r.status === 'moderee' || maxRatio >= 0.50) return '#10b981';
+                return '#06b6d4';
             };
 
             // Réactiver les boutons d'animation et d'analyse hydrologique si une simulation est disponible
@@ -238,15 +238,27 @@ function _masquerMenuInfobullesSim() {
             if (typeof clusterCouche !== 'undefined' && clusterCouche && carte.hasLayer(clusterCouche)) {
                 carte.removeLayer(clusterCouche);
             }
-            if (carte.hasLayer(couches.conduites)) {
-                carte.removeLayer(couches.conduites);
+            // Conduites et regards bruts : atténués en fond sombre (contexte spatial)
+            // pour faire ressortir sans ambiguïté les conduites et regards SWMM simulés
+            if (couches.conduites) {
+                couches.conduites.eachLayer(function(l) {
+                    if (l && typeof l.setStyle === 'function') {
+                        l.setStyle({ color: '#334155', weight: 1.5, opacity: 0.35 });
+                    }
+                });
+                if (!carte.hasLayer(couches.conduites)) couches.conduites.addTo(carte);
                 const el = document.getElementById('f-conduites');
-                if (el) el.checked = false;
+                if (el) el.checked = true;
             }
-            if (carte.hasLayer(couches.regards)) {
-                carte.removeLayer(couches.regards);
+            if (couches.regards) {
+                couches.regards.eachLayer(function(l) {
+                    if (l && typeof l.setStyle === 'function') {
+                        l.setStyle({ radius: 1.5, color: '#334155', fillColor: '#1e293b', opacity: 0.35, fillOpacity: 0.25 });
+                    }
+                });
+                if (!carte.hasLayer(couches.regards)) couches.regards.addTo(carte);
                 const el = document.getElementById('f-regards');
-                if (el) el.checked = false;
+                if (el) el.checked = true;
             }
             // Maintenir impérativement cochés et visibles les exutoires (rejets) et la station d'épuration (STEP)
             if (couches.rejets && !carte.hasLayer(couches.rejets)) {
@@ -277,8 +289,9 @@ function _masquerMenuInfobullesSim() {
             const cRes = data.conduit_results;
             const nRes = data.node_results;
 
-            // Indexer les conduites par extrémités (u_node, d_node) pour un appariement direct infaillible
+            // Indexer les conduites par extrémités (u_node, d_node) et par link_id pour un appariement direct infaillible
             const conduitByNodes = {};
+            const conduitByLinkId = {};
             Object.values(cRes).forEach(r => {
                 const u = String(r.u_node || '').replace(/\.0$/, '').trim();
                 const d = String(r.d_node || '').replace(/\.0$/, '').trim();
@@ -286,7 +299,24 @@ function _masquerMenuInfobullesSim() {
                     conduitByNodes[`${u}->${d}`] = r;
                     conduitByNodes[`${d}->${u}`] = r;
                 }
+                if (r.link_id) {
+                    conduitByLinkId[String(r.link_id).trim().toLowerCase()] = r;
+                }
             });
+
+            const _trouverResultatConduite = function(p) {
+                if (!p) return null;
+                const u = String(p.ID_AMONT || p.id_amont || p.AMONT || p.amont || p.NODE1 || p.node1 || '').replace(/\.0$/, '').trim();
+                const d = String(p.ID_AVAL || p.id_aval || p.AVAL || p.aval || p.NODE2 || p.node2 || '').replace(/\.0$/, '').trim();
+                if (u && d && (conduitByNodes[`${u}->${d}`] || conduitByNodes[`${d}->${u}`])) {
+                    return conduitByNodes[`${u}->${d}`] || conduitByNodes[`${d}->${u}`];
+                }
+                const lid = String(p.link_id || p.LINK_ID || p.id || p.ID || p.code || p.CODE || '').trim().toLowerCase();
+                if (lid && conduitByLinkId[lid]) {
+                    return conduitByLinkId[lid];
+                }
+                return null;
+            };
 
             // 1. Conduites : coloration dynamique selon taux de charge Q/Qmax & remplissage
             if (window._rawNetworkData && window._rawNetworkData.couches && window._rawNetworkData.couches.conduites) {
@@ -294,23 +324,17 @@ function _masquerMenuInfobullesSim() {
                 L.geoJSON(pipesGeo, {
                     pane: 'swmmResultsPane',
                     filter: (feature) => {
-                        const p = feature.properties || {};
-                        const u = String(p.ID_AMONT || p.id_amont || '').replace(/\.0$/, '').trim();
-                        const d = String(p.ID_AVAL || p.id_aval || '').replace(/\.0$/, '').trim();
-                        return !!(conduitByNodes[`${u}->${d}`] || conduitByNodes[`${d}->${u}`]);
+                        return !!_trouverResultatConduite(feature.properties);
                     },
                     style: (feature) => {
-                        const p = feature.properties || {};
-                        const u = String(p.ID_AMONT || p.id_amont || '').replace(/\.0$/, '').trim();
-                        const d = String(p.ID_AVAL || p.id_aval || '').replace(/\.0$/, '').trim();
-                        const r = conduitByNodes[`${u}->${d}`] || conduitByNodes[`${d}->${u}`];
+                        const r = _trouverResultatConduite(feature.properties);
                         if (!r) return { opacity: 0, weight: 0 };
 
                         const col = _couleurConduite(r);
                         const isSurcharge = (r.status === 'surcharge' || (r.depth_ratio >= 1.0) || (r.flow_ratio >= 1.0));
                         const isCritique = (r.status === 'critique' || (r.depth_ratio >= 0.8));
                         const isModeree = (r.status === 'moderee' || (r.depth_ratio >= 0.5) || (r.flow_ratio >= 0.5));
-                        const w = isSurcharge ? 6.0 : (isCritique ? 5.2 : (isModeree ? 4.5 : 3.8));
+                        const w = isSurcharge ? 6.5 : (isCritique ? 5.5 : (isModeree ? 4.8 : 4.0));
                         return {
                             color: col,
                             weight: w,
@@ -321,10 +345,10 @@ function _masquerMenuInfobullesSim() {
                     },
                     onEachFeature: (feature, layer) => {
                         const p = feature.properties || {};
-                        const u = String(p.ID_AMONT || p.id_amont || '').replace(/\.0$/, '').trim();
-                        const d = String(p.ID_AVAL || p.id_aval || '').replace(/\.0$/, '').trim();
-                        const r = conduitByNodes[`${u}->${d}`] || conduitByNodes[`${d}->${u}`];
+                        const r = _trouverResultatConduite(p);
                         if (!r) return;
+                        const u = String(r.u_node || p.ID_AMONT || p.id_amont || '').replace(/\.0$/, '').trim();
+                        const d = String(r.d_node || p.ID_AVAL || p.id_aval || '').replace(/\.0$/, '').trim();
                         const diam = p.DIAMETRE || p.diametre || (r.diam_mm || 600);
 
                         const qPct = (r.flow_ratio * 100).toFixed(0);

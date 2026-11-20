@@ -381,7 +381,14 @@
 
                         // S'assurer que les couches sont effectivement attachées et visibles sur la carte
                         if (!carte.hasLayer(couches.bassins)) couches.bassins.addTo(carte);
-                        if (!carte.hasLayer(clusterCouche)) clusterCouche.addTo(carte);
+                        if (!carte.hasLayer(clusterCouche)) {
+                            // Si des résultats de simulation SWMM sont déjà affichés sur la carte,
+                            // NE PAS afficher clusterCouche pour éviter d'écraser visuellement les conduites thématiques !
+                            const simActive = window._dernierResultatSimulation && carte.hasLayer(couches.res_conduites) && couches.res_conduites.getLayers().length > 0;
+                            if (!simActive) {
+                                clusterCouche.addTo(carte);
+                            }
+                        }
 
                         // Alimenter la couche dédiée des tronçons et regards orphelins (déconnectés)
                         const orphelinsGeo = clusterData.orphelins_conduites;

@@ -82,13 +82,9 @@
         if (!banniere) {
             banniere = document.createElement('div');
             banniere.id = 'banniere-snapshot-archive';
-            banniere.style.cssText = 'position:relative;width:100%;z-index:2400;'
-                + 'background:#78350f;color:#fef3c7;padding:6px 16px;font-size:12.5px;'
-                + 'display:flex;align-items:center;gap:12px;border-bottom:2px solid #f59e0b;'
-                + 'font-family:inherit;min-height:36px;box-sizing:border-box;';
-            const topbar = document.getElementById('saas-topbar');
-            if (topbar && topbar.parentNode) {
-                topbar.parentNode.insertBefore(banniere, topbar.nextSibling);
+            const carteWs = document.getElementById('carte-workspace') || document.getElementById('app-workspace');
+            if (carteWs) {
+                carteWs.insertBefore(banniere, carteWs.firstChild);
             } else {
                 document.body.appendChild(banniere);
             }
@@ -180,7 +176,7 @@
             && (ref === cs.sha256 || ref === cs.versionId)) {
             return Promise.resolve({ ok: true });
         }
-        if (cs.estVersionCourante && cs.sha256 && ref === cs.sha256) {
+        if (cs.estVersionCourante && ((cs.sha256 && ref === cs.sha256) || (cs.versionId && ref === cs.versionId) || !cs.sha256)) {
             return Promise.resolve({ ok: true });
         }
 
