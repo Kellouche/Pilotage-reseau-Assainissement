@@ -306,52 +306,14 @@
                 const tauxDeriveStr = window.formaterNombre(tauxDerive, 1);
                 const tauxExutoireStr = window.formaterNombre(tauxExutoire, 1);
 
-                if (topIcon) topIcon.innerHTML = '<i class="fas fa-check-circle" style="color: #34d399;"></i>';
+                if (topIcon) topIcon.innerHTML = '<i class="fas fa-water" style="color: #34d399;"></i>';
                 if (topText) topText.innerHTML = `Bassin : <span style="color: #34d399; font-weight: 700;">${nom}</span>`;
-                if (topBadge) {
-                    // Période de retour de la simulation (T = 2/10/50/100 ans,
-                    // scénario BMS ou libellé de scénario en repli).
-                    const _tRetour = kp.pluvio_periode_retour || m.pluvio_periode_retour;
-                    const _scenNom = kp.pluvio_scenario_nom || m.pluvio_scenario_nom;
-                    let _badgeTxt = _tRetour || _scenNom || '';
-                    if (!_badgeTxt) {
-                        const _params = (simActive.result_summary && simActive.result_summary.parameters)
-                            || (simActive.summary_kpis && simActive.summary_kpis.parameters)
-                            || (kp.parameters) || {};
-                        const _sk = _params.scenario_key || '';
-                        const _scenMap = {
-                            'pluie_biennale': 'T = 2 ans', 'pluie_decennale': 'T = 10 ans',
-                            'pluie_cinquantennale': 'T = 50 ans', 'pluie_centennale': 'T = 100 ans',
-                            'pluie_orage_2h': 'Orage 2 h', 'bms_onm': 'BMS ONM'
-                        };
-                        _badgeTxt = _scenMap[_sk] || (_sk ? _sk.replace(/_/g, ' ') : '');
-                    }
-                    topBadge.innerText = _badgeTxt ? `Simulation ${_badgeTxt}` : 'Simulation';
-                    topBadge.title = _scenNom ? `Scénario : ${_scenNom}` : '';
-                    topBadge.style.background = 'rgba(56, 189, 248, 0.18)';
-                    topBadge.style.color = '#38bdf8';
-                }
-                // Badge de fiabilité du modèle (agent garde-fou hydraulicien)
-                let _simFiab = simActive;
-                if (!_fiabiliteDepuisSimulation(_simFiab) && cidStr) {
-                    if (window._simulationsCache) {
-                        for (const _k of Object.keys(window._simulationsCache)) {
-                            const _cand = window._simulationsCache[_k];
-                            if (_cand && _simCorrespondAuBassin(_cand, cidStr)) { _simFiab = _cand; break; }
-                        }
-                    }
-                    // Repli sur la dernière simulation seulement si elle
-                    // correspond bien à ce bassin (éviter un verdict étranger).
-                    if (!_simFiab && window._dernierResultatSimulation
-                            && _simCorrespondAuBassin(window._dernierResultatSimulation, cidStr)) {
-                        _simFiab = window._dernierResultatSimulation;
-                    }
-                }
-                _majBadgeFiabiliteTopbar(
-                    window._fiabiliteDepuisSimulation(_simFiab),
-                    window._anomaliesDepuisSimulation(_simFiab)
-                );
+                if (topBadge) topBadge.style.display = 'none';
+                if (topFiab) topFiab.style.display = 'none';
                 if (topReset) topReset.style.display = 'inline-block';
+                if (typeof window.actualiserDropdownBassin === 'function') {
+                    window.actualiserDropdownBassin();
+                }
                 return;
             }
 
@@ -360,11 +322,16 @@
                 if (topIcon) topIcon.innerHTML = '<i class="fas fa-network-wired" style="color: #38bdf8;"></i>';
                 if (topText) topText.innerHTML = `Bassins : <span style="color: #38bdf8; font-weight: 700;">Tous les bassins</span>`;
                 if (topBadge) {
+                    topBadge.style.display = 'inline-block';
                     topBadge.innerText = `${totalBassins} BV`;
                     topBadge.style.background = 'rgba(56, 189, 248, 0.15)';
                     topBadge.style.color = '#38bdf8';
                 }
+                if (topFiab) topFiab.style.display = 'none';
                 if (topReset) topReset.style.display = 'none';
+                if (typeof window.actualiserDropdownBassin === 'function') {
+                    window.actualiserDropdownBassin();
+                }
                 return;
             }
 
@@ -419,13 +386,18 @@
             }
 
             if (topIcon) topIcon.innerHTML = `<i class="fas fa-draw-polygon" style="color: ${bColor};"></i>`;
-            if (topText) topText.innerHTML = `Bassin : <span style="color: #f8fafc; font-weight: 700;">${nom}</span> <span style="color: #94a3b8; font-size: 0.72rem; font-weight: 600;">(non simulé)</span>`;
+            if (topText) topText.innerHTML = `Bassin : <span style="color: #f8fafc; font-weight: 700;">${nom}</span>`;
             if (topBadge) {
-                topBadge.innerText = surfHa || (nbRegards ? `${nbRegards} • ${nbConduites}` : `ID ${cidStr}`);
+                topBadge.style.display = 'inline-block';
+                topBadge.innerText = surfHa || (nbRegards ? `${nbRegards}` : `ID ${cidStr}`);
                 topBadge.style.background = 'rgba(56, 189, 248, 0.15)';
                 topBadge.style.color = '#38bdf8';
             }
+            if (topFiab) topFiab.style.display = 'none';
             if (topReset) topReset.style.display = 'inline-block';
+            if (typeof window.actualiserDropdownBassin === 'function') {
+                window.actualiserDropdownBassin();
+            }
 
             // Masquer immédiatement la légende car sans objet pour un bassin non simulé
             const legNonSim = document.getElementById('sim-floating-legend');
@@ -918,3 +890,224 @@
                 zoomerSurBassin(finalCid, clusterLayer);
             };
         }
+
+        // ==========================================
+        // GESTION DU MENU DÉROULANT HIÉRARCHIQUE BASSIN (TOPBAR)
+        // ==========================================
+
+        window.basculerMenuBassin = function(e) {
+            if (e) {
+                if (e.target && e.target.closest('#topbar-bassin-reset-btn')) return;
+                e.stopPropagation();
+            }
+            const d = document.getElementById('topbar-bassin-dropdown');
+            if (!d) return;
+            const isVisible = d.style.display === 'block';
+            if (!isVisible) {
+                if (typeof window.actualiserDropdownBassin === 'function') {
+                    window.actualiserDropdownBassin();
+                }
+                d.style.display = 'block';
+                const chev = document.getElementById('topbar-bassin-chevron');
+                if (chev) chev.style.transform = 'rotate(180deg)';
+            } else {
+                window.fermerMenuBassin();
+            }
+        };
+
+        window.fermerMenuBassin = function() {
+            const d = document.getElementById('topbar-bassin-dropdown');
+            if (d) d.style.display = 'none';
+            const chev = document.getElementById('topbar-bassin-chevron');
+            if (chev) chev.style.transform = 'rotate(0deg)';
+        };
+
+        window.actualiserDropdownBassin = function() {
+            const dropdown = document.getElementById('topbar-bassin-dropdown');
+            if (!dropdown) return;
+
+            const _esc = function(s) {
+                return (typeof window.dwfEchapperHtml === 'function')
+                    ? window.dwfEchapperHtml(s)
+                    : String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            };
+
+            const cidStr = (window._selectedClusterId !== null && window._selectedClusterId !== undefined && window._selectedClusterId !== '')
+                ? String(window._selectedClusterId) : null;
+            const totalBassins = (window._clustersData && window._clustersData.clusters_crees)
+                || (window._bassinNoms ? Object.keys(window._bassinNoms).length : '--') || '--';
+
+            // 1. Vue globale (aucun bassin sélectionné)
+            if (!cidStr) {
+                const projNom = (window._rawNetworkData && (window._rawNetworkData.project_name || window._rawNetworkData.project_id)) || 'Réseau urbain';
+                dropdown.innerHTML = `
+                    <div style="padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03);">
+                        <div style="font-weight: 800; font-size: 13px; color: #38bdf8; display: flex; align-items: center; gap: 8px;">
+                            <i class="fas fa-network-wired"></i> Vue globale du réseau
+                        </div>
+                        <div style="font-size: 11px; color: #94a3b8; margin-top: 3px;">
+                            ${_esc(projNom)} · <b>${totalBassins} bassins versants</b>
+                        </div>
+                    </div>
+                    <div style="padding: 12px 16px; font-size: 12px; color: #cbd5e1; line-height: 1.5;">
+                        <p style="margin: 0 0 10px 0; color: #94a3b8; font-size: 11px;">
+                            Cliquez sur un bassin sur la carte ou dans le sélecteur pour inspecter ses caractéristiques hydrauliques, ses apports DWF et ses résultats SWMM.
+                        </p>
+                        <button type="button" onclick="fermerMenuBassin(); ouvrirModalApportsDwf();" style="width: 100%; padding: 7px 10px; background: rgba(52,211,153,0.15); border: 1px solid rgba(52,211,153,0.4); color: #34d399; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer;">
+                            <i class="fas fa-faucet-drip me-1"></i> Gérer les apports DWF du réseau
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+
+            // 2. Recherche de la simulation associée à ce bassin
+            let simActive = null;
+            const lastSim = window._dernierResultatSimulation;
+            if (lastSim && lastSim.meta && typeof _simCorrespondAuBassin === 'function' && _simCorrespondAuBassin(lastSim, cidStr)) {
+                simActive = lastSim;
+            }
+            if (!simActive && window._simulationsCache) {
+                for (const _k of Object.keys(window._simulationsCache)) {
+                    const _cand = window._simulationsCache[_k];
+                    if (_cand && _cand.status !== 'failed' && typeof _simCorrespondAuBassin === 'function' && _simCorrespondAuBassin(_cand, cidStr)) {
+                        simActive = _cand;
+                        break;
+                    }
+                }
+            }
+
+            const m = (simActive && simActive.meta) ? simActive.meta : {};
+            const kp = (simActive && simActive.kpis) ? simActive.kpis : (simActive || {});
+            const nom = (typeof _nomMetierBassin === 'function') ? _nomMetierBassin(cidStr, m) : `Bassin ${cidStr}`;
+
+            // Propriétés du bassin
+            const bp = (window._bassinProperties && window._bassinProperties[cidStr]) || {};
+            const nbRegards = m.junctions_count || bp.nb_regards || bp.nodes_count || '--';
+            const nbTroncons = m.conduits_count || bp.nb_canalisations || bp.pipes_count || '--';
+            const surfaceHa = m.total_area_ha ? Number(m.total_area_ha).toFixed(1) : (bp.surface_ha ? Number(bp.surface_ha).toFixed(1) : '--');
+
+            // --- ÉLÉMENT 1 : Simulation (Scénario / Période de retour) ---
+            let simBlock = '';
+            if (simActive) {
+                const tRetour = kp.pluvio_periode_retour || m.pluvio_periode_retour || 'T = 2 ans (Biennale)';
+                const scenNom = kp.pluvio_scenario_nom || m.pluvio_scenario_nom || m.scenario || 'Pluie de projet';
+                const duree = m.duree_heures || kp.duree_heures || 2;
+                simBlock = `
+                    <div style="margin-bottom: 8px;">
+                        <div style="font-size: 12px; font-weight: 700; color: #38bdf8; display: flex; align-items: center; gap: 7px;">
+                            <i class="fas fa-cloud-showers-heavy" style="font-size: 11px;"></i> Simulation : ${_esc(tRetour)}
+                        </div>
+                        <div style="font-size: 11px; color: #94a3b8; margin-top: 2px; padding-left: 18px;">
+                            ${_esc(scenNom)} (${duree} h)
+                        </div>
+                    </div>
+                `;
+            } else {
+                simBlock = `
+                    <div style="margin-bottom: 8px;">
+                        <div style="font-size: 12px; font-weight: 600; color: #94a3b8; display: flex; align-items: center; gap: 7px;">
+                            <i class="fas fa-info-circle" style="font-size: 11px;"></i> Aucune simulation active
+                        </div>
+                        <div style="font-size: 11px; color: #64748b; margin-top: 2px; padding-left: 18px;">
+                            Ce bassin n'a pas encore été calculé
+                        </div>
+                    </div>
+                `;
+            }
+
+            // --- ÉLÉMENT 2 : Modèle sain / Diagnostic Garde-fou & DWF ---
+            let diagBlock = '';
+            const verdict = window._fiabiliteDepuisSimulation ? window._fiabiliteDepuisSimulation(simActive) : 'SAIN';
+            const metaFiab = _FIABILITE_META[verdict] || _FIABILITE_META['SAIN'];
+
+            // Analyse DWF
+            let dwfTxt = 'DWF : Aucun injecté (0 L/s)';
+            let dwfColor = '#94a3b8';
+            let dwfSub = '';
+            const provDwf = (simActive && simActive.provenance && simActive.provenance.apports_dwf)
+                || (simActive && simActive.kpis && simActive.kpis.provenance ? simActive.kpis.provenance.apports_dwf : null)
+                || (m && m.apports_dwf ? { injectes: m.apports_dwf, ignores: m.apports_dwf_ignores || [] } : null);
+
+            if (provDwf) {
+                const nInj = Array.isArray(provDwf.injectes) ? provDwf.injectes.length : 0;
+                const nIgn = Array.isArray(provDwf.ignores) ? provDwf.ignores.length : 0;
+                let qTot = 0;
+                if (Array.isArray(provDwf.injectes)) {
+                    provDwf.injectes.forEach(a => {
+                        const q = parseFloat(a.debit_moyen_m3s || 0);
+                        if (isFinite(q)) qTot += q;
+                    });
+                }
+                const qLs = (qTot * 1000).toFixed(1);
+                if (nInj > 0) {
+                    dwfTxt = `DWF : <b>${nInj} injecté${nInj > 1 ? 's' : ''} (${qLs} L/s)</b>`;
+                    dwfColor = '#06b6d4';
+                    if (nIgn > 0) dwfSub = `<span style="color:#fbbf24; font-size:10px; display:block; margin-top:2px;">⚠️ ${nIgn} exclu(s) hors bassin</span>`;
+                } else if (nIgn > 0) {
+                    dwfTxt = `DWF : Aucun injecté`;
+                    dwfColor = '#fbbf24';
+                    dwfSub = `<span style="color:#fbbf24; font-size:10px; display:block; margin-top:2px;">⚠️ ${nIgn} exclu(s) (regard hors bassin)</span>`;
+                }
+            } else if (window._dwfSimulationInfo && window._dwfSimulationInfo.actifs > 0) {
+                dwfTxt = `DWF : ${window._dwfSimulationInfo.actifs} configuré(s)`;
+                dwfColor = '#6ee7b7';
+            }
+
+            diagBlock = `
+                <div style="margin-bottom: 10px;">
+                    <div style="font-size: 12px; font-weight: 700; color: ${metaFiab.color}; display: flex; align-items: center; gap: 7px;">
+                        <span>${metaFiab.icon}</span> <span>${metaFiab.label}</span>
+                    </div>
+                    <!-- Sous-élément DWF indenté -->
+                    <div style="margin-top: 5px; margin-left: 20px; padding-left: 8px; border-left: 2px solid rgba(6, 182, 212, 0.4);">
+                        <div style="font-size: 11px; color: ${dwfColor}; display: flex; align-items: center; justify-content: space-between;">
+                            <span><i class="fas fa-faucet-drip me-1" style="color: #06b6d4;"></i> ${dwfTxt}</span>
+                            <button type="button" onclick="fermerMenuBassin(); ouvrirModalApportsDwf();" style="background: transparent; border: none; color: #38bdf8; font-size: 10px; text-decoration: underline; cursor: pointer; padding: 0 4px;">
+                                Gérer
+                            </button>
+                        </div>
+                        ${dwfSub}
+                    </div>
+                </div>
+            `;
+
+            dropdown.innerHTML = `
+                <div style="padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03);">
+                    <div style="font-weight: 800; font-size: 13px; color: #34d399; display: flex; align-items: center; gap: 7px;">
+                        <i class="fas fa-water"></i> ${_esc(nom)}
+                    </div>
+                    <div style="font-size: 11px; color: #94a3b8; margin-top: 3px;">
+                        ${nbRegards} regards · ${nbTroncons} canalisations · ${surfaceHa} ha
+                    </div>
+                </div>
+
+                <div style="padding: 12px 14px;">
+                    <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; margin-bottom: 8px;">
+                        État d'analyse du bassin
+                    </div>
+                    ${simBlock}
+                    ${diagBlock}
+
+                    <div style="display: flex; gap: 6px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); margin-top: 8px;">
+                        <button type="button" onclick="fermerMenuBassin(); ouvrirSimulationOuHistorique();" style="flex: 1; padding: 6px 10px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer;">
+                            <i class="fas fa-play me-1"></i> ${simActive ? 'Re-simuler' : 'Simuler'}
+                        </button>
+                        <button type="button" onclick="fermerMenuBassin(); reinitialiserSelectionBassin();" style="flex: 1; padding: 6px 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.15); color: #cbd5e1; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer;">
+                            <i class="fas fa-globe me-1"></i> Tous bassins
+                        </button>
+                    </div>
+                </div>
+            `;
+        };
+
+        // Fermeture automatique au clic extérieur
+        document.addEventListener('click', (e) => {
+            const d = document.getElementById('topbar-bassin-dropdown');
+            const pill = document.getElementById('topbar-bassin-pill');
+            if (d && d.style.display === 'block') {
+                if (!d.contains(e.target) && (!pill || !pill.contains(e.target))) {
+                    window.fermerMenuBassin();
+                }
+            }
+        });

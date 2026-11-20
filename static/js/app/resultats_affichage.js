@@ -671,12 +671,15 @@ function _masquerMenuInfobullesSim() {
             }
 
             // Indication visible Cockpit / Topbar pour la simulation courante
+            // Remarque : Le pill DWF autonome est désormais masqué au profit du menu
+            // déroulant hiérarchique sous le nom du bassin (topbar-bassin-dropdown).
             try {
                 const dwfPill = document.getElementById('topbar-dwf-pill');
                 const dwfLabel = document.getElementById('topbar-dwf-label');
                 const provDwf = (data && data.provenance && data.provenance.apports_dwf)
                     || (data && data.kpis && data.kpis.provenance ? data.kpis.provenance.apports_dwf : null);
                 if (dwfPill && dwfLabel) {
+                    dwfPill.style.display = 'none';
                     if (provDwf) {
                         const nInj = Array.isArray(provDwf.injectes) ? provDwf.injectes.length : 0;
                         const nIgn = Array.isArray(provDwf.ignores) ? provDwf.ignores.length : 0;
@@ -688,26 +691,25 @@ function _masquerMenuInfobullesSim() {
                             });
                         }
                         const qLs = (qTot * 1000).toFixed(1);
-                        dwfPill.style.display = 'inline-flex';
                         if (nInj > 0) {
                             dwfLabel.innerHTML = `💧 DWF : <b>${nInj} injecté${nInj > 1 ? 's' : ''} (${qLs} L/s)</b>${nIgn > 0 ? ` <span style="color:#fbbf24; font-weight:800;">· ⚠️ ${nIgn} exclu${nIgn > 1 ? 's' : ''}</span>` : ''}`;
-                            dwfPill.style.borderColor = nIgn > 0 ? '#f59e0b' : '#06b6d4';
-                            dwfPill.style.background = nIgn > 0 ? 'rgba(245, 158, 11, 0.2)' : 'rgba(6, 182, 212, 0.16)';
-                            dwfPill.title = `Simulation SWMM avec ${nInj} apport(s) DWF injecté(s)${nIgn > 0 ? ` et ${nIgn} exclu(s)` : ''} — cliquer pour gérer`;
                         } else {
                             dwfLabel.innerHTML = `💧 DWF : Aucun injecté${nIgn > 0 ? ` <span style="color:#fbbf24; font-weight:800;">· ⚠️ ${nIgn} exclu${nIgn > 1 ? 's' : ''}</span>` : ''}`;
-                            dwfPill.style.borderColor = nIgn > 0 ? '#f59e0b' : '#94a3b8';
-                            dwfPill.style.background = nIgn > 0 ? 'rgba(245, 158, 11, 0.16)' : 'rgba(148, 163, 184, 0.15)';
-                            dwfPill.title = `Aucun apport DWF actif n'a été injecté dans ce calcul${nIgn > 0 ? ` (${nIgn} exclu(s))` : ''}`;
                         }
-                    } else {
-                        dwfPill.style.display = 'none';
                     }
                 }
             } catch (_) {}
 
             window._dernierResultatSimulation = data;
+            if (typeof window.mettreAJourIndicateurBassin === 'function' && window._selectedClusterId) {
+                window.mettreAJourIndicateurBassin(window._selectedClusterId, data);
+            }
+            if (typeof window.actualiserDropdownBassin === 'function') {
+                window.actualiserDropdownBassin();
+            }
             if (typeof activerActionsSimulation === 'function') {
+                activerActionsSimulation(true);
+            }
                 activerActionsSimulation(true);
             }
         };
