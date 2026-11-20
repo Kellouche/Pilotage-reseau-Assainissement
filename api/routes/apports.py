@@ -28,6 +28,7 @@ from api.services.apports_dwf_history_service import (
     enregistrer_historique_apport,
     lister_historique_apport,
 )
+from api.services.apports_dwf_service import generer_code_apport
 from api.services.simulation_service import (
     _resoudre_projet_pour_simulation,
     resoudre_gpkg_effectif_pour_projet,
@@ -297,6 +298,7 @@ def lister_apports_a_reconcilier(
                 "code": "gpkg_courant_indisponible",
                 "apport_id": a.get("id"),
                 "node_id": a.get("node_id"),
+                "noeud_present": False,
                 "apport_gpkg_version_id": a.get("gpkg_version_id"),
                 "apport_gpkg_sha256": a.get("gpkg_sha256"),
                 "simulation_gpkg_version_id": version_meta.get("version_id"),
@@ -322,9 +324,18 @@ def lister_apports_a_reconcilier(
             incompatibles = e.details
 
     ids_incompatibles = {d.get("apport_id") for d in incompatibles}
+    noeud_present_map = {d.get("apport_id"): d.get("noeud_present", False) for d in incompatibles}
+    apports_enrichis = []
+    for a in apports:
+        aid = a.get("id")
+        if aid in ids_incompatibles:
+            a_copy = dict(a)
+            a_copy["noeud_present"] = noeud_present_map.get(aid, False)
+            apports_enrichis.append(a_copy)
+
     return {
         "project_id": proj.id,
-        "apports": [a for a in apports if a.get("id") in ids_incompatibles],
+        "apports": apports_enrichis,
         "incompatibles": incompatibles,
         "count": len(incompatibles),
         "reseau_courant": {
@@ -348,9 +359,25 @@ def creer_apport(
     proj = _resoudre_projet(db, tenant, payload.project_id)
     node_id, version_meta = _valider_noeud_et_version(db, proj, payload.node_id)
 
+    code_apport = payload.code_apport
+    if code_apport and code_apport.strip():
+        code_apport = code_apport.strip()
+        existant = db.query(ApportDwf).filter(
+            ApportDwf.project_id == proj.id,
+            ApportDwf.code_apport == code_apport,
+        ).first()
+        if existant:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Le code apport '{code_apport}' existe déjà pour ce projet."
+            )
+    else:
+        code_apport = generer_code_apport(db, proj.id)
+
     apport = ApportDwf(
         org_id=tenant.org_id,
         project_id=proj.id,
+        code_apport=code_apport,
         node_id=node_id,
         # LOT P1.4 — estampillage : version exacte du GPKG qui a validé
         # ce nœud (version_id NULL pour les projets legacy : sha seul).
@@ -369,7 +396,7 @@ def creer_apport(
         actif=payload.actif,
         source=payload.source,
         observations=payload.observations,
-        created_by_id=getattr(tenant.user, "id", None) if tenant.user else None,
+        created_by_id=getattr(getattr(tenant, "actor", None), "id", None),
     )
     _calculer_debit(apport)
     db.add(apport)
@@ -380,7 +407,7 @@ def creer_apport(
         org_id=tenant.org_id,
         project_id=proj.id,
         action="create",
-        changed_by_id=getattr(tenant.user, "id", None) if tenant.user else None,
+        changed_by_id=getattr(getattr(tenant, "actor", None), "id", None),
         changed_fields=None,
         previous_state=None,
         new_state=apport.to_dict(),
@@ -498,6 +525,23 @@ def modifier_apport(
     previous_state = apport.to_dict()
 
     data = payload.model_dump(exclude_unset=True)
+
+    nouveau_code = data.get("code_apport")
+    if nouveau_code is not None:
+        nouveau_code = nouveau_code.strip()
+        if nouveau_code != (apport.code_apport or ""):
+            existant = db.query(ApportDwf).filter(
+                ApportDwf.project_id == apport.project_id,
+                ApportDwf.code_apport == nouveau_code,
+                ApportDwf.id != apport.id,
+            ).first()
+            if existant:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Le code apport '{nouveau_code}' existe déjà pour ce projet."
+                )
+        data["code_apport"] = nouveau_code
+
     nouveau_node = data.pop("node_id", None)
     changement_noeud = False
     if nouveau_node is not None and proj is not None and nouveau_node != apport.node_id:
@@ -558,7 +602,7 @@ def modifier_apport(
             org_id=tenant.org_id,
             project_id=apport.project_id,
             action=action,
-            changed_by_id=getattr(tenant.user, "id", None) if tenant.user else None,
+            changed_by_id=getattr(getattr(tenant, "actor", None), "id", None),
             changed_fields=changed_fields,
             previous_state=previous_state,
             new_state=new_state,
@@ -603,7 +647,7 @@ def revalider_apport(
         org_id=tenant.org_id,
         project_id=apport.project_id,
         action="reconcile",
-        changed_by_id=getattr(tenant.user, "id", None) if tenant.user else None,
+        changed_by_id=getattr(getattr(tenant, "actor", None), "id", None),
         changed_fields=changed_fields or ["reconcile"],
         previous_state=previous_state,
         new_state=new_state,
@@ -628,7 +672,7 @@ def supprimer_apport(
         org_id=tenant.org_id,
         project_id=apport.project_id,
         action="delete",
-        changed_by_id=getattr(tenant.user, "id", None) if tenant.user else None,
+        changed_by_id=getattr(getattr(tenant, "actor", None), "id", None),
         changed_fields=None,
         previous_state=previous_state,
         new_state=None,

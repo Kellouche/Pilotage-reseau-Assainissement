@@ -485,6 +485,25 @@ window._toolbarPositionPersonnalisee = function(toolbar) {
     return !!(toolbar && toolbar.dataset.positionManuelle === '1');
 };
 
+/**
+ * Position manuelle exprimée en FRACTIONS du viewport (fx, fy ∈ [0,1]) :
+ * le décalage est relatif — la toolbar suit le redimensionnement comme
+ * la légende, puis est bornée pour rester visible.
+ */
+window._positionRelativeToolbar = function(toolbar) {
+    if (!toolbar) return;
+    const fx = parseFloat(toolbar.dataset.fx);
+    const fy = parseFloat(toolbar.dataset.fy);
+    if (isNaN(fx) || isNaN(fy)) {
+        window._bornerToolbarViewport(toolbar);
+        return;
+    }
+    toolbar.style.left = Math.round(fx * window.innerWidth) + 'px';
+    toolbar.style.top = Math.round(fy * window.innerHeight) + 'px';
+    toolbar.style.right = 'auto';
+    window._bornerToolbarViewport(toolbar);
+};
+
 function initDraggableToolbar() {
     const toolbar = document.getElementById('main-edit-toolbar');
     const handle = document.getElementById('toolbar-drag-handle');
@@ -505,10 +524,20 @@ function initDraggableToolbar() {
             const pos = JSON.parse(savedPos);
             if (pos.top && pos.left) {
                 toolbar.dataset.positionManuelle = '1';
-                toolbar.style.top = `${pos.top}px`;
-                toolbar.style.left = `${pos.left}px`;
-                toolbar.style.right = 'auto';
-                window._bornerToolbarViewport(toolbar);
+                if (pos.fx !== undefined && pos.fy !== undefined) {
+                    toolbar.dataset.fx = String(pos.fx);
+                    toolbar.dataset.fy = String(pos.fy);
+                    window._positionRelativeToolbar(toolbar);
+                } else {
+                    // Ancien format px seul : conversion en fractions
+                    // approximative sur le viewport courant.
+                    toolbar.dataset.fx = String(Math.min(Math.max(pos.left / window.innerWidth, 0), 1));
+                    toolbar.dataset.fy = String(Math.min(Math.max(pos.top / window.innerHeight, 0), 1));
+                    toolbar.style.top = `${pos.top}px`;
+                    toolbar.style.left = `${pos.left}px`;
+                    toolbar.style.right = 'auto';
+                    window._bornerToolbarViewport(toolbar);
+                }
             }
         } catch (err) {}
     }
@@ -526,7 +555,7 @@ function initDraggableToolbar() {
     // est seulement ramenée dans le viewport.
     const _surResizeToolbar = function() {
         if (window._toolbarPositionPersonnalisee(toolbar)) {
-            window._bornerToolbarViewport(toolbar);
+            window._positionRelativeToolbar(toolbar);
         } else {
             window._positionAutoToolbar(toolbar);
         }
@@ -588,9 +617,14 @@ function initDraggableToolbar() {
         // en mode « position manuelle » et ne suit plus le layout.
         toolbar.dataset.positionManuelle = '1';
         const rect = toolbar.getBoundingClientRect();
+        // Fractions du viewport = décalage relatif conservé au resize.
+        toolbar.dataset.fx = String(rect.left / window.innerWidth);
+        toolbar.dataset.fy = String(rect.top / window.innerHeight);
         localStorage.setItem('drainpilot_toolbar_pos', JSON.stringify({
             top: Math.round(rect.top),
-            left: Math.round(rect.left)
+            left: Math.round(rect.left),
+            fx: rect.left / window.innerWidth,
+            fy: rect.top / window.innerHeight
         }));
     }
 }
@@ -694,6 +728,8 @@ window.sauvegarderEtatBureau = function(reseauId) {
             visible: toolbar.style.display !== 'none',
             collapsed: toolbar.classList.contains('collapsed'),
             x: r.left, y: r.top,
+            fx: r.left / window.innerWidth,
+            fy: r.top / window.innerHeight,
             personnalisee: window._toolbarPositionPersonnalisee
                 ? window._toolbarPositionPersonnalisee(toolbar) : false
         };
@@ -771,14 +807,18 @@ window.restaurerEtatBureau = function(reseauId) {
             const icon = document.getElementById('icon-collapse-toolbar');
             if (icon) icon.className = etat.toolbar.collapsed ? 'fas fa-chevron-right' : 'fas fa-chevron-left';
             if (etat.toolbar.x !== undefined && etat.toolbar.personnalisee) {
-                // Position manuelle : bornée à la fenêtre courante.
+                // Position manuelle : décalage RELATIF (fractions du
+                // viewport) — suit le resize puis borné à l'écran.
                 toolbar.dataset.positionManuelle = '1';
-                const _maxX = Math.max(8, window.innerWidth - 60);
-                const _maxY = Math.max(52, window.innerHeight - 60);
-                toolbar.style.left = Math.min(Math.max(Number(etat.toolbar.x) || 8, 8), _maxX) + 'px';
-                toolbar.style.top = Math.min(Math.max(Number(etat.toolbar.y) || 52, 52), _maxY) + 'px';
-                toolbar.style.right = 'auto';
-                window._bornerToolbarViewport(toolbar);
+                if (etat.toolbar.fx !== undefined && etat.toolbar.fy !== undefined) {
+                    toolbar.dataset.fx = String(etat.toolbar.fx);
+                    toolbar.dataset.fy = String(etat.toolbar.fy);
+                } else {
+                    // Anciens états sans fractions : conversion approximative.
+                    toolbar.dataset.fx = String(Math.min(Math.max(Number(etat.toolbar.x) / window.innerWidth, 0), 1));
+                    toolbar.dataset.fy = String(Math.min(Math.max(Number(etat.toolbar.y) / window.innerHeight, 0), 1));
+                }
+                window._positionRelativeToolbar(toolbar);
             } else if (etat.toolbar.visible !== false) {
                 // Position automatique : recalée sur le panneau d'ingénierie.
                 delete toolbar.dataset.positionManuelle;

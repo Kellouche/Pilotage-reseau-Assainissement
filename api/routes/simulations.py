@@ -218,7 +218,7 @@ def launch_simulation(
         cluster_id=simulation.cluster_id,
         job_id=job.id,
         parameters=simulation.parameters,
-        created_by=tenant.user.id if tenant.user else user_id,
+        created_by=getattr(getattr(tenant, "actor", None), "id", None) or user_id,
         org_id=org_id,
         project_id=project_id,
         scenario_pluie=scenario_pluie,
@@ -304,6 +304,9 @@ class SimulationRunRequest(BaseModel):
     # LOT P1.3 — apports de temps sec (DWF) : injectés par défaut quand le
     # projet en possède d'actifs ; False = désactivation explicite.
     dwf_actif: Optional[bool] = None
+    # LOT A3-DWF — simulation flexible : si True, exclut les apports DWF incompatibles
+    # au lieu d'interrompre en HTTP 422.
+    dwf_compatibles_seulement: Optional[bool] = False
     # Option C (SHP.md §7bis) — altimétrie terrain IDW dans le .inp :
     # opt-in explicite, jamais automatique ; couche optionnelle.
     altimetrie_terrain: Optional[bool] = False
@@ -683,7 +686,9 @@ def run_native_swmm_simulation(
     try:
         apports_dwf, info_cache_dwf = preparer_apports_pour_simulation(
             db, proj, dwf_actif=payload.dwf_actif,
-            version_meta=contexte.version_meta, gpkg_path=gpkg_path)
+            version_meta=contexte.version_meta, gpkg_path=gpkg_path,
+            dwf_compatibles_seulement=bool(payload.dwf_compatibles_seulement),
+            user_id=getattr(getattr(tenant, "actor", None), "id", None))
     except ApportsDwfIncompatiblesError as e:
         raise HTTPException(status_code=422, detail={
             "message": str(e),
@@ -809,6 +814,14 @@ def run_native_swmm_simulation(
             prov["gpkg_version_id"] = vmeta.get("version_id")
             prov["gpkg_sha256"] = vmeta.get("sha256")
             prov["gpkg_storage_kind"] = vmeta.get("storage_kind")
+        if info_cache_dwf.get("apports_dwf_ignores"):
+            prov = resultat.setdefault("provenance", {})
+            prov_dwf = prov.setdefault("apports_dwf", {})
+            existing_ignores = prov_dwf.get("ignores", [])
+            prov_dwf["ignores"] = existing_ignores + [
+                ig for ig in info_cache_dwf["apports_dwf_ignores"]
+                if ig.get("id") not in {e.get("id") for e in existing_ignores}
+            ]
         if altimetrie_meta is not None:
             prov = resultat.setdefault("provenance", {})
             prov["altimetrie"] = {
