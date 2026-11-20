@@ -449,9 +449,28 @@
                     window._fiabiliteParBassin[String(_cid)] = d;
                     if (typeof window._decorerOptionsFiabilite === 'function') window._decorerOptionsFiabilite();
                 }
+
+                // Synchroniser le sélecteur et le focus sur le bassin de la simulation
+                const optionValue = (typeof window._optionBassinPourMetaSim === 'function' ? window._optionBassinPourMetaSim(d.meta) : null)
+                    || (typeof _trouverOptionBassin === 'function' ? _trouverOptionBassin(_cid) : null)
+                    || _cid;
+
+                if (optionValue) {
+                    const bSel = document.getElementById('bassin-select');
+                    if (bSel) bSel.value = optionValue;
+                    try { if (typeof _selectedClusterId !== 'undefined') _selectedClusterId = optionValue; } catch (_) {}
+                    window._selectedClusterId = optionValue;
+                    if (typeof highlightCluster === 'function') {
+                        highlightCluster(optionValue, window._activeClusterLayer || (typeof couches !== 'undefined' ? couches.bassins : null));
+                    }
+                    if (typeof zoomerSurBassin === 'function') {
+                        zoomerSurBassin(optionValue, window._activeClusterLayer || (typeof couches !== 'undefined' ? couches.bassins : null));
+                    }
+                }
+
                 if (typeof afficherResultatsSimulation === 'function') afficherResultatsSimulation(d);
                 if (typeof window.mettreAJourIndicateurBassin === 'function') {
-                    window.mettreAJourIndicateurBassin(cidStr, d);
+                    window.mettreAJourIndicateurBassin(optionValue || cidStr, d);
                 }
                 window.fermerModalSimulationsBassin();
             })

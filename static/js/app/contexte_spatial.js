@@ -76,16 +76,22 @@
         if (cs.estVersionCourante) {
             if (banniere) banniere.style.display = 'none';
             document.body.classList.remove('snapshot-archive');
+            try { if (window.carte && window.carte.invalidateSize) window.carte.invalidateSize(); } catch (_) {}
             return;
         }
         if (!banniere) {
             banniere = document.createElement('div');
             banniere.id = 'banniere-snapshot-archive';
-            banniere.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;'
-                + 'background:#78350f;color:#fef3c7;padding:8px 16px;font-size:13px;'
+            banniere.style.cssText = 'position:relative;width:100%;z-index:2400;'
+                + 'background:#78350f;color:#fef3c7;padding:6px 16px;font-size:12.5px;'
                 + 'display:flex;align-items:center;gap:12px;border-bottom:2px solid #f59e0b;'
-                + 'font-family:inherit;';
-            document.body.appendChild(banniere);
+                + 'font-family:inherit;min-height:36px;box-sizing:border-box;';
+            const topbar = document.getElementById('saas-topbar');
+            if (topbar && topbar.parentNode) {
+                topbar.parentNode.insertBefore(banniere, topbar.nextSibling);
+            } else {
+                document.body.appendChild(banniere);
+            }
         }
         const libelle = cs.libelle || 'version archivée';
         const parties = [];
@@ -102,6 +108,7 @@
             + 'Revenir au réseau actuel</button>';
         banniere.style.display = 'flex';
         document.body.classList.add('snapshot-archive');
+        try { if (window.carte && window.carte.invalidateSize) window.carte.invalidateSize(); } catch (_) {}
         const btn = document.getElementById('btn-retour-reseau-actuel');
         if (btn && !btn._lie) {
             btn._lie = true;
@@ -223,8 +230,12 @@
             // passer — le matching par IDs reste le garde-fou naturel.
             return { ok: true };
         }
-        const okSha = shaSim && cs.sha256 && shaSim === cs.sha256;
-        const okVid = vidSim && cs.versionId && String(vidSim) === String(cs.versionId);
+        const sSim = String(shaSim || '').trim().toLowerCase();
+        const sCs = String(cs.sha256 || '').trim().toLowerCase();
+        const okSha = sSim && sCs && (sSim === sCs || sSim.startsWith(sCs) || sCs.startsWith(sSim));
+        const vSim = String(vidSim || '').trim().toLowerCase();
+        const vCs = String(cs.versionId || '').trim().toLowerCase();
+        const okVid = vSim && vCs && (vSim === vCs || vSim.startsWith(vCs) || vCs.startsWith(vSim));
         if (okSha || okVid) return { ok: true };
         return { ok: false, raison: 'gpkg_snapshot_mismatch' };
     }

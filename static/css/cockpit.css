@@ -79,6 +79,10 @@ body {
     height: calc(100vh - 52px);
 }
 
+body.snapshot-archive #app-workspace {
+    height: calc(100vh - 52px - 36px);
+}
+
 #sidebar {
     width: 320px;
     min-width: 320px;

@@ -180,18 +180,18 @@ function _masquerMenuInfobullesSim() {
                 }
             }
 
-            // P0 — couleur dérivée du STATUT sémantique (stable entre les
-            // versions de résultats persistés) : palette bleu → vert →
-            // jaune → rouge selon la charge. Le débordement réel des
-            // regards garde son rouge brique #dc2626 distinct.
+            // P0 — couleur dérivée du STATUT sémantique et des ratios physiques SWMM :
+            // palette normal (<50% bleu) → modéré (50-80% vert) → critique (80-100% jaune) → surcharge (≥100% rouge).
             const _couleurConduite = function(r) {
-                const parStatut = {
-                    surcharge: '#ef4444',
-                    critique: '#eab308',
-                    moderee: '#22c55e',
-                    normal: '#3b82f6'
-                };
-                return parStatut[r && r.status] || (r && r.color) || '#3b82f6';
+                if (!r) return '#3b82f6';
+                const qRatio = (r.flow_ratio !== undefined && r.flow_ratio !== null) ? Number(r.flow_ratio) : null;
+                const dRatio = (r.depth_ratio !== undefined && r.depth_ratio !== null) ? Number(r.depth_ratio) : null;
+                const maxRatio = Math.max(qRatio || 0, dRatio || 0);
+
+                if (r.status === 'surcharge' || maxRatio >= 1.0) return '#ef4444';
+                if (r.status === 'critique' || maxRatio >= 0.80) return '#eab308';
+                if (r.status === 'moderee' || maxRatio >= 0.50) return '#22c55e';
+                return (r.color && r.color !== '#3b82f6') ? r.color : '#3b82f6';
             };
 
             // Réactiver les boutons d'animation et d'analyse hydrologique si une simulation est disponible
@@ -309,7 +309,8 @@ function _masquerMenuInfobullesSim() {
                         const col = _couleurConduite(r);
                         const isSurcharge = (r.status === 'surcharge' || (r.depth_ratio >= 1.0) || (r.flow_ratio >= 1.0));
                         const isCritique = (r.status === 'critique' || (r.depth_ratio >= 0.8));
-                        const w = isSurcharge ? 6.0 : (isCritique ? 5.0 : 4.0);
+                        const isModeree = (r.status === 'moderee' || (r.depth_ratio >= 0.5) || (r.flow_ratio >= 0.5));
+                        const w = isSurcharge ? 6.0 : (isCritique ? 5.2 : (isModeree ? 4.5 : 3.8));
                         return {
                             color: col,
                             weight: w,
