@@ -415,3 +415,59 @@ if (document.readyState === 'loading') {
 } else {
     _initialiserSidebarIngenierie();
 }
+
+// ==========================================
+// EXCLUSION MUTUELLE DES MENUS TOPBAR
+// (Bassin, Actions, Aide/Ressources, Profil connecté, BMS)
+// ==========================================
+window.fermerTousLesMenusTopbar = function(sauf) {
+    // 1. Menu dynamique du bassin
+    if (sauf !== 'bassin' && typeof window.fermerMenuBassin === 'function') {
+        window.fermerMenuBassin();
+    }
+    // 2. Menu Actions & simulation
+    if (sauf !== 'actions') {
+        const d = document.getElementById('actions-dropdown');
+        if (d) d.style.display = 'none';
+    }
+    // 3. Menu Aide & ressources
+    if (sauf !== 'ressources') {
+        const d = document.getElementById('resources-dropdown');
+        if (d) d.style.display = 'none';
+    }
+    // 4. Menu Profil utilisateur connecté
+    if (sauf !== 'profil') {
+        const d = document.getElementById('user-profile-dropdown');
+        if (d) d.style.display = 'none';
+    }
+    // 5. Infobulle/Popover BMS (alerte météo)
+    if (sauf !== 'bms') {
+        const pop = document.getElementById('topbar-bms-popover');
+        if (pop) pop.style.display = 'none';
+    }
+};
+
+// Fermeture centralisée de tous les menus lors d'un clic en dehors
+document.addEventListener('click', function(e) {
+    const cibles = [
+        { btn: 'topbar-bassin-pill', menu: 'topbar-bassin-dropdown' },
+        { btn: 'btn-actions-menu', menu: 'actions-dropdown' },
+        { btn: 'btn-resources-menu', menu: 'resources-dropdown' },
+        { btn: 'btn-user-profile-menu', menu: 'user-profile-dropdown' },
+        { btn: 'topbar-bms-pill', menu: 'topbar-bms-popover' }
+    ];
+
+    let cliquDansUnMenu = false;
+    for (let i = 0; i < cibles.length; i++) {
+        const btn = document.getElementById(cibles[i].btn);
+        const menu = document.getElementById(cibles[i].menu);
+        if ((btn && btn.contains(e.target)) || (menu && menu.contains(e.target))) {
+            cliquDansUnMenu = true;
+            break;
+        }
+    }
+
+    if (!cliquDansUnMenu && typeof window.fermerTousLesMenusTopbar === 'function') {
+        window.fermerTousLesMenusTopbar(null);
+    }
+});

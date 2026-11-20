@@ -173,23 +173,3 @@
             let html = window._construireHtmlCorpsInterpretation(simData, k, cRes, nRes, meta, agents, bufferSens, diag, gc, lid, risk, finance, synth, variantes, ratios, contError, surchargedNodes, floodedNodes, peakOutflow, nbConduites, nbNormal, nbVigilance, nbSurcharge, verdict, verdictCouleur);
             container.innerHTML = html;
         };
-
-        window.addEventListener('click', function(e) {
-            const btnActions = document.getElementById('btn-actions-menu');
-            const dActions = document.getElementById('actions-dropdown');
-            if (dActions && btnActions && !btnActions.contains(e.target) && !dActions.contains(e.target)) {
-                dActions.style.display = 'none';
-            }
-
-            const btnProfile = document.getElementById('btn-user-profile-menu');
-            const dProfile = document.getElementById('user-profile-dropdown');
-            if (dProfile && btnProfile && !btnProfile.contains(e.target) && !dProfile.contains(e.target)) {
-                dProfile.style.display = 'none';
-            }
-
-            const btnRes = document.getElementById('btn-resources-menu');
-            const dRes = document.getElementById('resources-dropdown');
-            if (dRes && btnRes && !btnRes.contains(e.target) && !dRes.contains(e.target)) {
-                dRes.style.display = 'none';
-            }
-        });

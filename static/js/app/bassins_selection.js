@@ -895,6 +895,9 @@
             const d = document.getElementById('topbar-bassin-dropdown');
             if (!d) return;
             const isVisible = d.style.display === 'block';
+            if (typeof window.fermerTousLesMenusTopbar === 'function') {
+                window.fermerTousLesMenusTopbar(isVisible ? null : 'bassin');
+            }
             if (!isVisible) {
                 if (typeof window.actualiserDropdownBassin === 'function') {
                     window.actualiserDropdownBassin();

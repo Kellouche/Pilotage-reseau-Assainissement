@@ -242,7 +242,12 @@
         window.basculerMenuRessources = function(e) {
             if (e) e.stopPropagation();
             const d = document.getElementById('resources-dropdown');
-            if (d) d.style.display = (d.style.display === 'block') ? 'none' : 'block';
+            if (!d) return;
+            const estVisible = (d.style.display === 'block');
+            if (typeof window.fermerTousLesMenusTopbar === 'function') {
+                window.fermerTousLesMenusTopbar(estVisible ? null : 'ressources');
+            }
+            d.style.display = estVisible ? 'none' : 'block';
         };
 
         window.fermerMenuRessources = function() {
@@ -256,7 +261,12 @@
         window.basculerMenuProfil = function(e) {
             if (e) e.stopPropagation();
             const d = document.getElementById('user-profile-dropdown');
-            if (d) d.style.display = (d.style.display === 'block') ? 'none' : 'block';
+            if (!d) return;
+            const estVisible = (d.style.display === 'block');
+            if (typeof window.fermerTousLesMenusTopbar === 'function') {
+                window.fermerTousLesMenusTopbar(estVisible ? null : 'profil');
+            }
+            d.style.display = estVisible ? 'none' : 'block';
         };
 
         window.fermerMenuProfil = function() {
@@ -270,7 +280,12 @@
         window.basculerMenuActions = function(e) {
             if (e) e.stopPropagation();
             const d = document.getElementById('actions-dropdown');
-            if (d) d.style.display = (d.style.display === 'block') ? 'none' : 'block';
+            if (!d) return;
+            const estVisible = (d.style.display === 'block');
+            if (typeof window.fermerTousLesMenusTopbar === 'function') {
+                window.fermerTousLesMenusTopbar(estVisible ? null : 'actions');
+            }
+            d.style.display = estVisible ? 'none' : 'block';
         };
 
         window.fermerMenuActions = function() {

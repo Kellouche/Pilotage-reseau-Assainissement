@@ -671,7 +671,11 @@ window.dessinerRaccordementsOrphelinsSurCarte = function() {
             if (event) event.stopPropagation();
             const pop = document.getElementById('topbar-bms-popover');
             if (!pop) return;
-            pop.style.display = (pop.style.display === 'none' || !pop.style.display) ? 'block' : 'none';
+            const estVisible = (pop.style.display === 'block');
+            if (typeof window.fermerTousLesMenusTopbar === 'function') {
+                window.fermerTousLesMenusTopbar(estVisible ? null : 'bms');
+            }
+            pop.style.display = estVisible ? 'none' : 'block';
         };
 
         window.fermerInfobulleBMS = function(event) {
