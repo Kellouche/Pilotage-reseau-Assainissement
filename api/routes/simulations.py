@@ -87,7 +87,7 @@ def _identite_bassin_du_cache(gpkg_path: Optional[Path], cluster_id: str) -> dic
         return {}
     cible = str(cluster_id).strip()
     cible_low = cible.lower()
-    prefixed = cible_low.startswith("exutoire:")
+    prefixed = cible_low.startswith("exutoire:") or cible_low.startswith("bassin:")
     cle = cible.split(":", 1)[1] if prefixed else cible
     cle_low = cle.lower()
 
@@ -101,14 +101,7 @@ def _identite_bassin_du_cache(gpkg_path: Optional[Path], cluster_id: str) -> dic
         bref = p.get("bassin_ref") or (f"exutoire:{ex}" if ex else None)
         return {"nom": p.get("nom"), "exutoire_id": ex, "bassin_ref": bref}
 
-    # EQUIVALENCE DES ESPACES D'IDENTIFIANTS — critique :
-    #   - « exutoire:… »           → référence métier exutoire (bassin_ref / exutoire_id)
-    #   - cluster_id positionnel   → UNIQUEMENT cluster_id / id_bassin du geojson.
-    #     Les exutoire_id ne doivent JAMAIS être comparés à un cluster_id
-    #     positionnel : les exutoire_id numériques (ex. « 12 ») entrent en
-    #     collision avec les positions (ex. cluster 12 = autre bassin).
-    #   - identifiant stable nu    → repli exutoire_id / bassin_ref
-    #     (ex. meta.cluster_id « 8_rejets_346731 » envoyé par un client).
+    # EQUIVALENCE DES ESPACES D'IDENTIFIANTS :
     if prefixed:
         for f in features:
             p = f.get("properties") or {}
@@ -116,19 +109,47 @@ def _identite_bassin_du_cache(gpkg_path: Optional[Path], cluster_id: str) -> dic
             ex = str(p.get("exutoire_id") or "").strip().lower()
             if (bref and bref == cible_low) or (ex and ex == cle_low):
                 return _ident(p)
+            if str(p.get("cluster_id") or "").strip() == cle or str(p.get("id_bassin") or "").strip() == cle:
+                return _ident(p)
         return {}
 
+    # 1. Correspondance positionnelle (cluster_id / id_bassin)
     for f in features:
         p = f.get("properties") or {}
         if (str(p.get("cluster_id") or "").strip() == cle
                 or str(p.get("id_bassin") or "").strip() == cle):
             return _ident(p)
 
+    # 2. Correspondance exutoire_id ou bassin_ref
     for f in features:
         p = f.get("properties") or {}
         ex = str(p.get("exutoire_id") or "").strip().lower()
         bref = str(p.get("bassin_ref") or "").strip().lower()
         if (ex and ex == cle_low) or (bref and bref == cle_low):
+            return _ident(p)
+
+    # 3. Correspondance par nom complet (ex: "Exutoire OUT_55")
+    for f in features:
+        p = f.get("properties") or {}
+        nom = str(p.get("nom") or "").strip().lower()
+        nom_ex = str(p.get("nom_exutoire") or "").strip().lower()
+        if (nom and nom == cle_low) or (nom_ex and nom_ex == cle_low):
+            return _ident(p)
+
+    # 4. Correspondance format "Bassin X" (ex: "Bassin 1")
+    if cle_low.startswith("bassin "):
+        sub_cle = cle_low.replace("bassin ", "").strip()
+        for f in features:
+            p = f.get("properties") or {}
+            if (str(p.get("cluster_id") or "").strip().lower() == sub_cle
+                    or str(p.get("id_bassin") or "").strip().lower() == sub_cle):
+                return _ident(p)
+
+    # 5. Correspondance par inclusion de l'exutoire_id (ex: "out_55" dans "exutoire out_55")
+    for f in features:
+        p = f.get("properties") or {}
+        ex = str(p.get("exutoire_id") or "").strip().lower()
+        if ex and ex in cle_low.replace(" ", "_").split("_"):
             return _ident(p)
     return {}
 

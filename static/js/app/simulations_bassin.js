@@ -52,7 +52,18 @@
      * `auto` : n'ouvre qu'une fois par bassin (évite la réouverture en boucle).
      */
     window.ouvrirModalSimulationsBassin = function (clusterId, auto = false) {
-        const cidStr = String(clusterId || '').trim();
+        let cidStr = String(clusterId || '').trim();
+        if (!cidStr) {
+            const res = (typeof _resoudreBassinPourSimulation === 'function') ? _resoudreBassinPourSimulation() : null;
+            cidStr = (res && res.historyId) ? String(res.historyId).trim() : '';
+        }
+        if (!cidStr && window._selectedClusterId) {
+            cidStr = String(window._selectedClusterId).trim();
+        }
+        if (!cidStr && window._dernierResultatSimulation && window._dernierResultatSimulation.meta) {
+            const m = window._dernierResultatSimulation.meta;
+            cidStr = String(m.cluster_id || m.exutoire_id || m.bassin_nom || '').trim();
+        }
         if (!cidStr) return;
         if (auto && window._bassinModalPour === cidStr) return;
         window._bassinModalPour = cidStr;
@@ -63,7 +74,15 @@
         const sousTitre = document.getElementById('sim-hist-sous-titre');
         if (!modal || !corps) return;
 
-        const nomBassin = (window._bassinNoms && window._bassinNoms[cidStr]) || `Bassin ${cidStr}`;
+        let nomBassin = (window._bassinNoms && window._bassinNoms[cidStr]) || null;
+        if (!nomBassin && window._bassinProperties && window._bassinProperties[cidStr]) {
+            nomBassin = window._bassinProperties[cidStr].nom;
+        }
+        if (!nomBassin && window._dernierResultatSimulation && window._dernierResultatSimulation.meta) {
+            nomBassin = window._dernierResultatSimulation.meta.cluster_nom || window._dernierResultatSimulation.meta.bassin_nom;
+        }
+        if (!nomBassin) nomBassin = `Bassin ${cidStr}`;
+
         if (titre) titre.textContent = `Simulations — ${nomBassin}`;
         if (sousTitre) sousTitre.textContent = 'Historique des calculs SWMM 5.2 — exécuter, modifier ou supprimer';
 

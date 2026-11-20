@@ -1064,6 +1064,13 @@
                 </div>
             `;
 
+            // Résolution optimale de l'identifiant stable pour l'historique
+            let idHistorique = cidStr;
+            if (window._bassinProperties && window._bassinProperties[cidStr]) {
+                const bp = window._bassinProperties[cidStr];
+                idHistorique = bp.exutoire_id || bp.bassin_ref || bp.cluster_id || cidStr;
+            }
+
             dropdown.innerHTML = `
                 <div style="padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03);">
                     <div style="font-weight: 800; font-size: 13px; color: #34d399; display: flex; align-items: center; gap: 7px;">
@@ -1085,7 +1092,7 @@
                         <button type="button" onclick="reSimulerBassin('${_esc(cidStr)}');" title="Configurer et relancer une simulation pour ce bassin" style="flex: 1.2; padding: 6px 10px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;">
                             <i class="fas fa-play"></i> ${simActive ? 'Re-simuler' : 'Simuler'}
                         </button>
-                        <button type="button" onclick="fermerMenuBassin(); if (typeof ouvrirModalSimulationsBassin === 'function') ouvrirModalSimulationsBassin('${_esc(cidStr)}', false);" title="Consulter l'historique des calculs enregistrés pour ce bassin" style="flex: 1; padding: 6px 8px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.15); color: #94a3b8; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;">
+                        <button type="button" onclick="fermerMenuBassin(); if (typeof ouvrirModalSimulationsBassin === 'function') ouvrirModalSimulationsBassin('${_esc(idHistorique)}', false);" title="Consulter l'historique des calculs enregistrés pour ce bassin" style="flex: 1; padding: 6px 8px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.15); color: #94a3b8; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;">
                             <i class="fas fa-history"></i> Historique
                         </button>
                         <button type="button" onclick="fermerMenuBassin(); reinitialiserSelectionBassin();" title="Revenir à la vue globale du réseau" style="flex: 0.8; padding: 6px 6px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.15); color: #cbd5e1; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;">
