@@ -13,6 +13,7 @@ temporels, validations métier, migration Alembic sur base existante.
 import os
 import subprocess
 import sys
+import uuid
 from pathlib import Path
 
 import pytest
@@ -54,7 +55,7 @@ def ctx_apports(tmp_path):
     _creer_gpkg_test(gpkg_b, ["REG_B1", "REG_B2"])
 
     db = SessionLocal()
-    prefix = "p12"
+    prefix = f"p12_{uuid.uuid4().hex[:6]}"
 
     def _org(uid):
         return Organization(id=f"{prefix}_{uid}", name=f"Org {uid}",
@@ -406,3 +407,4 @@ def test_migration_apports_dwf_sur_base_existante(tmp_path, monkeypatch):
                 "mode_determination", "debit_moyen_m3s", "eh",
                 "debit_specifique_l_hab_j", "profile_key", "actif",
                 "source", "observations"} <= cols
+    eng.dispose()

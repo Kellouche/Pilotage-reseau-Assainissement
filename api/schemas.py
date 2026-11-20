@@ -235,6 +235,8 @@ class SimulationCreate(BaseModel):
     # scénario, sans suppression des apports configurés.
     dwf_actif: Optional[bool] = Field(
         None, description="False = désactive l'injection des apports DWF pour ce run")
+    dwf_compatibles_seulement: Optional[bool] = Field(
+        False, description="True = exclut les apports DWF incompatibles au lieu de bloquer en 422")
 
 
 class SimulationResponse(BaseModel):
@@ -323,6 +325,7 @@ class AuditLogResponse(BaseModel):
 class ApportDwfCreate(BaseModel):
     """Création d'un apport de temps sec rattaché à un nœud du projet."""
     project_id: Optional[str] = Field(None, description="Projet cible (requis si plusieurs projets actifs)")
+    code_apport: Optional[str] = Field(None, max_length=50, description="Code métier unique de l'apport (ex. AP-2026-0001). Auto-généré si omis.")
     node_id: str = Field(..., min_length=1, max_length=100,
                          description="Identifiant du regard/nœud dans le GPKG du projet")
     nature: str = Field("domestique", description="domestique | industriel | infiltration | autre")
@@ -375,6 +378,7 @@ class ApportDwfCreate(BaseModel):
 
 class ApportDwfUpdate(BaseModel):
     """Mise à jour partielle d'un apport (PATCH-like via PUT)."""
+    code_apport: Optional[str] = Field(None, max_length=50, description="Code métier unique de l'apport (ex. AP-2026-0001).")
     node_id: Optional[str] = Field(None, min_length=1, max_length=100)
     nature: Optional[str] = None
     mode_determination: Optional[str] = None
@@ -424,6 +428,7 @@ class ApportDwfResponse(BaseModel):
     id: str
     org_id: str
     project_id: str
+    code_apport: Optional[str] = Field(None, description="Code métier unique de l'apport (ex. AP-2026-0001).")
     node_id: str
     nature: str
     mode_determination: str

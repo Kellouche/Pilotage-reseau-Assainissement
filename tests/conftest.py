@@ -41,6 +41,9 @@ def setup_test_database():
             # LOT P1.4 — estampillage GPKG des apports DWF
             "ALTER TABLE apports_dwf ADD COLUMN gpkg_version_id VARCHAR(36)",
             "ALTER TABLE apports_dwf ADD COLUMN gpkg_sha256 VARCHAR(64)",
+            # LOT A1-DWF — Clé métier unique par projet
+            "ALTER TABLE apports_dwf ADD COLUMN code_apport VARCHAR(50)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_apports_dwf_project_code ON apports_dwf (project_id, code_apport)",
             # Paramétrage garde-fou par projet (JSON nullable)
             "ALTER TABLE projects ADD COLUMN garde_fou_config JSON",
             # LOT P6.1 — historique métier des apports DWF

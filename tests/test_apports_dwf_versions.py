@@ -11,6 +11,7 @@ tenant, invalidation de cache.
 ================================================================================
 """
 
+import uuid
 import geopandas as gpd
 import pytest
 from pathlib import Path
@@ -181,7 +182,7 @@ def test_dwf_desactive_aucune_validation(tmp_path):
     gpkg = tmp_path / "r.gpkg"
     _creer_gpkg(gpkg, ["REG_B1"])
     db = SessionLocal()
-    pref = "p14off"
+    pref = f"p14off_{uuid.uuid4().hex[:6]}"
     org = Organization(id=f"{pref}_o", name="O", slug=f"{pref}-o")
     proj = Project(id=f"{pref}_p", org_id=org.id, name="P",
                    slug=f"{pref}-p", is_archived=False)
@@ -215,7 +216,7 @@ def ctx_p14(tmp_path):
     _creer_gpkg(gpkg, ["REG_B1", "REG_B2"])
 
     db = SessionLocal()
-    pref = "p14"
+    pref = f"p14_{uuid.uuid4().hex[:6]}"
     org = Organization(id=f"{pref}_o", name="O14", slug=f"{pref}-o")
     user = User(id=f"{pref}_u", email="u@p14.dz",
                 password_hash=hash_password("DwfPass2026!"),

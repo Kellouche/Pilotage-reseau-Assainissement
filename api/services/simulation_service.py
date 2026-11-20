@@ -1572,7 +1572,9 @@ def executer_en_async(
     try:
         apports_dwf, info_cache_dwf = preparer_apports_pour_simulation(
             db, proj, dwf_actif=params_exec.get("dwf_actif"),
-            version_meta=version_meta, gpkg_path=gpkg_path)
+            version_meta=version_meta, gpkg_path=gpkg_path,
+            dwf_compatibles_seulement=bool(params_exec.get("dwf_compatibles_seulement")),
+            user_id=getattr(sim, "user_id", None))
     except Exception:
         sim.status = "failed"
         db.commit()
@@ -1627,6 +1629,13 @@ def executer_en_async(
     prov["gpkg_sha256"] = version_meta.get("sha256")
     prov["gpkg_storage_kind"] = version_meta.get("storage_kind")
     prov["execution_mode"] = "celery"
+    if info_cache_dwf.get("apports_dwf_ignores"):
+        prov_dwf = prov.setdefault("apports_dwf", {})
+        existing_ignores = prov_dwf.get("ignores", [])
+        prov_dwf["ignores"] = existing_ignores + [
+            ig for ig in info_cache_dwf["apports_dwf_ignores"]
+            if ig.get("id") not in {e.get("id") for e in existing_ignores}
+        ]
     if params_exec.get("altimetrie_meta"):
         prov["altimetrie"] = {
             "mode": "terrain_idw",

@@ -728,6 +728,8 @@ class ApportDwf(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_gen_uuid)
     org_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), index=True, nullable=False)
     project_id: Mapped[str] = mapped_column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), index=True, nullable=False)
+    # LOT A1-DWF — Clé métier unique par projet (format séquentiel AP-YYYY-NNNN)
+    code_apport: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
     # Identifiant canonique du nœud = _clean_node_id(Code) du GPKG versionné
     # du projet. Pas de FK ORM : la topologie vit dans le GeoPackage.
     node_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
@@ -760,6 +762,7 @@ class ApportDwf(Base):
     __table_args__ = (
         Index("ix_apports_dwf_org_project", "org_id", "project_id"),
         Index("ix_apports_dwf_project_node", "project_id", "node_id"),
+        UniqueConstraint("project_id", "code_apport", name="uq_apports_dwf_project_code"),
     )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -767,6 +770,7 @@ class ApportDwf(Base):
             "id": self.id,
             "org_id": self.org_id,
             "project_id": self.project_id,
+            "code_apport": self.code_apport,
             "node_id": self.node_id,
             "nature": self.nature,
             "mode_determination": self.mode_determination,

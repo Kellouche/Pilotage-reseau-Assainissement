@@ -12,6 +12,7 @@ simulation. Les apports inactifs ne bloquent jamais.
 ================================================================================
 """
 
+import uuid
 import geopandas as gpd
 import pytest
 from pathlib import Path
@@ -53,8 +54,8 @@ def ctx_p15(tmp_path):
     _creer_gpkg(gpkg, ["REG_B1", "REG_B2"])
 
     db = SessionLocal()
-    pref = "p15"
-    org = Organization(id=f"{pref}_o", name="O15", slug=f"{pref}-o")
+    pref = f"p15_{uuid.uuid4().hex[:6]}"
+    org = Organization(id=f"{pref}_o", name=f"O15_{pref}", slug=f"{pref}-o")
     user = User(id=f"{pref}_u", email="u@p15.dz",
                 password_hash=hash_password("DwfPass2026!"),
                 full_name="U15", email_verified=True)

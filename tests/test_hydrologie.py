@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 import geopandas as gpd
 from pathlib import Path
 
+from sqlalchemy import text
 from api.main import app
 from api.database import SessionLocal, engine, Base
 from api.models import User, Organization, Membership, Project
@@ -24,12 +25,16 @@ client = TestClient(app)
 def clean_db():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
-    db.query(Membership).delete()
-    db.query(Project).delete()
-    db.query(User).delete()
-    db.query(Organization).delete()
-    db.commit()
-    db.close()
+    try:
+        db.execute(text("PRAGMA foreign_keys=OFF"))
+        for table in reversed(Base.metadata.sorted_tables):
+            db.execute(text(f"DELETE FROM {table.name}"))
+        db.execute(text("PRAGMA foreign_keys=ON"))
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
     yield
 
 def test_generateur_hydrologie_domain_direct():

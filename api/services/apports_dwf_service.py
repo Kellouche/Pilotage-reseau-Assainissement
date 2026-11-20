@@ -150,14 +150,16 @@ def _motif_incompatibilite(a: Dict[str, Any],
 
 
 def _details_incompatibilite(a: Dict[str, Any], motif: str,
-                             version_meta: Dict[str, Any]) -> Dict[str, Any]:
-    # LOT P1.5.1 — `code` = code motif STABLE (sans les valeurs interpolées)
-    # pour les clients ; `motif` conserve le détail lisible complet.
+                             version_meta: Dict[str, Any],
+                             noeud_present: bool = False) -> Dict[str, Any]:
+    # LOT P1.5.1 / LOT A2-DWF — `code` = code motif STABLE ;
+    # `noeud_present` = qualification de présence physique du nœud dans le réseau courant
     code = motif.split(" (", 1)[0].strip()
     return {
         "code": code,
         "apport_id": a.get("id"),
         "node_id": a.get("node_id"),
+        "noeud_present": bool(noeud_present),
         "apport_gpkg_version_id": a.get("gpkg_version_id"),
         "apport_gpkg_sha256": a.get("gpkg_sha256"),
         "simulation_gpkg_version_id": version_meta.get("version_id"),
@@ -201,12 +203,16 @@ def valider_apports_pour_version(
     incompatibles: List[Dict[str, Any]] = []
     for a in apports:
         motif = _motif_incompatibilite(a, version_meta)
-        if motif is None and noeuds_snapshot is not None:
+        noeud_present = False
+        if noeuds_snapshot is not None:
             nid = str(a.get("node_id") or "").strip()
-            if nid not in noeuds_snapshot:
+            noeud_present = (nid in noeuds_snapshot)
+            if motif is None and not noeud_present:
                 motif = "noeud_absent_du_snapshot"
         if motif is not None:
-            incompatibles.append(_details_incompatibilite(a, motif, version_meta))
+            incompatibles.append(
+                _details_incompatibilite(a, motif, version_meta, noeud_present=noeud_present)
+            )
 
     if incompatibles:
         raise ApportsDwfIncompatiblesError(incompatibles)
@@ -219,6 +225,8 @@ def preparer_apports_pour_simulation(
     dwf_actif: Optional[bool] = None,
     version_meta: Optional[Dict[str, Any]] = None,
     gpkg_path: Any = None,
+    dwf_compatibles_seulement: bool = False,
+    user_id: Optional[str] = None,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """
     Résout les apports à injecter pour une simulation.
@@ -227,6 +235,12 @@ def preparer_apports_pour_simulation(
     DWF actif en temps sec comme en pluie) ; False → désactivation
     explicite du scénario, aucun apport injecté et AUCUNE validation
     de version (comportement historique conservé).
+
+    `dwf_compatibles_seulement` (LOT A3-DWF) : si True, n'interrompt pas la
+    simulation en cas d'apports incompatibles. Les incompatibles sont isolés,
+    journalisés dans l'historique d'audit (action 'sim_exclusion') et dans
+    les ignorés du rapport, et la simulation s'exécute avec les seuls apports
+    compatibles. Si False (défaut), lève ApportsDwfIncompatiblesError (rejet strict 422).
 
     `version_meta` / `gpkg_path` : version EXACTE résolue pour la
     simulation (resoudre_version_pour_simulation). Obligatoires dès que
@@ -237,19 +251,136 @@ def preparer_apports_pour_simulation(
     l'empreinte à intégrer dans params_dict (clé de cache) :
       - "apports_dwf_sha256" : empreinte du jeu résolu ;
       - "dwf_actif"          : drapeau explicite de désactivation.
-
-    Lève ApportsDwfIncompatiblesError si un apport actif n'est pas
-    réconcilié avec la version simulée (politique stricte P1.4).
     """
     actif = dwf_actif is not False  # None et True → injection autorisée
     if not actif or proj is None:
-        return [], {"dwf_actif": False,
-                    "apports_dwf_sha256": empreinte_apports([])}
+        return [], {
+            "dwf_actif": False,
+            "apports_dwf_sha256": empreinte_apports([]),
+            "apports_dwf_count": 0,
+            "apports_dwf_ignores_count": 0,
+            "apports_dwf_ignores": [],
+        }
+
     apports = resoudre_apports_dwf(db, proj)
+    apports_retenus = apports
+    apports_ignores: List[Dict[str, Any]] = []
+
     if apports:
-        valider_apports_pour_version(apports, version_meta or {}, gpkg_path)
-    return apports, {
+        if not dwf_compatibles_seulement:
+            valider_apports_pour_version(apports, version_meta or {}, gpkg_path)
+        else:
+            try:
+                valider_apports_pour_version(apports, version_meta or {}, gpkg_path)
+            except ApportsDwfIncompatiblesError as e:
+                ids_incompatibles = {d["apport_id"]: d for d in e.details}
+                apports_retenus = [a for a in apports if a.get("id") not in ids_incompatibles]
+                from api.services.apports_dwf_history_service import enregistrer_exclusion_simulation
+                for a in apports:
+                    aid = a.get("id")
+                    if aid in ids_incompatibles:
+                        detail_inc = ids_incompatibles[aid]
+                        motif_excl = "exclusion_utilisateur"
+                        apports_ignores.append({
+                            "id": aid,
+                            "node_id": a.get("node_id"),
+                            "code_apport": a.get("code_apport"),
+                            "motif": motif_excl,
+                            "detail_incompatibilite": detail_inc.get("motif"),
+                            "code_incompatibilite": detail_inc.get("code"),
+                        })
+                        try:
+                            enregistrer_exclusion_simulation(
+                                db=db,
+                                apport_id=aid,
+                                org_id=proj.org_id,
+                                project_id=proj.id,
+                                simulation_id=None,
+                                motif=motif_excl,
+                                details=detail_inc,
+                                user_id=user_id,
+                            )
+                            db.flush()
+                        except Exception as ex_hist:
+                            logger.warning("Erreur audit exclusion apport %s: %s", aid, ex_hist)
+
+    return apports_retenus, {
         "dwf_actif": True,
-        "apports_dwf_sha256": empreinte_apports(apports),
-        "apports_dwf_count": len(apports),
+        "apports_dwf_sha256": empreinte_apports(apports_retenus),
+        "apports_dwf_count": len(apports_retenus),
+        "apports_dwf_ignores_count": len(apports_ignores),
+        "apports_dwf_ignores": apports_ignores,
+        "dwf_compatibles_seulement": bool(dwf_compatibles_seulement),
     }
+
+
+# ============================================================================
+# LOT A1-DWF — Clé Métier Unique `code_apport` (AP-YYYY-NNNN)
+# ============================================================================
+
+def generer_code_apport(db: Session, project_id: str, annee: Optional[int] = None) -> str:
+    """
+    Génère un code métier unique au format AP-YYYY-NNNN pour un projet donné.
+    La numérotation est séquentielle, scopée par projet et par année civile.
+    Exemples : AP-2026-0001, AP-2026-0002.
+    """
+    from datetime import datetime, timezone
+    import re
+    from api.models import ApportDwf
+
+    if annee is None:
+        annee = datetime.now(timezone.utc).year
+
+    prefix = f"AP-{annee}-"
+    codes = (
+        db.query(ApportDwf.code_apport)
+        .filter(
+            ApportDwf.project_id == project_id,
+            ApportDwf.code_apport.like(f"{prefix}%"),
+        )
+        .all()
+    )
+
+    max_seq = 0
+    pattern = re.compile(rf"^AP-{annee}-(\d+)$")
+    for (code,) in codes:
+        if code:
+            m = pattern.match(code.strip())
+            if m:
+                try:
+                    val = int(m.group(1))
+                    if val > max_seq:
+                        max_seq = val
+                except ValueError:
+                    pass
+
+    next_seq = max_seq + 1
+    return f"{prefix}{next_seq:04d}"
+
+
+def backfill_codes_apports(db: Session, project_id: Optional[str] = None) -> int:
+    """
+    Attribue rétroactivement un code_apport unique séquentiel à tous les apports
+    existants qui n'en possèdent pas encore.
+    Retourne le nombre d'enregistrements mis à jour.
+    """
+    from api.models import ApportDwf
+
+    q = db.query(ApportDwf).filter(
+        (ApportDwf.code_apport.is_(None)) | (ApportDwf.code_apport == "")
+    )
+    if project_id:
+        q = q.filter(ApportDwf.project_id == project_id)
+
+    apports_sans_code = q.order_by(ApportDwf.created_at, ApportDwf.id).all()
+    count = 0
+    for apport in apports_sans_code:
+        annee = apport.created_at.year if apport.created_at else None
+        apport.code_apport = generer_code_apport(db, apport.project_id, annee=annee)
+        db.flush()
+        count += 1
+
+    if count > 0:
+        db.commit()
+    return count
+

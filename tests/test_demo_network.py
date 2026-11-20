@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pathlib import Path
 from api.main import app
+from sqlalchemy import text
 from api.database import SessionLocal, engine, Base
 from api.models import User, Organization, Membership, Project
 
@@ -19,12 +20,16 @@ from api.models import User, Organization, Membership, Project
 def clean_test_env():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
-    db.query(Membership).delete()
-    db.query(Project).delete()
-    db.query(User).delete()
-    db.query(Organization).delete()
-    db.commit()
-    db.close()
+    try:
+        db.execute(text("PRAGMA foreign_keys=OFF"))
+        for table in reversed(Base.metadata.sorted_tables):
+            db.execute(text(f"DELETE FROM {table.name}"))
+        db.execute(text("PRAGMA foreign_keys=ON"))
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
     yield
 
 
