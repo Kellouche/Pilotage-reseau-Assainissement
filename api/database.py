@@ -154,6 +154,9 @@ def init_db():
             # LOT P1.4 — estampillage GPKG des apports DWF (migration douce)
             "ALTER TABLE apports_dwf ADD COLUMN gpkg_version_id VARCHAR(36)",
             "ALTER TABLE apports_dwf ADD COLUMN gpkg_sha256 VARCHAR(64)",
+            # LOT A1-DWF — clé métier unique code_apport (migration douce)
+            "ALTER TABLE apports_dwf ADD COLUMN code_apport VARCHAR(50)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_apports_dwf_project_code ON apports_dwf (project_id, code_apport)",
             # Paramétrage garde-fou par projet (JSON nullable)
             "ALTER TABLE projects ADD COLUMN garde_fou_config JSON",
             # Cloisonnement couches SIG satellites par version GPKG
@@ -186,5 +189,16 @@ def init_db():
             conn.commit()
         except Exception:
             pass
+
+    # LOT A1-DWF — attribution des codes métiers aux apports existants
+    try:
+        from api.services.apports_dwf_service import backfill_codes_apports
+        db_mig = SessionLocal()
+        try:
+            backfill_codes_apports(db_mig)
+        finally:
+            db_mig.close()
+    except Exception:
+        pass
 
     print("[DB] Tables initialisées avec succès")
