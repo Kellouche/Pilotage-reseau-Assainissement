@@ -222,13 +222,34 @@ async function chargerProfilsDwf() {
 }
 
 async function chargerNoeudsDwf() {
-    const pid = DWF.projectId ? `?project_id=${encodeURIComponent(DWF.projectId)}` : '';
-    var _urlNoeuds = `/api/v1/apports/noeuds${pid}`;
-    if (typeof window._urlAvecSnapshot === 'function') _urlNoeuds = window._urlAvecSnapshot(_urlNoeuds);
-    const res = await dwfFetch(_urlNoeuds);
+    const pid = DWF.projectId ? `project_id=${encodeURIComponent(DWF.projectId)}` : '';
+    // Détection intelligente du cluster/bassin actif
+    const activeCluster = window._selectedClusterId
+        || (window._dernierResultatSimulation && window._dernierResultatSimulation.meta ? window._dernierResultatSimulation.meta.cluster_id : null);
+    
+    let urlNoeuds = `/api/v1/apports/noeuds?${pid}&connectes_seulement=true`;
+    if (activeCluster) {
+        urlNoeuds += `&cluster_id=${encodeURIComponent(activeCluster)}`;
+    }
+    if (typeof window._urlAvecSnapshot === 'function') urlNoeuds = window._urlAvecSnapshot(urlNoeuds);
+    
+    const res = await dwfFetch(urlNoeuds);
     DWF.noeuds = (res && Array.isArray(res.noeuds)) ? res.noeuds : [];
+    DWF.noeudsMeta = res || {};
+    
     const dl = document.getElementById('dwf-liste-noeuds');
     if (dl) dl.innerHTML = DWF.noeuds.map(n => `<option value="${dwfEchapper(n)}">`).join('');
+    
+    const aide = document.getElementById('dwf-f-node-aide');
+    if (aide) {
+        if (activeCluster && res && res.cluster_id) {
+            aide.innerHTML = `<span style="color:#34d399;"><i class="fas fa-check-circle me-1"></i><b>${DWF.noeuds.length} regards connectés</b> au bassin actif (${dwfEchapper(activeCluster)})</span>`;
+        } else if (res && res.nb_connectes) {
+            aide.innerHTML = `<span style="color:#38bdf8;"><i class="fas fa-network-wired me-1"></i><b>${DWF.noeuds.length} regards connectés</b> au réseau hydraulique</span>`;
+        } else {
+            aide.innerHTML = `<span style="color:#94a3b8;"><i class="fas fa-info-circle me-1"></i>${DWF.noeuds.length} regards disponibles</span>`;
+        }
+    }
 }
 
 window.actualiserDwf = async function() {
@@ -774,3 +795,85 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
+// ---------------------------------------------------------------------------
+// Sélection interactive de regard sur la carte
+// ---------------------------------------------------------------------------
+
+window._dwfPickModeActive = false;
+
+window.dwfActiverSelectionCarte = function() {
+    const btn = document.getElementById('dwf-btn-pick-map');
+    const modalEl = document.getElementById('modal-apports-dwf');
+    if (window._dwfPickModeActive) {
+        window._dwfPickModeActive = false;
+        if (btn) {
+            btn.innerHTML = '<i class="fas fa-crosshairs"></i> Sur la carte';
+            btn.style.background = 'rgba(6, 182, 212, 0.15)';
+        }
+        if (modalEl) {
+            modalEl.style.opacity = '1';
+            modalEl.style.pointerEvents = 'auto';
+        }
+        return;
+    }
+
+    window._dwfPickModeActive = true;
+    if (btn) {
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Cliquez un regard…';
+        btn.style.background = 'rgba(245, 158, 11, 0.35)';
+        btn.style.borderColor = '#f59e0b';
+    }
+
+    if (modalEl) {
+        modalEl.style.opacity = '0.3';
+        modalEl.style.pointerEvents = 'none';
+    }
+
+    if (typeof window.afficherNotification === 'function') {
+        window.afficherNotification('Mode sélection actif : cliquez directement sur un regard du réseau sur la carte.', 'info');
+    }
+};
+
+window.dwfAppliquerNoeudSelectionne = function(nodeId) {
+    window._dwfPickModeActive = false;
+    const btn = document.getElementById('dwf-btn-pick-map');
+    const modalEl = document.getElementById('modal-apports-dwf');
+    const inputNode = document.getElementById('dwf-f-node');
+
+    if (modalEl) {
+        modalEl.style.opacity = '1';
+        modalEl.style.pointerEvents = 'auto';
+    }
+    if (btn) {
+        btn.innerHTML = '<i class="fas fa-crosshairs"></i> Sur la carte';
+        btn.style.background = 'rgba(6, 182, 212, 0.15)';
+        btn.style.borderColor = 'rgba(6, 182, 212, 0.4)';
+    }
+    if (inputNode && nodeId) {
+        inputNode.value = String(nodeId).trim();
+        inputNode.dispatchEvent(new Event('input', { bubbles: true }));
+        inputNode.focus();
+    }
+    if (typeof window.afficherNotification === 'function') {
+        window.afficherNotification(`Regard N° ${nodeId} sélectionné pour l'apport DWF.`, 'success');
+    }
+};
+
+window.ouvrirAjoutDwfPourNoeud = function(nodeId) {
+    if (typeof window.ouvrirModalApportsDwf === 'function') {
+        window.ouvrirModalApportsDwf();
+    }
+    setTimeout(() => {
+        if (typeof window.basculerFormulaireDwf === 'function') {
+            window.basculerFormulaireDwf(true);
+        }
+        const inputNode = document.getElementById('dwf-f-node');
+        if (inputNode && nodeId) {
+            inputNode.value = String(nodeId).trim();
+            inputNode.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        const inputDebit = document.getElementById('dwf-f-debit');
+        if (inputDebit) inputDebit.focus();
+    }, 200);
+};

@@ -11,7 +11,7 @@ GPKG versionné du projet, aucune émission INP (lot P1.3).
 
 import logging
 from pathlib import Path
-from typing import Optional, Set
+from typing import Optional, Set, Any, List, Dict
 
 import geopandas as gpd
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -106,6 +106,65 @@ def _contexte_noeuds(db: Session, proj: Project):
     return noeuds, gpkg_path, version_meta
 
 
+def _natural_sort_key(s: Any) -> list:
+    import re
+    return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', str(s))]
+
+
+def _noeuds_connectes_gpkg(gpkg_path: Path) -> Set[str]:
+    """Extrait l'ensemble des identifiants de nœuds connectés à au moins une canalisation."""
+    from src.domain.moteur_swmm.constants import _clean_node_id
+    try:
+        layers = gpd.list_layers(str(gpkg_path))["name"].tolist()
+        canal_layer = next((l for l in layers if any(k in l.lower() for k in ("canal", "troncon", "pipe"))), None)
+        if not canal_layer:
+            return set()
+        gdf_c = gpd.read_file(str(gpkg_path), layer=canal_layer)
+        connectes = set()
+        for col in ("ID_AMONT", "ID_AVAL", "amont", "aval", "id_amont", "id_aval", "u", "d", "U", "D"):
+            if col in gdf_c.columns:
+                for val in gdf_c[col].dropna():
+                    clean = _clean_node_id(val)
+                    if clean:
+                        connectes.add(clean)
+        return connectes
+    except Exception as e:
+        logger.warning("Extraction des nœuds connectés impossible: %s", e)
+        return set()
+
+
+def _noeuds_cluster_gpkg(gpkg_path: Path, cluster_id: str) -> Set[str]:
+    """Résout l'ensemble des nœuds amont drainant vers l'exutoire d'un cluster."""
+    if not cluster_id or not str(cluster_id).strip():
+        return set()
+    cid = str(cluster_id).strip()
+    try:
+        from api.routes.clusters import _get_graph
+        import networkx as nx
+        G = _get_graph(str(gpkg_path))
+        target = None
+        if cid in G:
+            target = cid
+        elif cid.startswith("OUT_") and cid[4:] in G:
+            target = cid[4:]
+        elif f"OUT_{cid}" in G:
+            target = f"OUT_{cid}"
+        else:
+            for n in G.nodes():
+                if str(n) == cid or f"OUT_{n}" == cid or n == f"OUT_{cid}":
+                    target = n
+                    break
+        if target and target in G:
+            ancestors = nx.ancestors(G, target)
+            return {str(a) for a in ancestors} | {str(target)}
+        for comp in nx.weakly_connected_components(G):
+            if any(cid in str(n) or str(n) in cid for n in comp):
+                return {str(n) for n in comp}
+    except Exception as e:
+        logger.warning("Résolution des nœuds du cluster %s impossible: %s", cluster_id, e)
+    return set()
+
+
 def _noeuds_valides_projet(db: Session, proj: Project) -> Set[str]:
     """Ensemble des identifiants de nœuds valides du GPKG effectif du projet."""
     return _contexte_noeuds(db, proj)[0]
@@ -134,10 +193,18 @@ def _valider_noeud(db: Session, proj: Project, node_id: str) -> str:
     nid = _clean_node_id(node_id)
     if not nid:
         raise HTTPException(status_code=422, detail="Identifiant de nœud invalide.")
-    if nid not in _noeuds_valides_projet(db, proj):
+    noeuds, gpkg_path, _ = _contexte_noeuds(db, proj)
+    if nid not in noeuds:
         raise HTTPException(
             status_code=422,
             detail=f"Nœud '{nid}' inexistant dans le réseau du projet.")
+    connectes = _noeuds_connectes_gpkg(gpkg_path)
+    if connectes and nid not in connectes:
+        raise HTTPException(
+            status_code=422,
+            detail=(f"Le regard '{nid}' existe dans le fichier SIG mais n'est raccordé "
+                    f"à aucune canalisation du réseau hydraulique (regard orphelin). "
+                    f"Veuillez sélectionner un regard connecté au réseau pour y injecter un débit."))
     return nid
 
 
@@ -152,11 +219,18 @@ def _valider_noeud_et_version(db: Session, proj: Project, node_id: str):
     nid = _clean_node_id(node_id)
     if not nid:
         raise HTTPException(status_code=422, detail="Identifiant de nœud invalide.")
-    noeuds, _gpkg_path, version_meta = _contexte_noeuds(db, proj)
+    noeuds, gpkg_path, version_meta = _contexte_noeuds(db, proj)
     if nid not in noeuds:
         raise HTTPException(
             status_code=422,
             detail=f"Nœud '{nid}' inexistant dans le réseau du projet.")
+    connectes = _noeuds_connectes_gpkg(gpkg_path)
+    if connectes and nid not in connectes:
+        raise HTTPException(
+            status_code=422,
+            detail=(f"Le regard '{nid}' existe dans le fichier SIG mais n'est raccordé "
+                    f"à aucune canalisation du réseau hydraulique (regard orphelin). "
+                    f"Veuillez sélectionner un regard connecté au réseau pour y injecter un débit."))
     return nid, version_meta
 
 
@@ -220,13 +294,18 @@ def lister_apports(
 def lister_noeuds_disponibles(
     project_id: Optional[str] = Query(None),
     snapshot: Optional[str] = Query(None),
+    cluster_id: Optional[str] = Query(None),
+    connectes_seulement: bool = Query(True),
     db: Session = Depends(get_db),
     tenant: TenantContext = Depends(get_tenant_context),
 ):
-    """Liste les identifiants de nœuds valides du GPKG du projet (aide à la saisie).
+    """Liste les identifiants de nœuds valides du GPKG du projet (aide à la saisie intelligente).
 
-    `snapshot` : lit les nœuds du snapshot demandé (version archivée) au
-    lieu de la version courante — la vue archive voit SON réseau.
+    - `connectes_seulement` (défaut True) : ne propose que les regards
+      raccordés à au moins une canalisation (exclut les regards isolés / orphelins).
+    - `cluster_id` : si spécifié, filtre exclusivement les regards appartenant
+      au bassin versant sélectionné.
+    - `snapshot` : lit les nœuds du snapshot demandé au lieu de la version courante.
     """
     proj = _resoudre_projet(db, tenant, project_id)
     if snapshot and str(snapshot).strip():
@@ -243,11 +322,41 @@ def lister_noeuds_disponibles(
             raise HTTPException(status_code=422, detail="Couche 'regards' absente du snapshot.")
         regards = gpd.read_file(str(gpkg_path), layer=regard_layer, columns=["Code"])
         from src.domain.moteur_swmm.constants import _clean_node_id
-        noeuds = sorted({_clean_node_id(c) for c in regards.get("Code", [])} - {""})
-        return {"project_id": proj.id, "noeuds": noeuds, "count": len(noeuds),
-                "snapshot_sha256": snap_ctx.get("sha256")}
-    noeuds = sorted(_noeuds_valides_projet(db, proj))
-    return {"project_id": proj.id, "noeuds": noeuds, "count": len(noeuds)}
+        tous_noeuds = {_clean_node_id(c) for c in regards.get("Code", [])} - {""}
+        connectes = _noeuds_connectes_gpkg(gpkg_path)
+        selection = (tous_noeuds & connectes) if (connectes_seulement and connectes) else set(tous_noeuds)
+        if cluster_id:
+            c_nodes = _noeuds_cluster_gpkg(gpkg_path, cluster_id)
+            if c_nodes:
+                selection = selection & c_nodes
+        noeuds = sorted(list(selection), key=_natural_sort_key)
+        return {
+            "project_id": proj.id,
+            "cluster_id": cluster_id,
+            "noeuds": noeuds,
+            "count": len(noeuds),
+            "total_regards": len(tous_noeuds),
+            "nb_connectes": len(tous_noeuds & connectes) if connectes else len(tous_noeuds),
+            "snapshot_sha256": snap_ctx.get("sha256"),
+        }
+
+    tous_noeuds, gpkg_path, version_meta = _contexte_noeuds(db, proj)
+    connectes = _noeuds_connectes_gpkg(gpkg_path)
+    selection = (tous_noeuds & connectes) if (connectes_seulement and connectes) else set(tous_noeuds)
+    if cluster_id:
+        c_nodes = _noeuds_cluster_gpkg(gpkg_path, cluster_id)
+        if c_nodes:
+            selection = selection & c_nodes
+    noeuds = sorted(list(selection), key=_natural_sort_key)
+    return {
+        "project_id": proj.id,
+        "cluster_id": cluster_id,
+        "noeuds": noeuds,
+        "count": len(noeuds),
+        "total_regards": len(tous_noeuds),
+        "nb_connectes": len(tous_noeuds & connectes) if connectes else len(tous_noeuds),
+        "nb_orphelins": len(tous_noeuds - connectes) if connectes else 0,
+    }
 
 
 @router.get("/a-reconcilier")

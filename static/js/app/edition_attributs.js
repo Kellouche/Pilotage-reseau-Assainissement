@@ -276,6 +276,9 @@
                 <button onclick="editRegard(${index})" style="width: 100%; padding: 5px 10px; background: #0284c7; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600;">
                     <i class="fas fa-edit me-1"></i> Modifier l'ouvrage
                 </button>
+                <button onclick="window.ouvrirAjoutDwfPourNoeud('${cleanCode}')" style="width: 100%; margin-top: 5px; padding: 5px 10px; background: rgba(52,211,153,0.15); color: #059669; border: 1px solid rgba(5,150,105,0.4); border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 700;">
+                    <i class="fas fa-faucet-drip me-1"></i> Ajouter un apport DWF
+                </button>
             </div>`;
         }
 

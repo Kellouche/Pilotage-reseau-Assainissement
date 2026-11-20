@@ -95,10 +95,16 @@ Objet : LOT P1.5.2 — Modale de gestion des apports de temps sec (DWF)
                                 <label style="font-size: 0.76rem; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 5px;">
                                     <i class="fas fa-bullseye me-1" style="color:#38bdf8;"></i> Regard du réseau *
                                 </label>
-                                <input type="text" id="dwf-f-node" list="dwf-liste-noeuds" placeholder="Identifiant du regard (ex. REG_12)…" autocomplete="off"
-                                       style="width: 100%; padding: 9px 12px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #f8fafc; font-size: 0.85rem;">
+                                <div style="display: flex; gap: 8px; align-items: center;">
+                                    <input type="text" id="dwf-f-node" list="dwf-liste-noeuds" placeholder="ex. 9080, 2185…" autocomplete="off"
+                                           style="flex: 1; padding: 9px 12px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #f8fafc; font-size: 0.85rem;">
+                                    <button type="button" id="dwf-btn-pick-map" onclick="dwfActiverSelectionCarte()" title="Sélectionner un regard directement en cliquant sur la carte"
+                                            style="background: rgba(6, 182, 212, 0.15); border: 1px solid rgba(6, 182, 212, 0.4); color: #38bdf8; border-radius: 8px; padding: 8px 12px; font-size: 0.75rem; font-weight: 700; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 5px;">
+                                        <i class="fas fa-crosshairs"></i> Sur la carte
+                                    </button>
+                                </div>
                                 <datalist id="dwf-liste-noeuds"></datalist>
-                                <small style="color: #64748b; font-size: 0.7rem;" id="dwf-f-node-aide">Issu du GeoPackage du projet — le nœud est revérifié à l'enregistrement.</small>
+                                <small style="color: #64748b; font-size: 0.7rem; display: block; margin-top: 4px;" id="dwf-f-node-aide">Chargement des regards du réseau…</small>
                             </div>
 
                             <div>

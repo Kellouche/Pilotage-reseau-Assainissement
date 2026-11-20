@@ -283,6 +283,19 @@ function chargerDonneesInitiales() {
                                 // Si l'icône est active : tracé du profil sans ouvrir la fenêtre de modification
                                 // Si l'icône n'est pas active : la fenêtre de modification s'ouvre normalement
                                 layer.on('click', (e) => {
+                                    // Interception si le mode Sélection Regard DWF est actif
+                                    if (window._dwfPickModeActive) {
+                                        L.DomEvent.stop(e);
+                                        const cMap = window.carte || window.map;
+                                        if (cMap) cMap.closePopup();
+                                        if (layer.closePopup) layer.closePopup();
+                                        const p = feature.properties || {};
+                                        const code = p.Code || p.code || p.CODE || p.id || p.ID || p.Id || p.nom || p.NOM || p.Nom || p.CODEPRR || p.NUMERO || feature.id;
+                                        if (code && typeof window.dwfAppliquerNoeudSelectionne === 'function') {
+                                            window.dwfAppliquerNoeudSelectionne(code);
+                                        }
+                                        return false;
+                                    }
                                     if (window.profilLongState && window.profilLongState.active) {
                                         L.DomEvent.stop(e);
                                         const cMap = window.carte || window.map;
