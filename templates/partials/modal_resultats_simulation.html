@@ -290,12 +290,12 @@ Objet : Fenêtre dédiée Haute Définition de restitution des résultats de sim
 
                 <!-- SOUS-ONGLET A : TABLEAU DES CONDUITES -->
                 <div id="subtab-content-conduites">
-                    <!-- Boutons filtres rapides conduites -->
-                    <div style="display: flex; gap: 8px; margin-bottom: 12px; font-size: 0.75rem;">
-                        <button onclick="filtrerConduitesParStatut('tous')" class="btn-filter-cond active" style="padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.08); color: white; cursor: pointer;">Toutes</button>
-                        <button onclick="filtrerConduitesParStatut('surcharge')" class="btn-filter-cond" style="padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.1); color: #f87171; cursor: pointer;">🔴 Surcharge (&gt; 100%)</button>
-                        <button onclick="filtrerConduitesParStatut('moderee')" class="btn-filter-cond" style="padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.1); color: #fbbf24; cursor: pointer;">🟠 Modérée (70-100%)</button>
-                        <button onclick="filtrerConduitesParStatut('libre')" class="btn-filter-cond" style="padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(52, 211, 153, 0.4); background: rgba(52, 211, 153, 0.1); color: #34d399; cursor: pointer;">🟢 Capacité libre (&lt; 70%)</button>
+                    <!-- Boutons filtres rapides conduites avec décomptes dynamiques -->
+                    <div style="display: flex; gap: 8px; margin-bottom: 12px; font-size: 0.75rem; flex-wrap: wrap;">
+                        <button onclick="filtrerConduitesParStatut('tous')" id="btn-filter-cond-tous" class="btn-filter-cond active" style="padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.08); color: white; cursor: pointer;">Toutes (<span id="count-filter-cond-tous">0</span>)</button>
+                        <button onclick="filtrerConduitesParStatut('surcharge')" id="btn-filter-cond-surcharge" class="btn-filter-cond" style="padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.1); color: #f87171; cursor: pointer;">🔴 Surcharge (<span id="count-filter-cond-surcharge">0</span>)</button>
+                        <button onclick="filtrerConduitesParStatut('moderee')" id="btn-filter-cond-moderee" class="btn-filter-cond" style="padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.1); color: #fbbf24; cursor: pointer;">🟠 Charge modérée (<span id="count-filter-cond-moderee">0</span>)</button>
+                        <button onclick="filtrerConduitesParStatut('libre')" id="btn-filter-cond-libre" class="btn-filter-cond" style="padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(52, 211, 153, 0.4); background: rgba(52, 211, 153, 0.1); color: #34d399; cursor: pointer;">🟢 Capacité libre (<span id="count-filter-cond-libre">0</span>)</button>
                     </div>
 
                     <!-- Tableau des Conduites -->
@@ -309,12 +309,13 @@ Objet : Fenêtre dédiée Haute Définition de restitution des résultats de sim
                                     <th style="padding: 10px 12px;">Pente</th>
                                     <th style="padding: 10px 12px;">Débit max</th>
                                     <th style="padding: 10px 12px;">Vitesse max</th>
-                                    <th style="padding: 10px 12px; width: 180px;">Remplissage (Q/Qmax)</th>
+                                    <th style="padding: 10px 12px; width: 170px;">Remplissage (Q/Qmax)</th>
+                                    <th style="padding: 10px 12px; text-align: center; width: 85px;">Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="tbody-details-conduites">
                                 <tr>
-                                    <td colspan="7" style="padding: 24px; text-align: center; color: #64748b;">
+                                    <td colspan="8" style="padding: 24px; text-align: center; color: #64748b;">
                                         Aucun résultat de conduit disponible
                                     </td>
                                 </tr>
@@ -325,11 +326,12 @@ Objet : Fenêtre dédiée Haute Définition de restitution des résultats de sim
 
                 <!-- SOUS-ONGLET B : TABLEAU DES REGARDS -->
                 <div id="subtab-content-regards" style="display: none;">
-                    <!-- Boutons filtres rapides regards -->
-                    <div style="display: flex; gap: 8px; margin-bottom: 12px; font-size: 0.75rem;">
-                        <button onclick="filtrerRegardsParStatut('tous')" class="btn-filter-reg active" style="padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.08); color: white; cursor: pointer;">Tous les regards</button>
-                        <button onclick="filtrerRegardsParStatut('debordement')" class="btn-filter-reg" style="padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.1); color: #f87171; cursor: pointer;">🔴 En débordement (tampon atteint)</button>
-                        <button onclick="filtrerRegardsParStatut('charge')" class="btn-filter-reg" style="padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.1); color: #fbbf24; cursor: pointer;">🟠 En charge sans débordement</button>
+                    <!-- Boutons filtres rapides regards avec décomptes dynamiques -->
+                    <div style="display: flex; gap: 8px; margin-bottom: 12px; font-size: 0.75rem; flex-wrap: wrap;">
+                        <button onclick="filtrerRegardsParStatut('tous')" id="btn-filter-reg-tous" class="btn-filter-reg active" style="padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.08); color: white; cursor: pointer;">Tous les regards (<span id="count-filter-reg-tous">0</span>)</button>
+                        <button onclick="filtrerRegardsParStatut('debordement')" id="btn-filter-reg-debordement" class="btn-filter-reg" style="padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.1); color: #f87171; cursor: pointer;">🔴 En débordement tampon (<span id="count-filter-reg-debordement">0</span>)</button>
+                        <button onclick="filtrerRegardsParStatut('charge')" id="btn-filter-reg-charge" class="btn-filter-reg" style="padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.1); color: #fbbf24; cursor: pointer;">🟠 En charge sans débordement (<span id="count-filter-reg-charge">0</span>)</button>
+                        <button onclick="filtrerRegardsParStatut('libre')" id="btn-filter-reg-libre" class="btn-filter-reg" style="padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(52, 211, 153, 0.4); background: rgba(52, 211, 153, 0.1); color: #34d399; cursor: pointer;">🟢 Écoulement libre (<span id="count-filter-reg-libre">0</span>)</button>
                     </div>
 
                     <!-- Tableau des Regards -->
@@ -343,11 +345,12 @@ Objet : Fenêtre dédiée Haute Définition de restitution des résultats de sim
                                     <th style="padding: 10px 12px;">Hauteur de charge</th>
                                     <th style="padding: 10px 12px;">Volume débordé</th>
                                     <th style="padding: 10px 12px;">Statut hydraulique</th>
+                                    <th style="padding: 10px 12px; text-align: center; width: 85px;">Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="tbody-details-regards">
                                 <tr>
-                                    <td colspan="6" style="padding: 24px; text-align: center; color: #64748b;">
+                                    <td colspan="7" style="padding: 24px; text-align: center; color: #64748b;">
                                         Aucun résultat de regard disponible
                                     </td>
                                 </tr>

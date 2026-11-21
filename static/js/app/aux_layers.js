@@ -13,7 +13,8 @@
         _moveendBind: false,
         _chargement: false,
         nomsImportes: new Set(),  // basenames (sans ext.) des fichiers déjà importés
-        _listeChargee: false
+        _listeChargee: false,
+        _prefs: {}               // layer_id -> bool : choix utilisateur persistant
     };
 
     // Palette + motifs de traits : chaque couche satellite reçoit un style
@@ -172,11 +173,15 @@
             const couleur = (c.type === 'altimetrie_points') ? TYPE_COULEURS[c.type] : st.couleur;
             const lib = TYPE_LIBELLES[c.type] || 'SIG';
             const estTopo = c.type === 'altimetrie_points' && c.statut === 'ok';
+            // État initial : choix explicite de l'utilisateur prioritaire ;
+            // à défaut, les couches altimétriques « ok » démarrent cochées.
+            const cocheInitial = (AUX._prefs[c.id] !== undefined)
+                ? AUX._prefs[c.id] : estTopo;
             const div = document.createElement('div');
             div.className = 'layer-item';
             div.style.cssText = 'display:flex; align-items:center; gap:6px; flex-wrap:wrap;';
             div.innerHTML = `
-                <input type="checkbox" id="aux-f-${c.id}" ${estTopo ? 'checked' : ''}>
+                <input type="checkbox" id="aux-f-${c.id}" ${cocheInitial ? 'checked' : ''}>
                 <span class="layer-indicator" style="background:${couleur}; border-radius:50%; width:9px; height:9px;"></span>
                 <span style="font-size:0.75rem; color:#cbd5e1; flex:1; min-width:90px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${c.nom} — ${lib} — ${c.nb_features} entités">${c.nom}</span>
                 <span style="font-size:0.62rem; color:#64748b;">${c.nb_features} objets</span>
@@ -185,6 +190,10 @@
                 <button type="button" class="aux-del-btn" data-id="${c.id}" title="Supprimer définitivement cette couche satellite" style="background:rgba(248,113,113,0.12); border:1px solid rgba(248,113,113,0.35); color:#fca5a5; border-radius:5px; padding:1px 6px; font-size:0.65rem; cursor:pointer; flex:none;">🗑</button>
             `;
             div.querySelector('input[type=checkbox]').addEventListener('change', (e) => {
+                // Mémoriser le choix explicite : les rechargements de liste
+                // (changement de projet/snapshot) ne doivent pas réactiver
+                // une couche que l'utilisateur a désactivée.
+                AUX._prefs[c.id] = e.target.checked;
                 basculerCouche(c.id, e.target.checked);
             });
             const btnSonde = div.querySelector('.aux-sonde-btn');
@@ -201,8 +210,9 @@
             }
             cont.appendChild(div);
 
-            // Pré-activer les couches altimétriques OK
-            if (estTopo) {
+            // Activer les couches cochées : altimétrie « ok » par défaut,
+            // sauf si l'utilisateur les a explicitement désactivées.
+            if (cocheInitial) {
                 basculerCouche(c.id, true);
             }
         });

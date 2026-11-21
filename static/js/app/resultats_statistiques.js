@@ -247,6 +247,237 @@ window.fermerModalResultatsSimulation = function() {
     if (modal) modal.style.display = 'none';
 };
 
+// Affichage d'un toast interactif permettant de rouvrir la modale de résultats après navigation
+window.afficherToastRetourResultats = function(message) {
+    let toast = document.getElementById('toast-retour-modal-resultats');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'toast-retour-modal-resultats';
+        toast.style.cssText = 'position:fixed;top:68px;left:50%;transform:translateX(-50%);z-index:10600;background:rgba(15,23,42,0.94);backdrop-filter:blur(12px);border:1px solid rgba(56,189,248,0.45);border-radius:30px;padding:8px 18px;color:#f8fafc;font-size:0.8rem;box-shadow:0 10px 25px -5px rgba(0,0,0,0.5),0 0 15px rgba(56,189,248,0.25);display:flex;align-items:center;gap:12px;';
+        document.body.appendChild(toast);
+    }
+    toast.innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;">
+            <i class="fas fa-bullseye" style="color:#38bdf8;"></i>
+            <span>${message}</span>
+        </div>
+        <button type="button" onclick="window.ouvrirModalResultatsSimulation();document.getElementById('toast-retour-modal-resultats').style.display='none';" style="background:linear-gradient(135deg,#0284c7,#0369a1);border:1px solid rgba(255,255,255,0.25);color:white;border-radius:20px;padding:4px 12px;font-size:0.75rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;box-shadow:0 2px 6px rgba(0,0,0,0.3);">
+            <i class="fas fa-table-cells"></i>
+            <span>Rouvrir Résultats</span>
+        </button>
+        <button type="button" onclick="document.getElementById('toast-retour-modal-resultats').style.display='none';" style="background:transparent;border:none;color:#94a3b8;cursor:pointer;padding:0 4px;font-size:0.85rem;" title="Fermer">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    toast.style.display = 'flex';
+};
+
+// Localisation instantanée avec centrage fluide et impulsion visuelle
+window.localiserElementSurCarte = function(type, id) {
+    if (!id) return;
+    const strId = String(id).trim();
+    const cleanId = strId.endsWith('.0') ? strId.slice(0, -2) : strId;
+
+    window.fermerModalResultatsSimulation();
+
+    const carte = (typeof window.carte !== 'undefined' && window.carte)
+        || (typeof window.map !== 'undefined' && window.map)
+        || (typeof carte !== 'undefined' ? carte : null);
+    if (!carte) return;
+
+    if (type === 'regard') {
+        let coords = null;
+        let targetLayer = null;
+
+        if (typeof couches !== 'undefined' && couches.res_regards && couches.res_regards.eachLayer) {
+            couches.res_regards.eachLayer(l => {
+                if (coords) return;
+                const p = (l.feature && l.feature.properties) || {};
+                const code = String(p.Code || p.code || p.CODE || p.id || '').trim();
+                const cl = code.endsWith('.0') ? code.slice(0, -2) : code;
+                if (cl === cleanId || code === strId) {
+                    const ll = l.getLatLng ? l.getLatLng() : null;
+                    if (ll) { coords = { lng: ll.lng, lat: ll.lat }; targetLayer = l; }
+                }
+            });
+        }
+
+        if (!coords && typeof couches !== 'undefined' && couches.regards && couches.regards.eachLayer) {
+            couches.regards.eachLayer(l => {
+                if (coords) return;
+                const p = (l.feature && l.feature.properties) || {};
+                const code = String(p.Code || p.code || p.CODE || p.id || '').trim();
+                const cl = code.endsWith('.0') ? code.slice(0, -2) : code;
+                if (cl === cleanId || code === strId) {
+                    const ll = l.getLatLng ? l.getLatLng() : null;
+                    if (ll) { coords = { lng: ll.lng, lat: ll.lat }; targetLayer = l; }
+                }
+            });
+        }
+
+        if (!coords && window._rawNetworkData && window._rawNetworkData.couches && window._rawNetworkData.couches.regards && Array.isArray(window._rawNetworkData.couches.regards.features)) {
+            const feats = window._rawNetworkData.couches.regards.features;
+            for (let i = 0; i < feats.length; i++) {
+                const f = feats[i];
+                const p = f.properties || {};
+                const code = String(p.Code || p.code || p.CODE || p.id || '').trim();
+                const cl = code.endsWith('.0') ? code.slice(0, -2) : code;
+                if ((cl === cleanId || code === strId) && f.geometry && Array.isArray(f.geometry.coordinates)) {
+                    coords = { lng: f.geometry.coordinates[0], lat: f.geometry.coordinates[1] };
+                    break;
+                }
+            }
+        }
+
+        if (coords) {
+            window._rechercheCentrageJusqua = Date.now() + 8000;
+            if (typeof carte.flyTo === 'function') {
+                carte.flyTo([coords.lat, coords.lng], 18, { duration: 1.2 });
+            } else if (typeof carte.setView === 'function') {
+                carte.setView([coords.lat, coords.lng], 18);
+            }
+
+            const pulseIcon = L.divIcon({
+                className: 'pulse-temp-marker',
+                html: '<div style="position:relative;width:34px;height:34px;"><div style="position:absolute;left:50%;top:50%;width:34px;height:34px;transform:translate(-50%,-50%);border-radius:50%;border:3px solid #f59e0b;animation:pulseRing 1.1s ease-out infinite;"></div><div style="position:absolute;left:50%;top:50%;width:14px;height:14px;transform:translate(-50%,-50%);background:#f59e0b;border:2.5px solid #fff;border-radius:50%;box-shadow:0 0 10px rgba(245,158,11,0.9);"></div></div>',
+                iconSize: [34, 34],
+                iconAnchor: [17, 17]
+            });
+            const m = L.marker([coords.lat, coords.lng], { icon: pulseIcon }).addTo(carte);
+            m.bindTooltip(`Regard ${strId}`, { permanent: true, direction: 'top' });
+            setTimeout(() => { try { carte.removeLayer(m); } catch(_) {} }, 6000);
+
+            if (targetLayer && typeof targetLayer.openPopup === 'function') {
+                setTimeout(() => { try { targetLayer.openPopup(); } catch(_) {} }, 1250);
+            }
+            window.afficherToastRetourResultats(`Regard <b>${strId}</b> centré sur la carte.`);
+        } else {
+            if (typeof window.dialogueAlerte === 'function') {
+                window.dialogueAlerte(`Coordonnées du regard ${strId} introuvables.`, 'info');
+            }
+        }
+    } else if (type === 'conduite') {
+        let targetLayer = null;
+        let bounds = null;
+
+        if (typeof couches !== 'undefined' && couches.res_conduites && couches.res_conduites.eachLayer) {
+            couches.res_conduites.eachLayer(l => {
+                if (targetLayer) return;
+                const p = (l.feature && l.feature.properties) || {};
+                const cid = String(p.link_id || p.ID || p.id || p.Name || '').trim();
+                if (cid === strId) {
+                    targetLayer = l;
+                    if (l.getBounds) bounds = l.getBounds();
+                }
+            });
+        }
+
+        if (!targetLayer && typeof couches !== 'undefined' && couches.conduites && couches.conduites.eachLayer) {
+            couches.conduites.eachLayer(l => {
+                if (targetLayer) return;
+                const p = (l.feature && l.feature.properties) || {};
+                const cid = String(p.ID || p.id || p.Name || p.link_id || '').trim();
+                if (cid === strId) {
+                    targetLayer = l;
+                    if (l.getBounds) bounds = l.getBounds();
+                }
+            });
+        }
+
+        if (targetLayer && bounds) {
+            window._rechercheCentrageJusqua = Date.now() + 8000;
+            if (typeof carte.flyToBounds === 'function') {
+                carte.flyToBounds(bounds, { maxZoom: 18, padding: [60, 60], duration: 1.2 });
+            } else if (typeof carte.fitBounds === 'function') {
+                carte.fitBounds(bounds, { maxZoom: 18, padding: [60, 60] });
+            }
+            if (typeof targetLayer.openPopup === 'function') {
+                setTimeout(() => { try { targetLayer.openPopup(); } catch(_) {} }, 1250);
+            }
+            window.afficherToastRetourResultats(`Tronçon <b>${strId}</b> centré sur la carte.`);
+        } else {
+            if (typeof window.dialogueAlerte === 'function') {
+                window.dialogueAlerte(`Tracé de la conduite ${strId} introuvable.`, 'info');
+            }
+        }
+    }
+};
+
+// Ouverture directe du profil en long depuis le tableau de résultats
+window.ouvrirProfilDepuisModal = function(type, id, uNode, dNode) {
+    window.fermerModalResultatsSimulation();
+
+    let amont = uNode;
+    let aval = dNode;
+
+    if (type === 'regard' || (!amont && !aval)) {
+        const nid = String(id).trim();
+        const cleanNid = nid.endsWith('.0') ? nid.slice(0, -2) : nid;
+
+        const simData = window._dernierResultatSimulation || {};
+        const cRes = simData.conduit_results || {};
+
+        let incomingAmont = null;
+        let outgoingAval = null;
+
+        Object.values(cRes).forEach(c => {
+            const u = String(c.u_node || '').trim();
+            const d = String(c.d_node || '').trim();
+            const uCl = u.endsWith('.0') ? u.slice(0, -2) : u;
+            const dCl = d.endsWith('.0') ? d.slice(0, -2) : d;
+
+            if (uCl === cleanNid || u === nid) {
+                if (!outgoingAval) outgoingAval = d;
+            }
+            if (dCl === cleanNid || d === nid) {
+                if (!incomingAmont) incomingAmont = u;
+            }
+        });
+
+        if (incomingAmont && outgoingAval) {
+            amont = incomingAmont;
+            aval = outgoingAval;
+        } else if (outgoingAval) {
+            amont = nid;
+            aval = outgoingAval;
+        } else if (incomingAmont) {
+            amont = incomingAmont;
+            aval = nid;
+        } else {
+            amont = nid;
+            aval = nid;
+        }
+    }
+
+    if (!amont || !aval) {
+        if (typeof window.dialogueAlerte === 'function') {
+            window.dialogueAlerte(`Impossible de déterminer l'axe amont-aval pour l'ouvrage ${id}.`, 'info');
+        }
+        return;
+    }
+
+    const inpA = document.getElementById('input-profil-amont');
+    const inpB = document.getElementById('input-profil-aval');
+    if (inpA) inpA.value = amont;
+    if (inpB) inpB.value = aval;
+
+    if (typeof window.synchroniserInputProfilAmont === 'function') window.synchroniserInputProfilAmont(amont);
+    if (typeof window.synchroniserInputProfilAval === 'function') window.synchroniserInputProfilAval(aval);
+
+    const panel = document.getElementById('panel-profil-long');
+    if (panel) {
+        panel.style.display = 'flex';
+        if (typeof _centrerPanelProfil === 'function') _centrerPanelProfil();
+        if (typeof _initProfilLongDraggable === 'function') _initProfilLongDraggable();
+    }
+
+    if (typeof chargerProfilLong === 'function') {
+        chargerProfilLong(amont, aval);
+    }
+
+    window.afficherToastRetourResultats(`Profil en long tracé de <b>${amont}</b> &rarr; <b>${aval}</b>.`);
+};
+
 window.basculerOngletResultats = function(tabKey) {
     const tabs = ['kpi', 'details', 'ia'];
     tabs.forEach(t => {
@@ -554,9 +785,19 @@ window.remplirModalResultatsSimulation = function(data) {
     const condKeys = Object.keys(cRes);
     if (badgeCond) badgeCond.textContent = condKeys.length;
 
+    // Décomptes dynamiques des filtres Conduites
+    const cAll = document.getElementById('count-filter-cond-tous');
+    if (cAll) cAll.textContent = condKeys.length;
+    const cSur = document.getElementById('count-filter-cond-surcharge');
+    if (cSur) cSur.textContent = surchargedPipesCount;
+    const cMod = document.getElementById('count-filter-cond-moderee');
+    if (cMod) cMod.textContent = moderatePipesCount;
+    const cLib = document.getElementById('count-filter-cond-libre');
+    if (cLib) cLib.textContent = freePipesCount;
+
     if (tbodyCond) {
         if (condKeys.length === 0) {
-            tbodyCond.innerHTML = `<tr><td colspan="7" style="padding:24px; text-align:center; color:#64748b;">Aucun tronçon de conduite dans ce périmètre</td></tr>`;
+            tbodyCond.innerHTML = `<tr><td colspan="8" style="padding:24px; text-align:center; color:#64748b;">Aucun tronçon de conduite dans ce périmètre</td></tr>`;
         } else {
             let htmlCond = '';
             condKeys.forEach(kId => {
@@ -568,7 +809,8 @@ window.remplirModalResultatsSimulation = function(data) {
 
                 let statutClass = 'libre';
                 let col = '#10b981';
-                if (c.status === 'surcharge' || maxR >= 1.0) {
+                const isCritique = (c.status === 'surcharge' || maxR >= 1.0);
+                if (isCritique) {
                     statutClass = 'surcharge';
                     col = '#ef4444';
                 } else if (c.status === 'critique' || c.status === 'moderee' || maxR >= 0.70) {
@@ -582,6 +824,13 @@ window.remplirModalResultatsSimulation = function(data) {
                 const pente = (c.slope !== undefined) ? (Number(c.slope) * 100).toFixed(2) : '--';
                 const qMaxStr = window.formaterNombre(c.max_flow_cms || c.q_max || 0, 3);
                 const vMaxStr = window.formaterNombre(c.max_velocity_ms || 0, 2);
+
+                const btnMapStyle = isCritique 
+                    ? 'background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.5); color: #fca5a5; box-shadow: 0 0 8px rgba(239, 68, 68, 0.35);'
+                    : 'background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8;';
+                const btnProfilStyle = isCritique 
+                    ? 'background: rgba(245, 158, 11, 0.2); border: 1px solid rgba(245, 158, 11, 0.5); color: #fde68a; box-shadow: 0 0 8px rgba(245, 158, 11, 0.35);'
+                    : 'background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.4); color: #c084fc;';
 
                 htmlCond += `
                     <tr data-statut="${statutClass}" data-id="${kId}" data-amont="${u}" data-aval="${d}" style="border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.15s;" onmouseover="this.style.background='rgba(56,189,248,0.06)'" onmouseout="this.style.background='transparent'">
@@ -599,6 +848,16 @@ window.remplirModalResultatsSimulation = function(data) {
                                     <div style="width: ${Math.min(100, rPct)}%; height: 100%; background: ${col};"></div>
                                 </div>
                                 <span style="font-weight: 800; color: ${col}; font-size: 0.76rem; width: 44px; text-align: right;">${rPct}%</span>
+                            </div>
+                        </td>
+                        <td style="padding: 9px 12px; text-align: center;">
+                            <div style="display: flex; gap: 6px; justify-content: center; align-items: center;">
+                                <button type="button" onclick="localiserElementSurCarte('conduite', '${kId}')" title="Positionner et voir sur la carte" style="width: 27px; height: 27px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; cursor: pointer; transition: all 0.15s; ${btnMapStyle}" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
+                                    <i class="fas fa-crosshairs" style="font-size: 0.72rem;"></i>
+                                </button>
+                                <button type="button" onclick="ouvrirProfilDepuisModal('conduite', '${kId}', '${u}', '${d}')" title="Tracer le profil en long (HGL)" style="width: 27px; height: 27px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; cursor: pointer; transition: all 0.15s; ${btnProfilStyle}" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
+                                    <i class="fas fa-chart-line" style="font-size: 0.72rem;"></i>
+                                </button>
                             </div>
                         </td>
                     </tr>
@@ -643,9 +902,13 @@ window.remplirModalResultatsSimulation = function(data) {
     const nodeKeys = Array.from(allNodeIdsSet);
     if (badgeReg) badgeReg.textContent = nodeKeys.length;
 
+    let regFloodedCount = 0;
+    let regSurchargedCount = 0;
+    let regFreeCount = 0;
+
     if (tbodyReg) {
         if (nodeKeys.length === 0) {
-            tbodyReg.innerHTML = `<tr><td colspan="6" style="padding:24px; text-align:center; color:#64748b;">Aucun regard dans ce périmètre</td></tr>`;
+            tbodyReg.innerHTML = `<tr><td colspan="7" style="padding:24px; text-align:center; color:#64748b;">Aucun regard dans ce périmètre</td></tr>`;
         } else {
             let htmlReg = '';
             nodeKeys.forEach(nId => {
@@ -707,6 +970,10 @@ window.remplirModalResultatsSimulation = function(data) {
                 const isSurcharged = (!isFlooded && (n.status === 'surcharged' || (n.hours_surcharged && n.hours_surcharged > 0) || (n.surcharge_depth_m && n.surcharge_depth_m > 0)));
                 let statutClass = isFlooded ? 'debordement' : (isSurcharged ? 'charge' : 'libre');
 
+                if (isFlooded) regFloodedCount++;
+                else if (isSurcharged) regSurchargedCount++;
+                else regFreeCount++;
+
                 // Chaînes formatées pour l'affichage
                 const tnStr = (tnVal !== null && !isNaN(tnVal)) ? `${tnVal.toFixed(2)} m` : '--';
                 const radStr = (radierVal !== null && !isNaN(radierVal)) ? `${radierVal.toFixed(2)} m` : '--';
@@ -740,6 +1007,16 @@ window.remplirModalResultatsSimulation = function(data) {
                     badgeHtml = `<span style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 0.72rem;">🟢 Libre</span>`;
                 }
 
+                const isCritiqueReg = isFlooded || isSurcharged;
+                const btnRegMapStyle = isFlooded
+                    ? 'background: rgba(239, 68, 68, 0.25); border: 1.5px solid #ef4444; color: #fca5a5; box-shadow: 0 0 10px rgba(239, 68, 68, 0.45);'
+                    : (isSurcharged ? 'background: rgba(245, 158, 11, 0.22); border: 1.5px solid #f59e0b; color: #fde68a; box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);'
+                                    : 'background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8;');
+
+                const btnRegProfilStyle = isCritiqueReg
+                    ? 'background: rgba(168, 85, 247, 0.25); border: 1.5px solid #a855f7; color: #e9d5ff; box-shadow: 0 0 8px rgba(168, 85, 247, 0.4);'
+                    : 'background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.4); color: #c084fc;';
+
                 htmlReg += `
                     <tr data-statut="${statutClass}" data-id="${nId}" style="border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.15s;" onmouseover="this.style.background='rgba(56,189,248,0.06)'" onmouseout="this.style.background='transparent'">
                         <td style="padding: 8px 12px; font-weight: 700; color: #f8fafc;">
@@ -756,12 +1033,32 @@ window.remplirModalResultatsSimulation = function(data) {
                         <td style="padding: 8px 12px;">${cellCharge}</td>
                         <td style="padding: 8px 12px; color: ${volFlood > 0 ? '#f87171' : '#64748b'}; font-weight: ${volFlood > 0 ? '800' : 'normal'};">${volDebStr}</td>
                         <td style="padding: 8px 12px;">${badgeHtml}</td>
+                        <td style="padding: 8px 12px; text-align: center;">
+                            <div style="display: flex; gap: 6px; justify-content: center; align-items: center;">
+                                <button type="button" onclick="localiserElementSurCarte('regard', '${nId}')" title="Positionner et voir le regard ${nId} sur la carte" style="width: 27px; height: 27px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; cursor: pointer; transition: all 0.15s; ${btnRegMapStyle}" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
+                                    <i class="fas fa-crosshairs" style="font-size: 0.72rem;"></i>
+                                </button>
+                                <button type="button" onclick="ouvrirProfilDepuisModal('regard', '${nId}')" title="Tracer le profil en long (HGL) passant par le regard ${nId}" style="width: 27px; height: 27px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; cursor: pointer; transition: all 0.15s; ${btnRegProfilStyle}" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
+                                    <i class="fas fa-chart-line" style="font-size: 0.72rem;"></i>
+                                </button>
+                            </div>
+                        </td>
                     </tr>
                 `;
             });
             tbodyReg.innerHTML = htmlReg;
         }
     }
+
+    // Décomptes dynamiques des filtres Regards
+    const rAll = document.getElementById('count-filter-reg-tous');
+    if (rAll) rAll.textContent = nodeKeys.length;
+    const rDeb = document.getElementById('count-filter-reg-debordement');
+    if (rDeb) rDeb.textContent = regFloodedCount;
+    const rChg = document.getElementById('count-filter-reg-charge');
+    if (rChg) rChg.textContent = regSurchargedCount;
+    const rLib = document.getElementById('count-filter-reg-libre');
+    if (rLib) rLib.textContent = regFreeCount;
 
     const badgeCritCount = document.getElementById('badge-tab-details-count');
     if (badgeCritCount) {
