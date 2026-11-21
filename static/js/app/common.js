@@ -255,9 +255,9 @@
 
         // ==========================================
         // BARRE D'OUTILS D'ÉDITION HYDRAULIQUE (CONTRÔLE LEAFLET INTÉGRÉ)
-        // Ancrée avec la légende Leaflet en bas à droite (bottomright)
+        // Ancrée en haut à droite (topright)
         // ==========================================
-        let editToolbarControl = L.control({ position: 'bottomright' });
+        let editToolbarControl = L.control({ position: 'topright' });
 
         editToolbarControl.onAdd = function(map) {
             const tb = document.getElementById('main-edit-toolbar');

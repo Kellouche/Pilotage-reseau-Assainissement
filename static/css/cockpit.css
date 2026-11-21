@@ -360,14 +360,28 @@ body.snapshot-archive #map .leaflet-top.leaflet-left {
     top: 52px;
 }
 
-/* Contrôles Leaflet inférieurs droits : légende et toolbar d'édition ancrées côte-à-côte */
+/* Contrôles Leaflet supérieurs droits (barre d'outils d'édition hydraulique) */
+#map .leaflet-top.leaflet-right {
+    top: 12px;
+    right: 12px;
+    z-index: 1000;
+    pointer-events: none;
+    transition: top 0.2s ease;
+}
+
+#map .leaflet-top.leaflet-right .leaflet-control {
+    pointer-events: auto;
+    margin: 0 !important;
+}
+
+body.snapshot-archive #map .leaflet-top.leaflet-right {
+    top: 52px;
+}
+
+/* Contrôles Leaflet inférieurs droits : légende SWMM 5.2 */
 #map .leaflet-bottom.leaflet-right {
-    display: flex;
-    flex-direction: row-reverse;
-    align-items: flex-end;
-    gap: 10px;
-    margin-right: 12px;
-    margin-bottom: 12px;
+    bottom: 12px;
+    right: 12px;
     z-index: 1000;
     pointer-events: none;
 }
@@ -399,11 +413,11 @@ body.snapshot-archive #map .leaflet-top.leaflet-left {
     flex: 0 0 auto;
 }
 
-/* Badge Enveloppe de Criticité : toujours calé en haut à droite de l'espace cartographique */
+/* Badge Enveloppe de Criticité : calé en haut à droite à côté de la toolbar d'édition */
 .map-criticality-badge {
     position: absolute;
     top: 14px;
-    right: 14px;
+    right: 74px;
     z-index: 1100;
 }
 
@@ -1496,11 +1510,11 @@ body.snapshot-archive #map .leaflet-top.leaflet-left {
    dynamique (état à l'instant T). Purement UI/UX, aucun impact sur les calculs.
    ========================================================================== */
 
-/* Badge Map - Enveloppe de criticité (maximums observés sur toute l'événement) */
+/* Badge Map - Enveloppe de criticité (maximums observés sur toute l'événement) : positionné à gauche de la toolbar */
 .map-criticality-badge {
     position: absolute;
-    top: 20px;
-    right: 20px;
+    top: 12px;
+    right: 74px;
     z-index: 1100;
     background: rgba(245, 158, 11, 0.15);
     border: 1px solid #f59e0b;

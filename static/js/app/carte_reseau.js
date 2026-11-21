@@ -465,7 +465,7 @@ function toggleToolbarCollapse(e) {
     const isCollapsed = toolbar.classList.contains('collapsed');
 
     if (icon) {
-        icon.className = isCollapsed ? 'fas fa-chevron-up' : 'fas fa-chevron-down';
+        icon.className = isCollapsed ? 'fas fa-chevron-down' : 'fas fa-chevron-up';
     }
     localStorage.setItem('drainpilot_toolbar_collapsed', isCollapsed ? '1' : '0');
 }
@@ -520,10 +520,10 @@ function initDraggableToolbar() {
     if (localStorage.getItem('drainpilot_toolbar_collapsed') === '1') {
         toolbar.classList.add('collapsed');
         const icon = document.getElementById('icon-collapse-toolbar');
-        if (icon) icon.className = 'fas fa-chevron-up';
+        if (icon) icon.className = 'fas fa-chevron-down';
     } else {
         const icon = document.getElementById('icon-collapse-toolbar');
-        if (icon) icon.className = 'fas fa-chevron-down';
+        if (icon) icon.className = 'fas fa-chevron-up';
     }
 }
 
@@ -689,7 +689,7 @@ window.restaurerEtatBureau = function(reseauId) {
         }
     }
 
-    // Restaurer toolbar (ancrée dans Leaflet avec la légende en bas à droite)
+    // Restaurer toolbar (ancrée dans Leaflet en haut à droite)
     if (etat.toolbar) {
         const toolbar = document.getElementById('main-edit-toolbar');
         if (toolbar) {
@@ -697,7 +697,7 @@ window.restaurerEtatBureau = function(reseauId) {
             if (etat.toolbar.collapsed) toolbar.classList.add('collapsed');
             else toolbar.classList.remove('collapsed');
             const icon = document.getElementById('icon-collapse-toolbar');
-            if (icon) icon.className = etat.toolbar.collapsed ? 'fas fa-chevron-up' : 'fas fa-chevron-down';
+            if (icon) icon.className = etat.toolbar.collapsed ? 'fas fa-chevron-down' : 'fas fa-chevron-up';
             window._positionAutoToolbar(toolbar);
         }
     }
@@ -760,14 +760,14 @@ window.nettoyerEtatReseau = function(reseauId) {
     const badgeInstant = document.getElementById('badge-instant-state');
     if (badgeInstant) badgeInstant.classList.add('hidden');
 
-    // Réinitialiser la toolbar (déplier et réancrer avec la légende)
+    // Réinitialiser la toolbar (déplier et réancrer en haut à droite)
     const toolbar = document.getElementById('main-edit-toolbar');
     if (toolbar) {
         toolbar.classList.remove('collapsed');
         window._positionAutoToolbar(toolbar);
     }
     const icon = document.getElementById('icon-collapse-toolbar');
-    if (icon) icon.className = 'fas fa-chevron-down';
+    if (icon) icon.className = 'fas fa-chevron-up';
 
     // Masquer la légende flottante
     const leg = document.getElementById('sim-floating-legend');
