@@ -465,19 +465,30 @@ function toggleToolbarCollapse(e) {
 }
 
 /**
- * Maintient la toolbar dans le viewport : les positions persistées
- * (localStorage / etatBureau) datent d'écrans plus grands — sans
- * bornage, la barre devient invisible quand la fenêtre rétrécit.
+ * Maintient la toolbar dans les limites visibles de son conteneur (#carte-workspace)
+ * et du viewport pour éviter qu'elle ne devienne invisible lors du redimensionnement.
  */
 window._bornerToolbarViewport = function(toolbar) {
     if (!toolbar) return;
-    const rect = toolbar.getBoundingClientRect();
-    if (!rect.width || !rect.height) return; // masquée : rien à borner
-    const maxLeft = Math.max(8, window.innerWidth - rect.width - 8);
-    const maxTop = Math.max(52, window.innerHeight - rect.height - 8);
-    const left = Math.min(Math.max(rect.left, 8), maxLeft);
-    const top = Math.min(Math.max(rect.top, 52), maxTop);
-    if (left !== rect.left || top !== rect.top) {
+    const parent = toolbar.offsetParent || document.body;
+    const parentW = parent.clientWidth || window.innerWidth;
+    const parentH = parent.clientHeight || window.innerHeight;
+    const width = toolbar.offsetWidth || 52;
+    const height = toolbar.offsetHeight || 300;
+
+    const ws = document.getElementById('app-workspace');
+    const replie = ws && ws.classList.contains('sidebar-collapsed');
+    const minLeft = replie ? 80 : 10;
+    const maxLeft = Math.max(minLeft, parentW - width - 10);
+    const minTop = document.body.classList.contains('snapshot-archive') ? 54 : 10;
+    const maxTop = Math.max(minTop, parentH - height - 10);
+
+    const curLeft = toolbar.offsetLeft;
+    const curTop = toolbar.offsetTop;
+    const left = Math.min(Math.max(curLeft, minLeft), maxLeft);
+    const top = Math.min(Math.max(curTop, minTop), maxTop);
+
+    if (left !== curLeft || top !== curTop) {
         toolbar.style.left = left + 'px';
         toolbar.style.top = top + 'px';
         toolbar.style.right = 'auto';
@@ -485,17 +496,19 @@ window._bornerToolbarViewport = function(toolbar) {
 };
 
 /**
- * Position « automatique » de la toolbar : accrochée au bord du
- * panneau d'ingénierie (ou au bord gauche si le panneau est replié),
- * comme la légende Leaflet qui suit le redimensionnement de la carte.
- * Utilisée tant que l'utilisateur n'a pas déplacé la barre à la main.
+ * Position « automatique » de la toolbar : accrochée au bord gauche
+ * de l'espace cartographique (#carte-workspace).
+ * - Quand le panneau est ouvert (320px), #carte-workspace commence à x=320px,
+ *   donc un style.left = 14px place la toolbar immédiatement à côté du panneau.
+ * - Quand le panneau est replié, style.left = 80px laisse libre l'onglet de
+ *   réouverture #btn-sidebar-reopen sans aucun chevauchement.
  */
 window._positionAutoToolbar = function(toolbar) {
     if (!toolbar) return;
     const ws = document.getElementById('app-workspace');
     const replie = ws && ws.classList.contains('sidebar-collapsed');
-    toolbar.style.left = (replie ? 16 : 330) + 'px';
-    toolbar.style.top = '70px';
+    toolbar.style.left = (replie ? 80 : 14) + 'px';
+    toolbar.style.top = document.body.classList.contains('snapshot-archive') ? '54px' : '14px';
     toolbar.style.right = 'auto';
     window._bornerToolbarViewport(toolbar);
 };
@@ -506,9 +519,8 @@ window._toolbarPositionPersonnalisee = function(toolbar) {
 };
 
 /**
- * Position manuelle exprimée en FRACTIONS du viewport (fx, fy ∈ [0,1]) :
- * le décalage est relatif — la toolbar suit le redimensionnement comme
- * la légende, puis est bornée pour rester visible.
+ * Position manuelle exprimée en FRACTIONS du conteneur parent (#carte-workspace) :
+ * le décalage est relatif et suit le redimensionnement.
  */
 window._positionRelativeToolbar = function(toolbar) {
     if (!toolbar) return;
@@ -518,8 +530,11 @@ window._positionRelativeToolbar = function(toolbar) {
         window._bornerToolbarViewport(toolbar);
         return;
     }
-    toolbar.style.left = Math.round(fx * window.innerWidth) + 'px';
-    toolbar.style.top = Math.round(fy * window.innerHeight) + 'px';
+    const parent = toolbar.offsetParent || document.body;
+    const parentW = parent.clientWidth || window.innerWidth;
+    const parentH = parent.clientHeight || window.innerHeight;
+    toolbar.style.left = Math.round(fx * parentW) + 'px';
+    toolbar.style.top = Math.round(fy * parentH) + 'px';
     toolbar.style.right = 'auto';
     window._bornerToolbarViewport(toolbar);
 };
@@ -536,23 +551,21 @@ function initDraggableToolbar() {
         if (icon) icon.className = 'fas fa-chevron-right';
     }
 
-    // Restaurer la position si mémorisée (elle ne l'est qu'après un
-    // déplacement manuel → la toolbar reste alors en mode « personnel »).
+    // Restaurer la position si mémorisée
     const savedPos = localStorage.getItem('drainpilot_toolbar_pos');
     if (savedPos) {
         try {
             const pos = JSON.parse(savedPos);
-            if (pos.top && pos.left) {
+            // Si l'ancienne position sauvegardée contenait l'ancien offset erroné (> 250px), purger
+            if (pos.left && pos.left > 250 && (!pos.fx || pos.fx > 0.35)) {
+                localStorage.removeItem('drainpilot_toolbar_pos');
+            } else if (pos.top && pos.left) {
                 toolbar.dataset.positionManuelle = '1';
                 if (pos.fx !== undefined && pos.fy !== undefined) {
                     toolbar.dataset.fx = String(pos.fx);
                     toolbar.dataset.fy = String(pos.fy);
                     window._positionRelativeToolbar(toolbar);
                 } else {
-                    // Ancien format px seul : conversion en fractions
-                    // approximative sur le viewport courant.
-                    toolbar.dataset.fx = String(Math.min(Math.max(pos.left / window.innerWidth, 0), 1));
-                    toolbar.dataset.fy = String(Math.min(Math.max(pos.top / window.innerHeight, 0), 1));
                     toolbar.style.top = `${pos.top}px`;
                     toolbar.style.left = `${pos.left}px`;
                     toolbar.style.right = 'auto';
@@ -562,17 +575,14 @@ function initDraggableToolbar() {
         } catch (err) {}
     }
 
-    // Position initiale : ancrage automatique au panneau (coordonnées
-    // relatives) sauf si une position manuelle a été mémorisée.
+    // Position initiale : ancrage automatique au bord de la carte sauf si position manuelle
     if (!window._toolbarPositionPersonnalisee(toolbar)) {
         window._positionAutoToolbar(toolbar);
     } else {
         window._bornerToolbarViewport(toolbar);
     }
 
-    // Redimensionnement / repli du panneau : la toolbar non déplacée à la
-    // main suit le layout (comme la légende) ; la toolbar déplacée manuellement
-    // est seulement ramenée dans le viewport.
+    // Redimensionnement / repli du panneau
     const _surResizeToolbar = function() {
         if (window._toolbarPositionPersonnalisee(toolbar)) {
             window._positionRelativeToolbar(toolbar);
@@ -581,7 +591,6 @@ function initDraggableToolbar() {
         }
     };
     window.addEventListener('resize', _surResizeToolbar);
-    // Le repli du panneau d'ingénierie dispatche un 'resize' sur document.
     document.addEventListener('resize', _surResizeToolbar);
 
     let isDragging = false;
@@ -589,7 +598,6 @@ function initDraggableToolbar() {
     let initialLeft = 0, initialTop = 0;
 
     handle.addEventListener('mousedown', (e) => {
-        // Ne pas déclencher le drag si on clique sur le bouton collapse
         if (e.target.closest('#btn-collapse-toolbar')) return;
 
         isDragging = true;
@@ -597,9 +605,8 @@ function initDraggableToolbar() {
         startX = e.clientX;
         startY = e.clientY;
 
-        const rect = toolbar.getBoundingClientRect();
-        initialLeft = rect.left;
-        initialTop = rect.top;
+        initialLeft = toolbar.offsetLeft;
+        initialTop = toolbar.offsetTop;
 
         document.addEventListener('mousemove', onMouseMove);
         document.addEventListener('mouseup', onMouseUp);
@@ -614,12 +621,19 @@ function initDraggableToolbar() {
         let newLeft = initialLeft + dx;
         let newTop = initialTop + dy;
 
-        // Limites écran
-        const maxLeft = window.innerWidth - toolbar.offsetWidth - 10;
-        const maxTop = window.innerHeight - toolbar.offsetHeight - 10;
+        const parent = toolbar.offsetParent || document.body;
+        const parentW = parent.clientWidth || window.innerWidth;
+        const parentH = parent.clientHeight || window.innerHeight;
 
-        newLeft = Math.max(10, Math.min(newLeft, maxLeft));
-        newTop = Math.max(55, Math.min(newTop, maxTop));
+        const ws = document.getElementById('app-workspace');
+        const replie = ws && ws.classList.contains('sidebar-collapsed');
+        const minLeft = replie ? 80 : 10;
+        const maxLeft = Math.max(minLeft, parentW - toolbar.offsetWidth - 10);
+        const minTop = document.body.classList.contains('snapshot-archive') ? 54 : 10;
+        const maxTop = Math.max(minTop, parentH - toolbar.offsetHeight - 10);
+
+        newLeft = Math.max(minLeft, Math.min(newLeft, maxLeft));
+        newTop = Math.max(minTop, Math.min(newTop, maxTop));
 
         toolbar.style.left = `${newLeft}px`;
         toolbar.style.top = `${newTop}px`;
@@ -633,18 +647,19 @@ function initDraggableToolbar() {
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
 
-        // Mémoriser la position — à partir de cet instant la toolbar est
-        // en mode « position manuelle » et ne suit plus le layout.
         toolbar.dataset.positionManuelle = '1';
-        const rect = toolbar.getBoundingClientRect();
-        // Fractions du viewport = décalage relatif conservé au resize.
-        toolbar.dataset.fx = String(rect.left / window.innerWidth);
-        toolbar.dataset.fy = String(rect.top / window.innerHeight);
+        const parent = toolbar.offsetParent || document.body;
+        const parentW = parent.clientWidth || window.innerWidth;
+        const parentH = parent.clientHeight || window.innerHeight;
+        const fx = toolbar.offsetLeft / Math.max(parentW, 1);
+        const fy = toolbar.offsetTop / Math.max(parentH, 1);
+        toolbar.dataset.fx = String(fx);
+        toolbar.dataset.fy = String(fy);
         localStorage.setItem('drainpilot_toolbar_pos', JSON.stringify({
-            top: Math.round(rect.top),
-            left: Math.round(rect.left),
-            fx: rect.left / window.innerWidth,
-            fy: rect.top / window.innerHeight
+            top: toolbar.offsetTop,
+            left: toolbar.offsetLeft,
+            fx: fx,
+            fy: fy
         }));
     }
 }

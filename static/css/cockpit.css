@@ -344,15 +344,32 @@ body {
     gap: 6px;
     border: 1px solid rgba(56, 189, 248, 0.3);
     user-select: none;
-    transition: box-shadow 0.2s;
+    transition: box-shadow 0.2s, left 0.25s ease, top 0.25s ease;
+}
+
+/* Quand le panneau d'ingénierie est replié, décaler la toolbar à 80px pour ne pas chevaucher #btn-sidebar-reopen */
+#app-workspace.sidebar-collapsed .edit-toolbar {
+    left: 80px;
+}
+
+body.snapshot-archive .edit-toolbar {
+    top: 54px;
 }
 
 /* Décalage des contrôles de zoom Leaflet pour éviter tout conflit avec la toolbar flottante */
 #map .leaflet-top.leaflet-left {
     top: 14px;
-    left: 65px;
+    left: 75px;
     z-index: 990;
-    transition: top 0.2s ease;
+    transition: top 0.2s ease, left 0.25s ease;
+}
+
+#app-workspace.sidebar-collapsed #map .leaflet-top.leaflet-left {
+    left: 142px;
+}
+
+body.snapshot-archive #map .leaflet-top.leaflet-left {
+    top: 54px;
 }
 
 /* Bannière de consultation d'archive (Snapshot immuable)
@@ -382,7 +399,6 @@ body {
     top: 14px;
     right: 14px;
     z-index: 1100;
-}
 }
 
 .edit-toolbar.is-dragging {
