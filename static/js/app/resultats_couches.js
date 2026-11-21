@@ -157,59 +157,65 @@ window.addEventListener('DOMContentLoaded', initSaaSNavbar);
                 ? `Surface drainée du bassin sélectionné : <b>${totArea} ha</b> sur <b>${count} sous-bassins</b>.`
                 : `Surface drainée : <b>${totArea} ha</b> sur <b>${count} sous-bassins</b>${bvSuffix}.`;
 
-                    L.geoJSON(fc, {
-                        pane: 'voronoiPane',
-                        style: {
-                            color: '#059669',
-                            weight: 1.5,
-                            opacity: 0.85,
-                            fillColor: '#10b981',
-                            fillOpacity: 0.18,
-                            dashArray: '4, 4'
-                        },
-                        onEachFeature: (feature, layer) => {
-                            const p = feature.properties || {};
-                            const sId = p.subcatchment_id || p.id || 'SB';
-                            const aHa = (p.area_ha || 0).toFixed(3);
-                            const aM2 = (p.area_m2 || 0).toFixed(0);
-                            const outNode = p.outlet || '--';
-                            const imp = (p.imperv_pct || 70).toFixed(0);
-                            const slope = (p.slope_pct || 0.5).toFixed(1);
+            // Optimisation majeure de fluidité : n'attacher les infobulles et événements hover lourds
+            // que sur les sous-bassins filtrés (ou petits ensembles). Sur 10 500 polygones globaux,
+            // créer 10 500 infobulles et 21 000 écouteurs freeze le navigateur et consomme la RAM.
+            const attacherInteractions = estFiltre || (count <= 300);
 
-                            const tooltipHtml = `
-                                <div style="font-family: inherit; font-size: 12px; line-height: 1.4;">
-                                    <div style="font-weight: 800; color: #059669; margin-bottom: 3px; display: flex; align-items: center; gap: 5px;">
-                                        <i class="fas fa-draw-polygon"></i> Sous-Bassin ${sId}
-                                    </div>
-                                    <div style="margin-bottom: 3px;"><span style="color: #64748b;">Exutoire récepteur :</span> <b>Regard N° ${outNode}</b></div>
-                                    <div>Surface drainée : <b>${aHa} ha</b> (${aM2} m²)</div>
-                                    <div>Imperméabilisation : <b>${imp} %</b></div>
-                                    <div>Pente moyenne : <b>${slope} %</b></div>
-                                </div>
-                            `;
-                            layer.bindTooltip(tooltipHtml, { sticky: true, opacity: 0.95 });
-                            
-                            layer.on('mouseover', function(e) {
-                                if (_activeGlobalTooltip && _activeGlobalTooltip !== layer.getTooltip()) {
-                                    try {
-                                        if (_activeGlobalTooltip._source && typeof _activeGlobalTooltip._source.closeTooltip === 'function') {
-                                            _activeGlobalTooltip._source.closeTooltip();
-                                        }
-                                    } catch(_) {}
+            L.geoJSON(fc, {
+                pane: 'voronoiPane',
+                style: {
+                    color: '#059669',
+                    weight: 1.5,
+                    opacity: 0.85,
+                    fillColor: '#10b981',
+                    fillOpacity: 0.18,
+                    dashArray: '4, 4'
+                },
+                onEachFeature: (feature, layer) => {
+                    if (!attacherInteractions) return;
+                    const p = feature.properties || {};
+                    const sId = p.subcatchment_id || p.id || 'SB';
+                    const aHa = (p.area_ha || 0).toFixed(3);
+                    const aM2 = (p.area_m2 || 0).toFixed(0);
+                    const outNode = p.outlet || '--';
+                    const imp = (p.imperv_pct || 70).toFixed(0);
+                    const slope = (p.slope_pct || 0.5).toFixed(1);
+
+                    const tooltipHtml = `
+                        <div style="font-family: inherit; font-size: 12px; line-height: 1.4;">
+                            <div style="font-weight: 800; color: #059669; margin-bottom: 3px; display: flex; align-items: center; gap: 5px;">
+                                <i class="fas fa-draw-polygon"></i> Sous-Bassin ${sId}
+                            </div>
+                            <div style="margin-bottom: 3px;"><span style="color: #64748b;">Exutoire récepteur :</span> <b>Regard N° ${outNode}</b></div>
+                            <div>Surface drainée : <b>${aHa} ha</b> (${aM2} m²)</div>
+                            <div>Imperméabilisation : <b>${imp} %</b></div>
+                            <div>Pente moyenne : <b>${slope} %</b></div>
+                        </div>
+                    `;
+                    layer.bindTooltip(tooltipHtml, { sticky: true, opacity: 0.95 });
+                    
+                    layer.on('mouseover', function(e) {
+                        if (_activeGlobalTooltip && _activeGlobalTooltip !== layer.getTooltip()) {
+                            try {
+                                if (_activeGlobalTooltip._source && typeof _activeGlobalTooltip._source.closeTooltip === 'function') {
+                                    _activeGlobalTooltip._source.closeTooltip();
                                 }
-                                layer.setStyle({ fillOpacity: 0.38, weight: 2.5, color: '#10b981' });
-                            });
-                            layer.on('mouseout', function() {
-                                if (typeof this.closeTooltip === 'function') {
-                                    try { this.closeTooltip(); } catch(_) {}
-                                }
-                                if (_activeGlobalTooltip === this.getTooltip()) {
-                                    _activeGlobalTooltip = null;
-                                }
-                                layer.setStyle({ fillOpacity: 0.18, weight: 1.5, color: '#059669' });
-                            });
+                            } catch(_) {}
                         }
-                    }).addTo(couches.subcatchments);
+                        layer.setStyle({ fillOpacity: 0.38, weight: 2.5, color: '#10b981' });
+                    });
+                    layer.on('mouseout', function() {
+                        if (typeof this.closeTooltip === 'function') {
+                            try { this.closeTooltip(); } catch(_) {}
+                        }
+                        if (_activeGlobalTooltip === this.getTooltip()) {
+                            _activeGlobalTooltip = null;
+                        }
+                        layer.setStyle({ fillOpacity: 0.18, weight: 1.5, color: '#059669' });
+                    });
+                }
+            }).addTo(couches.subcatchments);
         };
 
         /**

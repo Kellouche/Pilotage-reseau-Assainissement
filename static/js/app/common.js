@@ -43,11 +43,29 @@
             });
         };
 
+        // Pré-cadrage instantané : utiliser la dernière emprise réseau mémorisée pour éviter
+        // l'affichage transitoire de la carte à zoom 13 avec grandes écritures régionales OSM.
+        let savedBbox = null;
+        try {
+            const rawBbox = localStorage.getItem('swmm_last_bbox');
+            if (rawBbox) {
+                const parsed = JSON.parse(rawBbox);
+                if (Array.isArray(parsed) && parsed.length === 2 && Array.isArray(parsed[0]) && Array.isArray(parsed[1])) {
+                    savedBbox = parsed;
+                }
+            }
+        } catch (_) {}
+
         let carte = L.map('map', {
             maxZoom: 22,
             zoomSnap: 0.5,
             zoomDelta: 0.5
-        }).setView([36.15, 1.33], 13);
+        });
+        if (savedBbox) {
+            carte.fitBounds(savedBbox);
+        } else {
+            carte.setView([36.15, 1.33], 15);
+        }
         window.carte = carte;
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap',

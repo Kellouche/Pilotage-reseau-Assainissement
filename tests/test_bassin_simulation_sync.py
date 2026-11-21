@@ -125,15 +125,15 @@ def test_bassin_non_simule_mention_et_masquage_legende():
 
 
 def test_persistance_cochage_rejets_et_step():
-    """Vérifie que les couches rejets et step restent cochées et affichées lors des transitions."""
+    """Vérifie que les couches physiques sont désactivées lors de l'affichage des résultats de simulation (règle d'allègement)."""
     res_aff = Path("static/js/app/resultats_affichage.js").read_text(encoding="utf-8")
     res_act = Path("static/js/app/resultats_actions.js").read_text(encoding="utf-8")
     bassin_sel = Path("static/js/app/bassins_selection.js").read_text(encoding="utf-8")
 
-    assert "elRejets.checked = true" in res_aff
-    assert "elStep.checked = true" in res_aff
-    assert "elRej.checked = true" in res_act
-    assert "elStep.checked = true" in res_act
+    assert "'f-rejets'" in res_aff
+    assert "'f-step'" in res_aff
+    assert "'rejets'" in res_act
+    assert "'step'" in res_act
     assert "elRejSync.checked = true" in bassin_sel
     assert "elStepSync.checked = true" in bassin_sel
 

@@ -786,6 +786,7 @@ def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional
 
     if not persist:
         _CLUSTERS_CACHE[cache_key] = final_res
+        _CLUSTERS_CACHE[norm_key] = final_res
         disk_path = _get_clusters_disk_cache_path(chemin_gpkg)
         if disk_path:
             try:

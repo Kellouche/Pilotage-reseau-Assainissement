@@ -153,9 +153,11 @@
                 })
                 .then(clusterData => {
                     window._clustersData = clusterData;
+                    // Optimisation performance & RAM : ne conserver dans les couches de bassins que les polygones
+                    // de bassins urbains et marqueurs d'exutoires. Les conduites physiques sont déjà portées par couches.conduites.
                     clusterData.features = (clusterData.resultats || []).flatMap(result =>
                         result.geojson && Array.isArray(result.geojson.features)
-                            ? result.geojson.features
+                            ? result.geojson.features.filter(f => f.properties && f.properties.type !== 'conduite')
                             : []
                     );
                     if (clusterData.features && clusterData.features.length > 0) {

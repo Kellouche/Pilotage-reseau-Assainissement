@@ -550,6 +550,21 @@ def get_layers(
             result["compteurs"][key] = 0
             gdf_cache_temp[key] = gpd.GeoDataFrame()
 
+    # Calcul de la bounding box globale du réseau (WGS84 [lat_min, lon_min], [lat_max, lon_max])
+    total_bounds = None
+    for gdf in gdf_cache_temp.values():
+        if not gdf.empty:
+            b = gdf.total_bounds
+            if total_bounds is None:
+                total_bounds = [float(b[0]), float(b[1]), float(b[2]), float(b[3])]
+            else:
+                total_bounds[0] = min(total_bounds[0], float(b[0]))
+                total_bounds[1] = min(total_bounds[1], float(b[1]))
+                total_bounds[2] = max(total_bounds[2], float(b[2]))
+                total_bounds[3] = max(total_bounds[3], float(b[3]))
+    if total_bounds:
+        result["bbox"] = [[total_bounds[1], total_bounds[0]], [total_bounds[3], total_bounds[2]]]
+
     _GDF_CACHE[cache_key] = gdf_cache_temp
     if not has_bounds:
         _LAYERS_CACHE[cache_key] = result

@@ -65,6 +65,15 @@ function chargerDonneesInitiales() {
                 .then(d => {
                     console.log('Données:', d.compteurs);
                     window._rawNetworkData = d;
+
+                    // Recadrage instantané : dès réception de la bbox calculée par l'API, zoomer
+                    // immédiatement sans attendre la boucle de création DOM des milliers d'objets.
+                    if (d.bbox && Array.isArray(d.bbox) && d.bbox.length === 2) {
+                        try {
+                            carte.fitBounds(d.bbox, { padding: [40, 40], maxZoom: 17 });
+                            localStorage.setItem('swmm_last_bbox', JSON.stringify(d.bbox));
+                        } catch (_) {}
+                    }
                     // Contexte spatial : le snapshot réellement servi fait
                     // foi pour toutes les vérifications INV-2 en aval.
                     if (typeof window._majContexteDepuisLayers === 'function') {
@@ -371,22 +380,24 @@ function chargerDonneesInitiales() {
                     });
                     if (bounds.isValid()) {
                         carte.fitBounds(bounds, { padding: [40, 40], maxZoom: 17 });
+                        try {
+                            localStorage.setItem('swmm_last_bbox', JSON.stringify([
+                                [bounds.getSouth(), bounds.getWest()],
+                                [bounds.getNorth(), bounds.getEast()]
+                            ]));
+                        } catch (_) {}
                     }
                     
-                    // 1. Charger immédiatement la sectorisation Voronoï
-                    if (window.majMessageChargement) {
-                        window.majMessageChargement('Génération du maillage de sous-bassins (Voronoï)…');
-                    }
-                    if (typeof chargerEtAfficherSousBassins === 'function') {
-                        chargerEtAfficherSousBassins();
-                    }
-
-                    // 2. Partitionnement et tracé automatique immédiat des bassins versants (Exutoires)
+                    // 1. Partitionnement et tracé automatique immédiat des bassins versants (Exutoires)
                     if (window.majMessageChargement) {
                         window.majMessageChargement('Analyse topologique et sectorisation des bassins versants…');
                     }
                     if (typeof window.lancerPartitionnementBassins === 'function') {
                         window.lancerPartitionnementBassins(function(clusterData) {
+                            // Charger le maillage des sous-bassins Voronoï en arrière-plan sans bloquer
+                            if (typeof chargerEtAfficherSousBassins === 'function') {
+                                chargerEtAfficherSousBassins();
+                            }
                             if (window._chargementSnapshotEnCours) {
                                 // En cours de bascule de snapshot archivé : NE PAS écraser la simulation
                                 // demandée par l'ancienne dernière simulation ni réinitialiser le bassin
