@@ -20,7 +20,11 @@ import geopandas as gpd
 
 from src.domain.hydrologie import GenerateurHydrologie
 from src.domain.moteur_swmm.assemblage_inp import assembler_modele_inp_impl
-from src.domain.moteur_swmm.analyse_rapport import analyser_rapport_swmm_impl, enrichir_hydraulique_noeuds
+from src.domain.moteur_swmm.analyse_rapport import (
+    analyser_rapport_swmm_impl,
+    enrichir_hydraulique_noeuds,
+    enrichir_node_results_cotes_inp,
+)
 from src.domain.moteur_swmm.bilan_hydraulique import calculer_sensibilite_buffers_impl
 from src.domain.moteur_swmm.execution_solver import executer_solver_swmm
 
@@ -229,6 +233,12 @@ class MoteurSWMM:
             enrichir_hydraulique_noeuds(kpis)
         except Exception as e_enrich:
             logger.warning("Enrichissement maxima .rpt impossible: %s", e_enrich)
+
+        # Enrichissement avec les cotes physiques INP (radier, tampon, hauteur de charge)
+        try:
+            enrichir_node_results_cotes_inp(kpis.get("node_results", {}), inp_content)
+        except Exception as e_cotes:
+            logger.warning("Enrichissement cotes INP impossible: %s", e_cotes)
 
         # 1. Calcul en arrière-plan de la sensibilité aux 3 cas de buffers (35, 45, 60m)
         try:

@@ -178,9 +178,13 @@ def analyser_rapport_swmm_impl(rpt_text: str, meta: Dict[str, Any]) -> Dict[str,
                 nid = parts[0]
                 try:
                     h_surch = float(parts[2])
+                    max_height_crown = float(parts[3]) if len(parts) >= 4 else 0.0
+                    min_depth_rim = float(parts[4]) if len(parts) >= 5 else 0.0
                     kpis["node_results"][nid] = {
                         "node": nid,
                         "hours_surcharged": h_surch,
+                        "surcharge_depth_m": max_height_crown,
+                        "min_depth_below_rim_m": min_depth_rim,
                         "hours_flooded": 0.0,
                         "peak_flood_flow_cms": 0.0,
                         "flood_volume_m3": 0.0,
@@ -245,6 +249,37 @@ def analyser_rapport_swmm_impl(rpt_text: str, meta: Dict[str, Any]) -> Dict[str,
     _depth_maxima, _depth_status = _lire_node_depth_summary(rpt_text)
     kpis["node_depth_maxima"] = _depth_maxima
     kpis["node_depth_maxima_status"] = _depth_status
+
+    # 7c. Maxima hydrauliques au pas de routage consolidés pour tous les nœuds simulés
+    for nid, d_info in _depth_maxima.items():
+        if nid not in kpis["node_results"]:
+            kpis["node_results"][nid] = {
+                "node": nid,
+                "type": d_info.get("type", "JUNCTION"),
+                "hours_surcharged": 0.0,
+                "surcharge_depth_m": 0.0,
+                "hours_flooded": 0.0,
+                "peak_flood_flow_cms": 0.0,
+                "flood_volume_m3": 0.0,
+                "status": "normal",
+                "color": "#10b981",
+                "max_depth_m": d_info.get("max_depth_m"),
+                "max_head_m": d_info.get("max_hgl_m"),
+                "max_hgl_m": d_info.get("max_hgl_m"),
+                "avg_depth_m": d_info.get("avg_depth_m"),
+                "reported_max_depth_m": d_info.get("reported_max_depth_m"),
+                "max_time_minute": d_info.get("max_time_minute"),
+            }
+        else:
+            kpis["node_results"][nid].update({
+                "type": d_info.get("type", "JUNCTION"),
+                "max_depth_m": d_info.get("max_depth_m"),
+                "max_head_m": d_info.get("max_hgl_m"),
+                "max_hgl_m": d_info.get("max_hgl_m"),
+                "avg_depth_m": d_info.get("avg_depth_m"),
+                "reported_max_depth_m": d_info.get("reported_max_depth_m"),
+                "max_time_minute": d_info.get("max_time_minute"),
+            })
 
     kpis["flooded_nodes_count"] = len(kpis["flooded_nodes"])
     kpis["surcharged_nodes_count"] = sum(1 for n in kpis["node_results"].values() if n.get("status") in ("surcharged", "flooded"))
@@ -444,6 +479,11 @@ def analyser_rapport_swmm_impl(rpt_text: str, meta: Dict[str, Any]) -> Dict[str,
     }
     kpis["bilan_hydraulique_decisionnel"] = texte_decisionnel
     kpis["compliance_continuity"] = abs(kpis["routing_continuity_error_pct"]) <= 5.0
+    if meta.get("inp_content"):
+        try:
+            enrichir_node_results_cotes_inp(kpis["node_results"], meta["inp_content"])
+        except Exception as e_inp_c:
+            logger.warning("Enrichissement cotes INP dans analyse_rapport impossible: %s", e_inp_c)
     return kpis
 
 
@@ -494,4 +534,95 @@ def enrichir_hydraulique_noeuds(kpis: Dict[str, Any]) -> None:
             # False = volume brut rapporté par SWMM (résolution ~1 m³).
             ent["flood_volume_estime"] = bool(nr.get("flood_volume_estime", True))
             ent["flooding_source"] = "rpt_node_flooding_summary"
+
+
+def extraire_cotes_noeuds_inp(inp_text: str) -> Dict[str, Dict[str, Any]]:
+    """
+    Extrait les cotes géométriques physiques des nœuds depuis un texte .inp SWMM :
+    - [JUNCTIONS] : Elevation (radier), MaxDepth (profondeur) -> rim_elev = Elevation + MaxDepth
+    - [OUTFALLS]  : Elevation (radier) -> rim_elev = Elevation
+    - [STORAGE]   : Elevation (radier), MaxDepth -> rim_elev = Elevation + MaxDepth
+    """
+    cotes: Dict[str, Dict[str, Any]] = {}
+    if not inp_text:
+        return cotes
+
+    sec_courante = None
+    for line in inp_text.splitlines():
+        s = line.strip()
+        if not s or s.startswith(";"):
+            continue
+        if s.startswith("[") and s.endswith("]"):
+            sec_courante = s.upper()
+            continue
+
+        if sec_courante == "[JUNCTIONS]":
+            parts = s.split()
+            if len(parts) >= 2:
+                nid = parts[0]
+                try:
+                    elev = float(parts[1])
+                    max_depth = float(parts[2]) if len(parts) >= 3 else 2.0
+                    cotes[nid] = {
+                        "invert_elev": elev,
+                        "max_depth_structure": max_depth,
+                        "rim_elev": round(elev + max_depth, 3),
+                        "type": "JUNCTION",
+                    }
+                except (ValueError, TypeError):
+                    pass
+        elif sec_courante == "[OUTFALLS]":
+            parts = s.split()
+            if len(parts) >= 2:
+                nid = parts[0]
+                try:
+                    elev = float(parts[1])
+                    cotes[nid] = {
+                        "invert_elev": elev,
+                        "max_depth_structure": 0.0,
+                        "rim_elev": elev,
+                        "type": "OUTFALL",
+                    }
+                except (ValueError, TypeError):
+                    pass
+        elif sec_courante == "[STORAGE]":
+            parts = s.split()
+            if len(parts) >= 2:
+                nid = parts[0]
+                try:
+                    elev = float(parts[1])
+                    max_depth = float(parts[2]) if len(parts) >= 3 else 2.0
+                    cotes[nid] = {
+                        "invert_elev": elev,
+                        "max_depth_structure": max_depth,
+                        "rim_elev": round(elev + max_depth, 3),
+                        "type": "STORAGE",
+                    }
+                except (ValueError, TypeError):
+                    pass
+
+    return cotes
+
+
+def enrichir_node_results_cotes_inp(node_results: Dict[str, Any], inp_text: str) -> None:
+    """Injecte invert_elev, max_depth_structure et rim_elev dans node_results."""
+    if not node_results or not inp_text:
+        return
+    cotes = extraire_cotes_noeuds_inp(inp_text)
+    for nid, nr in node_results.items():
+        if not isinstance(nr, dict):
+            continue
+        c_info = cotes.get(nid) or cotes.get(str(nid).split(".")[0])
+        if c_info:
+            nr.setdefault("invert_elev", c_info["invert_elev"])
+            nr.setdefault("max_depth_structure", c_info["max_depth_structure"])
+            nr.setdefault("rim_elev", c_info["rim_elev"])
+            if nr.get("type") is None:
+                nr["type"] = c_info.get("type", "JUNCTION")
+            # Calcul précis de la hauteur de surcharge par rapport au tampon
+            if nr.get("max_head_m") is not None and nr.get("rim_elev") is not None:
+                h_diff = round(nr["max_head_m"] - nr["rim_elev"], 3)
+                if h_diff > 0:
+                    nr["surcharge_depth_m"] = h_diff
+
 

@@ -739,6 +739,14 @@ def construire_reponse_simulation(resultat: Dict[str, Any], cached: bool = False
         if cached
         else "Simulation hydrodynamique SWMM 5.2 exécutée avec succès."
     )
+    node_res = resultat.get("node_results", {})
+    inp_txt = resultat.get("inp_content")
+    if inp_txt and node_res:
+        try:
+            from src.domain.moteur_swmm.analyse_rapport import enrichir_node_results_cotes_inp
+            enrichir_node_results_cotes_inp(node_res, inp_txt)
+        except Exception:
+            pass
     return {
         "status": "success",
         "cached": cached,
@@ -803,7 +811,7 @@ def construire_reponse_simulation(resultat: Dict[str, Any], cached: bool = False
         "fiabilite_modele": (
             ((resultat.get("agents_expertise") or {}).get("controle_modele_hydraulique") or {}).get("fiabilite_modele")
         ),
-        "node_results": resultat.get("node_results", {}),
+        "node_results": node_res,
         "conduit_results": resultat.get("conduit_results", {}),
         # Séries temporelles jointes UNIQUEMENT en mode instantané (cached) :
         # après « Afficher » sur une simulation de l'historique, le time-slider

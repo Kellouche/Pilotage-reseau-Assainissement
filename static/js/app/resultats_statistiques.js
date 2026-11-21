@@ -611,7 +611,36 @@ window.remplirModalResultatsSimulation = function(data) {
     // Regards
     const tbodyReg = document.getElementById('tbody-details-regards');
     const badgeReg = document.getElementById('badge-count-regards');
-    const nodeKeys = Object.keys(nRes);
+
+    // Indexer les données SIG géographiques disponibles (regards, noeuds, rejets)
+    const gisNodesMap = {};
+    if (window._rawNetworkData && window._rawNetworkData.couches) {
+        ['regards', 'noeuds', 'rejets'].forEach(layerKey => {
+            const layerObj = window._rawNetworkData.couches[layerKey];
+            if (layerObj && Array.isArray(layerObj.features)) {
+                layerObj.features.forEach(f => {
+                    const p = f.properties || {};
+                    const rawCode = p.Code !== undefined ? p.Code : (p.code !== undefined ? p.code : (p.CODE || p.id || ''));
+                    if (rawCode !== undefined && rawCode !== null && rawCode !== '') {
+                        const strCode = String(rawCode).trim();
+                        gisNodesMap[strCode] = p;
+                        if (strCode.endsWith('.0')) gisNodesMap[strCode.slice(0, -2)] = p;
+                    }
+                });
+            }
+        });
+    }
+
+    const nhMap = (data.timeseries && data.timeseries.node_hydraulics) || {};
+    const depthMaxMap = data.node_depth_maxima || (data.kpis && data.kpis.node_depth_maxima) || {};
+
+    // Fusion de l'ensemble des regards simulés (nRes, depthMaxMap, meta.simulated_nodes)
+    const allNodeIdsSet = new Set(Object.keys(nRes));
+    Object.keys(depthMaxMap).forEach(id => allNodeIdsSet.add(id));
+    if (data.meta && Array.isArray(data.meta.simulated_nodes)) {
+        data.meta.simulated_nodes.forEach(id => allNodeIdsSet.add(String(id)));
+    }
+    const nodeKeys = Array.from(allNodeIdsSet);
     if (badgeReg) badgeReg.textContent = nodeKeys.length;
 
     if (tbodyReg) {
@@ -620,15 +649,87 @@ window.remplirModalResultatsSimulation = function(data) {
         } else {
             let htmlReg = '';
             nodeKeys.forEach(nId => {
-                const n = nRes[nId];
-                const isFlooded = (n.status === 'flooded' || (n.flooding_m3 && n.flooding_m3 > 0));
-                const isSurcharged = (n.status === 'surcharged');
+                const cleanId = String(nId).endsWith('.0') ? String(nId).slice(0, -2) : String(nId);
+                const n = nRes[nId] || nRes[cleanId] || {};
+                const gisProps = gisNodesMap[nId] || gisNodesMap[cleanId] || {};
+                const nh = nhMap[nId] || nhMap[cleanId] || {};
+                const dm = depthMaxMap[nId] || depthMaxMap[cleanId] || {};
+
+                // 1. Cote Tampon (TN)
+                let tnVal = null;
+                if (n.rim_elev !== undefined && n.rim_elev !== null) tnVal = Number(n.rim_elev);
+                else if (gisProps.COTETN !== undefined && gisProps.COTETN !== null && gisProps.COTETN !== '') tnVal = Number(gisProps.COTETN);
+                else if (gisProps.COTTN !== undefined && gisProps.COTTN !== null && gisProps.COTTN !== '') tnVal = Number(gisProps.COTTN);
+                else if (gisProps.cote_tampon !== undefined && gisProps.cote_tampon !== null && gisProps.cote_tampon !== '') tnVal = Number(gisProps.cote_tampon);
+                else if (gisProps.Cote_TN !== undefined && gisProps.Cote_TN !== null && gisProps.Cote_TN !== '') tnVal = Number(gisProps.Cote_TN);
+                else if (gisProps.TN !== undefined && gisProps.TN !== null && gisProps.TN !== '') tnVal = Number(gisProps.TN);
+                else if (gisProps.Z_TN !== undefined && gisProps.Z_TN !== null && gisProps.Z_TN !== '') tnVal = Number(gisProps.Z_TN);
+                else if (gisProps.Z_SOL !== undefined && gisProps.Z_SOL !== null && gisProps.Z_SOL !== '') tnVal = Number(gisProps.Z_SOL);
+                else if (gisProps.ELEVATION !== undefined && gisProps.ELEVATION !== null && gisProps.ELEVATION !== '') tnVal = Number(gisProps.ELEVATION);
+
+                // 2. Cote Radier
+                let radierVal = null;
+                if (n.invert_elev !== undefined && n.invert_elev !== null) radierVal = Number(n.invert_elev);
+                else if (nh.invert_m !== undefined && nh.invert_m !== null) radierVal = Number(nh.invert_m);
+                else if (gisProps.COTERAD !== undefined && gisProps.COTERAD !== null && gisProps.COTERAD !== '') radierVal = Number(gisProps.COTERAD);
+                else if (gisProps.COTRAD !== undefined && gisProps.COTRAD !== null && gisProps.COTRAD !== '') radierVal = Number(gisProps.COTRAD);
+                else if (gisProps.cote_radier !== undefined && gisProps.cote_radier !== null && gisProps.cote_radier !== '') radierVal = Number(gisProps.cote_radier);
+                else if (gisProps.PROFRADI !== undefined && gisProps.PROFRADI !== null && gisProps.PROFRADI !== '') radierVal = Number(gisProps.PROFRADI);
+
+                // Fallbacks croisés entre Radier et Tampon
+                const profStruct = Number(gisProps.PROFONDEUR || gisProps.profondeur || n.max_depth_structure || 2.0);
+                if (tnVal === null && radierVal !== null) {
+                    tnVal = radierVal + profStruct;
+                } else if (radierVal === null && tnVal !== null) {
+                    radierVal = tnVal - profStruct;
+                }
+
+                // 3. Cote d'eau max (HGL)
+                let hmaxVal = null;
+                if (n.max_head_m !== undefined && n.max_head_m !== null) hmaxVal = Number(n.max_head_m);
+                else if (n.max_hgl_m !== undefined && n.max_hgl_m !== null) hmaxVal = Number(n.max_hgl_m);
+                else if (dm.max_hgl_m !== undefined && dm.max_hgl_m !== null) hmaxVal = Number(dm.max_hgl_m);
+                else if (nh.rpt_max_head_m !== undefined && nh.rpt_max_head_m !== null) hmaxVal = Number(nh.rpt_max_head_m);
+                else if (nh.max_head_m !== undefined && nh.max_head_m !== null) hmaxVal = Number(nh.max_head_m);
+                else if (radierVal !== null && (n.max_depth_m !== undefined || dm.max_depth_m !== undefined)) {
+                    hmaxVal = radierVal + Number(n.max_depth_m !== undefined ? n.max_depth_m : dm.max_depth_m);
+                }
+
+                // 4. Tirant d'eau max
+                let depthVal = null;
+                if (n.max_depth_m !== undefined && n.max_depth_m !== null) depthVal = Number(n.max_depth_m);
+                else if (dm.max_depth_m !== undefined && dm.max_depth_m !== null) depthVal = Number(dm.max_depth_m);
+                else if (nh.max_depth_m !== undefined && nh.max_depth_m !== null) depthVal = Number(nh.max_depth_m);
+                else if (hmaxVal !== null && radierVal !== null) depthVal = Math.max(0, hmaxVal - radierVal);
+
+                // 5. Statut et classification
+                const isFlooded = (n.status === 'flooded' || (n.flood_volume_m3 && n.flood_volume_m3 > 0) || (tnVal !== null && hmaxVal !== null && hmaxVal >= tnVal && (n.hours_flooded > 0 || (n.flood_volume_m3 > 0))));
+                const isSurcharged = (!isFlooded && (n.status === 'surcharged' || (n.hours_surcharged && n.hours_surcharged > 0) || (n.surcharge_depth_m && n.surcharge_depth_m > 0)));
                 let statutClass = isFlooded ? 'debordement' : (isSurcharged ? 'charge' : 'libre');
 
-                const tn = (n.rim_elev !== undefined) ? Number(n.rim_elev).toFixed(2) : '--';
-                const hmax = (n.max_head_m !== undefined) ? Number(n.max_head_m).toFixed(2) : ((n.max_depth_m !== undefined) ? Number(n.max_depth_m).toFixed(2) : '--');
-                const surcharge = (n.surcharge_depth_m !== undefined) ? `${Number(n.surcharge_depth_m).toFixed(2)} m` : '--';
-                const volDeb = (n.flooding_m3 !== undefined && n.flooding_m3 > 0) ? `${Number(n.flooding_m3).toFixed(1)} m³` : '0 m³';
+                // Chaînes formatées pour l'affichage
+                const tnStr = (tnVal !== null && !isNaN(tnVal)) ? `${tnVal.toFixed(2)} m` : '--';
+                const radStr = (radierVal !== null && !isNaN(radierVal)) ? `${radierVal.toFixed(2)} m` : '--';
+                const hmaxStr = (hmaxVal !== null && !isNaN(hmaxVal)) ? `${hmaxVal.toFixed(2)} m` : '--';
+                const depthStr = (depthVal !== null && !isNaN(depthVal)) ? `${depthVal.toFixed(2)} m` : '--';
+
+                let cellCharge = '';
+                if (isFlooded) {
+                    const debordH = (tnVal !== null && hmaxVal !== null && hmaxVal >= tnVal) ? (hmaxVal - tnVal) : 0.0;
+                    cellCharge = `<div style="color: #f87171; font-weight: 700;">+${debordH.toFixed(2)} m (Refoulement)</div><div style="font-size: 0.68rem; color: #fca5a5;">Tampon submergé</div>`;
+                } else if (isSurcharged) {
+                    const surchH = n.surcharge_depth_m ? Number(n.surcharge_depth_m) : ((depthVal && radierVal && tnVal) ? Math.max(0, depthVal - (tnVal - radierVal)) : 0.0);
+                    const revanche = (tnVal !== null && hmaxVal !== null) ? Math.max(0, tnVal - hmaxVal) : null;
+                    const revStr = (revanche !== null) ? `Revanche : ${revanche.toFixed(2)} m` : 'Sous pression';
+                    cellCharge = `<div style="color: #fbbf24; font-weight: 700;">En charge (+${surchH.toFixed(2)} m)</div><div style="font-size: 0.68rem; color: #fde68a;">${revStr}</div>`;
+                } else {
+                    const revanche = (tnVal !== null && hmaxVal !== null) ? Math.max(0, tnVal - hmaxVal) : null;
+                    const revStr = (revanche !== null) ? `Revanche : ${revanche.toFixed(2)} m` : 'Régime libre';
+                    cellCharge = `<div style="color: #34d399; font-weight: 600;">Écoulement libre</div><div style="font-size: 0.68rem; color: #94a3b8;">${revStr}</div>`;
+                }
+
+                const volFlood = Number(n.flood_volume_m3 || n.flooding_m3 || 0);
+                const volDebStr = volFlood > 0 ? `${volFlood.toFixed(1)} m³` : '0 m³';
 
                 let badgeHtml = '';
                 if (isFlooded) {
@@ -641,14 +742,20 @@ window.remplirModalResultatsSimulation = function(data) {
 
                 htmlReg += `
                     <tr data-statut="${statutClass}" data-id="${nId}" style="border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.15s;" onmouseover="this.style.background='rgba(56,189,248,0.06)'" onmouseout="this.style.background='transparent'">
-                        <td style="padding: 9px 12px; font-weight: 700; color: #f8fafc;">
+                        <td style="padding: 8px 12px; font-weight: 700; color: #f8fafc;">
                             <span style="font-family: monospace; background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 4px;">${nId}</span>
                         </td>
-                        <td style="padding: 9px 12px; color: #94a3b8;">${tn} m</td>
-                        <td style="padding: 9px 12px; color: #38bdf8; font-weight: 700;">${hmax} m</td>
-                        <td style="padding: 9px 12px; color: ${isSurcharged || isFlooded ? '#fbbf24' : '#cbd5e1'}; font-weight: ${isSurcharged || isFlooded ? '700' : 'normal'};">${surcharge}</td>
-                        <td style="padding: 9px 12px; color: ${isFlooded ? '#f87171' : '#64748b'}; font-weight: ${isFlooded ? '800' : 'normal'};">${volDeb}</td>
-                        <td style="padding: 9px 12px;">${badgeHtml}</td>
+                        <td style="padding: 8px 12px;">
+                            <div style="font-weight: 700; color: #f8fafc;">${tnStr}</div>
+                            <div style="font-size: 0.68rem; color: #64748b;">Radier : ${radStr}</div>
+                        </td>
+                        <td style="padding: 8px 12px;">
+                            <div style="font-weight: 800; color: #38bdf8;">${hmaxStr}</div>
+                            <div style="font-size: 0.68rem; color: #94a3b8;">Tirant max : ${depthStr}</div>
+                        </td>
+                        <td style="padding: 8px 12px;">${cellCharge}</td>
+                        <td style="padding: 8px 12px; color: ${volFlood > 0 ? '#f87171' : '#64748b'}; font-weight: ${volFlood > 0 ? '800' : 'normal'};">${volDebStr}</td>
+                        <td style="padding: 8px 12px;">${badgeHtml}</td>
                     </tr>
                 `;
             });
