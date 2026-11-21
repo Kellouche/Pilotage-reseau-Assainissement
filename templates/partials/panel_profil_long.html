@@ -87,7 +87,62 @@ Objet : Panneau rétractable du profil en long hydraulique interactif (Phase 6.A
 
     <!-- Corps du graphique -->
     <div class="profil-long-body">
-        <div class="profil-chart-wrapper">
+        <!-- Écran de validation des cotes suspectes (Human-in-the-Loop) -->
+        <div id="profil-validation-cotes-view" style="display: none; width: 100%; height: 100%; padding: 24px; box-sizing: border-box; overflow-y: auto; background: radial-gradient(circle at top left, rgba(239, 68, 68, 0.08), transparent 70%), #0f172a;">
+            <div style="max-width: 820px; margin: 0 auto; background: rgba(30, 41, 59, 0.8); backdrop-filter: blur(12px); border: 1.5px solid rgba(239, 68, 68, 0.45); border-radius: 16px; padding: 24px 28px; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);">
+                <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 14px;">
+                    <div style="width: 44px; height: 44px; border-radius: 12px; background: rgba(239, 68, 68, 0.15); border: 1.5px solid #ef4444; display: flex; align-items: center; justify-content: center; color: #ef4444; font-size: 1.25rem;">
+                        <i class="fas fa-hand-paper"></i>
+                    </div>
+                    <div>
+                        <h4 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #f8fafc; letter-spacing: -0.3px;">
+                            Profil en long suspendu — Cotes nodales à valider
+                        </h4>
+                        <div style="font-size: 0.82rem; color: #94a3b8; margin-top: 2px;">
+                            Contrôle de rigueur hydraulique : des cotes manifestement aberrantes ont été détectées sur ce tronçon.
+                        </div>
+                    </div>
+                </div>
+
+                <p id="profil-validation-cotes-msg" style="font-size: 0.85rem; color: #cbd5e1; line-height: 1.5; margin-bottom: 18px; padding: 10px 14px; background: rgba(15, 23, 42, 0.6); border-radius: 8px; border-left: 3px solid #f59e0b;">
+                    Veuillez certifier ou corriger les valeurs ci-dessous avant d'élaborer le profil hydraulique.
+                </p>
+
+                <!-- Tableau interactif des regards suspects -->
+                <div style="overflow-x: auto; margin-bottom: 20px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.08);">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: left;">
+                        <thead>
+                            <tr style="background: rgba(15, 23, 42, 0.8); color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
+                                <th style="padding: 10px 12px;">Regard</th>
+                                <th style="padding: 10px 12px;">Cote / Prof. Brute</th>
+                                <th style="padding: 10px 12px;">Diagnostic</th>
+                                <th style="padding: 10px 12px; width: 180px;">Cote certifiée (m)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="profil-validation-cotes-tbody">
+                            <!-- Rempli dynamiquement -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Boutons d'action -->
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+                    <button type="button" class="btn-forcer-brut-profil" onclick="forcerTraceProfilBrut()" style="background: transparent; border: 1px solid rgba(148, 163, 184, 0.3); color: #94a3b8; padding: 8px 14px; border-radius: 8px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+                        <i class="fas fa-exclamation-triangle" style="color: #f59e0b; margin-right: 6px;"></i> Forcer le tracé brut (Non certifié)
+                    </button>
+                    <div style="display: flex; gap: 10px;">
+                        <button type="button" onclick="fermerProfilLong()" style="background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.2); color: #cbd5e1; padding: 8px 16px; border-radius: 8px; font-size: 0.82rem; font-weight: 600; cursor: pointer;">
+                            Annuler
+                        </button>
+                        <button type="button" onclick="soumettreValidationCotesProfil()" style="background: linear-gradient(135deg, #0284c7, #0369a1); border: none; color: #ffffff; padding: 8px 20px; border-radius: 8px; font-size: 0.82rem; font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35); display: flex; align-items: center; gap: 8px;">
+                            <i class="fas fa-check-circle"></i> Valider et Élaborer le profil
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="profil-chart-wrapper" id="profil-chart-wrapper">
             <canvas id="canvas-profil-long"></canvas>
         </div>
 

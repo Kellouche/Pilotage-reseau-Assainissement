@@ -47,6 +47,7 @@ def generer_lignes_sections_inp(
     apports_dwf: Optional[List[Dict[str, Any]]] = None,
     elevations_terrain: Optional[Dict[str, float]] = None,
     altimetrie_meta: Optional[Dict[str, Any]] = None,
+    cotes_validations: Optional[Dict[str, float]] = None,
 ) -> Tuple[List[str], Dict[str, Any]]:
     """
     Génère la liste de lignes de toutes les sections .inp et le dictionnaire meta.
@@ -258,6 +259,13 @@ def generer_lignes_sections_inp(
         if nid == actual_outfall_name or nid in noeuds_traites:
             continue
         prof = float(r["Profondeur"]) if ("Profondeur" in r and r["Profondeur"] > 0) else 2.0
+        # Règle de validation des cotes nodales (Human-in-the-Loop) :
+        if cotes_validations:
+            code_brut = str(r.get("Code", ""))
+            if nid in cotes_validations:
+                prof = float(cotes_validations[nid])
+            elif code_brut in cotes_validations:
+                prof = float(cotes_validations[code_brut])
         z_rad = node_elevs.get(nid, 100.0)
         lines.append(f"{nid:<16} {z_rad:<10.3f} {prof:<10.3f} 0.000      0.000      0.000")
         noeuds_traites.add(nid)

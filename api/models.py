@@ -301,6 +301,7 @@ class Project(Base):
     simulations: Mapped[List["Simulation"]] = relationship("Simulation", back_populates="project", cascade="all, delete-orphan")
     apports_dwf: Mapped[List["ApportDwf"]] = relationship("ApportDwf", back_populates="project", cascade="all, delete-orphan")
     apports_dwf_history: Mapped[List["ApportDwfHistory"]] = relationship("ApportDwfHistory", back_populates="project")
+    cotes_validations: Mapped[List["NodeCoteValidation"]] = relationship("NodeCoteValidation", back_populates="project", cascade="all, delete-orphan")
 
     __table_args__ = (
         UniqueConstraint("org_id", "slug", name="uq_project_org_slug"),
@@ -906,3 +907,52 @@ class ProjectAuxLayer(Base):
             "statut": self.statut,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+
+
+class NodeCoteValidation(Base):
+    """
+    Registre des validations de cotes nodales suspectes par projet.
+    Permet à l'hydraulicien de valider, corriger ou confirmer les cotes et profondeurs suspectes.
+    """
+    __tablename__ = "node_cote_validations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_gen_uuid)
+    org_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), index=True, nullable=False)
+    project_id: Mapped[str] = mapped_column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), index=True, nullable=False)
+    node_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    champ: Mapped[str] = mapped_column(String(50), default="profondeur", nullable=False)
+    valeur_brute: Mapped[float] = mapped_column(Float, nullable=False)
+    valeur_suggeree: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    valeur_validee: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    statut: Mapped[str] = mapped_column(String(30), default="a_valider", nullable=False)  # a_valider, valide, conserve_brut
+    motif_suspicion: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    commentaire: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    validated_by_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    validated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, onupdate=_utc_now, nullable=False)
+
+    project: Mapped["Project"] = relationship("Project", back_populates="cotes_validations")
+    organization: Mapped["Organization"] = relationship("Organization")
+
+    __table_args__ = (
+        Index("ix_node_cote_val_proj_node", "project_id", "node_id"),
+        UniqueConstraint("project_id", "node_id", "champ", name="uq_node_cote_val_proj_node_champ"),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "project_id": self.project_id,
+            "node_id": self.node_id,
+            "champ": self.champ,
+            "valeur_brute": self.valeur_brute,
+            "valeur_suggeree": self.valeur_suggeree,
+            "valeur_validee": self.valeur_validee,
+            "statut": self.statut,
+            "motif_suspicion": self.motif_suspicion,
+            "commentaire": self.commentaire,
+            "validated_at": self.validated_at.isoformat() if self.validated_at else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+

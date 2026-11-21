@@ -726,6 +726,7 @@ def executer_moteur_swmm(
         garde_fou_config=garde_fou_config,
         elevations_terrain=params.get("altimetrie_elevations"),
         altimetrie_meta=params.get("altimetrie_meta"),
+        cotes_validations=params.get("cotes_validations"),
     )
 
     return corriger_pic_depuis_timeseries(resultat)
@@ -1618,6 +1619,19 @@ def executer_en_async(
 
     debut = datetime.now(timezone.utc)
     try:
+        try:
+            from api.services.cotes_suspectes_service import obtenir_map_validations_projet
+            vmap = obtenir_map_validations_projet(db, proj.id, proj.org_id)
+            cotes_validees_dict = {
+                nid: ent["profondeur"]["valeur_validee"]
+                for nid, ent in vmap.items()
+                if "profondeur" in ent and ent["profondeur"].get("statut") == "valide"
+                and ent["profondeur"].get("valeur_validee") is not None
+            }
+            if cotes_validees_dict:
+                params_exec["cotes_validations"] = cotes_validees_dict
+        except Exception:
+            pass
         resultat = executer_moteur_swmm(
             gpkg_path, params_exec, execution_mode="celery",
             garde_fou_config=getattr(proj, "garde_fou_config", None))

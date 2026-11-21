@@ -843,6 +843,20 @@ def run_native_swmm_simulation(
         if altimetrie_elevations is not None:
             params_exec["altimetrie_elevations"] = altimetrie_elevations
             params_exec["altimetrie_meta"] = altimetrie_meta
+        # Cotes nodales certifiées par l'hydraulicien
+        try:
+            from api.services.cotes_suspectes_service import obtenir_map_validations_projet
+            vmap = obtenir_map_validations_projet(db, proj.id, org_id)
+            cotes_validees_dict = {
+                nid: ent["profondeur"]["valeur_validee"]
+                for nid, ent in vmap.items()
+                if "profondeur" in ent and ent["profondeur"].get("statut") == "valide"
+                and ent["profondeur"].get("valeur_validee") is not None
+            }
+            if cotes_validees_dict:
+                params_exec["cotes_validations"] = cotes_validees_dict
+        except Exception as e_vmap:
+            logger.warning("Erreur chargement cotes validées pour simulation: %s", e_vmap)
         resultat = _executer_moteur_swmm(
             gpkg_path, params_exec, execution_mode="sync",
             garde_fou_config=getattr(proj, "garde_fou_config", None))
@@ -1958,6 +1972,7 @@ def get_profil_en_long(
     node_aval: str,
     base: str = "max",
     instant_minute: Optional[int] = None,
+    forcer_brut: bool = False,
     db: Session = Depends(get_db),
     tenant: TenantContext = Depends(get_tenant_context),
 ):
@@ -2139,6 +2154,59 @@ def get_profil_en_long(
                         detail=f"Aucun chemin hydraulique entre '{node_amont}' et '{node_aval}'. "
                                "Vérifiez que les deux regards appartiennent au même réseau connecté."
                     )
+
+        # Règle de Rigour Hydraulicienne (Human-in-the-Loop) :
+        # Contrôle des cotes nodales suspectes sur le chemin demandé.
+        # Tout regard ayant une profondeur aberrante non certifiée suspend le tracé
+        # jusqu'à validation ou confirmation explicite de l'utilisateur.
+        from api.services.cotes_suspectes_service import (
+            synchroniser_cotes_suspectes_projet,
+            obtenir_map_validations_projet,
+            SEUIL_PROFONDEUR_MAX_M,
+            suggerer_correction_profondeur,
+        )
+        validations_map = {}
+        if proj is not None:
+            try:
+                synchroniser_cotes_suspectes_projet(db, proj)
+                validations_map = obtenir_map_validations_projet(db, proj.id, org_id)
+            except Exception as e_cs:
+                logger.warning("Erreur synchronisation cotes suspectes: %s", e_cs)
+
+        cotes_suspectes_bloquantes = []
+        for nid in path_nodes:
+            info = node_index.get(nid, {})
+            prof = info.get("profondeur")
+            val_entry = (validations_map.get(str(nid), {}).get("profondeur") or
+                         validations_map.get(_clean_node_id(nid), {}).get("profondeur"))
+            if prof is not None and prof > SEUIL_PROFONDEUR_MAX_M:
+                if not val_entry or val_entry.get("statut") == "a_valider":
+                    sugg = suggerer_correction_profondeur(prof)
+                    cotes_suspectes_bloquantes.append({
+                        "node_id": str(nid),
+                        "champ": "profondeur",
+                        "valeur_brute": float(prof),
+                        "valeur_suggeree": float(sugg) if sugg is not None else None,
+                        "motif_suspicion": (
+                            f"Profondeur excessive ({prof:.1f} m > {SEUIL_PROFONDEUR_MAX_M:.0f} m) — "
+                            f"confusion d'unité probable ({sugg:.2f} m suggéré)"
+                        ),
+                        "statut": "a_valider",
+                    })
+
+        if cotes_suspectes_bloquantes and not forcer_brut:
+            return {
+                "status": "cotes_suspectes_a_valider",
+                "message": (
+                    f"Le profil hydraulique entre '{node_amont}' et '{node_aval}' traverse "
+                    f"{len(cotes_suspectes_bloquantes)} regard(s) aux cotes non validées. "
+                    "Conformément aux règles d'ingénierie hydraulique, veuillez valider "
+                    "ou corriger ces valeurs avant l'élaboration du tracé."
+                ),
+                "node_amont": src,
+                "node_aval": dst,
+                "cotes_suspectes": cotes_suspectes_bloquantes,
+            }
 
         # Couverture du chemin : la « dernière » simulation completed peut
         # être un cluster sectorisé qui ne couvre pas le chemin demandé
@@ -2457,9 +2525,21 @@ def get_profil_en_long(
 
             # Sommet de regard SWMM = radier + MaxDepth (.inp) — plan de
             # rupture du modèle, distinct du terrain naturel.
+            # Règle Human-in-the-Loop : si l'hydraulicien a validé une profondeur certifiée,
+            # celle-ci prévaut sur la valeur brute erronée.
+            val_entry = (validations_map.get(str(nid), {}).get("profondeur") or
+                         validations_map.get(_clean_node_id(nid), {}).get("profondeur"))
+            prof_effectif = profondeur
+            cote_est_validee = False
+            if val_entry and val_entry.get("statut") == "valide" and val_entry.get("valeur_validee") is not None:
+                prof_effectif = float(val_entry["valeur_validee"])
+                cote_est_validee = True
+
             z_sommet = None
             inp_n = inp_noeuds.get(nid) or inp_noeuds.get(_clean_node_id(nid) or "")
-            if inp_n and inp_n.get("maxdepth") is not None:
+            if prof_effectif is not None and z_rad is not None:
+                z_sommet = z_rad + prof_effectif
+            elif inp_n and inp_n.get("maxdepth") is not None:
                 rad_src = z_rad if z_rad is not None else inp_n.get("elevation")
                 if rad_src is not None:
                     z_sommet = rad_src + inp_n["maxdepth"]
@@ -2634,7 +2714,8 @@ def get_profil_en_long(
                 "flood_time_minute": rpt_flood_min,
                 "pression_m": pression_m,
                 "revanche_m": revanche_m,
-                "profondeur_m": round(profondeur, 2) if profondeur is not None else None,
+                "profondeur_m": round(prof_effectif, 2) if prof_effectif is not None else None,
+                "cote_validee": cote_est_validee,
                 "node_status": node_sim.get("status", "normal") if node_sim else "normal",
                 "node_color": node_sim.get("color", "#10b981") if node_sim else "#10b981",
                 "conduit_sortant": conduit,
@@ -2903,6 +2984,16 @@ def get_profil_en_long(
                     "recommandation": "Surveiller lors d'épisodes orageux de période de retour supérieure à T10."
                 })
 
+        if forcer_brut and cotes_suspectes_bloquantes:
+            for cs in cotes_suspectes_bloquantes:
+                alerts.append({
+                    "type": "cote_suspecte_non_validee",
+                    "node": cs["node_id"],
+                    "message": f"⚠️ Regard {cs['node_id']} : Tracé avec cote brute non certifiée ({cs['valeur_brute']} m)",
+                    "observations": "Cette valeur brute déforme l'échelle géométrique du profil.",
+                    "recommandation": f"Validation recommandée à {cs['valeur_suggeree']} m.",
+                })
+
         _hgl_max_srcs = {s.get("hgl_source") for s in segments if s.get("hgl_source")}
         _a_rpt = "rpt_max_head" in _hgl_max_srcs
         _a_out = "swmm_out_max_head" in _hgl_max_srcs
@@ -3059,6 +3150,72 @@ def get_profil_en_long(
     except Exception as e:
         logger.exception("Erreur calcul profil en long: %s", e)
         raise HTTPException(status_code=500, detail=f"Erreur calcul profil en long : {e}")
+
+
+class CoteValidationItem(BaseModel):
+    node_id: str
+    champ: str = "profondeur"
+    action: str = "valider"  # "valider" | "conserve_brut"
+    valeur_validee: Optional[float] = None
+    commentaire: Optional[str] = None
+
+
+class CotesValidationPayload(BaseModel):
+    validations: List[CoteValidationItem]
+
+
+@router.get("/cotes-suspectes")
+def lister_cotes_suspectes_endpoint(
+    statut: Optional[str] = None,
+    db: Session = Depends(get_db),
+    tenant: TenantContext = Depends(get_tenant_context),
+):
+    """
+    Retourne la liste des cotes nodales suspectes du projet (ex: prof > 15m),
+    consignées dans le registre pour validation Human-in-the-Loop.
+    """
+    org_id = _org_id_requete(tenant)
+    try:
+        proj = _resoudre_projet_pour_simulation(db, org_id, None)
+    except (ProjetAmbigu, ContexteSimulationIntrouvable) as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    from api.services.cotes_suspectes_service import lister_cotes_suspectes_projet
+    suspectes = lister_cotes_suspectes_projet(db, proj, statut=statut)
+    return {
+        "status": "success",
+        "project_id": proj.id,
+        "total": len(suspectes),
+        "items": [s.to_dict() for s in suspectes],
+    }
+
+
+@router.post("/cotes-suspectes/valider")
+def valider_cotes_suspectes_endpoint(
+    payload: CotesValidationPayload,
+    db: Session = Depends(get_db),
+    tenant: TenantContext = Depends(require_role("engineer")),
+):
+    """
+    Valide, corrige ou confirme les cotes suspectes du projet.
+    Permet à l'hydraulicien de certifier les données avant élaboration du profil ou simulation.
+    """
+    org_id = _org_id_requete(tenant)
+    try:
+        proj = _resoudre_projet_pour_simulation(db, org_id, None)
+    except (ProjetAmbigu, ContexteSimulationIntrouvable) as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    from api.services.cotes_suspectes_service import valider_cotes_suspectes_service
+    items = [item.model_dump() for item in payload.validations]
+    user_id = getattr(tenant, "user_id", None)
+    modifies = valider_cotes_suspectes_service(db, proj, items, user_id=user_id)
+    return {
+        "status": "success",
+        "message": f"{len(modifies)} cote(s) validée(s) avec succès.",
+        "items": [m.to_dict() for m in modifies],
+    }
+
 
 
 # ============================================================

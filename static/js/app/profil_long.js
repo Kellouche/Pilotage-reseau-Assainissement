@@ -344,13 +344,18 @@ function rafraichirProfilLong() {
 
 /**
  * Appelle l'API et affiche le profil en long
+ * Si des cotes suspectes non validées sont présentes sur le chemin, suspend le tracé
+ * et affiche l'écran de certification/validation pour l'hydraulicien.
  */
-function chargerProfilLong(nodeAmont, nodeAval) {
+function chargerProfilLong(nodeAmont, nodeAval, forcerBrut = false) {
     const panel = document.getElementById('panel-profil-long');
     const overlay = document.getElementById('profil-loading-overlay');
     if (overlay) overlay.style.display = 'flex';
 
-    const url = `/api/v1/simulations/profil-en-long?node_amont=${encodeURIComponent(nodeAmont)}&node_aval=${encodeURIComponent(nodeAval)}`;
+    let url = `/api/v1/simulations/profil-en-long?node_amont=${encodeURIComponent(nodeAmont)}&node_aval=${encodeURIComponent(nodeAval)}`;
+    if (forcerBrut) {
+        url += '&forcer_brut=true';
+    }
 
     fetch(url)
         .then(response => {
@@ -363,6 +368,24 @@ function chargerProfilLong(nodeAmont, nodeAval) {
         })
         .then(data => {
             if (overlay) overlay.style.display = 'none';
+
+            // Contrôle Human-in-the-Loop : cotes suspectes nécessitant validation
+            if (data.status === 'cotes_suspectes_a_valider') {
+                if (panel) panel.style.display = 'flex';
+                if (typeof _initProfilLongDraggable === 'function') {
+                    _initProfilLongDraggable();
+                }
+                afficherEcranValidationCotesProfil(data);
+                _centrerPanelProfil();
+                return;
+            }
+
+            // Réactiver la vue graphique
+            const valView = document.getElementById('profil-validation-cotes-view');
+            const chartWrapper = document.getElementById('profil-chart-wrapper');
+            if (valView) valView.style.display = 'none';
+            if (chartWrapper) chartWrapper.style.display = 'block';
+
             window.profilLongState.lastData = data;
             if (panel) panel.style.display = 'flex';
             // Initialiser le déplacement du panneau (draggable)
@@ -420,6 +443,123 @@ function _couleurSeverite(sev) {
 }
 function _rangSeverite(sev) {
     return { fort: 4, moyen: 3, faible: 2, info: 1 }[sev] || 0;
+}
+
+/**
+ * Affiche l'écran de validation interactive des cotes suspectes (Human-in-the-Loop)
+ */
+function afficherEcranValidationCotesProfil(data) {
+    window.profilLongState._pendingValidationData = data;
+    const valView = document.getElementById('profil-validation-cotes-view');
+    const chartWrapper = document.getElementById('profil-chart-wrapper');
+    const alertesContainer = document.getElementById('profil-alertes-container');
+    const msgElem = document.getElementById('profil-validation-cotes-msg');
+    const tbody = document.getElementById('profil-validation-cotes-tbody');
+
+    if (chartWrapper) chartWrapper.style.display = 'none';
+    if (alertesContainer) alertesContainer.style.display = 'none';
+    if (valView) valView.style.display = 'block';
+
+    const panel = document.getElementById('panel-profil-long');
+    if (panel) {
+        panel.style.height = 'auto';
+        panel.style.maxHeight = '85vh';
+    }
+
+    if (msgElem && data.message) {
+        msgElem.textContent = data.message;
+    }
+
+    if (tbody) {
+        tbody.innerHTML = '';
+        const suspectes = data.cotes_suspectes || [];
+        suspectes.forEach((cs, idx) => {
+            const tr = document.createElement('tr');
+            tr.style.cssText = 'border-bottom: 1px solid rgba(255, 255, 255, 0.05); background: ' + (idx % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent');
+            tr.innerHTML = `
+                <td style="padding: 10px 12px; font-weight: 700; color: #f8fafc;">
+                    <span style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); color: #38bdf8; border-radius: 6px; padding: 2px 8px; font-size: 0.8rem;">
+                        Regard ${cs.node_id}
+                    </span>
+                </td>
+                <td style="padding: 10px 12px; color: #ef4444; font-weight: 700; font-family: monospace;">
+                    ${cs.valeur_brute} m
+                </td>
+                <td style="padding: 10px 12px; color: #cbd5e1; font-size: 0.82rem;">
+                    ${cs.motif_suspicion || 'Profondeur excessive'}
+                </td>
+                <td style="padding: 10px 12px;">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <input type="number" step="0.01" class="input-cote-validee-val" data-node="${cs.node_id}" data-champ="${cs.champ || 'profondeur'}" value="${cs.valeur_suggeree !== null ? cs.valeur_suggeree : cs.valeur_brute}" style="width: 90px; background: rgba(15, 23, 42, 0.9); border: 1.5px solid #0284c7; color: #38bdf8; font-weight: 700; font-family: monospace; border-radius: 6px; padding: 4px 8px; font-size: 0.85rem; text-align: right;">
+                        <span style="color: #64748b; font-size: 0.8rem;">m</span>
+                    </div>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+}
+
+/**
+ * Valide les cotes suspectes saisies et déclenche le tracé certifié du profil
+ */
+function soumettreValidationCotesProfil() {
+    const data = window.profilLongState._pendingValidationData;
+    if (!data) return;
+
+    const inputs = document.querySelectorAll('.input-cote-validee-val');
+    const validations = [];
+    inputs.forEach(inp => {
+        const node_id = inp.getAttribute('data-node');
+        const champ = inp.getAttribute('data-champ') || 'profondeur';
+        const val = parseFloat(inp.value);
+        if (node_id && !isNaN(val)) {
+            validations.push({
+                node_id: node_id,
+                champ: champ,
+                action: 'valider',
+                valeur_validee: val,
+                commentaire: `Validé par l'hydraulicien lors du tracé profil (${val} m)`
+            });
+        }
+    });
+
+    if (validations.length === 0) return;
+
+    const overlay = document.getElementById('profil-loading-overlay');
+    if (overlay) overlay.style.display = 'flex';
+
+    fetch('/api/v1/simulations/cotes-suspectes/valider', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ validations: validations })
+    })
+    .then(r => {
+        if (!r.ok) throw new Error(`Erreur validation (${r.status})`);
+        return r.json();
+    })
+    .then(res => {
+        if (typeof window.dialogueAlerte === 'function') {
+            window.dialogueAlerte(`${validations.length} cote(s) validée(s) et certifiée(s). Élaboration du profil...`, 'succes');
+        }
+        chargerProfilLong(data.node_amont, data.node_aval, false);
+    })
+    .catch(err => {
+        if (overlay) overlay.style.display = 'none';
+        console.error("Erreur validation cotes:", err);
+        if (typeof window.dialogueAlerte === 'function') {
+            window.dialogueAlerte(`Échec de la validation : ${err.message}`, 'erreur');
+        }
+    });
+}
+
+/**
+ * Force le tracé du profil avec les cotes brutes non validées
+ */
+function forcerTraceProfilBrut() {
+    const data = window.profilLongState._pendingValidationData;
+    if (!data) return;
+    chargerProfilLong(data.node_amont, data.node_aval, true);
 }
 
 /**
