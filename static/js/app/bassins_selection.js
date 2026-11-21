@@ -521,11 +521,15 @@
             }
 
             // 3. Interroger le serveur pour charger la simulation enregistrée de ce bassin
+            if (window._simBassinEnChargement === cidStr) return; // Déjà en cours de requête pour ce bassin
+            window._simBassinEnChargement = cidStr;
+
             const token = localStorage.getItem('swmm_access_token');
             const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
             fetch('/api/v1/simulations/bassin/' + encodeURIComponent(cidStr), { headers, credentials: 'include' })
                 .then(r => r.json())
                 .then(d => {
+                    window._simBassinEnChargement = null;
                     // Vérifier que l'utilisateur est toujours sur ce bassin
                     if (_selectedClusterId !== cidStr) return;
 
@@ -562,6 +566,7 @@
                     }
                 })
                 .catch(err => {
+                    window._simBassinEnChargement = null;
                     console.warn("Vérification simulation bassin:", err);
                     if (_selectedClusterId === cidStr) {
                         if (typeof reinitialiserAffichageSimulation === 'function') {
@@ -745,11 +750,11 @@
         window.restaurerDernierBassin = function () {
             try {
                 const brut = localStorage.getItem('drainpilot_dernier_bassin');
-                if (!brut) return;
+                if (!brut) return false;
                 const d = JSON.parse(brut);
-                if (!d || !d.cluster) return;
+                if (!d || !d.cluster) return false;
                 const projetCourant = (window._rawNetworkData && (window._rawNetworkData.project_name || window._rawNetworkData.project_id)) || null;
-                if (d.projet && projetCourant && String(d.projet) !== String(projetCourant)) return;
+                if (d.projet && projetCourant && String(d.projet) !== String(projetCourant)) return false;
                 const cid = String(d.cluster);
 
                 // Le cluster doit exister dans le réseau fraîchement chargé
@@ -763,14 +768,17 @@
                 if (!existe && window._clustersData) {
                     existe = !!(window._clustersData[cid] || window._clustersData[Number(cid)]);
                 }
-                if (!existe) return;
+                if (!existe) return false;
 
                 highlightCluster(cid, window._activeClusterLayer || (typeof couches !== 'undefined' ? couches.bassins : null));
                 const gl = window._activeClusterLayer || (typeof couches !== 'undefined' ? couches.bassins : null);
                 if (gl && gl.getBounds && gl.getBounds().isValid()) {
                     carte.fitBounds(gl.getBounds(), { padding: [50, 50], maxZoom: 17 });
                 }
-            } catch (e) {}
+                return true;
+            } catch (e) {
+                return false;
+            }
         };
 
         // Synchronise la sélection entre le sélecteur de bassins collecteurs

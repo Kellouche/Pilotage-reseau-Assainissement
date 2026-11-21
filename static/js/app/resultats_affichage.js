@@ -131,9 +131,18 @@ function _masquerMenuInfobullesSim() {
             // sélectionné pendant le rendu. Le drapeau est levé le temps de
             // l'exécution synchrone puis relâché au tick suivant.
             if (window._affichageSimEnCours) return;
-            window._affichageSimEnCours = true;
-            setTimeout(function () { window._affichageSimEnCours = false; }, 0);
             if (!data || !data.conduit_results || !data.node_results) return;
+
+            // Garde anti-doublon : ne pas recalculer ni re-rendre si exactement la même simulation est déjà affichée
+            if (window._dernierResultatSimulation === data &&
+                window.couches && window.couches.res_conduites &&
+                window.carte && window.carte.hasLayer(window.couches.res_conduites) &&
+                window.couches.res_conduites.getLayers().length > 0) {
+                return;
+            }
+
+            window._affichageSimEnCours = true;
+            setTimeout(function () { window._affichageSimEnCours = false; }, 150);
             window._dernierResultatSimulation = data;
 
             // Contexte « infobulles » : réinitialise le registre et active

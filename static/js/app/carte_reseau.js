@@ -394,21 +394,27 @@ function chargerDonneesInitiales() {
                                 if (window._resolverChargementReseau) window._resolverChargementReseau();
                                 return;
                             }
-                            // 3. Charger et restituer la dernière simulation une fois les bassins tracés
-                            if (window.majMessageChargement) {
-                                window.majMessageChargement('Restauration de la dernière simulation…');
+                            // Rouvrir sur le dernier bassin consulté (par projet) s'il existe
+                            let aRestaureBassin = false;
+                            if (typeof window.restaurerDernierBassin === 'function') {
+                                try {
+                                    aRestaureBassin = !!window.restaurerDernierBassin();
+                                } catch (_) {}
                             }
-                            if (typeof chargerDerniereSimulation === 'function') {
-                                chargerDerniereSimulation();
+
+                            // 3. Charger et restituer la dernière simulation SEULEMENT si aucun bassin spécifique n'a été restauré
+                            if (!aRestaureBassin) {
+                                if (window.majMessageChargement) {
+                                    window.majMessageChargement('Restauration de la dernière simulation…');
+                                }
+                                if (typeof chargerDerniereSimulation === 'function') {
+                                    chargerDerniereSimulation();
+                                }
                             }
                             // Met à jour le badge « N BV » avec le nombre
                             // réel de bassins sectorisés (fini le « -- »).
                             if (typeof window.mettreAJourIndicateurBassin === 'function') {
                                 window.mettreAJourIndicateurBassin(null, {});
-                            }
-                            // Rouvrir sur le dernier bassin consulté (par projet)
-                            if (typeof window.restaurerDernierBassin === 'function') {
-                                window.restaurerDernierBassin();
                             }
                             montrerChargement(false);
                             if (window._resolverChargementReseau) window._resolverChargementReseau();
@@ -567,16 +573,13 @@ function initDraggableToolbar() {
         window._positionAutoToolbar(toolbar);
     }
 
-    // Redimensionnement / repli du panneau
+    // Redimensionnement de la carte : uniquement si la toolbar a été déplacée manuellement
     const _surResizeToolbar = function() {
         if (window._toolbarPositionPersonnalisee(toolbar)) {
             window._positionRelativeToolbar(toolbar);
-        } else {
-            window._positionAutoToolbar(toolbar);
         }
     };
     window.addEventListener('resize', _surResizeToolbar);
-    document.addEventListener('resize', _surResizeToolbar);
 
     let isDragging = false;
     let startX = 0, startY = 0;
