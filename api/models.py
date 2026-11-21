@@ -549,7 +549,7 @@ class Simulation(Base):
             "job_id": self.id,
             "org_id": self.org_id,
             "project_id": self.project_id,
-            "cluster_id": (self.summary_kpis or {}).get("cluster_id", 1),
+            "cluster_id": (self.summary_kpis or {}).get("cluster_id"),
             "bassin_ref": self.bassin_ref,
             "exutoire_noeud": self.exutoire_noeud,
             "name": self.name,

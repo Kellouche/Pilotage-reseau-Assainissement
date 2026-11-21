@@ -42,7 +42,7 @@ window.reinitialiserAffichageSimulation = function() {
             if (couches.regards) {
                 couches.regards.eachLayer(function(l) {
                     if (l && typeof l.setStyle === 'function') {
-                        l.setStyle({ radius: 3.5, color: '#e2e8f0', fillColor: '#e2e8f0', opacity: 1.0, fillOpacity: 0.9 });
+                        l.setStyle({ radius: 2.5, color: '#2c3e50', fillColor: '#2c3e50', opacity: 0.9, fillOpacity: 0.8 });
                     }
                 });
             }

@@ -241,7 +241,7 @@ function chargerDonneesInitiales() {
 
                     // Points (regards, rejets, stations, step, ouvrages)
                     const styles = {
-                        regards: { radius: 4, color: '#2c3e50', fillColor: '#2c3e50', fillOpacity: 0.8 },
+                        regards: { radius: 2.5, color: '#2c3e50', fillColor: '#2c3e50', fillOpacity: 0.8 },
                         rejets: { radius: 7, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.9, weight: 2 },
                         stations: { radius: 7, color: '#f97316', fillColor: '#f97316', fillOpacity: 0.85, weight: 2 },
                         step: { radius: 8, color: '#22c55e', fillColor: '#22c55e', fillOpacity: 0.9, weight: 2 },

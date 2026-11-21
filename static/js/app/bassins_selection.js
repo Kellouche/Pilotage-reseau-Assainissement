@@ -65,8 +65,12 @@
                 .then(r => r.ok ? r.json() : [])
                 .then(list => {
                     window._fiabiliteParBassin = {};
+                    const curProjId = (window._contexteSpatial && window._contexteSpatial.projectId)
+                        || (window._rawNetworkData && (window._rawNetworkData.project_id || window._rawNetworkData.project_name))
+                        || null;
                     (Array.isArray(list) ? list : []).forEach(s => {
                         if (!s || s.status !== 'completed') return;
+                        if (curProjId && s.project_id && String(s.project_id) !== String(curProjId)) return;
                         const cid = s.cluster_id !== undefined && s.cluster_id !== null ? String(s.cluster_id) : null;
                         if (!cid) return;
                         const verdict = window._fiabiliteDepuisSimulation(s);
@@ -92,7 +96,9 @@
                 if (!opt.value) return;
                 if (opt.dataset.labelBase === undefined) opt.dataset.labelBase = opt.textContent;
                 const sim = map[String(opt.value)];
-                const verdict = sim ? window._fiabiliteDepuisSimulation(sim) : null;
+                // Vérifier que la simulation correspond effectivement à ce bassin avant d'afficher un verdict
+                const estConforme = sim && (typeof _simCorrespondAuBassin === 'function' ? _simCorrespondAuBassin(sim, String(opt.value)) : true);
+                const verdict = estConforme ? window._fiabiliteDepuisSimulation(sim) : null;
                 const meta = verdict ? _FIABILITE_META[verdict] : null;
                 opt.textContent = meta ? `${meta.icon} ${opt.dataset.labelBase}` : opt.dataset.labelBase;
             });
@@ -132,7 +138,7 @@
             if (window._bassinNoms && cidStr && window._bassinNoms[cidStr]) return window._bassinNoms[cidStr];
             const _p = window._bassinProperties && cidStr ? window._bassinProperties[cidStr] : null;
             if (_p) {
-                const _pn = String(_p.nom || _p.nom_exutoire || _p.bassin_nom || '').trim();
+                const _pn = String(_p.nom_affiche || _p.nom || _p.nom_exutoire || _p.bassin_nom || '').trim();
                 if (_pn && !/^Bassin\s+\d+$/i.test(_pn)) return _pn;
             }
             return cidStr ? `Bassin ${cidStr}` : 'Tous les bassins';
@@ -814,21 +820,35 @@
 
             bassins.forEach(f => {
                 const cid = f.properties.cluster_id;
-                const nom = f.properties.nom || `Bassin ${cid}`;
-                _bassinNoms[cid] = nom;
+                let nom = f.properties.nom || `Bassin ${cid}`;
+                // Rendre les identifiants techniques SIG plus conviviaux (ex. 0_rejets_346980 -> Exutoire 346980)
+                nom = nom.replace(/^(\d+)_rejets_(\w+)/i, 'Exutoire $2');
+                nom = nom.replace(/^(\d+)_ouvrages_speciaux_(\w+)/i, 'Ouvrage $2');
+                f.properties.nom_affiche = nom;
+
+                _bassinNoms[String(cid)] = nom;
                 if (!window._bassinProperties) window._bassinProperties = {};
                 window._bassinProperties[String(cid)] = f.properties;
+                // Protection anti-collision homonymes (ex. Carmella 93 ha vs Carmella 0.35 ha) :
+                // Ne stocker par clé textuelle 'nom' QUE si non encore enregistré, ou si le candidat actuel a plus de regards
                 if (nom) {
-                    window._bassinProperties[String(nom)] = f.properties;
-                    _bassinNoms[String(nom)] = nom;
+                    const existant = window._bassinProperties[String(nom)];
+                    if (!existant || (parseInt(f.properties.nb_regards || 0) > parseInt(existant.nb_regards || 0))) {
+                        window._bassinProperties[String(nom)] = f.properties;
+                        _bassinNoms[String(nom)] = nom;
+                    }
                 }
 
                 const nbReg = parseInt(f.properties.nb_regards || 0);
                 const nbCond = parseInt(f.properties.nb_conduites || 0);
                 const surf = parseFloat(f.properties.surface_ha || 0.0);
 
-                // Un bassin appartient aux collecteurs s'il a au moins un regard ou conduite connectée ou surface > 0.45 ha
-                if (nbReg > 0 || nbCond > 2 || surf > 0.45) {
+                // Seuil strict pour les collecteurs simulables :
+                // Doit comporter au moins 3 regards ET 3 conduites (ou surface >= 1.0 ha avec au moins 2 conduites).
+                // Tout élément avec 1 ou 2 regards est classé dans les ouvrages et exutoires isolés (non simulables).
+                const estCollecteur = (nbReg >= 3 && nbCond >= 3) || (surf >= 1.0 && nbCond >= 2);
+
+                if (estCollecteur) {
                     f.properties.est_isole = false;
                     collecteurs.push(f);
                 } else {
@@ -841,10 +861,10 @@
             window._bassinsIsoles = isoles;
             window._bassinsIsoleIds = new Set(isoles.map(f => String(f.properties.cluster_id)));
 
-            // Tri alphabétique strict des deux listes (par nom)
+            // Tri alphabétique strict des deux listes (par nom affiché)
             const triAlphabetique = (a, b) => {
-                const nomA = (a.properties.nom || '').trim().toLowerCase();
-                const nomB = (b.properties.nom || '').trim().toLowerCase();
+                const nomA = (a.properties.nom_affiche || a.properties.nom || '').trim().toLowerCase();
+                const nomB = (b.properties.nom_affiche || b.properties.nom || '').trim().toLowerCase();
                 return nomA.localeCompare(nomB, 'fr', { sensitivity: 'base', numeric: true });
             };
 
@@ -855,7 +875,7 @@
             sel.innerHTML = `<option value="">-- Choisir un bassin versant (${collecteurs.length}) --</option>`;
             collecteurs.forEach(f => {
                 const cid = f.properties.cluster_id;
-                const nom = f.properties.nom || `Bassin ${cid}`;
+                const nom = f.properties.nom_affiche || f.properties.nom || `Bassin ${cid}`;
                 const surf = f.properties.surface_ha !== undefined ? ` (${f.properties.surface_ha} ha)` : '';
                 const reg = (f.properties.nb_regards && f.properties.nb_regards > 0) ? ` • ${f.properties.nb_regards} reg.` : '';
                 const opt = document.createElement('option');
@@ -876,15 +896,16 @@
                     selIsole.innerHTML = `<option value="">-- Choisir un ouvrage isolé (${isoles.length}) --</option>`;
                     isoles.forEach(f => {
                         const cid = f.properties.cluster_id;
-                        const nom = f.properties.nom || `Ouvrage ${cid}`;
+                        const nom = f.properties.nom_affiche || f.properties.nom || `Ouvrage ${cid}`;
                         const surf = f.properties.surface_ha !== undefined ? ` (${f.properties.surface_ha} ha)` : '';
+                        const reg = (f.properties.nb_regards && f.properties.nb_regards > 0) ? ` • ${f.properties.nb_regards} reg.` : '';
                         const opt = document.createElement('option');
                         opt.value = cid;
                         if (f.properties.bassin_ref) opt.dataset.bassinRef = f.properties.bassin_ref;
                         if (f.properties.exutoire_id !== undefined && f.properties.exutoire_id !== null) {
                             opt.dataset.exutoireId = f.properties.exutoire_id;
                         }
-                        opt.textContent = `📍 ${nom}${surf}`;
+                        opt.textContent = `📍 ${nom}${surf}${reg}`;
                         selIsole.appendChild(opt);
                     });
 

@@ -169,14 +169,18 @@
         }
 
         const cs = window._contexteSpatial;
-        // Déjà cohérent ? (vue archive sur ce snapshot, ou réseau courant
-        // dont l'empreinte correspond)
+        // Déjà cohérent ? (vue archive sur ce snapshot, ou réseau courant).
+        // RÈGLE D'OR : Si nous sommes sur la version courante du projet, ne JAMAIS
+        // déclencher chargerDonneesInitiales() lors d'une sélection de bassin ou de
+        // simulation — cela rechargerait tout le réseau (10k regards) et relancerait
+        // le partitionnement lourd. Les identifiants topologiques de nœuds et tronçons
+        // assurent l'intégrité du rendu directement.
+        if (cs.estVersionCourante) {
+            return Promise.resolve({ ok: true });
+        }
         const ref = String(refSnap);
         if (!cs.estVersionCourante
             && (ref === cs.sha256 || ref === cs.versionId)) {
-            return Promise.resolve({ ok: true });
-        }
-        if (cs.estVersionCourante && ((cs.sha256 && ref === cs.sha256) || (cs.versionId && ref === cs.versionId) || !cs.sha256)) {
             return Promise.resolve({ ok: true });
         }
 

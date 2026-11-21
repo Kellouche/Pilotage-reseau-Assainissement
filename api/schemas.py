@@ -248,7 +248,7 @@ class SimulationResponse(BaseModel):
     # cluster_id peut être positionnel (int) ou identifiant métier stable
     # chaîne (« 8_rejets_346731 », « 30_ouvrages_speciaux_351607 ») —
     # summary_kpis.cluster_id est la source de vérité.
-    cluster_id: Union[int, str]
+    cluster_id: Optional[Union[int, str]] = None
     status: str
     result_summary: Optional[Dict[str, Any]] = None
     created_at: datetime
