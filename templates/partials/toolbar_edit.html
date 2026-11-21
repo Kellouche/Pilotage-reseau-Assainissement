@@ -7,13 +7,12 @@ Date de modification : 2026-11-08
 Objet : Barre d'outils flottante d'édition hydraulique et sectorisation manuelle
 ================================================================================
 -->
-    <!-- Barre d'outils d'édition flottante et déplaçable (Draggable) -->
+    <!-- Barre d'outils d'édition ancrée avec la légende -->
     <div class="edit-toolbar" id="main-edit-toolbar">
-        <!-- Poignée de déplacement et contrôle de repli -->
-        <div class="toolbar-header-drag" id="toolbar-drag-handle" title="Maintenir enfoncé pour déplacer la barre d'outils">
-            <i class="fas fa-grip-vertical toolbar-grip-icon"></i>
+        <!-- Contrôle de repli -->
+        <div class="toolbar-header-drag" id="toolbar-drag-handle" title="Barre d'outils d'ingénierie">
             <button class="toolbar-collapse-btn" id="btn-collapse-toolbar" onclick="toggleToolbarCollapse(event)" title="Réduire / Agrandir la barre d'outils">
-                <i class="fas fa-chevron-left" id="icon-collapse-toolbar"></i>
+                <i class="fas fa-chevron-down" id="icon-collapse-toolbar"></i>
             </button>
         </div>
 
@@ -39,7 +38,7 @@ Objet : Barre d'outils flottante d'édition hydraulique et sectorisation manuell
                     <i class="fas fa-vector-square" style="color: #a78bfa;"></i>
                 </button>
                 <!-- Mini-toolbar : 2 icônes de mode pochoir, visible au clic sur ▣ -->
-                <div id="menu-pochoir" style="display:none; position:absolute; right:0; top:calc(100% + 6px); background:#1e293b; border:1px solid rgba(255,255,255,0.15); border-radius:10px; box-shadow:0 12px 32px rgba(0,0,0,0.5); padding:4px; gap:4px; z-index:4000;">
+                <div id="menu-pochoir" style="display:none; position:absolute; right:calc(100% + 8px); bottom:0; background:#1e293b; border:1px solid rgba(255,255,255,0.15); border-radius:10px; box-shadow:0 12px 32px rgba(0,0,0,0.5); padding:4px; gap:4px; z-index:4000;">
                     <button class="tool-btn tool-tip" data-tip="Pochoir : cliquer un bassin versant d'une couche SIG" onclick="choisirModePochoir('bassin')">
                         <i class="fas fa-mouse-pointer" style="color:#38bdf8;"></i>
                     </button>

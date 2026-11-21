@@ -342,12 +342,8 @@ body {
     margin: 0 !important;
 }
 
-/* Contrôles Leaflet supérieurs gauches : toolbar d'édition et boutons de zoom côte-à-côte */
+/* Contrôles Leaflet supérieurs gauches (boutons de zoom) */
 #map .leaflet-top.leaflet-left {
-    display: flex;
-    flex-direction: row;
-    align-items: flex-start;
-    gap: 8px;
     top: 12px;
     left: 12px;
     z-index: 1000;
@@ -362,6 +358,24 @@ body {
 
 body.snapshot-archive #map .leaflet-top.leaflet-left {
     top: 52px;
+}
+
+/* Contrôles Leaflet inférieurs droits : légende et toolbar d'édition ancrées côte-à-côte */
+#map .leaflet-bottom.leaflet-right {
+    display: flex;
+    flex-direction: row-reverse;
+    align-items: flex-end;
+    gap: 10px;
+    margin-right: 12px;
+    margin-bottom: 12px;
+    z-index: 1000;
+    pointer-events: none;
+}
+
+#map .leaflet-bottom.leaflet-right .leaflet-control {
+    pointer-events: auto;
+    margin: 0 !important;
+    float: none !important;
 }
 
 /* Bannière de consultation d'archive (Snapshot immuable)
@@ -398,31 +412,16 @@ body.snapshot-archive #map .leaflet-top.leaflet-left {
     cursor: grabbing !important;
 }
 
-/* Poignée de déplacement et contrôle d'agrandissement/réduction */
+/* En-tête de la barre d'outils et contrôle de repli */
 .toolbar-header-drag {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 4px 6px;
+    justify-content: center;
+    padding: 3px 4px;
     background: rgba(15, 23, 42, 0.6);
     border-radius: 4px;
-    cursor: grab;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     margin-bottom: 2px;
-}
-
-.toolbar-header-drag:active {
-    cursor: grabbing;
-}
-
-.toolbar-grip-icon {
-    font-size: 0.75rem;
-    color: #64748b;
-    transition: color 0.15s;
-}
-
-.toolbar-header-drag:hover .toolbar-grip-icon {
-    color: #38bdf8;
 }
 
 .toolbar-collapse-btn {

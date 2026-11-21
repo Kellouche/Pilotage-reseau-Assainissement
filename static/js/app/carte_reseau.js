@@ -465,7 +465,7 @@ function toggleToolbarCollapse(e) {
     const isCollapsed = toolbar.classList.contains('collapsed');
 
     if (icon) {
-        icon.className = isCollapsed ? 'fas fa-chevron-right' : 'fas fa-chevron-left';
+        icon.className = isCollapsed ? 'fas fa-chevron-up' : 'fas fa-chevron-down';
     }
     localStorage.setItem('drainpilot_toolbar_collapsed', isCollapsed ? '1' : '0');
 }
@@ -475,21 +475,7 @@ function toggleToolbarCollapse(e) {
  * et du viewport pour éviter qu'elle ne devienne invisible lors du redimensionnement.
  */
 window._bornerToolbarViewport = function(toolbar) {
-    if (!toolbar || toolbar.dataset.positionManuelle !== '1') return;
-    const mapContainer = document.getElementById('map') || document.body;
-    const maxLeft = Math.max(10, mapContainer.clientWidth - toolbar.offsetWidth - 10);
-    const maxTop = Math.max(10, mapContainer.clientHeight - toolbar.offsetHeight - 10);
-
-    const curLeft = toolbar.offsetLeft;
-    const curTop = toolbar.offsetTop;
-    const left = Math.min(Math.max(curLeft, 10), maxLeft);
-    const top = Math.min(Math.max(curTop, 10), maxTop);
-
-    if (left !== curLeft || top !== curTop) {
-        toolbar.style.left = left + 'px';
-        toolbar.style.top = top + 'px';
-        toolbar.style.right = 'auto';
-    }
+    if (!toolbar) return;
 };
 
 /**
@@ -511,7 +497,7 @@ window._positionAutoToolbar = function(toolbar) {
 
 /** Vrai si l'utilisateur a déplacé la toolbar manuellement. */
 window._toolbarPositionPersonnalisee = function(toolbar) {
-    return !!(toolbar && toolbar.dataset.positionManuelle === '1');
+    return false;
 };
 
 /**
@@ -519,135 +505,25 @@ window._toolbarPositionPersonnalisee = function(toolbar) {
  * le décalage est relatif et suit le redimensionnement de la carte.
  */
 window._positionRelativeToolbar = function(toolbar) {
-    if (!toolbar) return;
-    const fx = parseFloat(toolbar.dataset.fx);
-    const fy = parseFloat(toolbar.dataset.fy);
-    if (isNaN(fx) || isNaN(fy)) {
-        window._positionAutoToolbar(toolbar);
-        return;
-    }
-    const mapContainer = document.getElementById('map') || document.body;
-    toolbar.style.position = 'absolute';
-    toolbar.style.left = Math.round(fx * mapContainer.clientWidth) + 'px';
-    toolbar.style.top = Math.round(fy * mapContainer.clientHeight) + 'px';
-    toolbar.style.right = 'auto';
-    window._bornerToolbarViewport(toolbar);
+    window._positionAutoToolbar(toolbar);
 };
 
 function initDraggableToolbar() {
     const toolbar = document.getElementById('main-edit-toolbar');
-    const handle = document.getElementById('toolbar-drag-handle');
-    if (!toolbar || !handle) return;
+    if (!toolbar) return;
+
+    // Purge de toute ancienne position manuelle pour garantir l'ancrage Leaflet avec la légende
+    localStorage.removeItem('drainpilot_toolbar_pos');
+    window._positionAutoToolbar(toolbar);
 
     // Restaurer l'état réduit si mémorisé
     if (localStorage.getItem('drainpilot_toolbar_collapsed') === '1') {
         toolbar.classList.add('collapsed');
         const icon = document.getElementById('icon-collapse-toolbar');
-        if (icon) icon.className = 'fas fa-chevron-right';
-    }
-
-    // Double-clic sur la poignée pour réancrer dans Leaflet à côté des zooms (comme la légende)
-    handle.addEventListener('dblclick', (e) => {
-        e.stopPropagation();
-        localStorage.removeItem('drainpilot_toolbar_pos');
-        window._positionAutoToolbar(toolbar);
-    });
-
-    // Restaurer la position si mémorisée
-    const savedPos = localStorage.getItem('drainpilot_toolbar_pos');
-    if (savedPos) {
-        try {
-            const pos = JSON.parse(savedPos);
-            if (pos.top && pos.left && pos.fx !== undefined && pos.fy !== undefined) {
-                toolbar.dataset.positionManuelle = '1';
-                toolbar.dataset.fx = String(pos.fx);
-                toolbar.dataset.fy = String(pos.fy);
-                window._positionRelativeToolbar(toolbar);
-            } else {
-                window._positionAutoToolbar(toolbar);
-            }
-        } catch (err) {
-            window._positionAutoToolbar(toolbar);
-        }
+        if (icon) icon.className = 'fas fa-chevron-up';
     } else {
-        window._positionAutoToolbar(toolbar);
-    }
-
-    // Redimensionnement de la carte : uniquement si la toolbar a été déplacée manuellement
-    const _surResizeToolbar = function() {
-        if (window._toolbarPositionPersonnalisee(toolbar)) {
-            window._positionRelativeToolbar(toolbar);
-        }
-    };
-    window.addEventListener('resize', _surResizeToolbar);
-
-    let isDragging = false;
-    let startX = 0, startY = 0;
-    let initialLeft = 0, initialTop = 0;
-
-    handle.addEventListener('mousedown', (e) => {
-        if (e.target.closest('#btn-collapse-toolbar')) return;
-
-        isDragging = true;
-        toolbar.classList.add('is-dragging');
-        startX = e.clientX;
-        startY = e.clientY;
-
-        const mapContainer = document.getElementById('map') || document.body;
-        const mapRect = mapContainer.getBoundingClientRect();
-        const tbRect = toolbar.getBoundingClientRect();
-
-        toolbar.style.position = 'absolute';
-        initialLeft = tbRect.left - mapRect.left;
-        initialTop = tbRect.top - mapRect.top;
-        toolbar.style.left = `${initialLeft}px`;
-        toolbar.style.top = `${initialTop}px`;
-        toolbar.style.right = 'auto';
-
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
-        e.preventDefault();
-    });
-
-    function onMouseMove(e) {
-        if (!isDragging) return;
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
-
-        let newLeft = initialLeft + dx;
-        let newTop = initialTop + dy;
-
-        const mapContainer = document.getElementById('map') || document.body;
-        const maxLeft = Math.max(10, mapContainer.clientWidth - toolbar.offsetWidth - 10);
-        const maxTop = Math.max(10, mapContainer.clientHeight - toolbar.offsetHeight - 10);
-
-        newLeft = Math.max(10, Math.min(newLeft, maxLeft));
-        newTop = Math.max(10, Math.min(newTop, maxTop));
-
-        toolbar.style.left = `${newLeft}px`;
-        toolbar.style.top = `${newTop}px`;
-        toolbar.style.right = 'auto';
-    }
-
-    function onMouseUp() {
-        if (!isDragging) return;
-        isDragging = false;
-        toolbar.classList.remove('is-dragging');
-        document.removeEventListener('mousemove', onMouseMove);
-        document.removeEventListener('mouseup', onMouseUp);
-
-        toolbar.dataset.positionManuelle = '1';
-        const mapContainer = document.getElementById('map') || document.body;
-        const fx = toolbar.offsetLeft / Math.max(mapContainer.clientWidth, 1);
-        const fy = toolbar.offsetTop / Math.max(mapContainer.clientHeight, 1);
-        toolbar.dataset.fx = String(fx);
-        toolbar.dataset.fy = String(fy);
-        localStorage.setItem('drainpilot_toolbar_pos', JSON.stringify({
-            top: toolbar.offsetTop,
-            left: toolbar.offsetLeft,
-            fx: fx,
-            fy: fy
-        }));
+        const icon = document.getElementById('icon-collapse-toolbar');
+        if (icon) icon.className = 'fas fa-chevron-down';
     }
 }
 
@@ -745,15 +621,9 @@ window.sauvegarderEtatBureau = function(reseauId) {
     // Toolbar d'édition
     const toolbar = document.getElementById('main-edit-toolbar');
     if (toolbar) {
-        const r = toolbar.getBoundingClientRect();
         etat.toolbar = {
             visible: toolbar.style.display !== 'none',
-            collapsed: toolbar.classList.contains('collapsed'),
-            x: r.left, y: r.top,
-            fx: r.left / window.innerWidth,
-            fy: r.top / window.innerHeight,
-            personnalisee: window._toolbarPositionPersonnalisee
-                ? window._toolbarPositionPersonnalisee(toolbar) : false
+            collapsed: toolbar.classList.contains('collapsed')
         };
     }
 
@@ -819,33 +689,16 @@ window.restaurerEtatBureau = function(reseauId) {
         }
     }
 
-    // Restaurer toolbar
+    // Restaurer toolbar (ancrée dans Leaflet avec la légende en bas à droite)
     if (etat.toolbar) {
         const toolbar = document.getElementById('main-edit-toolbar');
         if (toolbar) {
-            toolbar.style.display = etat.toolbar.visible ? 'block' : 'none';
+            toolbar.style.display = etat.toolbar.visible !== false ? 'flex' : 'none';
             if (etat.toolbar.collapsed) toolbar.classList.add('collapsed');
             else toolbar.classList.remove('collapsed');
             const icon = document.getElementById('icon-collapse-toolbar');
-            if (icon) icon.className = etat.toolbar.collapsed ? 'fas fa-chevron-right' : 'fas fa-chevron-left';
-            if (etat.toolbar.x !== undefined && etat.toolbar.personnalisee) {
-                // Position manuelle : décalage RELATIF (fractions du
-                // viewport) — suit le resize puis borné à l'écran.
-                toolbar.dataset.positionManuelle = '1';
-                if (etat.toolbar.fx !== undefined && etat.toolbar.fy !== undefined) {
-                    toolbar.dataset.fx = String(etat.toolbar.fx);
-                    toolbar.dataset.fy = String(etat.toolbar.fy);
-                } else {
-                    // Anciens états sans fractions : conversion approximative.
-                    toolbar.dataset.fx = String(Math.min(Math.max(Number(etat.toolbar.x) / window.innerWidth, 0), 1));
-                    toolbar.dataset.fy = String(Math.min(Math.max(Number(etat.toolbar.y) / window.innerHeight, 0), 1));
-                }
-                window._positionRelativeToolbar(toolbar);
-            } else if (etat.toolbar.visible !== false) {
-                // Position automatique : recalée sur le panneau d'ingénierie.
-                delete toolbar.dataset.positionManuelle;
-                window._positionAutoToolbar(toolbar);
-            }
+            if (icon) icon.className = etat.toolbar.collapsed ? 'fas fa-chevron-up' : 'fas fa-chevron-down';
+            window._positionAutoToolbar(toolbar);
         }
     }
 
@@ -907,11 +760,14 @@ window.nettoyerEtatReseau = function(reseauId) {
     const badgeInstant = document.getElementById('badge-instant-state');
     if (badgeInstant) badgeInstant.classList.add('hidden');
 
-    // Réinitialiser la toolbar (déplier)
+    // Réinitialiser la toolbar (déplier et réancrer avec la légende)
     const toolbar = document.getElementById('main-edit-toolbar');
-    if (toolbar) toolbar.classList.remove('collapsed');
+    if (toolbar) {
+        toolbar.classList.remove('collapsed');
+        window._positionAutoToolbar(toolbar);
+    }
     const icon = document.getElementById('icon-collapse-toolbar');
-    if (icon) icon.className = 'fas fa-chevron-left';
+    if (icon) icon.className = 'fas fa-chevron-down';
 
     // Masquer la légende flottante
     const leg = document.getElementById('sim-floating-legend');

@@ -55,6 +55,9 @@
             maxZoom: 22,
             maxNativeZoom: 19
         }).addTo(carte);
+        if (carte.attributionControl) {
+            carte.attributionControl.setPosition('bottomleft');
+        }
 
         // Hiérarchie cartographique des Panes Leaflet (z-index)
         // 1. Sous-bassins versants Voronoï (fond géométrique)
@@ -252,10 +255,9 @@
 
         // ==========================================
         // BARRE D'OUTILS D'ÉDITION HYDRAULIQUE (CONTRÔLE LEAFLET INTÉGRÉ)
-        // Inspiré de la légende Leaflet : ancré directement dans la carte
-        // comme contrôle natif, sans dépendance de conteneur externe.
+        // Ancrée avec la légende Leaflet en bas à droite (bottomright)
         // ==========================================
-        let editToolbarControl = L.control({ position: 'topleft' });
+        let editToolbarControl = L.control({ position: 'bottomright' });
 
         editToolbarControl.onAdd = function(map) {
             const tb = document.getElementById('main-edit-toolbar');
@@ -270,15 +272,6 @@
         };
 
         editToolbarControl.addTo(carte);
-
-        // Positionner la toolbar en premier dans le conteneur topleft (à côté des zooms)
-        try {
-            const cornerTopLeft = carte._controlCorners && carte._controlCorners.topleft;
-            const tbEl = document.getElementById('main-edit-toolbar');
-            if (cornerTopLeft && tbEl && cornerTopLeft.firstChild !== tbEl) {
-                cornerTopLeft.insertBefore(tbEl, cornerTopLeft.firstChild);
-            }
-        } catch (_) {}
 
         window.basculerAffichageLegende = function(e) {
             if (e) e.stopPropagation();
