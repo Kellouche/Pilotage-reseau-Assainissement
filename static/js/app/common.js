@@ -249,6 +249,36 @@
 
         simulationLegendControl.addTo(carte);
 
+        // ==========================================
+        // BARRE D'OUTILS D'ÉDITION HYDRAULIQUE (CONTRÔLE LEAFLET INTÉGRÉ)
+        // Inspiré de la légende Leaflet : ancré directement dans la carte
+        // comme contrôle natif, sans dépendance de conteneur externe.
+        // ==========================================
+        let editToolbarControl = L.control({ position: 'topleft' });
+
+        editToolbarControl.onAdd = function(map) {
+            const tb = document.getElementById('main-edit-toolbar');
+            if (tb) {
+                L.DomEvent.disableClickPropagation(tb);
+                L.DomEvent.disableScrollPropagation(tb);
+                return tb;
+            }
+            const div = L.DomUtil.create('div', 'edit-toolbar');
+            div.id = 'main-edit-toolbar';
+            return div;
+        };
+
+        editToolbarControl.addTo(carte);
+
+        // Positionner la toolbar en premier dans le conteneur topleft (à côté des zooms)
+        try {
+            const cornerTopLeft = carte._controlCorners && carte._controlCorners.topleft;
+            const tbEl = document.getElementById('main-edit-toolbar');
+            if (cornerTopLeft && tbEl && cornerTopLeft.firstChild !== tbEl) {
+                cornerTopLeft.insertBefore(tbEl, cornerTopLeft.firstChild);
+            }
+        } catch (_) {}
+
         window.basculerAffichageLegende = function(e) {
             if (e) e.stopPropagation();
             const body = document.getElementById('sim-legend-body');

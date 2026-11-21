@@ -469,24 +469,15 @@ function toggleToolbarCollapse(e) {
  * et du viewport pour éviter qu'elle ne devienne invisible lors du redimensionnement.
  */
 window._bornerToolbarViewport = function(toolbar) {
-    if (!toolbar) return;
-    const parent = toolbar.offsetParent || document.body;
-    const parentW = parent.clientWidth || window.innerWidth;
-    const parentH = parent.clientHeight || window.innerHeight;
-    const width = toolbar.offsetWidth || 52;
-    const height = toolbar.offsetHeight || 300;
-
-    const ws = document.getElementById('app-workspace');
-    const replie = ws && ws.classList.contains('sidebar-collapsed');
-    const minLeft = replie ? 80 : 10;
-    const maxLeft = Math.max(minLeft, parentW - width - 10);
-    const minTop = document.body.classList.contains('snapshot-archive') ? 54 : 10;
-    const maxTop = Math.max(minTop, parentH - height - 10);
+    if (!toolbar || toolbar.dataset.positionManuelle !== '1') return;
+    const mapContainer = document.getElementById('map') || document.body;
+    const maxLeft = Math.max(10, mapContainer.clientWidth - toolbar.offsetWidth - 10);
+    const maxTop = Math.max(10, mapContainer.clientHeight - toolbar.offsetHeight - 10);
 
     const curLeft = toolbar.offsetLeft;
     const curTop = toolbar.offsetTop;
-    const left = Math.min(Math.max(curLeft, minLeft), maxLeft);
-    const top = Math.min(Math.max(curTop, minTop), maxTop);
+    const left = Math.min(Math.max(curLeft, 10), maxLeft);
+    const top = Math.min(Math.max(curTop, 10), maxTop);
 
     if (left !== curLeft || top !== curTop) {
         toolbar.style.left = left + 'px';
@@ -496,21 +487,20 @@ window._bornerToolbarViewport = function(toolbar) {
 };
 
 /**
- * Position « automatique » de la toolbar : accrochée au bord gauche
- * de l'espace cartographique (#carte-workspace).
- * - Quand le panneau est ouvert (320px), #carte-workspace commence à x=320px,
- *   donc un style.left = 14px place la toolbar immédiatement à côté du panneau.
- * - Quand le panneau est replié, style.left = 80px laisse libre l'onglet de
- *   réouverture #btn-sidebar-reopen sans aucun chevauchement.
+ * Position « automatique » de la toolbar :
+ * Inspiré de la légende Leaflet, la toolbar est ancrée dans le conteneur
+ * Leaflet natif (.leaflet-top.leaflet-left). Aucun style inline de position
+ * n'est requis : Leaflet et le flexbox CSS gèrent le calage naturellement.
  */
 window._positionAutoToolbar = function(toolbar) {
     if (!toolbar) return;
-    const ws = document.getElementById('app-workspace');
-    const replie = ws && ws.classList.contains('sidebar-collapsed');
-    toolbar.style.left = (replie ? 80 : 14) + 'px';
-    toolbar.style.top = document.body.classList.contains('snapshot-archive') ? '54px' : '14px';
-    toolbar.style.right = 'auto';
-    window._bornerToolbarViewport(toolbar);
+    delete toolbar.dataset.positionManuelle;
+    delete toolbar.dataset.fx;
+    delete toolbar.dataset.fy;
+    toolbar.style.position = '';
+    toolbar.style.left = '';
+    toolbar.style.top = '';
+    toolbar.style.right = '';
 };
 
 /** Vrai si l'utilisateur a déplacé la toolbar manuellement. */
@@ -519,22 +509,21 @@ window._toolbarPositionPersonnalisee = function(toolbar) {
 };
 
 /**
- * Position manuelle exprimée en FRACTIONS du conteneur parent (#carte-workspace) :
- * le décalage est relatif et suit le redimensionnement.
+ * Position manuelle exprimée en FRACTIONS du conteneur #map :
+ * le décalage est relatif et suit le redimensionnement de la carte.
  */
 window._positionRelativeToolbar = function(toolbar) {
     if (!toolbar) return;
     const fx = parseFloat(toolbar.dataset.fx);
     const fy = parseFloat(toolbar.dataset.fy);
     if (isNaN(fx) || isNaN(fy)) {
-        window._bornerToolbarViewport(toolbar);
+        window._positionAutoToolbar(toolbar);
         return;
     }
-    const parent = toolbar.offsetParent || document.body;
-    const parentW = parent.clientWidth || window.innerWidth;
-    const parentH = parent.clientHeight || window.innerHeight;
-    toolbar.style.left = Math.round(fx * parentW) + 'px';
-    toolbar.style.top = Math.round(fy * parentH) + 'px';
+    const mapContainer = document.getElementById('map') || document.body;
+    toolbar.style.position = 'absolute';
+    toolbar.style.left = Math.round(fx * mapContainer.clientWidth) + 'px';
+    toolbar.style.top = Math.round(fy * mapContainer.clientHeight) + 'px';
     toolbar.style.right = 'auto';
     window._bornerToolbarViewport(toolbar);
 };
@@ -551,35 +540,31 @@ function initDraggableToolbar() {
         if (icon) icon.className = 'fas fa-chevron-right';
     }
 
+    // Double-clic sur la poignée pour réancrer dans Leaflet à côté des zooms (comme la légende)
+    handle.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        localStorage.removeItem('drainpilot_toolbar_pos');
+        window._positionAutoToolbar(toolbar);
+    });
+
     // Restaurer la position si mémorisée
     const savedPos = localStorage.getItem('drainpilot_toolbar_pos');
     if (savedPos) {
         try {
             const pos = JSON.parse(savedPos);
-            // Si l'ancienne position sauvegardée contenait l'ancien offset erroné (> 250px), purger
-            if (pos.left && pos.left > 250 && (!pos.fx || pos.fx > 0.35)) {
-                localStorage.removeItem('drainpilot_toolbar_pos');
-            } else if (pos.top && pos.left) {
+            if (pos.top && pos.left && pos.fx !== undefined && pos.fy !== undefined) {
                 toolbar.dataset.positionManuelle = '1';
-                if (pos.fx !== undefined && pos.fy !== undefined) {
-                    toolbar.dataset.fx = String(pos.fx);
-                    toolbar.dataset.fy = String(pos.fy);
-                    window._positionRelativeToolbar(toolbar);
-                } else {
-                    toolbar.style.top = `${pos.top}px`;
-                    toolbar.style.left = `${pos.left}px`;
-                    toolbar.style.right = 'auto';
-                    window._bornerToolbarViewport(toolbar);
-                }
+                toolbar.dataset.fx = String(pos.fx);
+                toolbar.dataset.fy = String(pos.fy);
+                window._positionRelativeToolbar(toolbar);
+            } else {
+                window._positionAutoToolbar(toolbar);
             }
-        } catch (err) {}
-    }
-
-    // Position initiale : ancrage automatique au bord de la carte sauf si position manuelle
-    if (!window._toolbarPositionPersonnalisee(toolbar)) {
-        window._positionAutoToolbar(toolbar);
+        } catch (err) {
+            window._positionAutoToolbar(toolbar);
+        }
     } else {
-        window._bornerToolbarViewport(toolbar);
+        window._positionAutoToolbar(toolbar);
     }
 
     // Redimensionnement / repli du panneau
@@ -605,8 +590,16 @@ function initDraggableToolbar() {
         startX = e.clientX;
         startY = e.clientY;
 
-        initialLeft = toolbar.offsetLeft;
-        initialTop = toolbar.offsetTop;
+        const mapContainer = document.getElementById('map') || document.body;
+        const mapRect = mapContainer.getBoundingClientRect();
+        const tbRect = toolbar.getBoundingClientRect();
+
+        toolbar.style.position = 'absolute';
+        initialLeft = tbRect.left - mapRect.left;
+        initialTop = tbRect.top - mapRect.top;
+        toolbar.style.left = `${initialLeft}px`;
+        toolbar.style.top = `${initialTop}px`;
+        toolbar.style.right = 'auto';
 
         document.addEventListener('mousemove', onMouseMove);
         document.addEventListener('mouseup', onMouseUp);
@@ -621,19 +614,12 @@ function initDraggableToolbar() {
         let newLeft = initialLeft + dx;
         let newTop = initialTop + dy;
 
-        const parent = toolbar.offsetParent || document.body;
-        const parentW = parent.clientWidth || window.innerWidth;
-        const parentH = parent.clientHeight || window.innerHeight;
+        const mapContainer = document.getElementById('map') || document.body;
+        const maxLeft = Math.max(10, mapContainer.clientWidth - toolbar.offsetWidth - 10);
+        const maxTop = Math.max(10, mapContainer.clientHeight - toolbar.offsetHeight - 10);
 
-        const ws = document.getElementById('app-workspace');
-        const replie = ws && ws.classList.contains('sidebar-collapsed');
-        const minLeft = replie ? 80 : 10;
-        const maxLeft = Math.max(minLeft, parentW - toolbar.offsetWidth - 10);
-        const minTop = document.body.classList.contains('snapshot-archive') ? 54 : 10;
-        const maxTop = Math.max(minTop, parentH - toolbar.offsetHeight - 10);
-
-        newLeft = Math.max(minLeft, Math.min(newLeft, maxLeft));
-        newTop = Math.max(minTop, Math.min(newTop, maxTop));
+        newLeft = Math.max(10, Math.min(newLeft, maxLeft));
+        newTop = Math.max(10, Math.min(newTop, maxTop));
 
         toolbar.style.left = `${newLeft}px`;
         toolbar.style.top = `${newTop}px`;
@@ -648,11 +634,9 @@ function initDraggableToolbar() {
         document.removeEventListener('mouseup', onMouseUp);
 
         toolbar.dataset.positionManuelle = '1';
-        const parent = toolbar.offsetParent || document.body;
-        const parentW = parent.clientWidth || window.innerWidth;
-        const parentH = parent.clientHeight || window.innerHeight;
-        const fx = toolbar.offsetLeft / Math.max(parentW, 1);
-        const fy = toolbar.offsetTop / Math.max(parentH, 1);
+        const mapContainer = document.getElementById('map') || document.body;
+        const fx = toolbar.offsetLeft / Math.max(mapContainer.clientWidth, 1);
+        const fy = toolbar.offsetTop / Math.max(mapContainer.clientHeight, 1);
         toolbar.dataset.fx = String(fx);
         toolbar.dataset.fy = String(fy);
         localStorage.setItem('drainpilot_toolbar_pos', JSON.stringify({
