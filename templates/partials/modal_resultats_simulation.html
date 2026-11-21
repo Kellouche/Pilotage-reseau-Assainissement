@@ -1,0 +1,434 @@
+<!--
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Objet : Fenêtre dédiée Haute Définition de restitution des résultats de simulation
+        SWMM 5.2 (Tableau de bord, KPIs, Détails par ouvrage, Diagnostic IA & Travaux)
+================================================================================
+-->
+<div id="modal-resultats-simulation" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.88); backdrop-filter: blur(10px); z-index: 3200; align-items: center; justify-content: center;">
+    <div style="background: linear-gradient(165deg, #1e293b 0%, #0f172a 100%); color: #f8fafc; border-radius: 18px; width: 94%; max-width: 1140px; height: 90vh; max-height: 90vh; display: flex; flex-direction: column; border: 1.5px solid rgba(56, 189, 248, 0.3); box-shadow: 0 30px 70px rgba(0, 0, 0, 0.75), 0 0 30px rgba(56, 189, 248, 0.15); overflow: hidden;">
+
+        <!-- 1. EN-TÊTE SUPÉRIEUR HAUTE DÉFINITION -->
+        <div style="background: rgba(15, 23, 42, 0.95); padding: 14px 24px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-shrink: 0;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, #0284c7, #0369a1); display: flex; align-items: center; justify-content: center; font-size: 18px; color: white; box-shadow: 0 0 15px rgba(56, 189, 248, 0.4);">
+                    <i class="fas fa-chart-pie"></i>
+                </div>
+                <div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <h4 style="margin: 0; font-weight: 800; font-size: 1.12rem; color: #f8fafc; letter-spacing: -0.3px;">
+                            Résultats de Simulation SWMM 5.2
+                        </h4>
+                        <span id="res-modal-badge-bassin" style="font-size: 0.75rem; background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.35); padding: 2px 8px; border-radius: 6px; font-weight: 700;">
+                            Réseau
+                        </span>
+                    </div>
+                    <small id="res-modal-subtitle" style="color: #94a3b8; font-size: 0.76rem;">
+                        Synthèse hydrodynamique complète · Solveur Saint-Venant 1D
+                    </small>
+                </div>
+            </div>
+
+            <!-- Contrôles d'en-tête -->
+            <div style="display: flex; align-items: center; gap: 14px;">
+                <!-- Option d'ouverture automatique -->
+                <label style="font-size: 0.76rem; color: #94a3b8; display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none;" title="Ouvrir automatiquement cette fenêtre après chaque calcul SWMM">
+                    <input type="checkbox" id="chk-auto-open-results" checked onchange="window.basculerAutoOpenResults(this.checked)" style="accent-color: #38bdf8; cursor: pointer;">
+                    <span>Ouverture automatique</span>
+                </label>
+
+                <!-- Export PDF rapide -->
+                <button onclick="telechargerRapportDiagnosticPDF()" style="background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8; padding: 6px 12px; border-radius: 8px; font-size: 0.78rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.15s;" onmouseover="this.style.background='rgba(56, 189, 248, 0.22)'" onmouseout="this.style.background='rgba(56, 189, 248, 0.12)'">
+                    <i class="fas fa-file-pdf"></i>
+                    <span>Rapport PDF</span>
+                </button>
+
+                <!-- Bouton de fermeture -->
+                <button onclick="fermerModalResultatsSimulation()" title="Fermer et explorer la carte" style="background: transparent; border: none; color: #94a3b8; font-size: 24px; cursor: pointer; line-height: 1; padding: 0 4px; transition: color 0.15s;" onmouseover="this.style.color='#f8fafc'" onmouseout="this.style.color='#94a3b8'">&times;</button>
+            </div>
+        </div>
+
+        <!-- 2. BANDEAU DE VERDICT HYDRAULIQUE PERCUTANT -->
+        <div id="res-verdict-banner" style="background: linear-gradient(90deg, rgba(239, 68, 68, 0.15) 0%, rgba(15, 23, 42, 0.6) 100%); border-bottom: 1.5px solid rgba(239, 68, 68, 0.4); padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;">
+            <div style="display: flex; align-items: center; gap: 14px;">
+                <div id="res-verdict-icon" style="width: 36px; height: 36px; border-radius: 50%; background: #ef4444; color: white; display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 0 15px rgba(239, 68, 68, 0.6); flex-shrink: 0;">
+                    <i class="fas fa-triangle-exclamation"></i>
+                </div>
+                <div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #fca5a5;">Verdict Global</span>
+                        <span id="res-verdict-badge" style="font-size: 0.74rem; font-weight: 800; padding: 2px 8px; border-radius: 4px; background: rgba(239, 68, 68, 0.25); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.5);">
+                            DÉBORDEMENT DÉTECTÉ
+                        </span>
+                    </div>
+                    <div id="res-verdict-text" style="font-size: 0.95rem; font-weight: 800; color: #f8fafc; margin-top: 2px;">
+                        Mise en charge et refoulement observés sur plusieurs regards collecteurs
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mini métriques d'impact dans le bandeau de verdict -->
+            <div style="display: flex; align-items: center; gap: 18px; font-size: 0.78rem;">
+                <div style="text-align: right;">
+                    <div style="color: #94a3b8; font-size: 0.68rem;">Pointe à l'exutoire</div>
+                    <b id="res-verdict-qpeak" style="font-size: 1.0rem; color: #38bdf8;">-- m³/s</b>
+                </div>
+                <div style="height: 28px; width: 1px; background: rgba(255,255,255,0.12);"></div>
+                <div style="text-align: right;">
+                    <div style="color: #94a3b8; font-size: 0.68rem;">Regards en charge</div>
+                    <b id="res-verdict-flooded" style="font-size: 1.0rem; color: #ef4444;">--</b>
+                </div>
+                <div style="height: 28px; width: 1px; background: rgba(255,255,255,0.12);"></div>
+                <div style="text-align: right;">
+                    <div style="color: #94a3b8; font-size: 0.68rem;">Bilan Continuité EPA</div>
+                    <b id="res-verdict-continuity" style="font-size: 1.0rem; color: #34d399;">-- %</b>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. BARRE D'ONGLETS THÉMATIQUES -->
+        <div style="background: rgba(15, 23, 42, 0.85); padding: 0 24px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); display: flex; gap: 4px; flex-shrink: 0;">
+            <button id="tab-btn-res-kpi" onclick="basculerOngletResultats('kpi')" style="padding: 12px 18px; background: transparent; border: none; border-bottom: 2.5px solid #38bdf8; color: #38bdf8; font-size: 0.84rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.15s;">
+                <i class="fas fa-gauge-high"></i>
+                <span>Tableau de bord &amp; KPIs</span>
+            </button>
+
+            <button id="tab-btn-res-details" onclick="basculerOngletResultats('details')" style="padding: 12px 18px; background: transparent; border: none; border-bottom: 2.5px solid transparent; color: #94a3b8; font-size: 0.84rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.15s;">
+                <i class="fas fa-list-check"></i>
+                <span>Détails par Ouvrage (Regards &amp; Conduites)</span>
+                <span id="badge-tab-details-count" style="font-size: 0.7rem; background: rgba(239, 68, 68, 0.2); color: #f87171; padding: 1px 6px; border-radius: 10px; font-weight: 700; display: none;">0</span>
+            </button>
+
+            <button id="tab-btn-res-ia" onclick="basculerOngletResultats('ia')" style="padding: 12px 18px; background: transparent; border: none; border-bottom: 2.5px solid transparent; color: #94a3b8; font-size: 0.84rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.15s;">
+                <i class="fas fa-brain"></i>
+                <span>Diagnostic IA &amp; Prescriptions</span>
+            </button>
+        </div>
+
+        <!-- 4. CONTENU DÉFILANT DES ONGLETS -->
+        <div style="flex: 1; overflow-y: auto; padding: 20px 24px;">
+
+            <!-- ============================================================ -->
+            <!-- ONGLET 1 : TABLEAU DE BORD & KPIS SYNTHÉTIQUES                -->
+            <!-- ============================================================ -->
+            <div id="onglet-res-kpi">
+
+                <!-- GRILLE DES 8 CARTES KPIS -->
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px;">
+                    <!-- KPI 1 : Continuité massique -->
+                    <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px 14px;">
+                        <div style="font-size: 0.7rem; color: #94a3b8; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;">
+                            <span>Bilan de continuité</span>
+                            <i class="fas fa-scale-balanced" style="color: #38bdf8;"></i>
+                        </div>
+                        <div id="modal-kpi-continuity" style="font-size: 1.25rem; font-weight: 900; color: #38bdf8;">--</div>
+                        <div style="font-size: 0.68rem; color: #64748b; margin-top: 2px;">Validation solveur EPA &lt; 1%</div>
+                    </div>
+
+                    <!-- KPI 2 : Débit de pointe -->
+                    <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px 14px;">
+                        <div style="font-size: 0.7rem; color: #94a3b8; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;">
+                            <span>Pointe à l'exutoire (Qmax)</span>
+                            <i class="fas fa-arrow-trend-up" style="color: #34d399;"></i>
+                        </div>
+                        <div id="modal-kpi-peak-outflow" style="font-size: 1.25rem; font-weight: 900; color: #34d399;">--</div>
+                        <div style="font-size: 0.68rem; color: #64748b; margin-top: 2px;">Débit maximal rejeté</div>
+                    </div>
+
+                    <!-- KPI 3 : Temps à la pointe -->
+                    <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px 14px;">
+                        <div style="font-size: 0.7rem; color: #94a3b8; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;">
+                            <span>Temps à la pointe (Tp)</span>
+                            <i class="fas fa-stopwatch" style="color: #fbbf24;"></i>
+                        </div>
+                        <div id="modal-kpi-peak-time" style="font-size: 1.25rem; font-weight: 900; color: #fbbf24;">--</div>
+                        <div style="font-size: 0.68rem; color: #64748b; margin-top: 2px;">Délai de concentration</div>
+                    </div>
+
+                    <!-- KPI 4 : Vitesse max & Autocurage -->
+                    <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px 14px;">
+                        <div style="font-size: 0.7rem; color: #94a3b8; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;">
+                            <span>Vitesse max (Vmax)</span>
+                            <i class="fas fa-gauge" style="color: #a855f7;"></i>
+                        </div>
+                        <div id="modal-kpi-max-velocity" style="font-size: 1.25rem; font-weight: 900; color: #a855f7;">--</div>
+                        <div id="modal-kpi-autocurage-desc" style="font-size: 0.68rem; color: #34d399; margin-top: 2px;">Autocurage certifié</div>
+                    </div>
+
+                    <!-- KPI 5 : Volume ruisselé -->
+                    <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px 14px;">
+                        <div style="font-size: 0.7rem; color: #94a3b8; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;">
+                            <span>Volume ruisselé</span>
+                            <i class="fas fa-water" style="color: #38bdf8;"></i>
+                        </div>
+                        <div id="modal-kpi-vol-runoff" style="font-size: 1.25rem; font-weight: 900; color: #38bdf8;">--</div>
+                        <div style="font-size: 0.68rem; color: #64748b; margin-top: 2px;">Eau collectée en réseau</div>
+                    </div>
+
+                    <!-- KPI 6 : Volume infiltré -->
+                    <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px 14px;">
+                        <div style="font-size: 0.7rem; color: #94a3b8; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;">
+                            <span>Volume infiltré</span>
+                            <i class="fas fa-seedling" style="color: #10b981;"></i>
+                        </div>
+                        <div id="modal-kpi-vol-infil" style="font-size: 1.25rem; font-weight: 900; color: #10b981;">--</div>
+                        <div style="font-size: 0.68rem; color: #64748b; margin-top: 2px;">Infiltration naturelle sols</div>
+                    </div>
+
+                    <!-- KPI 7 : Coefficient de ruissellement -->
+                    <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px 14px;">
+                        <div style="font-size: 0.7rem; color: #94a3b8; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;">
+                            <span>Coeff. ruissellement (Ceff)</span>
+                            <i class="fas fa-percent" style="color: #f59e0b;"></i>
+                        </div>
+                        <div id="modal-kpi-coeff-eff" style="font-size: 1.25rem; font-weight: 900; color: #f59e0b;">--</div>
+                        <div style="font-size: 0.68rem; color: #64748b; margin-top: 2px;">Ratio volumique net</div>
+                    </div>
+
+                    <!-- KPI 8 : Surcharge réseau -->
+                    <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px 14px;">
+                        <div style="font-size: 0.7rem; color: #94a3b8; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;">
+                            <span>Tronçons en surcharge</span>
+                            <i class="fas fa-triangle-exclamation" style="color: #f87171;"></i>
+                        </div>
+                        <div id="modal-kpi-surcharge-pct" style="font-size: 1.25rem; font-weight: 900; color: #f87171;">--</div>
+                        <div style="font-size: 0.68rem; color: #64748b; margin-top: 2px;">Capacité hydraulique saturée</div>
+                    </div>
+                </div>
+
+                <!-- BLOC 1 : SOLLICITATION PLUVIOMÉTRIQUE & STATION ANRH -->
+                <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 12px; padding: 14px 18px; margin-bottom: 14px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <span style="font-size: 0.86rem; font-weight: 700; color: #38bdf8; display: flex; align-items: center; gap: 8px;">
+                            <i class="fas fa-cloud-showers-heavy"></i> Sollicitation pluviométrique de dimensionnement
+                        </span>
+                        <span id="modal-kpi-pluvio-station-badge" style="font-size: 0.72rem; background: rgba(56, 189, 248, 0.15); color: #7dd3fc; border: 1px solid rgba(56, 189, 248, 0.35); padding: 3px 10px; border-radius: 6px; font-weight: 700;">
+                            Station ANRH Chlef Siège (010501)
+                        </span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+                        <div style="background: rgba(30, 41, 59, 0.5); padding: 10px 12px; border-radius: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.06);">
+                            <div style="color: #94a3b8; font-size: 0.7rem; margin-bottom: 2px;">Période de retour</div>
+                            <b id="modal-kpi-pluvio-periode" style="color: #f8fafc; font-size: 0.92rem;">T = 10 ans</b>
+                        </div>
+                        <div style="background: rgba(30, 41, 59, 0.5); padding: 10px 12px; border-radius: 8px; text-align: center; border: 1px solid rgba(56, 189, 248, 0.3);">
+                            <div style="color: #94a3b8; font-size: 0.7rem; margin-bottom: 2px;">Intensité de pointe (Imax)</div>
+                            <b id="modal-kpi-pluvio-imax" style="color: #38bdf8; font-size: 1.1rem; font-weight: 900;">-- mm/h</b>
+                        </div>
+                        <div style="background: rgba(30, 41, 59, 0.5); padding: 10px 12px; border-radius: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.06);">
+                            <div style="color: #94a3b8; font-size: 0.7rem; margin-bottom: 2px;">Hauteur cumulée (Ptot)</div>
+                            <b id="modal-kpi-pluvio-ptot" style="color: #34d399; font-size: 0.92rem;">-- mm</b>
+                        </div>
+                        <div style="background: rgba(30, 41, 59, 0.5); padding: 10px 12px; border-radius: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.06);">
+                            <div style="color: #94a3b8; font-size: 0.7rem; margin-bottom: 2px;">Formule Montana locale</div>
+                            <b id="modal-kpi-pluvio-montana" style="color: #fbbf24; font-size: 0.8rem;">I(t) = 9.334·t^(-0.745)</b>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- BLOC 2 : RÉPARTITION DES DÉBITS & OUVRAGES SPÉCIAUX (OPTION 1) -->
+                <div id="modal-sim-orphelin-kpi-box" style="display: none; background: rgba(6, 182, 212, 0.08); border: 1px solid rgba(6, 182, 212, 0.35); border-radius: 12px; padding: 14px 18px; margin-bottom: 14px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <div style="font-size: 0.86rem; font-weight: 800; color: #22d3ee; display: flex; align-items: center; gap: 8px;">
+                            <i class="fas fa-random"></i> Répartition des débits du bassin versant (Ouvrages Spéciaux)
+                        </div>
+                        <span id="modal-kpi-orphelin-badge" style="font-size: 0.72rem; padding: 3px 10px; border-radius: 6px; font-weight: 800; background: rgba(6, 182, 212, 0.2); color: #22d3ee; border: 1px solid rgba(6, 182, 212, 0.4);">--</span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; font-size: 0.8rem; background: rgba(0,0,0,0.3); border-radius: 8px; padding: 10px 14px;">
+                        <div><span style="color: #94a3b8; display: block; font-size: 0.72rem;">Débit total produit :</span> <b id="modal-kpi-orphelin-qgenere" style="color: #38bdf8; font-size: 1.05rem;">--</b></div>
+                        <div><span style="color: #94a3b8; display: block; font-size: 0.72rem;">Vers exutoire principal :</span> <b id="modal-kpi-orphelin-qexutoire" style="color: #34d399; font-size: 1.05rem;">--</b></div>
+                        <div><span style="color: #94a3b8; display: block; font-size: 0.72rem;">Dérivé par ouv. spéc. :</span> <b id="modal-kpi-orphelin-qdeleste" style="color: #22d3ee; font-size: 1.05rem;">--</b></div>
+                    </div>
+                    <div id="modal-kpi-orphelin-desc" style="color: #cbd5e1; font-size: 0.76rem; margin-top: 8px; border-top: 1px dashed rgba(6,182,212,0.25); padding-top: 6px; line-height: 1.4;">--</div>
+                </div>
+
+                <!-- BLOC 3 : CONTRÔLE DE COHÉRENCE PLUIE-DÉBIT (MÉTHODE RATIONNELLE) -->
+                <div id="modal-sim-coherence-box" style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 12px; padding: 14px 18px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <div style="font-size: 0.86rem; font-weight: 700; color: #f8fafc; display: flex; align-items: center; gap: 8px;">
+                            <i class="fas fa-brain" style="color: #38bdf8;"></i> Contrôle de cohérence pluie-débit (Méthode rationnelle C·I·A/360)
+                        </div>
+                        <span id="modal-kpi-coherence-badge" style="font-size: 0.72rem; padding: 3px 10px; border-radius: 6px; font-weight: 700;">--</span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 0.8rem; background: rgba(255,255,255,0.03); border-radius: 8px; padding: 10px 14px; margin-bottom: 8px;">
+                        <div><span style="color: #94a3b8;">Débit simulé Saint-Venant 1D :</span> <b id="modal-kpi-coh-qsim" style="color: #38bdf8; font-size: 1.0rem;">--</b></div>
+                        <div><span style="color: #94a3b8;">Débit rationnel attendu :</span> <b id="modal-kpi-coh-qrat" style="color: #cbd5e1; font-size: 1.0rem;">--</b></div>
+                    </div>
+                    <div id="modal-kpi-coherence-msg" style="font-size: 0.76rem; color: #cbd5e1; line-height: 1.4;">--</div>
+                </div>
+
+            </div> <!-- FIN ONGLET 1 -->
+
+
+            <!-- ============================================================ -->
+            <!-- ONGLET 2 : DÉTAILS PAR OUVRAGE (CONDUITES & REGARDS)          -->
+            <!-- ============================================================ -->
+            <div id="onglet-res-details" style="display: none;">
+
+                <!-- Sélecteur de sous-vue : Conduites vs Regards -->
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; background: rgba(15, 23, 42, 0.6); padding: 8px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08);">
+                    <div style="display: flex; gap: 6px;">
+                        <button id="btn-subtab-conduites" onclick="basculerSousOngletDetails('conduites')" style="padding: 6px 14px; border-radius: 6px; border: none; background: #0284c7; color: white; font-size: 0.78rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                            <i class="fas fa-arrows-left-right"></i>
+                            <span>Tronçons &amp; Conduites</span>
+                            <span id="badge-count-conduites" style="background: rgba(0,0,0,0.3); padding: 1px 6px; border-radius: 10px; font-size: 0.7rem;">0</span>
+                        </button>
+                        <button id="btn-subtab-regards" onclick="basculerSousOngletDetails('regards')" style="padding: 6px 14px; border-radius: 6px; border: none; background: transparent; color: #94a3b8; font-size: 0.78rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                            <i class="fas fa-circle-dot"></i>
+                            <span>Regards de visite</span>
+                            <span id="badge-count-regards" style="background: rgba(255,255,255,0.08); padding: 1px 6px; border-radius: 10px; font-size: 0.7rem;">0</span>
+                        </button>
+                    </div>
+
+                    <!-- Filtre de recherche texte instantané -->
+                    <div style="position: relative; width: 220px;">
+                        <i class="fas fa-search" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 11px; color: #64748b;"></i>
+                        <input type="text" id="inp-search-details-ouvrage" oninput="filtrerTableauDetailsOuvrages()" placeholder="Rechercher par identifiant…" style="width: 100%; padding: 6px 10px 6px 30px; font-size: 0.78rem; background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; color: #f8fafc; outline: none;">
+                    </div>
+                </div>
+
+                <!-- SOUS-ONGLET A : TABLEAU DES CONDUITES -->
+                <div id="subtab-content-conduites">
+                    <!-- Boutons filtres rapides conduites -->
+                    <div style="display: flex; gap: 8px; margin-bottom: 12px; font-size: 0.75rem;">
+                        <button onclick="filtrerConduitesParStatut('tous')" class="btn-filter-cond active" style="padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.08); color: white; cursor: pointer;">Toutes</button>
+                        <button onclick="filtrerConduitesParStatut('surcharge')" class="btn-filter-cond" style="padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.1); color: #f87171; cursor: pointer;">🔴 Surcharge (&gt; 100%)</button>
+                        <button onclick="filtrerConduitesParStatut('moderee')" class="btn-filter-cond" style="padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.1); color: #fbbf24; cursor: pointer;">🟠 Modérée (70-100%)</button>
+                        <button onclick="filtrerConduitesParStatut('libre')" class="btn-filter-cond" style="padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(52, 211, 153, 0.4); background: rgba(52, 211, 153, 0.1); color: #34d399; cursor: pointer;">🟢 Capacité libre (&lt; 70%)</button>
+                    </div>
+
+                    <!-- Tableau des Conduites -->
+                    <div style="border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; overflow: hidden; max-height: 480px; overflow-y: auto;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.78rem; text-align: left;">
+                            <thead style="background: #0f172a; position: sticky; top: 0; z-index: 2; border-bottom: 1.5px solid rgba(255,255,255,0.12); color: #94a3b8;">
+                                <tr>
+                                    <th style="padding: 10px 12px;">Tronçon ID</th>
+                                    <th style="padding: 10px 12px;">Amont → Aval</th>
+                                    <th style="padding: 10px 12px;">Diamètre</th>
+                                    <th style="padding: 10px 12px;">Pente</th>
+                                    <th style="padding: 10px 12px;">Débit max</th>
+                                    <th style="padding: 10px 12px;">Vitesse max</th>
+                                    <th style="padding: 10px 12px; width: 180px;">Remplissage (Q/Qmax)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-details-conduites">
+                                <tr>
+                                    <td colspan="7" style="padding: 24px; text-align: center; color: #64748b;">
+                                        Aucun résultat de conduit disponible
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- SOUS-ONGLET B : TABLEAU DES REGARDS -->
+                <div id="subtab-content-regards" style="display: none;">
+                    <!-- Boutons filtres rapides regards -->
+                    <div style="display: flex; gap: 8px; margin-bottom: 12px; font-size: 0.75rem;">
+                        <button onclick="filtrerRegardsParStatut('tous')" class="btn-filter-reg active" style="padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.08); color: white; cursor: pointer;">Tous les regards</button>
+                        <button onclick="filtrerRegardsParStatut('debordement')" class="btn-filter-reg" style="padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.1); color: #f87171; cursor: pointer;">🔴 En débordement (tampon atteint)</button>
+                        <button onclick="filtrerRegardsParStatut('charge')" class="btn-filter-reg" style="padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.1); color: #fbbf24; cursor: pointer;">🟠 En charge sans débordement</button>
+                    </div>
+
+                    <!-- Tableau des Regards -->
+                    <div style="border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; overflow: hidden; max-height: 480px; overflow-y: auto;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.78rem; text-align: left;">
+                            <thead style="background: #0f172a; position: sticky; top: 0; z-index: 2; border-bottom: 1.5px solid rgba(255,255,255,0.12); color: #94a3b8;">
+                                <tr>
+                                    <th style="padding: 10px 12px;">N° Regard</th>
+                                    <th style="padding: 10px 12px;">Cote Tampon (TN)</th>
+                                    <th style="padding: 10px 12px;">Cote d'eau max</th>
+                                    <th style="padding: 10px 12px;">Hauteur de charge</th>
+                                    <th style="padding: 10px 12px;">Volume débordé</th>
+                                    <th style="padding: 10px 12px;">Statut hydraulique</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-details-regards">
+                                <tr>
+                                    <td colspan="6" style="padding: 24px; text-align: center; color: #64748b;">
+                                        Aucun résultat de regard disponible
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div> <!-- FIN ONGLET 2 -->
+
+
+            <!-- ============================================================ -->
+            <!-- ONGLET 3 : DIAGNOSTIC IA & PRESCRIPTIONS DE TRAVAUX           -->
+            <!-- ============================================================ -->
+            <div id="onglet-res-ia" style="display: none;">
+
+                <!-- Synthèse rédigée multi-agents -->
+                <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 12px; padding: 16px 20px; margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <span style="font-size: 0.9rem; font-weight: 800; color: #c084fc; display: flex; align-items: center; gap: 8px;">
+                            <i class="fas fa-brain"></i> Synthèse d'expertise des Agents IA Multi-spécialités
+                        </span>
+                        <span style="font-size: 0.72rem; background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.35); padding: 2px 8px; border-radius: 4px; font-weight: 700;">
+                            Architecture Multi-Agents SWMM
+                        </span>
+                    </div>
+                    <div id="modal-ia-diagnostic-content" style="font-size: 0.82rem; color: #cbd5e1; line-height: 1.55;">
+                        <p style="color: #94a3b8; font-style: italic;">
+                            Génération automatique du diagnostic basée sur le régime d'écoulement Saint-Venant 1D…
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Analyse de sensibilité Voronoï -->
+                <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 12px; padding: 14px 18px; margin-bottom: 16px;">
+                    <div style="font-size: 0.86rem; font-weight: 700; color: #38bdf8; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
+                        <i class="fas fa-chart-line"></i> Analyse de sensibilité du rayon Voronoï (Scénarios 35 m, 45 m, 60 m)
+                    </div>
+                    <p style="font-size: 0.76rem; color: #94a3b8; margin-bottom: 12px;">
+                        Le rayon de découpage optimal de <b>45 m</b> comble les cœurs d'îlots sans déborder sur les bassins voisins.
+                    </p>
+                    <div id="modal-sim-buffer-tiles-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
+                        <!-- Rempli dynamiquement -->
+                    </div>
+                </div>
+
+                <!-- Boutons d'export et d'impression certifiés -->
+                <div style="background: rgba(30, 41, 59, 0.4); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between;">
+                    <div>
+                        <div style="font-weight: 700; font-size: 0.86rem; color: #f8fafc;">Rapports d'expertise &amp; Fichiers sources</div>
+                        <div style="font-size: 0.74rem; color: #94a3b8;">Téléchargez les livrables certifiés conformes au solveur SWMM 5.2</div>
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <button onclick="telechargerOrdreMissionTerrain()" style="padding: 8px 14px; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.35); color: #fbbf24; border-radius: 8px; font-size: 0.8rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                            <i class="fas fa-file-pdf"></i> Ordre de mission
+                        </button>
+                        <button onclick="telechargerRapportDiagnosticPDF()" style="padding: 8px 16px; background: linear-gradient(135deg, #0284c7, #0369a1); border: none; color: white; border-radius: 8px; font-size: 0.8rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35);">
+                            <i class="fas fa-file-pdf"></i> Rapport officiel complet
+                        </button>
+                    </div>
+                </div>
+
+            </div> <!-- FIN ONGLET 3 -->
+
+        </div> <!-- FIN CONTENU DÉFILANT -->
+
+        <!-- 5. PIED DE PAGE FIXE -->
+        <div style="background: rgba(15, 23, 42, 0.95); padding: 12px 24px; border-top: 1px solid rgba(255, 255, 255, 0.1); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
+            <div style="font-size: 0.74rem; color: #64748b; display: flex; align-items: center; gap: 8px;">
+                <i class="fas fa-shield-check" style="color: #34d399;"></i>
+                <span>Résolution hydraulique certifiée SWMM 5.2 · Invariance scientifique absolue</span>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button onclick="fermerModalResultatsSimulation(); ouvrirSimulationOuHistorique();" style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); color: #cbd5e1; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 0.8rem; font-weight: 600; display: flex; align-items: center; gap: 6px;">
+                    <i class="fas fa-rotate"></i> Relancer une simulation
+                </button>
+                <button onclick="fermerModalResultatsSimulation()" style="background: linear-gradient(135deg, #0284c7, #0369a1); border: none; color: white; padding: 8px 22px; border-radius: 8px; cursor: pointer; font-size: 0.82rem; font-weight: 700; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4);">
+                    <i class="fas fa-map"></i> Explorer sur la carte
+                </button>
+            </div>
+        </div>
+
+    </div>
+</div>

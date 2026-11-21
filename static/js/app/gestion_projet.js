@@ -297,6 +297,7 @@
             const itemResults = document.getElementById('action-item-results');
             const itemInterp = document.getElementById('action-item-interpretation');
             const itemRapportPdf = document.getElementById('action-item-rapport-pdf');
+            const badgeResults = document.getElementById('badge-menu-results-state');
 
             [itemResults, itemInterp, itemRapportPdf].forEach(el => {
                 if (!el) return;
@@ -312,6 +313,20 @@
                     el.style.cursor = 'not-allowed';
                 }
             });
+
+            if (badgeResults) {
+                if (actif) {
+                    badgeResults.textContent = 'DISPO';
+                    badgeResults.style.background = 'rgba(16, 185, 129, 0.2)';
+                    badgeResults.style.color = '#34d399';
+                    badgeResults.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+                } else {
+                    badgeResults.textContent = 'En attente';
+                    badgeResults.style.background = 'rgba(148, 163, 184, 0.15)';
+                    badgeResults.style.color = '#94a3b8';
+                    badgeResults.style.border = '1px solid rgba(148, 163, 184, 0.3)';
+                }
+            }
         };
 
         window.telechargerModeleInpActif = async function() {
@@ -394,8 +409,12 @@
                 window.dialogueAlerte("Aucun résultat de simulation disponible pour ce réseau. Veuillez d'abord lancer une simulation.", 'info');
                 return;
             }
-            afficherResultatsSimulation(window._dernierResultatSimulation);
-            ouvrirModalSimulation();
+            if (typeof window.ouvrirModalResultatsSimulation === 'function') {
+                window.ouvrirModalResultatsSimulation();
+            } else {
+                afficherResultatsSimulation(window._dernierResultatSimulation);
+                ouvrirModalSimulation();
+            }
         };
 
         window.ouvrirModalInterpretation = function() {

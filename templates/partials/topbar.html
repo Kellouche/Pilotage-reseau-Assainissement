@@ -85,51 +85,73 @@ Objet : Barre supérieure de navigation SaaS, sélecteur de projet et indicateur
                     <span>Actions</span>
                     <i class="fas fa-chevron-down" style="font-size: 9px; opacity: 0.85;"></i>
                 </button>
-                <div id="actions-dropdown" style="display: none; position: absolute; right: 0; top: 100%; margin-top: 6px; width: 235px; background: rgba(15, 23, 42, 0.98); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.18); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); z-index: 2600; overflow: hidden; padding: 6px 0;">
-                    <!-- Action 1 : Simuler (toujours actif) -->
-                    <button onclick="fermerMenuActions(); ouvrirSimulationOuHistorique();" style="width: 100%; text-align: left; padding: 8px 14px; font-size: 12px; font-weight: 600; color: #f8fafc; background: transparent; border: none; cursor: pointer; display: flex; align-items: center; gap: 9px; transition: background 0.15s;" onmouseover="this.style.background='rgba(56, 189, 248, 0.15)'" onmouseout="this.style.background='transparent'">
-                        <i class="fas fa-play" style="color: #38bdf8; width: 16px; font-size: 12px;"></i>
-                        <span>Simuler</span>
+                <div id="actions-dropdown" style="display: none; position: absolute; right: 0; top: 100%; margin-top: 6px; width: 260px; background: rgba(15, 23, 42, 0.98); backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,0.18); border-radius: 12px; box-shadow: 0 16px 40px rgba(0,0,0,0.65); z-index: 2600; overflow: hidden; padding: 6px 0;">
+                    
+                    <!-- SECTION 1 : HYDRAULIQUE & SIMULATION -->
+                    <div style="padding: 6px 14px 4px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; display: flex; align-items: center; gap: 6px;">
+                        <i class="fas fa-water" style="color: #38bdf8; font-size: 10px;"></i>
+                        <span>Hydraulique &amp; Calcul</span>
+                    </div>
+
+                    <button onclick="fermerMenuActions(); ouvrirSimulationOuHistorique();" style="width: 100%; text-align: left; padding: 7px 14px; font-size: 12px; font-weight: 600; color: #f8fafc; background: transparent; border: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: background 0.15s;" onmouseover="this.style.background='rgba(56, 189, 248, 0.15)'" onmouseout="this.style.background='transparent'">
+                        <div style="display: flex; align-items: center; gap: 9px;">
+                            <i class="fas fa-play" style="color: #38bdf8; width: 14px; font-size: 11px;"></i>
+                            <span>Lancer une simulation</span>
+                        </div>
+                        <span style="font-size: 9px; padding: 1px 5px; background: rgba(56, 189, 248, 0.2); color: #38bdf8; border-radius: 4px; font-weight: 700;">SWMM</span>
                     </button>
-                    <!-- Action : Exporter le modèle complet (.inp) -->
-                    <button onclick="fermerMenuActions(); telechargerModeleInpActif();" style="width: 100%; text-align: left; padding: 8px 14px; font-size: 12px; font-weight: 600; color: #f8fafc; background: transparent; border: none; cursor: pointer; display: flex; align-items: center; gap: 9px; box-sizing: border-box; transition: background 0.15s;" onmouseover="this.style.background='rgba(56, 189, 248, 0.15)'" onmouseout="this.style.background='transparent'">
-                        <i class="fas fa-file-code" style="color: #38bdf8; width: 16px; font-size: 12px;"></i>
-                        <span>Exporter le modèle (.inp)</span>
+
+                    <button id="action-item-results" onclick="fermerMenuActions(); ouvrirModalResultatsSimulation();" class="action-dropdown-item disabled" style="width: 100%; text-align: left; padding: 7px 14px; font-size: 12px; font-weight: 600; color: #cbd5e1; background: transparent; border: none; cursor: not-allowed; display: flex; align-items: center; justify-content: space-between; opacity: 0.45; pointer-events: none; transition: all 0.2s;" onmouseover="if(!this.classList.contains('disabled')) this.style.background='rgba(16, 185, 129, 0.15)'" onmouseout="this.style.background='transparent'">
+                        <div style="display: flex; align-items: center; gap: 9px;">
+                            <i class="fas fa-chart-line" style="color: #10b981; width: 14px; font-size: 11px;"></i>
+                            <span>Synthèse des résultats</span>
+                        </div>
+                        <span id="badge-menu-results-state" style="font-size: 9px; padding: 1px 5px; background: rgba(16, 185, 129, 0.2); color: #34d399; border-radius: 4px; font-weight: 700; display: none;">DISPO</span>
                     </button>
-                    <!-- Action : Contrôle Qualité Réseau -->
-                    <button onclick="fermerMenuActions(); basculerVueCockpit('qualite');" style="width: 100%; text-align: left; padding: 8px 14px; font-size: 12px; font-weight: 600; color: #f8fafc; background: transparent; border: none; cursor: pointer; display: flex; align-items: center; gap: 9px; transition: background 0.15s;" onmouseover="this.style.background='rgba(16, 185, 129, 0.15)'" onmouseout="this.style.background='transparent'">
-                        <i class="fas fa-clipboard-check" style="color: #10b981; width: 16px; font-size: 12px;"></i>
-                        <span>Contrôle qualité du réseau</span>
+
+                    <!-- SÉPARATEUR THÉMATIQUE -->
+                    <div style="height: 1px; background: rgba(255,255,255,0.08); margin: 6px 12px;"></div>
+
+                    <!-- SECTION 2 : CONTRÔLE QUALITÉ & AUDIT -->
+                    <div style="padding: 4px 14px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; display: flex; align-items: center; gap: 6px;">
+                        <i class="fas fa-shield-halved" style="color: #10b981; font-size: 10px;"></i>
+                        <span>Audit &amp; Qualité Réseau</span>
+                    </div>
+
+                    <button onclick="fermerMenuActions(); basculerVueCockpit('qualite');" style="width: 100%; text-align: left; padding: 7px 14px; font-size: 12px; font-weight: 600; color: #f8fafc; background: transparent; border: none; cursor: pointer; display: flex; align-items: center; gap: 9px; transition: background 0.15s;" onmouseover="this.style.background='rgba(16, 185, 129, 0.15)'" onmouseout="this.style.background='transparent'">
+                        <i class="fas fa-clipboard-check" style="color: #10b981; width: 14px; font-size: 11px;"></i>
+                        <span>Espace Contrôle Qualité</span>
                     </button>
-                    <!-- Action : Paramètres du garde-fou hydraulicien -->
-                    <button onclick="fermerMenuActions(); ouvrirModalGardeFou();" style="width: 100%; text-align: left; padding: 8px 14px; font-size: 12px; font-weight: 600; color: #f8fafc; background: transparent; border: none; cursor: pointer; display: flex; align-items: center; gap: 9px; transition: background 0.15s;" onmouseover="this.style.background='rgba(124, 58, 237, 0.15)'" onmouseout="this.style.background='transparent'">
-                        <i class="fas fa-shield-alt" style="color: #a78bfa; width: 16px; font-size: 12px;"></i>
-                        <span>Seuils du contrôle qualité</span>
+
+                    <button onclick="fermerMenuActions(); ouvrirModalGardeFou();" style="width: 100%; text-align: left; padding: 7px 14px; font-size: 12px; font-weight: 600; color: #f8fafc; background: transparent; border: none; cursor: pointer; display: flex; align-items: center; gap: 9px; transition: background 0.15s;" onmouseover="this.style.background='rgba(124, 58, 237, 0.15)'" onmouseout="this.style.background='transparent'">
+                        <i class="fas fa-sliders" style="color: #a78bfa; width: 14px; font-size: 11px;"></i>
+                        <span>Seuils du garde-fou</span>
                     </button>
-                    <!-- Séparateur -->
-                    <div style="height: 1px; background: rgba(255,255,255,0.08); margin: 4px 0;"></div>
-                    <!-- Action 2 : Afficher les résultats (désactivé tant que pas de simulation) -->
-                    <button id="action-item-results" onclick="fermerMenuActions(); afficherDerniersResultats();" class="action-dropdown-item disabled" style="width: 100%; text-align: left; padding: 8px 14px; font-size: 12px; font-weight: 600; color: #cbd5e1; background: transparent; border: none; cursor: not-allowed; display: flex; align-items: center; gap: 9px; opacity: 0.45; pointer-events: none; transition: all 0.2s;" onmouseover="if(!this.classList.contains('disabled')) this.style.background='rgba(16, 185, 129, 0.15)'" onmouseout="this.style.background='transparent'">
-                        <i class="fas fa-chart-line" style="color: #10b981; width: 16px; font-size: 12px;"></i>
-                        <span>Afficher les résultats</span>
+
+                    <!-- SÉPARATEUR THÉMATIQUE -->
+                    <div style="height: 1px; background: rgba(255,255,255,0.08); margin: 6px 12px;"></div>
+
+                    <!-- SECTION 3 : ÉDITIONS & EXPORTS OFFICIELS -->
+                    <div style="padding: 4px 14px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; display: flex; align-items: center; gap: 6px;">
+                        <i class="fas fa-file-export" style="color: #f59e0b; font-size: 10px;"></i>
+                        <span>Éditions &amp; Exports</span>
+                    </div>
+
+                    <button id="action-item-rapport-pdf" onclick="fermerMenuActions(); telechargerRapportDiagnosticPDF();" class="action-dropdown-item disabled" style="width: 100%; text-align: left; padding: 7px 14px; font-size: 12px; font-weight: 600; color: #cbd5e1; background: transparent; border: none; cursor: not-allowed; display: flex; align-items: center; gap: 9px; opacity: 0.45; pointer-events: none; transition: all 0.2s;" onmouseover="if(!this.classList.contains('disabled')) this.style.background='rgba(2, 132, 199, 0.15)'" onmouseout="this.style.background='transparent'">
+                        <i class="fas fa-file-pdf" style="color: #38bdf8; width: 14px; font-size: 11px;"></i>
+                        <span>Rapport d'expertise (PDF)</span>
                     </button>
-                    <!-- Action 3 : Interprétation des résultats (désactivé tant que pas de simulation) -->
-                    <button id="action-item-interpretation" onclick="fermerMenuActions(); ouvrirModalInterpretation();" class="action-dropdown-item disabled" style="width: 100%; text-align: left; padding: 8px 14px; font-size: 12px; font-weight: 600; color: #cbd5e1; background: transparent; border: none; cursor: not-allowed; display: flex; align-items: center; gap: 9px; opacity: 0.45; pointer-events: none; transition: all 0.2s;" onmouseover="if(!this.classList.contains('disabled')) this.style.background='rgba(168, 85, 247, 0.15)'" onmouseout="this.style.background='transparent'">
-                        <i class="fas fa-brain" style="color: #a855f7; width: 16px; font-size: 12px;"></i>
-                        <span>Interprétation des résultats</span>
-                    </button>
-                    <!-- Action 4 : Fiche réflexe terrain / Ordre de mission BMS -->
-                    <button id="action-item-bms-mission" onclick="fermerMenuActions(); telechargerOrdreMissionTerrain();" class="action-dropdown-item disabled" style="width: 100%; text-align: left; padding: 8px 14px; font-size: 12px; font-weight: 600; color: #cbd5e1; background: transparent; border: none; cursor: not-allowed; display: flex; align-items: center; gap: 9px; opacity: 0.45; pointer-events: none; transition: all 0.2s;" onmouseover="if(!this.classList.contains('disabled')) this.style.background='rgba(245, 158, 11, 0.15)'" onmouseout="this.style.background='transparent'">
-                        <i class="fas fa-file-pdf" style="color: #f59e0b; width: 16px; font-size: 12px;"></i>
+
+                    <button id="action-item-bms-mission" onclick="fermerMenuActions(); telechargerOrdreMissionTerrain();" class="action-dropdown-item disabled" style="width: 100%; text-align: left; padding: 7px 14px; font-size: 12px; font-weight: 600; color: #cbd5e1; background: transparent; border: none; cursor: not-allowed; display: flex; align-items: center; gap: 9px; opacity: 0.45; pointer-events: none; transition: all 0.2s;" onmouseover="if(!this.classList.contains('disabled')) this.style.background='rgba(245, 158, 11, 0.15)'" onmouseout="this.style.background='transparent'">
+                        <i class="fas fa-person-digging" style="color: #f59e0b; width: 14px; font-size: 11px;"></i>
                         <span>Ordre de mission terrain (PDF)</span>
                     </button>
-                    <!-- Séparateur -->
-                    <div style="height: 1px; background: rgba(255,255,255,0.08); margin: 4px 0;"></div>
-                    <!-- Action 5 : Rapport d'expertise hydraulique officiel (PDF ReportLab) -->
-                    <button id="action-item-rapport-pdf" onclick="fermerMenuActions(); telechargerRapportDiagnosticPDF();" class="action-dropdown-item disabled" style="width: 100%; text-align: left; padding: 8px 14px; font-size: 12px; font-weight: 600; color: #cbd5e1; background: transparent; border: none; cursor: not-allowed; display: flex; align-items: center; gap: 9px; opacity: 0.45; pointer-events: none; transition: all 0.2s;" onmouseover="if(!this.classList.contains('disabled')) this.style.background='rgba(2, 132, 199, 0.15)'" onmouseout="this.style.background='transparent'">
-                        <i class="fas fa-file-pdf" style="color: #38bdf8; width: 16px; font-size: 12px;"></i>
-                        <span>Rapport d'expertise officiel (PDF)</span>
+
+                    <button onclick="fermerMenuActions(); telechargerModeleInpActif();" style="width: 100%; text-align: left; padding: 7px 14px; font-size: 12px; font-weight: 600; color: #f8fafc; background: transparent; border: none; cursor: pointer; display: flex; align-items: center; gap: 9px; transition: background 0.15s;" onmouseover="this.style.background='rgba(56, 189, 248, 0.15)'" onmouseout="this.style.background='transparent'">
+                        <i class="fas fa-file-code" style="color: #38bdf8; width: 14px; font-size: 11px;"></i>
+                        <span>Exporter le modèle (.INP)</span>
                     </button>
+
                 </div>
             </div>
 

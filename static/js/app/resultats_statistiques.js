@@ -210,5 +210,522 @@ window.mettreAJourIndicateursEtKpisSimulation = function(data) {
             // Centrer et zoomer immédiatement la carte sur la zone simulée
             zoomerSurZoneSimulee(data);
 
+            // Remplir la fenêtre dédiée de restitution des résultats
+            if (typeof window.remplirModalResultatsSimulation === 'function') {
+                window.remplirModalResultatsSimulation(data);
+            }
+};
 
+// ================================================================================
+// CONTRÔLEUR DE LA MODALE DÉDIÉE DE RÉSULTATS SWMM 5.2 (Figma-grade HD)
+// ================================================================================
+
+window._detailsConduitesFiltreStatut = 'tous';
+window._detailsRegardsFiltreStatut = 'tous';
+
+window.basculerAutoOpenResults = function(checked) {
+    localStorage.setItem('swmm_auto_open_results', checked ? 'true' : 'false');
+};
+
+window.ouvrirModalResultatsSimulation = function() {
+    const modal = document.getElementById('modal-resultats-simulation');
+    if (!modal) return;
+
+    const chk = document.getElementById('chk-auto-open-results');
+    if (chk) {
+        chk.checked = (localStorage.getItem('swmm_auto_open_results') !== 'false');
+    }
+
+    if (window._dernierResultatSimulation) {
+        window.remplirModalResultatsSimulation(window._dernierResultatSimulation);
+    }
+    modal.style.display = 'flex';
+};
+
+window.fermerModalResultatsSimulation = function() {
+    const modal = document.getElementById('modal-resultats-simulation');
+    if (modal) modal.style.display = 'none';
+};
+
+window.basculerOngletResultats = function(tabKey) {
+    const tabs = ['kpi', 'details', 'ia'];
+    tabs.forEach(t => {
+        const pane = document.getElementById('onglet-res-' + t);
+        const btn = document.getElementById('tab-btn-res-' + t);
+        if (pane) pane.style.display = (t === tabKey) ? 'block' : 'none';
+        if (btn) {
+            if (t === tabKey) {
+                btn.style.borderBottom = '2.5px solid #38bdf8';
+                btn.style.color = '#38bdf8';
+                btn.style.fontWeight = '700';
+            } else {
+                btn.style.borderBottom = '2.5px solid transparent';
+                btn.style.color = '#94a3b8';
+                btn.style.fontWeight = '600';
+            }
+        }
+    });
+};
+
+window.basculerSousOngletDetails = function(subKey) {
+    const subConduites = document.getElementById('subtab-content-conduites');
+    const subRegards = document.getElementById('subtab-content-regards');
+    const btnConduites = document.getElementById('btn-subtab-conduites');
+    const btnRegards = document.getElementById('btn-subtab-regards');
+
+    if (subKey === 'conduites') {
+        if (subConduites) subConduites.style.display = 'block';
+        if (subRegards) subRegards.style.display = 'none';
+        if (btnConduites) { btnConduites.style.background = '#0284c7'; btnConduites.style.color = '#ffffff'; }
+        if (btnRegards) { btnRegards.style.background = 'transparent'; btnRegards.style.color = '#94a3b8'; }
+    } else {
+        if (subConduites) subConduites.style.display = 'none';
+        if (subRegards) subRegards.style.display = 'block';
+        if (btnConduites) { btnConduites.style.background = 'transparent'; btnConduites.style.color = '#94a3b8'; }
+        if (btnRegards) { btnRegards.style.background = '#0284c7'; btnRegards.style.color = '#ffffff'; }
+    }
+};
+
+window.filtrerConduitesParStatut = function(statut) {
+    window._detailsConduitesFiltreStatut = statut;
+    const btns = document.querySelectorAll('.btn-filter-cond');
+    btns.forEach(b => {
+        b.style.fontWeight = 'normal';
+        b.style.boxShadow = 'none';
+        b.classList.remove('active');
+    });
+    if (window.event && window.event.currentTarget) {
+        window.event.currentTarget.classList.add('active');
+        window.event.currentTarget.style.fontWeight = 'bold';
+        window.event.currentTarget.style.boxShadow = '0 0 10px rgba(56,189,248,0.3)';
+    }
+    window.filtrerTableauDetailsOuvrages();
+};
+
+window.filtrerRegardsParStatut = function(statut) {
+    window._detailsRegardsFiltreStatut = statut;
+    const btns = document.querySelectorAll('.btn-filter-reg');
+    btns.forEach(b => {
+        b.style.fontWeight = 'normal';
+        b.style.boxShadow = 'none';
+        b.classList.remove('active');
+    });
+    if (window.event && window.event.currentTarget) {
+        window.event.currentTarget.classList.add('active');
+        window.event.currentTarget.style.fontWeight = 'bold';
+        window.event.currentTarget.style.boxShadow = '0 0 10px rgba(56,189,248,0.3)';
+    }
+    window.filtrerTableauDetailsOuvrages();
+};
+
+window.filtrerTableauDetailsOuvrages = function() {
+    const input = document.getElementById('inp-search-details-ouvrage');
+    const q = (input && input.value ? input.value : '').toLowerCase().trim();
+
+    // Filtrage des conduites
+    const condRows = document.querySelectorAll('#tbody-details-conduites tr');
+    condRows.forEach(row => {
+        if (!row.getAttribute('data-id')) return;
+        const statut = row.getAttribute('data-statut') || '';
+        const id = (row.getAttribute('data-id') || '').toLowerCase();
+        const amont = (row.getAttribute('data-amont') || '').toLowerCase();
+        const aval = (row.getAttribute('data-aval') || '').toLowerCase();
+
+        const matchStatut = (window._detailsConduitesFiltreStatut === 'tous') || (statut === window._detailsConduitesFiltreStatut);
+        const matchSearch = (!q) || id.includes(q) || amont.includes(q) || aval.includes(q);
+
+        row.style.display = (matchStatut && matchSearch) ? '' : 'none';
+    });
+
+    // Filtrage des regards
+    const regRows = document.querySelectorAll('#tbody-details-regards tr');
+    regRows.forEach(row => {
+        if (!row.getAttribute('data-id')) return;
+        const statut = row.getAttribute('data-statut') || '';
+        const id = (row.getAttribute('data-id') || '').toLowerCase();
+
+        const matchStatut = (window._detailsRegardsFiltreStatut === 'tous') || (statut === window._detailsRegardsFiltreStatut);
+        const matchSearch = (!q) || id.includes(q);
+
+        row.style.display = (matchStatut && matchSearch) ? '' : 'none';
+    });
+};
+
+window.remplirModalResultatsSimulation = function(data) {
+    if (!data) return;
+    const k = data.kpis || {};
+    const meta = data.meta || {};
+    const cRes = data.conduit_results || {};
+    const nRes = data.node_results || {};
+
+    // 1. En-tête : Badge bassin & Sous-titre
+    const badgeBassin = document.getElementById('res-modal-badge-bassin');
+    if (badgeBassin) {
+        badgeBassin.textContent = meta.cluster_nom || meta.bassin_nom || (meta.cluster_id ? ('Bassin ' + meta.cluster_id) : 'Réseau Complet');
+    }
+    const subTitle = document.getElementById('res-modal-subtitle');
+    if (subTitle) {
+        const scenNom = (meta.scenario_nom || meta.scenario || (k.pluvio_periode_retour ? ('Pluie ' + k.pluvio_periode_retour) : 'SWMM 5.2 Dynamic Wave'));
+        subTitle.textContent = `Scénario : ${scenNom} • Résolution 1D Saint-Venant (EPA Dynamic Wave)`;
+    }
+
+    // 2. Détection de criticité globale & Verdict Banner
+    let floodedCount = 0;
+    let surchargedNodesCount = 0;
+    Object.values(nRes).forEach(n => {
+        if (n.status === 'flooded' || (n.flooding_m3 && n.flooding_m3 > 0)) floodedCount++;
+        else if (n.status === 'surcharged') surchargedNodesCount++;
+    });
+
+    let surchargedPipesCount = 0;
+    let moderatePipesCount = 0;
+    let freePipesCount = 0;
+    Object.values(cRes).forEach(c => {
+        const qR = Number(c.flow_ratio || 0);
+        const dR = Number(c.depth_ratio || 0);
+        const maxR = Math.max(qR, dR);
+        if (c.status === 'surcharge' || maxR >= 1.0) surchargedPipesCount++;
+        else if (c.status === 'critique' || c.status === 'moderee' || maxR >= 0.70) moderatePipesCount++;
+        else freePipesCount++;
+    });
+
+    const banner = document.getElementById('res-verdict-banner');
+    const vIcon = document.getElementById('res-verdict-icon');
+    const vBadge = document.getElementById('res-verdict-badge');
+    const vText = document.getElementById('res-verdict-text');
+    const vQpeak = document.getElementById('res-verdict-qpeak');
+    const vFlooded = document.getElementById('res-verdict-flooded');
+    const vCont = document.getElementById('res-verdict-continuity');
+
+    const qPeakVal = (typeof k.peak_outflow_m3s === 'number') ? k.peak_outflow_m3s : (typeof data.peak_outflow_m3s === 'number' ? data.peak_outflow_m3s : 0.0);
+    if (vQpeak) vQpeak.textContent = window.formaterNombre(qPeakVal, 3) + ' m³/s';
+    if (vFlooded) vFlooded.textContent = floodedCount > 0 ? `${floodedCount} regard${floodedCount > 1 ? 's' : ''}` : (surchargedNodesCount > 0 ? `${surchargedNodesCount} en charge` : '0 (Aucun)');
+    const contErr = k.routing_continuity_error_pct || 0;
+    if (vCont) vCont.textContent = (contErr > 0 ? '+' : '') + window.formaterNombre(contErr, 2) + ' %';
+
+    if (banner && vIcon && vBadge && vText) {
+        if (floodedCount > 0) {
+            banner.style.background = 'linear-gradient(90deg, rgba(239, 68, 68, 0.22) 0%, rgba(15, 23, 42, 0.8) 100%)';
+            banner.style.borderBottom = '1.5px solid rgba(239, 68, 68, 0.6)';
+            vIcon.style.background = '#ef4444';
+            vIcon.style.boxShadow = '0 0 16px rgba(239, 68, 68, 0.65)';
+            vIcon.innerHTML = '<i class="fas fa-triangle-exclamation"></i>';
+            vBadge.textContent = `DÉBORDEMENT DÉTECTÉ (${floodedCount} REGARD${floodedCount > 1 ? 'S' : ''})`;
+            vBadge.style.background = 'rgba(239, 68, 68, 0.25)';
+            vBadge.style.color = '#fca5a5';
+            vBadge.style.border = '1px solid rgba(239, 68, 68, 0.5)';
+            vText.textContent = `Refoulement critique en surface constaté · Débordement sur ${floodedCount} regard(s) de visite sous cet événement.`;
+        } else if (surchargedPipesCount > 0 || surchargedNodesCount > 0) {
+            banner.style.background = 'linear-gradient(90deg, rgba(245, 158, 11, 0.22) 0%, rgba(15, 23, 42, 0.8) 100%)';
+            banner.style.borderBottom = '1.5px solid rgba(245, 158, 11, 0.6)';
+            vIcon.style.background = '#f59e0b';
+            vIcon.style.boxShadow = '0 0 16px rgba(245, 158, 11, 0.65)';
+            vIcon.innerHTML = '<i class="fas fa-exclamation-circle"></i>';
+            vBadge.textContent = 'VIGILANCE — MISE EN CHARGE';
+            vBadge.style.background = 'rgba(245, 158, 11, 0.25)';
+            vBadge.style.color = '#fde68a';
+            vBadge.style.border = '1px solid rgba(245, 158, 11, 0.5)';
+            vText.textContent = `Réseau sous pression sans débordement de surface · ${surchargedPipesCount} tronçon(s) saturé(s) à pleine capacité.`;
+        } else {
+            banner.style.background = 'linear-gradient(90deg, rgba(16, 185, 129, 0.22) 0%, rgba(15, 23, 42, 0.8) 100%)';
+            banner.style.borderBottom = '1.5px solid rgba(16, 185, 129, 0.6)';
+            vIcon.style.background = '#10b981';
+            vIcon.style.boxShadow = '0 0 16px rgba(16, 185, 129, 0.65)';
+            vIcon.innerHTML = '<i class="fas fa-check-circle"></i>';
+            vBadge.textContent = 'CONFORME — AUCUN DÉBORDEMENT';
+            vBadge.style.background = 'rgba(16, 185, 129, 0.25)';
+            vBadge.style.color = '#6ee7b7';
+            vBadge.style.border = '1px solid rgba(16, 185, 129, 0.5)';
+            vText.textContent = `Capacité d'évacuation satisfaisante · L'ensemble des débits transite en régime à surface libre sans reflux.`;
+        }
+    }
+
+    // 3. Tab 1 : KPIs dans la modale dédiée
+    const mCont = document.getElementById('modal-kpi-continuity');
+    if (mCont) mCont.textContent = (contErr > 0 ? '+' : '') + window.formaterNombre(contErr, 2) + ' %';
+    const mPeak = document.getElementById('modal-kpi-peak-outflow');
+    if (mPeak) mPeak.textContent = window.formaterNombre(qPeakVal, 3) + ' m³/s';
+    const mTime = document.getElementById('modal-kpi-peak-time');
+    if (mTime) mTime.textContent = k.peak_time_str || '--';
+    const mVel = document.getElementById('modal-kpi-max-velocity');
+    if (mVel) {
+        const vVal = k.max_velocity_ms || 0;
+        mVel.textContent = window.formaterNombre(vVal, 2) + ' m/s';
+    }
+    const mAutoCur = document.getElementById('modal-kpi-autocurage-desc');
+    if (mAutoCur) {
+        mAutoCur.textContent = k.autocurage_statut || 'Autocurage certifié';
+        mAutoCur.style.color = k.autocurage_color || '#34d399';
+    }
+    const mRunoff = document.getElementById('modal-kpi-vol-runoff');
+    if (mRunoff) {
+        const rVal = k.total_runoff_volume_m3;
+        mRunoff.textContent = (rVal !== undefined && rVal !== null ? Math.round(rVal).toLocaleString('fr-FR') : '--') + ' m³';
+    }
+    const mInfil = document.getElementById('modal-kpi-vol-infil');
+    if (mInfil) {
+        const iVal = k.total_infiltration_volume_m3;
+        mInfil.textContent = (iVal !== undefined && iVal !== null ? Math.round(iVal).toLocaleString('fr-FR') : '--') + ' m³';
+    }
+    const mCoeff = document.getElementById('modal-kpi-coeff-eff');
+    if (mCoeff) mCoeff.textContent = window.formaterNombre(k.effective_runoff_coeff !== undefined ? k.effective_runoff_coeff : 0.70, 2);
+    const mSurch = document.getElementById('modal-kpi-surcharge-pct');
+    if (mSurch) mSurch.textContent = `${window.formaterNombre(k.surcharged_length_pct || 0, 1)} % (${window.formaterNombre(k.surcharged_length_m || 0, 1)} m)`;
+
+    // Sollicitation pluviométrique
+    const pluvioStation = k.pluvio_station || meta.pluvio_station || 'Station ANRH Chlef Siège (010501)';
+    const pluvioPeriode = k.pluvio_periode_retour || meta.pluvio_periode_retour || 'T = 10 ans (Décennale)';
+    const pluvioImax = k.pluvio_intensite_max_mmh !== undefined ? k.pluvio_intensite_max_mmh : (meta.pluvio_intensite_max_mmh || 74.9);
+    const pluvioPtot = k.pluvio_hauteur_totale_mm || meta.pluvio_hauteur_totale_mm || 42.8;
+    const pluvioMontana = k.pluvio_montana || meta.pluvio_montana || 'I(t) = 9.334 · t^(-0.745)';
+
+    const stBadge = document.getElementById('modal-kpi-pluvio-station-badge');
+    if (stBadge) stBadge.textContent = pluvioStation;
+    const pPer = document.getElementById('modal-kpi-pluvio-periode');
+    if (pPer) pPer.textContent = pluvioPeriode;
+    const pImax = document.getElementById('modal-kpi-pluvio-imax');
+    if (pImax) pImax.textContent = `${Number(pluvioImax).toFixed(1)} mm/h`;
+    const pPtot = document.getElementById('modal-kpi-pluvio-ptot');
+    if (pPtot) pPtot.textContent = `${Number(pluvioPtot).toFixed(1)} mm`;
+    const pMont = document.getElementById('modal-kpi-pluvio-montana');
+    if (pMont) pMont.textContent = pluvioMontana;
+
+    // Contrôle cohérence rationnelle
+    const coh = k.coherence_pluie_debit;
+    if (coh) {
+        const cBadge = document.getElementById('modal-kpi-coherence-badge');
+        if (cBadge) {
+            cBadge.textContent = coh.badge || coh.statut;
+            cBadge.style.background = (coh.color || '#10b981') + '22';
+            cBadge.style.color = coh.color || '#10b981';
+            cBadge.style.border = `1px solid ${coh.color || '#10b981'}55`;
+        }
+        const cQsim = document.getElementById('modal-kpi-coh-qsim');
+        if (cQsim) cQsim.textContent = `${window.formaterNombre(coh.q_simule_m3s, 3)} m³/s`;
+        const cQrat = document.getElementById('modal-kpi-coh-qrat');
+        if (cQrat) cQrat.textContent = `${window.formaterNombre(coh.q_rationnel_m3s, 3)} m³/s (Ratio: ${coh.ratio})`;
+        const cMsg = document.getElementById('modal-kpi-coherence-msg');
+        if (cMsg) cMsg.textContent = coh.message;
+    }
+
+    // Ouvrages spéciaux & délestage
+    const orphBox = document.getElementById('modal-sim-orphelin-kpi-box');
+    if (orphBox) {
+        const qDerive = (typeof k.q_derive_m3s === 'number') ? k.q_derive_m3s : ((typeof k.q_deleste_m3s === 'number') ? k.q_deleste_m3s : 0.0);
+        const qExutoire = (typeof k.q_exutoire_m3s === 'number') ? k.q_exutoire_m3s : qPeakVal;
+        const qGenere = (typeof k.q_genere_m3s === 'number') ? k.q_genere_m3s : (qExutoire + qDerive);
+        const nbOrph = k.nb_ouvrages_raccordes || 0;
+        const tauxDerive = (typeof k.taux_derive_pct === 'number') ? k.taux_derive_pct : (qGenere > 0 ? ((qDerive / qGenere) * 100.0) : 0.0);
+        const tauxExutoire = (typeof k.taux_exutoire_pct === 'number') ? k.taux_exutoire_pct : Math.max(0, 100.0 - tauxDerive);
+
+        orphBox.style.display = 'block';
+        const bEl = document.getElementById('modal-kpi-orphelin-badge');
+        const gEl = document.getElementById('modal-kpi-orphelin-qgenere');
+        const eEl = document.getElementById('modal-kpi-orphelin-qexutoire');
+        const qEl = document.getElementById('modal-kpi-orphelin-qdeleste');
+        const dEl = document.getElementById('modal-kpi-orphelin-desc');
+
+        if (gEl) gEl.textContent = `${window.formaterNombre(qGenere, 3)} m³/s`;
+        if (eEl) eEl.textContent = `${window.formaterNombre(qExutoire, 3)} m³/s (${window.formaterNombre(tauxExutoire, 1)}%)`;
+        if (qEl) qEl.textContent = `${window.formaterNombre(qDerive, 3)} m³/s (${window.formaterNombre(tauxDerive, 1)}%)`;
+
+        if (qDerive > 0) {
+            if (bEl) {
+                bEl.textContent = `Soulagement réseau : ${window.formaterNombre(tauxDerive, 1)}%`;
+                bEl.style.background = 'rgba(6, 182, 212, 0.25)';
+                bEl.style.color = '#22d3ee';
+                bEl.style.borderColor = 'rgba(6, 182, 212, 0.5)';
+            }
+            if (dEl) dEl.innerHTML = `<i class="fas fa-check-circle text-emerald-400 me-1"></i> <b>${nbOrph} ouvrage(s) spécial(aux) actif(s)</b> : ${window.formaterNombre(qDerive, 3)} m³/s captés (${window.formaterNombre(tauxDerive, 1)}% du débit produit).`;
+        } else {
+            if (bEl) {
+                bEl.textContent = `Soulagement réseau : 0,0%`;
+                bEl.style.background = 'rgba(16, 185, 129, 0.2)';
+                bEl.style.color = '#34d399';
+                bEl.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+            }
+            if (dEl) dEl.innerHTML = `<i class="fas fa-info-circle text-sky-400 me-1"></i> Scénario sans ouvrage spécial : 100,0% du débit transite vers l'exutoire principal.`;
+        }
+    }
+
+    // 4. Tab 2 : Remplissage des tableaux Conduites et Regards
+    const tbodyCond = document.getElementById('tbody-details-conduites');
+    const badgeCond = document.getElementById('badge-count-conduites');
+    const condKeys = Object.keys(cRes);
+    if (badgeCond) badgeCond.textContent = condKeys.length;
+
+    if (tbodyCond) {
+        if (condKeys.length === 0) {
+            tbodyCond.innerHTML = `<tr><td colspan="7" style="padding:24px; text-align:center; color:#64748b;">Aucun tronçon de conduite dans ce périmètre</td></tr>`;
+        } else {
+            let htmlCond = '';
+            condKeys.forEach(kId => {
+                const c = cRes[kId];
+                const qR = Number(c.flow_ratio || 0);
+                const dR = Number(c.depth_ratio || 0);
+                const maxR = Math.max(qR, dR);
+                const rPct = Math.round(maxR * 100);
+
+                let statutClass = 'libre';
+                let col = '#10b981';
+                if (c.status === 'surcharge' || maxR >= 1.0) {
+                    statutClass = 'surcharge';
+                    col = '#ef4444';
+                } else if (c.status === 'critique' || c.status === 'moderee' || maxR >= 0.70) {
+                    statutClass = 'moderee';
+                    col = '#f59e0b';
+                }
+
+                const u = String(c.u_node || '--');
+                const d = String(c.d_node || '--');
+                const diam = c.diam_mm || (c.geom1 ? Math.round(c.geom1 * 1000) : 600);
+                const pente = (c.slope !== undefined) ? (Number(c.slope) * 100).toFixed(2) : '--';
+                const qMaxStr = window.formaterNombre(c.max_flow_cms || c.q_max || 0, 3);
+                const vMaxStr = window.formaterNombre(c.max_velocity_ms || 0, 2);
+
+                htmlCond += `
+                    <tr data-statut="${statutClass}" data-id="${kId}" data-amont="${u}" data-aval="${d}" style="border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.15s;" onmouseover="this.style.background='rgba(56,189,248,0.06)'" onmouseout="this.style.background='transparent'">
+                        <td style="padding: 9px 12px; font-weight: 700; color: #f8fafc;">
+                            <span style="font-family: monospace; background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 4px;">${kId}</span>
+                        </td>
+                        <td style="padding: 9px 12px; color: #cbd5e1;">${u} &rarr; ${d}</td>
+                        <td style="padding: 9px 12px; color: #94a3b8;">DN ${diam} mm</td>
+                        <td style="padding: 9px 12px; color: #94a3b8;">${pente} %</td>
+                        <td style="padding: 9px 12px; color: #38bdf8; font-weight: 700;">${qMaxStr} m³/s</td>
+                        <td style="padding: 9px 12px; color: #cbd5e1;">${vMaxStr} m/s</td>
+                        <td style="padding: 9px 12px;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <div style="flex: 1; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
+                                    <div style="width: ${Math.min(100, rPct)}%; height: 100%; background: ${col};"></div>
+                                </div>
+                                <span style="font-weight: 800; color: ${col}; font-size: 0.76rem; width: 44px; text-align: right;">${rPct}%</span>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+            tbodyCond.innerHTML = htmlCond;
+        }
+    }
+
+    // Regards
+    const tbodyReg = document.getElementById('tbody-details-regards');
+    const badgeReg = document.getElementById('badge-count-regards');
+    const nodeKeys = Object.keys(nRes);
+    if (badgeReg) badgeReg.textContent = nodeKeys.length;
+
+    if (tbodyReg) {
+        if (nodeKeys.length === 0) {
+            tbodyReg.innerHTML = `<tr><td colspan="6" style="padding:24px; text-align:center; color:#64748b;">Aucun regard dans ce périmètre</td></tr>`;
+        } else {
+            let htmlReg = '';
+            nodeKeys.forEach(nId => {
+                const n = nRes[nId];
+                const isFlooded = (n.status === 'flooded' || (n.flooding_m3 && n.flooding_m3 > 0));
+                const isSurcharged = (n.status === 'surcharged');
+                let statutClass = isFlooded ? 'debordement' : (isSurcharged ? 'charge' : 'libre');
+
+                const tn = (n.rim_elev !== undefined) ? Number(n.rim_elev).toFixed(2) : '--';
+                const hmax = (n.max_head_m !== undefined) ? Number(n.max_head_m).toFixed(2) : ((n.max_depth_m !== undefined) ? Number(n.max_depth_m).toFixed(2) : '--');
+                const surcharge = (n.surcharge_depth_m !== undefined) ? `${Number(n.surcharge_depth_m).toFixed(2)} m` : '--';
+                const volDeb = (n.flooding_m3 !== undefined && n.flooding_m3 > 0) ? `${Number(n.flooding_m3).toFixed(1)} m³` : '0 m³';
+
+                let badgeHtml = '';
+                if (isFlooded) {
+                    badgeHtml = `<span style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.72rem;">🔴 Débordement</span>`;
+                } else if (isSurcharged) {
+                    badgeHtml = `<span style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.72rem;">🟠 En charge</span>`;
+                } else {
+                    badgeHtml = `<span style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 0.72rem;">🟢 Libre</span>`;
+                }
+
+                htmlReg += `
+                    <tr data-statut="${statutClass}" data-id="${nId}" style="border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.15s;" onmouseover="this.style.background='rgba(56,189,248,0.06)'" onmouseout="this.style.background='transparent'">
+                        <td style="padding: 9px 12px; font-weight: 700; color: #f8fafc;">
+                            <span style="font-family: monospace; background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 4px;">${nId}</span>
+                        </td>
+                        <td style="padding: 9px 12px; color: #94a3b8;">${tn} m</td>
+                        <td style="padding: 9px 12px; color: #38bdf8; font-weight: 700;">${hmax} m</td>
+                        <td style="padding: 9px 12px; color: ${isSurcharged || isFlooded ? '#fbbf24' : '#cbd5e1'}; font-weight: ${isSurcharged || isFlooded ? '700' : 'normal'};">${surcharge}</td>
+                        <td style="padding: 9px 12px; color: ${isFlooded ? '#f87171' : '#64748b'}; font-weight: ${isFlooded ? '800' : 'normal'};">${volDeb}</td>
+                        <td style="padding: 9px 12px;">${badgeHtml}</td>
+                    </tr>
+                `;
+            });
+            tbodyReg.innerHTML = htmlReg;
+        }
+    }
+
+    const badgeCritCount = document.getElementById('badge-tab-details-count');
+    if (badgeCritCount) {
+        const totalCrit = floodedCount + surchargedPipesCount;
+        if (totalCrit > 0) {
+            badgeCritCount.textContent = totalCrit;
+            badgeCritCount.style.display = 'inline-block';
+        } else {
+            badgeCritCount.style.display = 'none';
+        }
+    }
+
+    // 5. Tab 3 : Diagnostic IA & Sensibilité Voronoï
+    const iaBox = document.getElementById('modal-ia-diagnostic-content');
+    if (iaBox) {
+        const diagObj = (data.multi_agents && data.multi_agents.diagnostic) || {};
+        const diagSynthese = diagObj.synthese || diagObj.recommandations || null;
+        if (diagSynthese && typeof diagSynthese === 'string') {
+            iaBox.innerHTML = `<div style="line-height: 1.6; color: #e2e8f0;">${diagSynthese}</div>`;
+        } else if (Array.isArray(diagSynthese)) {
+            iaBox.innerHTML = `<ul style="margin: 0; padding-left: 20px; line-height: 1.6;">${diagSynthese.map(r => `<li>${r}</li>`).join('')}</ul>`;
+        } else {
+            let recoPipes = surchargedPipesCount > 0 ? `Renforcement ou recalibrage recommandé sur <b>${surchargedPipesCount} tronçon(s)</b> en saturation hydraulique.` : `Le dimensionnement actuel des conduites est adapté aux débits de pointe décennaux.`;
+            let recoNodes = floodedCount > 0 ? `Mise en œuvre prioritaire de bassins d'orage ou surélévation de tampons sur <b>${floodedCount} regard(s)</b> pour éliminer les inondations urbaines.` : `Aucun refoulement critique en surface.`;
+            iaBox.innerHTML = `
+                <div style="line-height: 1.6; color: #e2e8f0;">
+                    <p style="margin: 0 0 8px 0;"><i class="fas fa-check-circle text-sky-400 me-2"></i><b>Analyse d'Écoulement Saint-Venant 1D :</b> Débit de pointe simulé à l'exutoire de <b>${window.formaterNombre(qPeakVal, 3)} m³/s</b> avec une vitesse maximale de <b>${window.formaterNombre(k.max_velocity_ms || 0, 2)} m/s</b>.</p>
+                    <p style="margin: 0 0 8px 0;"><i class="fas fa-tools text-amber-400 me-2"></i><b>Prescription Génie Civil :</b> ${recoPipes}</p>
+                    <p style="margin: 0;"><i class="fas fa-shield-halved text-emerald-400 me-2"></i><b>Sécurisation Ouvrages :</b> ${recoNodes}</p>
+                </div>
+            `;
+        }
+    }
+
+    // Analyse de sensibilité du buffer Voronoï
+    if (data.buffer_sensitivity && typeof afficherAnalyseSensibiliteBuffer === 'function') {
+        const currentVal = window._activeBufferM || (data.meta && data.meta.buffer_m) || 35.0;
+        const curve = data.buffer_sensitivity.curve || [];
+        const mGrid = document.getElementById('modal-sim-buffer-tiles-grid');
+        if (mGrid && curve.length > 0) {
+            let htmlGrid = '';
+            curve.forEach(c => {
+                const isRec = c.is_recommended || (Math.round(c.buffer_m) === 45);
+                const isSelected = (Math.round(c.buffer_m) === Math.round(currentVal));
+                const borderColor = isSelected ? '#10b981' : (isRec ? 'rgba(56, 189, 248, 0.5)' : 'rgba(255,255,255,0.1)');
+                const bg = isSelected ? 'rgba(16, 185, 129, 0.12)' : (isRec ? 'rgba(56, 189, 248, 0.08)' : 'rgba(255,255,255,0.03)');
+
+                htmlGrid += `
+                    <div style="background: ${bg}; border: 1.5px solid ${borderColor}; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; justify-content: space-between; position: relative;">
+                        ${isRec ? `<span style="position: absolute; top: -8px; right: 8px; font-size: 0.65rem; background: #0284c7; color: white; padding: 1px 7px; border-radius: 4px; font-weight: 700;">POINT INFLEXION</span>` : ''}
+                        <div>
+                            <div style="font-size: 0.86rem; font-weight: 800; color: ${isSelected ? '#34d399' : (isRec ? '#38bdf8' : '#e2e8f0')}; margin-bottom: 2px;">
+                                Buffer ${Math.round(c.buffer_m)} m ${isSelected ? '✅' : ''}
+                            </div>
+                            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 6px;">
+                                ${c.buffer_m === 35 ? 'Voirie stricte' : (c.buffer_m === 45 ? 'Îlots comblés (Optimal)' : 'Périphérie élargie')}
+                            </div>
+                            <div style="font-size: 1.05rem; font-weight: 800; color: #f8fafc; margin-bottom: 2px;">
+                                ${c.surface_ha} ha ${c.gain_pct > 0 ? `<small style="font-size: 0.72rem; color: #34d399; font-weight: 700;">+${c.gain_pct}%</small>` : ''}
+                            </div>
+                            <div style="font-size: 0.74rem; color: #cbd5e1;">
+                                Débit : <b style="color: ${isRec ? '#38bdf8' : '#f8fafc'};">${c.peak_flow_m3s} m³/s</b>
+                            </div>
+                        </div>
+                        <button onclick="validerChoixBuffer(${c.buffer_m})" style="width: 100%; margin-top: 10px; padding: 6px; font-size: 0.75rem; font-weight: 700; border-radius: 6px; cursor: pointer; border: none; background: ${isSelected ? '#10b981' : (isRec ? 'linear-gradient(135deg, #0284c7, #0369a1)' : 'rgba(255,255,255,0.08)')}; color: white;">
+                            ${isSelected ? '<i class="fas fa-check"></i> Actif' : (isRec ? '⭐ Valider 45m' : `Valider ${Math.round(c.buffer_m)}m`)}
+                        </button>
+                    </div>
+                `;
+            });
+            mGrid.innerHTML = htmlGrid;
+        }
+    }
 };

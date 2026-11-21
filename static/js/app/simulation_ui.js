@@ -1049,6 +1049,14 @@ window.dessinerRaccordementsOrphelinsSurCarte = function() {
                         window.zoomerSurZoneSimulee(data, 19);
                     }, 100);
                 }
+
+                // Ouverture automatique de la fenêtre dédiée des résultats si préférence active (par défaut activée)
+                const autoOpenPref = localStorage.getItem('swmm_auto_open_results');
+                if (autoOpenPref !== 'false' && typeof window.ouvrirModalResultatsSimulation === 'function') {
+                    setTimeout(() => {
+                        window.ouvrirModalResultatsSimulation();
+                    }, 350);
+                }
             })
             .catch(err => {
                 arreterOverlaySimulation();
