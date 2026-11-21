@@ -123,7 +123,7 @@ function _masquerMenuInfobullesSim() {
 // ==========================================
         // POINTS 2 & 3 : COUCHES RÉSULTATS SWMM 5.2
         // ==========================================
-        window._afficherResultatsSimulationNu = function(data) {
+        window._afficherResultatsSimulationNu = function(data, force = false) {
             // Garde anti-récursion : l'affichage chaîne highlightCluster →
             // gererAffichageSimulationPourBassin → ré-affiche les résultats,
             // ce qui bouclait indéfiniment (« Maximum call stack size
@@ -134,7 +134,8 @@ function _masquerMenuInfobullesSim() {
             if (!data || !data.conduit_results || !data.node_results) return;
 
             // Garde anti-doublon : ne pas recalculer ni re-rendre si exactement la même simulation est déjà affichée
-            if (window._dernierResultatSimulation === data &&
+            // (contournable avec force=true, notamment à la fermeture du time slider pour rétablir les maximums)
+            if (!force && window._dernierResultatSimulation === data &&
                 window.couches && window.couches.res_conduites &&
                 window.carte && window.carte.hasLayer(window.couches.res_conduites) &&
                 window.couches.res_conduites.getLayers().length > 0) {
@@ -748,7 +749,7 @@ function _masquerMenuInfobullesSim() {
  * Sinon (tests unitaires JS, pages autonomes), alias direct du rendu.
  */
 if (typeof window._syncContexteAvecResultat === 'function') {
-    window.afficherResultatsSimulation = function (data) {
+    window.afficherResultatsSimulation = function (data, force = false) {
         if (!data) return;
         window._syncContexteAvecResultat(data).then(function (res) {
             if (res && res.ok === false) {
@@ -758,19 +759,19 @@ if (typeof window._syncContexteAvecResultat === 'function') {
                 return;
             }
             if (typeof window._afficherResultatsSimulationNu === 'function') {
-                window._afficherResultatsSimulationNu(data);
+                window._afficherResultatsSimulationNu(data, force);
             }
         }).catch(function (e) {
             console.warn('[contexte-spatial] sync résultat impossible :', e);
             if (typeof window._afficherResultatsSimulationNu === 'function') {
-                window._afficherResultatsSimulationNu(data);
+                window._afficherResultatsSimulationNu(data, force);
             }
         });
     };
 } else {
-    window.afficherResultatsSimulation = function (data) {
+    window.afficherResultatsSimulation = function (data, force = false) {
         if (typeof window._afficherResultatsSimulationNu === 'function') {
-            window._afficherResultatsSimulationNu(data);
+            window._afficherResultatsSimulationNu(data, force);
         }
     };
 }

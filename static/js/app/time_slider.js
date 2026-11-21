@@ -107,16 +107,11 @@ function toggleTimeSlider(forceState) {
             badgeCrit.classList.remove('hidden');
         }
 
-        // Restaurer la légende flottante à son état précédent (avant ouverture panneau)
+        // Restaurer la légende flottante à son état précédent
         const leg = document.getElementById('sim-floating-legend');
         if (leg) {
-            if (state.legendWasVisible) {
-                leg.style.display = 'block';
-                leg.classList.add('active-legend');
-            } else {
-                leg.style.display = 'none';
-                leg.classList.remove('active-legend');
-            }
+            leg.style.display = 'block';
+            leg.classList.add('active-legend');
         }
 
         // Déplier la toolbar d'édition si elle était repliée
@@ -125,20 +120,19 @@ function toggleTimeSlider(forceState) {
             toolbar.classList.remove('collapsed');
         }
         const icon = document.getElementById('icon-collapse-toolbar');
-        if (icon) icon.className = 'fas fa-chevron-left';
+        if (icon) icon.className = 'fas fa-chevron-up';
 
-        // Nettoyer les marqueurs de débordement radar
-        _nettoyerRadarDebordement();
+        // Vider les couches pour forcer le redessin net de l'enveloppe de criticité
+        if (window.couches && window.couches.res_conduites) {
+            window.couches.res_conduites.clearLayers();
+        }
+        if (window.couches && window.couches.res_regards) {
+            window.couches.res_regards.clearLayers();
+        }
 
-        // Rétablir la coloration standard SWMM de la simulation
+        // Rétablir la coloration standard SWMM de la simulation (enveloppe des maximums observés)
         if (window._dernierResultatSimulation && typeof afficherResultatsSimulation === 'function') {
-            afficherResultatsSimulation(window._dernierResultatSimulation);
-            // Après afficherResultatsSimulation (qui force l'affichage de la légende),
-            // ré-appliquer l'état stocké si la légende devait rester cachée
-            if (leg && !state.legendWasVisible) {
-                leg.style.display = 'none';
-                leg.classList.remove('active-legend');
-            }
+            afficherResultatsSimulation(window._dernierResultatSimulation, true);
         }
         return;
     }
@@ -190,7 +184,7 @@ function toggleTimeSlider(forceState) {
             toolbar.classList.add('collapsed');
         }
         const icon = document.getElementById('icon-collapse-toolbar');
-        if (icon) icon.className = 'fas fa-chevron-right';
+        if (icon) icon.className = 'fas fa-chevron-down';
 
         // Afficher le badge "État hydraulique à l'instant T" dans l'en-tête du player
         const badgeInstant = document.getElementById('badge-instant-state');
