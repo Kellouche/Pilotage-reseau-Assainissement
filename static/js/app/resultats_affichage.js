@@ -234,50 +234,44 @@ function _masquerMenuInfobullesSim() {
                 badgeCrit.classList.remove('hidden');
             }
 
-            // Masquer les couches physiques brutes et les clusters pour éviter tout conflit de couleur avec la simulation
+            // Pour ne pas alourdir l'affichage (éviter des milliers d'éléments SVG/canvas superflus),
+            // désactiver TOUTES les couches physiques et ne laisser que les couches thématiques.
+            if (!window._etatCouchesAvantSimulation) {
+                window._etatCouchesAvantSimulation = {};
+                const _ids = ['conduites', 'regards', 'rejets', 'stations', 'step', 'ouvrages', 'bassins', 'orphelins', 'subcatchments', 'sens-ecoulement'];
+                _ids.forEach(id => {
+                    const el = document.getElementById('f-' + id);
+                    if (el) window._etatCouchesAvantSimulation[id] = el.checked;
+                });
+            }
+
+            const _couchesPhysiques = [
+                'conduites', 'regards', 'rejets', 'stations', 'step',
+                'ouvrages', 'bassins', 'orphelins', 'subcatchments', 'sens_ecoulement'
+            ];
+            _couchesPhysiques.forEach(type => {
+                if (couches && couches[type] && carte.hasLayer(couches[type])) {
+                    carte.removeLayer(couches[type]);
+                }
+            });
+
             if (typeof clusterCouche !== 'undefined' && clusterCouche && carte.hasLayer(clusterCouche)) {
                 carte.removeLayer(clusterCouche);
             }
-            // Conduites et regards bruts : atténués en fond sombre (contexte spatial)
-            // pour faire ressortir sans ambiguïté les conduites et regards SWMM simulés
-            if (couches.conduites) {
-                couches.conduites.eachLayer(function(l) {
-                    if (l && typeof l.setStyle === 'function') {
-                        l.setStyle({ color: '#334155', weight: 1.5, opacity: 0.35 });
-                    }
-                });
-                if (!carte.hasLayer(couches.conduites)) couches.conduites.addTo(carte);
-                const el = document.getElementById('f-conduites');
-                if (el) el.checked = true;
-            }
-            if (couches.regards) {
-                couches.regards.eachLayer(function(l) {
-                    if (l && typeof l.setStyle === 'function') {
-                        l.setStyle({ radius: 1.5, color: '#334155', fillColor: '#1e293b', opacity: 0.35, fillOpacity: 0.25 });
-                    }
-                });
-                if (!carte.hasLayer(couches.regards)) couches.regards.addTo(carte);
-                const el = document.getElementById('f-regards');
-                if (el) el.checked = true;
-            }
-            // Maintenir impérativement cochés et visibles les exutoires (rejets) et la station d'épuration (STEP)
-            if (couches.rejets && !carte.hasLayer(couches.rejets)) {
-                couches.rejets.addTo(carte);
-            }
-            const elRejets = document.getElementById('f-rejets');
-            if (elRejets) elRejets.checked = true;
-
-            if (couches.step && !carte.hasLayer(couches.step)) {
-                couches.step.addTo(carte);
-            }
-            const elStep = document.getElementById('f-step');
-            if (elStep) elStep.checked = true;
-
-            // Retirer la couche de prévisualisation en pointillés (remplacée par les résultats de simulation)
-            if (window._coucheRaccordementsOrphelins && window.carte) {
-                window.carte.removeLayer(window._coucheRaccordementsOrphelins);
+            if (window._coucheRaccordementsOrphelins && carte.hasLayer(window._coucheRaccordementsOrphelins)) {
+                carte.removeLayer(window._coucheRaccordementsOrphelins);
                 window._coucheRaccordementsOrphelins.clearLayers();
             }
+
+            // Décocher les cases correspondantes dans le panneau latéral pour un affichage limpide et cohérent
+            const _chkIds = [
+                'f-conduites', 'f-regards', 'f-rejets', 'f-stations', 'f-step',
+                'f-ouvrages', 'f-bassins', 'f-orphelins', 'f-subcatchments', 'f-sens-ecoulement'
+            ];
+            _chkIds.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.checked = false;
+            });
 
             if (!carte.hasLayer(couches.res_conduites)) couches.res_conduites.addTo(carte);
             if (!carte.hasLayer(couches.res_regards)) couches.res_regards.addTo(carte);

@@ -203,29 +203,9 @@
             if (el) {
                 el.onchange = (e) => {
                     const chk = e.target.checked;
-                    if (type === 'conduites') {
-                        if (chk) {
-                            if (couches.conduites && !carte.hasLayer(couches.conduites)) couches.conduites.addTo(carte);
-                            if (window._dernierResultatSimulation && couches.res_conduites && !carte.hasLayer(couches.res_conduites)) {
-                                couches.res_conduites.addTo(carte);
-                            }
-                        } else {
-                            if (couches.conduites && carte.hasLayer(couches.conduites)) carte.removeLayer(couches.conduites);
-                            if (couches.res_conduites && carte.hasLayer(couches.res_conduites)) carte.removeLayer(couches.res_conduites);
-                        }
-                    } else if (type === 'regards') {
-                        if (chk) {
-                            if (couches.regards && !carte.hasLayer(couches.regards)) couches.regards.addTo(carte);
-                            if (window._dernierResultatSimulation && couches.res_regards && !carte.hasLayer(couches.res_regards)) {
-                                couches.res_regards.addTo(carte);
-                            }
-                        } else {
-                            if (couches.regards && carte.hasLayer(couches.regards)) carte.removeLayer(couches.regards);
-                            if (couches.res_regards && carte.hasLayer(couches.res_regards)) carte.removeLayer(couches.res_regards);
-                        }
-                    } else {
-                        if (chk) couches[type].addTo(carte);
-                        else carte.removeLayer(couches[type]);
+                    if (couches[type]) {
+                        if (chk && !carte.hasLayer(couches[type])) couches[type].addTo(carte);
+                        else if (!chk && carte.hasLayer(couches[type])) carte.removeLayer(couches[type]);
                     }
                 };
             }

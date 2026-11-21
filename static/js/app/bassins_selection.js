@@ -634,14 +634,17 @@
                 window.gererAffichageSimulationPourBassin(_selectedClusterId);
             }
 
-            // Maintenir systématiquement cochés et affichés les rejets et la STEP lors du changement de réseau
-            if (couches && couches.rejets && !carte.hasLayer(couches.rejets)) couches.rejets.addTo(carte);
-            const elRejSync = document.getElementById('f-rejets');
-            if (elRejSync) elRejSync.checked = true;
+            // Maintenir cochés et affichés les rejets et la STEP uniquement si aucune simulation thématique n'est affichée
+            const _simActive = !!(window._dernierResultatSimulation && couches && couches.res_conduites && carte.hasLayer(couches.res_conduites));
+            if (!_simActive) {
+                if (couches && couches.rejets && !carte.hasLayer(couches.rejets)) couches.rejets.addTo(carte);
+                const elRejSync = document.getElementById('f-rejets');
+                if (elRejSync) elRejSync.checked = true;
 
-            if (couches && couches.step && !carte.hasLayer(couches.step)) couches.step.addTo(carte);
-            const elStepSync = document.getElementById('f-step');
-            if (elStepSync) elStepSync.checked = true;
+                if (couches && couches.step && !carte.hasLayer(couches.step)) couches.step.addTo(carte);
+                const elStepSync = document.getElementById('f-step');
+                if (elStepSync) elStepSync.checked = true;
+            }
 
             geojsonLayer = geojsonLayer || window._activeClusterLayer || (typeof couches !== 'undefined' ? couches.bassins : null);
             if (!geojsonLayer) return;
