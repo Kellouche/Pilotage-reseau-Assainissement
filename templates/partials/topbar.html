@@ -78,6 +78,12 @@ Objet : Barre supérieure de navigation SaaS, sélecteur de projet et indicateur
 
         <!-- Section Droite : Simulation, Ressources & Profil Utilisateur -->
         <div id="nav-user-area" style="display: flex; align-items: center; gap: 10px;">
+            <!-- Badge d'alerte Cotes Suspectes (visible si cotes à valider) -->
+            <button id="topbar-cotes-suspectes-pill" onclick="ouvrirModalCotesSuspectes()" style="display: none; background: rgba(245, 158, 11, 0.16); border: 1.5px solid #f59e0b; border-radius: 20px; padding: 4px 11px; font-size: 0.76rem; color: #fbbf24; font-weight: 700; cursor: pointer; align-items: center; gap: 6px; box-shadow: 0 2px 8px rgba(245, 158, 11, 0.25); transition: all 0.2s;" onmouseover="this.style.background='rgba(245, 158, 11, 0.28)'" onmouseout="this.style.background='rgba(245, 158, 11, 0.16)'" title="Cliquer pour vérifier et certifier les cotes altimétriques suspectes (confusion cm/mm)">
+                <i class="fas fa-ruler-combined" style="color: #f59e0b;"></i>
+                <span id="topbar-cotes-count-text">0 cotes suspectes</span>
+            </button>
+
             <!-- Menu Déroulant Actions & Analyse Hydraulique -->
             <div style="position: relative;">
                 <button id="btn-actions-menu" onclick="basculerMenuActions(event)" title="Actions de simulation et d'analyse hydraulique" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); border: none; color: white; padding: 5px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 2px 8px rgba(2, 132, 199, 0.35); transition: all 0.2s;">
@@ -126,6 +132,14 @@ Objet : Barre supérieure de navigation SaaS, sélecteur de projet et indicateur
                     <button onclick="fermerMenuActions(); ouvrirModalGardeFou();" style="width: 100%; text-align: left; padding: 7px 14px; font-size: 12px; font-weight: 600; color: #f8fafc; background: transparent; border: none; cursor: pointer; display: flex; align-items: center; gap: 9px; transition: background 0.15s;" onmouseover="this.style.background='rgba(124, 58, 237, 0.15)'" onmouseout="this.style.background='transparent'">
                         <i class="fas fa-sliders" style="color: #a78bfa; width: 14px; font-size: 11px;"></i>
                         <span>Seuils du garde-fou</span>
+                    </button>
+
+                    <button id="btn-menu-cotes-suspectes" onclick="fermerMenuActions(); ouvrirModalCotesSuspectes();" style="width: 100%; text-align: left; padding: 7px 14px; font-size: 12px; font-weight: 600; color: #f8fafc; background: transparent; border: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: background 0.15s;" onmouseover="this.style.background='rgba(245, 158, 11, 0.15)'" onmouseout="this.style.background='transparent'">
+                        <div style="display: flex; align-items: center; gap: 9px;">
+                            <i class="fas fa-ruler-combined" style="color: #f59e0b; width: 14px; font-size: 11px;"></i>
+                            <span>Registre des cotes suspectes</span>
+                        </div>
+                        <span id="badge-topbar-cotes-count" style="display: none; font-size: 9px; padding: 1px 6px; background: rgba(245, 158, 11, 0.25); color: #fbbf24; border-radius: 9999px; font-weight: 800; border: 1px solid rgba(245, 158, 11, 0.4);">0</span>
                     </button>
 
                     <!-- SÉPARATEUR THÉMATIQUE -->

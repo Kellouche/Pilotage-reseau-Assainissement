@@ -67,6 +67,47 @@ def extraire_maxima_noeuds_rpt(rpt_text: str) -> Dict[str, Dict[str, Any]]:
     return maxima
 
 
+def calculer_coherence_pluie_debit(kpis: Dict[str, Any], meta: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Évalue ou réévalue la cohérence pluie-débit (méthode rationnelle Q = C*I*A / 360)
+    en comparant le débit rationnel attendu sur le bassin au débit de pointe simulé.
+    """
+    area_ha = float(meta.get("total_area_ha") or kpis.get("total_area_ha") or 0.0)
+    i_max = float(meta.get("pluvio_intensite_max_mmh") or kpis.get("pluvio_intensite_max_mmh") or 62.0)
+    c_eff = float(kpis.get("effective_runoff_coeff") or meta.get("effective_runoff_coeff") or 0.70)
+    q_rat = round((c_eff * i_max * area_ha) / 360.0, 3)
+    q_sim = round(float(kpis.get("peak_outflow_m3s") or 0.0), 3)
+    ratio_coh = round(q_sim / q_rat, 2) if q_rat > 0 else 1.0
+
+    if 0.65 <= ratio_coh <= 1.45:
+        coh_st = "COHERENT"
+        coh_badge = "✅ Cohérent"
+        coh_col = "#10b981"
+        coh_msg = f"Le débit de pointe simulé ({q_sim} m³/s) est en étroite cohérence avec le débit rationnel attendu ({q_rat} m³/s) pour une pluie de {i_max} mm/h sur {area_ha} ha (Ceff = {c_eff})."
+    elif ratio_coh > 1.45:
+        coh_st = "SUR-EVALUE"
+        coh_badge = "⚠️ Pic supérieur au rationnel"
+        coh_col = "#f59e0b"
+        coh_msg = f"Le débit simulé ({q_sim} m³/s) est supérieur au débit théorique direct ({q_rat} m³/s pour Imax = {i_max} mm/h). Ce pic peut provenir d'une concentration d'apports amont ou d'un tronçon raide court."
+    else:
+        coh_st = "AMORTI"
+        coh_badge = "ℹ️ Laminé en réseau"
+        coh_col = "#38bdf8"
+        coh_msg = f"Le débit simulé ({q_sim} m³/s) est inférieur au débit rationnel brut ({q_rat} m³/s pour Imax = {i_max} mm/h), traduisant un laminage hydraulique important et un stockage temporaire dans les collecteurs."
+
+    coh = {
+        "q_simule_m3s": q_sim,
+        "q_rationnel_m3s": q_rat,
+        "ratio": ratio_coh,
+        "statut": coh_st,
+        "badge": coh_badge,
+        "color": coh_col,
+        "message": coh_msg
+    }
+    kpis["coherence_pluie_debit"] = coh
+    return coh
+
+
 def analyser_rapport_swmm_impl(rpt_text: str, meta: Dict[str, Any]) -> Dict[str, Any]:
     """
     Parse et extrait les indicateurs clés (KPIs) et les résultats cartographiques
@@ -139,17 +180,44 @@ def analyser_rapport_swmm_impl(rpt_text: str, meta: Dict[str, Any]) -> Dict[str,
             kpis["total_outflow_m3"] = round(float(m_outflow.group(1)) * 1000.0, 1)
 
     # 5. Débit de pointe à l'exutoire (Outfall Loading Summary)
-    #    Priorité à l'exutoire principal du modèle ; les exutoires
-    #    frontières (OUT_BND_*) et les ouvrages orphelins ne sont jamais
-    #    retenus comme « pic à l'exutoire ».
+    #    Priorité au pic global du système (System) pour les bilans multi-exutoires
+    #    ou à l'exutoire principal du modèle s'il est isolé.
     if "Outfall Loading Summary" in rpt_text:
-        m_out = re.search(r"Outfall Loading Summary.*?\n\s*-+\s*\n(.*?)(?:\n\s*\n|[A-Z][a-z]+ [A-Z]|\Z)", rpt_text, re.DOTALL)
-        outfall_lines = m_out.group(1).strip().splitlines() if m_out else rpt_text.split("Outfall Loading Summary")[1].split("\n\n")[0].splitlines()
+        m_out = re.search(r"Outfall Loading Summary\s*\n\s*\*+\s*\n(.*?)(?=\n\s*\*+\s*\n|\n\s*Link Flow Summary|\n\s*Subcatchment|\Z)", rpt_text, re.DOTALL)
+        table_block = m_out.group(1) if m_out else rpt_text.split("Outfall Loading Summary")[1].split("\n\n\n")[0]
+        outfall_lines = table_block.strip().splitlines()
         _lignes_exutoire = []
+        _outfalls_dict = {}
+        _system_peak = 0.0
+        _system_vol = 0.0
+
         for line in outfall_lines:
             parts = line.split()
-            if len(parts) >= 4 and not parts[0].startswith("-") and parts[0] not in ("Outfall", "System", "Node"):
+            if not parts or parts[0].startswith("-") or parts[0] in ("Flow", "Freq", "Outfall", "Node"):
+                continue
+            if parts[0] == "System":
+                if len(parts) >= 4:
+                    try:
+                        _system_peak = float(parts[3])
+                    except Exception:
+                        pass
+                if len(parts) >= 5:
+                    try:
+                        _system_vol = float(parts[4])
+                    except Exception:
+                        pass
+            elif len(parts) >= 4:
                 _lignes_exutoire.append((parts[0], parts))
+                try:
+                    _outfalls_dict[parts[0]] = {
+                        "freq_pct": float(parts[1]) if len(parts) >= 2 else 0.0,
+                        "avg_cms": float(parts[2]),
+                        "max_cms": float(parts[3]),
+                        "vol_10e6_ltr": float(parts[4]) if len(parts) >= 5 else 0.0
+                    }
+                except Exception:
+                    pass
+
         _cibles = {str(meta.get("outfall_code") or ""), str(meta.get("junction_outfall_code") or "")}
         _principal = [lp for nm, lp in _lignes_exutoire if nm in _cibles]
         if not _principal:
@@ -160,14 +228,22 @@ def analyser_rapport_swmm_impl(rpt_text: str, meta: Dict[str, Any]) -> Dict[str,
             _principal = [lp for nm, lp in _lignes_exutoire if "OUT_" in nm]
         if not _principal and _lignes_exutoire:
             _principal = [_lignes_exutoire[0][1]]
-        for parts in _principal[:1]:
-            try:
-                kpis["peak_outflow_m3s"] = float(parts[3])
-            except Exception:
+
+        # Débit de pointe du système / bassin
+        if _system_peak > 0:
+            kpis["peak_outflow_m3s"] = _system_peak
+        elif _principal:
+            for parts in _principal[:1]:
                 try:
-                    kpis["peak_outflow_m3s"] = float(parts[2])
+                    kpis["peak_outflow_m3s"] = float(parts[3])
                 except Exception:
-                    pass
+                    try:
+                        kpis["peak_outflow_m3s"] = float(parts[2])
+                    except Exception:
+                        pass
+        kpis["outfall_loading_summary"] = _outfalls_dict
+        if _system_vol > 0 and not kpis.get("total_outflow_m3"):
+            kpis["total_outflow_m3"] = round(_system_vol * 1000.0, 1)
 
     # 6. Surcharge des regards (Node Surcharge Summary)
     if "Node Surcharge Summary" in rpt_text:
@@ -373,35 +449,7 @@ def analyser_rapport_swmm_impl(rpt_text: str, meta: Dict[str, Any]) -> Dict[str,
     area_ha = float(meta.get("total_area_ha") or 0.0)
     i_max = float(meta.get("pluvio_intensite_max_mmh") or 62.0)
     c_eff = float(kpis.get("effective_runoff_coeff") or 0.70)
-    q_rat = round((c_eff * i_max * area_ha) / 360.0, 3)
-    q_sim = round(float(kpis.get("peak_outflow_m3s") or 0.0), 3)
-    ratio_coh = round(q_sim / q_rat, 2) if q_rat > 0 else 1.0
-
-    if 0.65 <= ratio_coh <= 1.45:
-        coh_st = "COHERENT"
-        coh_badge = "✅ Cohérent"
-        coh_col = "#10b981"
-        coh_msg = f"Le débit de pointe simulé ({q_sim} m³/s) est en étroite cohérence avec le débit rationnel attendu ({q_rat} m³/s) pour une pluie de {i_max} mm/h sur {area_ha} ha (Ceff = {c_eff})."
-    elif ratio_coh > 1.45:
-        coh_st = "SUR-EVALUE"
-        coh_badge = "⚠️ Pic supérieur au rationnel"
-        coh_col = "#f59e0b"
-        coh_msg = f"Le débit simulé ({q_sim} m³/s) est supérieur au débit théorique direct ({q_rat} m³/s pour Imax = {i_max} mm/h). Ce pic peut provenir d'une concentration d'apports amont ou d'un tronçon raide court."
-    else:
-        coh_st = "AMORTI"
-        coh_badge = "ℹ️ Laminé en réseau"
-        coh_col = "#38bdf8"
-        coh_msg = f"Le débit simulé ({q_sim} m³/s) est inférieur au débit rationnel brut ({q_rat} m³/s pour Imax = {i_max} mm/h), traduisant un laminage hydraulique important et un stockage temporaire dans les collecteurs."
-
-    kpis["coherence_pluie_debit"] = {
-        "q_simule_m3s": q_sim,
-        "q_rationnel_m3s": q_rat,
-        "ratio": ratio_coh,
-        "statut": coh_st,
-        "badge": coh_badge,
-        "color": coh_col,
-        "message": coh_msg
-    }
+    calculer_coherence_pluie_debit(kpis, meta)
 
     kpis["typologie_sol"] = meta.get("typologie_sol")
     kpis["typologie_nom"] = meta.get("typologie_nom")

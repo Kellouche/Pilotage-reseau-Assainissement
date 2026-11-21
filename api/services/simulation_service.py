@@ -672,6 +672,7 @@ def corriger_pic_depuis_timeseries(resultat: Dict[str, Any]) -> Dict[str, Any]:
     """
     Corrige peak_outflow_m3s depuis les séries temporelles si le RPT donne 0.0
     (cas où la durée de simulation est trop courte pour capturer le pic à l'exutoire).
+    Synchronise également la cohérence pluie-débit (méthode rationnelle).
     """
     ts = resultat.get("timeseries")
     if ts and ts.get("status") == "SUCCESS" and ts.get("peak_outflow_m3s", 0.0) > 0:
@@ -684,6 +685,13 @@ def corriger_pic_depuis_timeseries(resultat: Dict[str, Any]) -> Dict[str, Any]:
             # Corriger aussi les KPIs dérivés
             resultat["q_exutoire_m3s"] = round(ts_peak, 3)
             resultat["q_genere_m3s"] = round(ts_peak + resultat.get("q_deleste_m3s", 0.0), 3)
+
+    try:
+        from src.domain.moteur_swmm.analyse_rapport import calculer_coherence_pluie_debit
+        calculer_coherence_pluie_debit(resultat, resultat.get("meta") or {})
+    except Exception as e:
+        logger.warning("Impossible de recalculer la cohérence pluie-débit : %s", e)
+
     return resultat
 
 
