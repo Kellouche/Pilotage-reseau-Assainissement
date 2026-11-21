@@ -44,7 +44,6 @@
         };
 
         let carte = L.map('map', {
-            preferCanvas: true,
             maxZoom: 22,
             zoomSnap: 0.5,
             zoomDelta: 0.5
