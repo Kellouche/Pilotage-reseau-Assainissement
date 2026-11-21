@@ -413,14 +413,6 @@ body.snapshot-archive #map .leaflet-top.leaflet-right {
     flex: 0 0 auto;
 }
 
-/* Badge Enveloppe de Criticité : calé en haut à droite à côté de la toolbar d'édition */
-.map-criticality-badge {
-    position: absolute;
-    top: 14px;
-    right: 74px;
-    z-index: 1100;
-}
-
 .edit-toolbar.is-dragging {
     box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6), 0 0 20px rgba(56, 189, 248, 0.4);
     cursor: grabbing !important;
@@ -1505,47 +1497,8 @@ body.snapshot-archive #map .leaflet-top.leaflet-right {
 
 
 /* ==========================================================================
-   BADGES D'INFORMATION : ENVELOPPE DE CRITICITÉ vs ÉTAT À L'INSTANT T
-   Objectif : Distinguer clairement la vue synthétique (maximums) de la vue
-   dynamique (état à l'instant T). Purement UI/UX, aucun impact sur les calculs.
+   BADGE D'INFORMATION : ÉTAT À L'INSTANT T DANS LE TIME SLIDER
    ========================================================================== */
-
-/* Badge Map - Enveloppe de criticité (maximums observés sur toute l'événement) : positionné à gauche de la toolbar */
-.map-criticality-badge {
-    position: absolute;
-    top: 12px;
-    right: 74px;
-    z-index: 1100;
-    background: rgba(245, 158, 11, 0.15);
-    border: 1px solid #f59e0b;
-    border-radius: 6px;
-    padding: 6px 10px;
-    font-family: 'Inter', 'Plus Jakarta Sans', sans-serif;
-    font-size: 0.75rem;
-    font-weight: 700;
-    color: #b45309;
-    max-width: 320px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    user-select: none;
-}
-
-.map-criticality-badge .badge-icon {
-    font-size: 1rem;
-    line-height: 1;
-}
-
-.map-criticality-badge .badge-label {
-    white-space: nowrap;
-}
-
-.map-criticality-badge .badge-subtitle {
-    font-size: 0.68rem;
-    opacity: 0.85;
-    white-space: nowrap;
-}
 
 /* Badge Player - État hydraulique à l'instant T */
 .player-instant-badge {
@@ -1569,8 +1522,7 @@ body.snapshot-archive #map .leaflet-top.leaflet-right {
     line-height: 1;
 }
 
-/* Cache les badges par défaut (affichés uniquement quand une simulation est active) */
-.map-criticality-badge.hidden,
+/* Cache le badge par défaut */
 .player-instant-badge.hidden {
     display: none !important;
 }

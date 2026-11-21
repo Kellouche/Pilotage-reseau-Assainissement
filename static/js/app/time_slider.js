@@ -101,12 +101,6 @@ function toggleTimeSlider(forceState) {
             badgeInstant.classList.add('hidden');
         }
 
-        // Rétablir le badge "Enveloppe de criticité" sur la carte
-        const badgeCrit = document.getElementById('map-criticality-badge');
-        if (badgeCrit && window._dernierResultatSimulation) {
-            badgeCrit.classList.remove('hidden');
-        }
-
         // Restaurer la légende flottante à son état précédent
         const leg = document.getElementById('sim-floating-legend');
         if (leg) {
@@ -171,12 +165,6 @@ function toggleTimeSlider(forceState) {
 
         // Initialiser le déplacement du panneau (comme hyeto-hydro)
         _initTimeSliderDraggable();
-
-        // Masquer le badge "Enveloppe de criticité" pendant l'animation
-        const badgeCrit = document.getElementById('map-criticality-badge');
-        if (badgeCrit) {
-            badgeCrit.classList.add('hidden');
-        }
 
         // Replier la toolbar d'édition (forcer l'état collapsed)
         const toolbar = document.getElementById('main-edit-toolbar');

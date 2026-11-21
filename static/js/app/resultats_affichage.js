@@ -236,15 +236,7 @@ function _masquerMenuInfobullesSim() {
                 leg.style.display = 'block';
             }
 
-            // Afficher le badge "Enveloppe de criticité" sur la carte (maximums observés)
-// Seulement si le player temporel n'est pas ouvert
-            const badgeCrit = document.getElementById('map-criticality-badge');
-            const tsActive = window.timeSliderState && window.timeSliderState.active;
-            if (badgeCrit && !tsActive) {
-                badgeCrit.classList.remove('hidden');
-            }
-
-            // Pour ne pas alourdir l'affichage (éviter des milliers d'éléments SVG/canvas superflus),
+            // Pour ne pas alourdir l'affichage (éviter des milliers d'éléments SVG superflus),
             // désactiver TOUTES les couches physiques et ne laisser que les couches thématiques.
             if (!window._etatCouchesAvantSimulation) {
                 window._etatCouchesAvantSimulation = {};

@@ -755,8 +755,6 @@ window.nettoyerEtatReseau = function(reseauId) {
     }
 
     // Masquer les badges d'interface
-    const badgeCrit = document.getElementById('map-criticality-badge');
-    if (badgeCrit) badgeCrit.classList.add('hidden');
     const badgeInstant = document.getElementById('badge-instant-state');
     if (badgeInstant) badgeInstant.classList.add('hidden');
 
