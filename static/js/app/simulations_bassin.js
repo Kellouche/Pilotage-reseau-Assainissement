@@ -501,7 +501,10 @@
                     }
                 }
 
-                if (typeof afficherResultatsSimulation === 'function') afficherResultatsSimulation(d);
+                if (typeof afficherResultatsSimulation === 'function') afficherResultatsSimulation(d, true);
+                if (typeof window.actualiserLegendeDwf === 'function') {
+                    window.actualiserLegendeDwf(d);
+                }
                 if (typeof window.mettreAJourIndicateurBassin === 'function') {
                     window.mettreAJourIndicateurBassin(optionValue || targetCid, d);
                 }

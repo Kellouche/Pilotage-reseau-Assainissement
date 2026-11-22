@@ -472,6 +472,9 @@
                 if (legTitle) {
                     legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> SWMM 5.2 — ${mNom || nomBassin}`;
                 }
+                if (typeof window.actualiserLegendeDwf === 'function') {
+                    window.actualiserLegendeDwf(window._dernierResultatSimulation);
+                }
                 return;
             }
 
@@ -514,6 +517,9 @@
                     const dispNom = (cached.meta && (cached.meta.cluster_nom || cached.meta.bassin_nom)) || nomBassin;
                     legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> SWMM 5.2 — ${dispNom}`;
                 }
+                if (typeof window.actualiserLegendeDwf === 'function') {
+                    window.actualiserLegendeDwf(cached);
+                }
                 if (typeof window.mettreAJourIndicateurBassin === 'function') {
                     window.mettreAJourIndicateurBassin(cidStr, cached);
                 }
@@ -547,6 +553,9 @@
                         if (legTitle) {
                             const dispNom = (d.meta && (d.meta.cluster_nom || d.meta.bassin_nom)) || nomBassin;
                             legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> SWMM 5.2 — ${dispNom}`;
+                        }
+                        if (typeof window.actualiserLegendeDwf === 'function') {
+                            window.actualiserLegendeDwf(d);
                         }
                         if (typeof window.mettreAJourIndicateurBassin === 'function') {
                             window.mettreAJourIndicateurBassin(cidStr, d);

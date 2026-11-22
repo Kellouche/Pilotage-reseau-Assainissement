@@ -41,7 +41,7 @@ window.dwfExtraireProvenance = function(data) {
         ? data.meta.apports_dwf_ignores : null;
 
     if (prov) {
-        const injectes = Array.isArray(prov.injectes) ? prov.injectes : [];
+        const injectes = Array.isArray(prov.injectes) ? prov.injectes : (Array.isArray(prov) ? prov : []);
         const ignores = Array.isArray(prov.ignores) ? prov.ignores : [];
         const metaPeuple = (metaInj && metaInj.length > 0)
             || (metaIgn && metaIgn.length > 0);

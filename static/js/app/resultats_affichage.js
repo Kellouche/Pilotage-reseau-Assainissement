@@ -121,9 +121,85 @@ function _masquerMenuInfobullesSim() {
 }
 
 // ==========================================
-        // POINTS 2 & 3 : COUCHES RÉSULTATS SWMM 5.2
-        // ==========================================
-        window._afficherResultatsSimulationNu = function(data, force = false) {
+// LOT P1.5.3 / P1.5.4 — LÉGENDE INTERACTIVE DWF
+// ==========================================
+window.actualiserLegendeDwf = function(data) {
+    const _dwfLeg = document.getElementById('sim-legend-dwf-info');
+    const _dwfMarkerRow = document.getElementById('sim-legend-dwf-marker-row');
+    if (!_dwfLeg && !_dwfMarkerRow) return;
+
+    if (!data) {
+        if (_dwfLeg) { _dwfLeg.style.display = 'none'; _dwfLeg.innerHTML = ''; }
+        if (_dwfMarkerRow) { _dwfMarkerRow.style.display = 'none'; }
+        return;
+    }
+
+    let _dwfExtrait = null;
+    if (typeof window.dwfExtraireProvenance === 'function') {
+        _dwfExtrait = window.dwfExtraireProvenance(data);
+    }
+    let _dwfProv = (_dwfExtrait && _dwfExtrait.source !== 'absente')
+        ? { injectes: _dwfExtrait.injectes, ignores: _dwfExtrait.ignores }
+        : ((data && data.provenance && data.provenance.apports_dwf)
+            || (data && data.kpis && data.kpis.provenance
+                ? data.kpis.provenance.apports_dwf : null));
+
+    if (!_dwfProv && data && data.meta && (Array.isArray(data.meta.apports_dwf) || Array.isArray(data.meta.apports_dwf_ignores))) {
+        _dwfProv = {
+            injectes: Array.isArray(data.meta.apports_dwf) ? data.meta.apports_dwf : [],
+            ignores: Array.isArray(data.meta.apports_dwf_ignores) ? data.meta.apports_dwf_ignores : []
+        };
+    }
+
+    if (_dwfProv) {
+        const _injList = Array.isArray(_dwfProv.injectes)
+            ? _dwfProv.injectes
+            : (Array.isArray(_dwfProv) ? _dwfProv : []);
+        const _ignList = Array.isArray(_dwfProv.ignores) ? _dwfProv.ignores : [];
+        const nInj = _injList.length;
+        const nIgn = _ignList.length;
+
+        if (_dwfMarkerRow) {
+            _dwfMarkerRow.style.display = (nInj > 0) ? 'flex' : 'none';
+        }
+
+        if (_dwfLeg) {
+            _dwfLeg.style.display = 'block';
+            if (nInj > 0) {
+                let qCumulM3s = 0;
+                _injList.forEach(a => {
+                    const q = parseFloat((a && (a.debit_moyen_m3s !== undefined ? a.debit_moyen_m3s : a.q_base_m3s)) || 0);
+                    if (isFinite(q)) qCumulM3s += q;
+                });
+                const qLs = (qCumulM3s * 1000).toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 2 });
+                _dwfLeg.innerHTML = `
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px;">
+                        <span style="color: #38bdf8; font-weight: 700;"><i class="fas fa-faucet-drip me-1"></i> Apports DWF :</span>
+                        <span style="font-weight: 800; color: #38bdf8; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); padding: 1px 6px; border-radius: 4px; font-size: 10px;"><b>${nInj} injecté${nInj > 1 ? 's' : ''}</b></span>
+                    </div>
+                    <div style="font-size: 10px; color: #cbd5e1; display: flex; justify-content: space-between; align-items: center;">
+                        <span>Débit moyen cumulé :</span>
+                        <b style="color: #6ee7b7;">${qLs} L/s</b>
+                    </div>
+                    ${nIgn > 0 ? `<div style="font-size: 9.5px; color: #fbbf24; margin-top: 2px;"><i class="fas fa-exclamation-circle me-1"></i> ${nIgn} ignoré(s)</div>` : ''}
+                `;
+            } else {
+                _dwfLeg.innerHTML = `<i class="fas fa-faucet-drip me-1"></i> Apports DWF : <b>aucun injecté</b>${nIgn > 0 ? ` — ${nIgn} ignoré(s)` : ''}`;
+            }
+        }
+    } else {
+        if (_dwfMarkerRow) _dwfMarkerRow.style.display = 'none';
+        if (_dwfLeg) {
+            _dwfLeg.style.display = 'none';
+            _dwfLeg.innerHTML = '';
+        }
+    }
+};
+
+// ==========================================
+// POINTS 2 & 3 : COUCHES RÉSULTATS SWMM 5.2
+// ==========================================
+window._afficherResultatsSimulationNu = function(data, force = false) {
             // Garde anti-récursion : l'affichage chaîne highlightCluster →
             // gererAffichageSimulationPourBassin → ré-affiche les résultats,
             // ce qui bouclait indéfiniment (« Maximum call stack size
@@ -139,6 +215,9 @@ function _masquerMenuInfobullesSim() {
                 window.couches && window.couches.res_conduites &&
                 window.carte && window.carte.hasLayer(window.couches.res_conduites) &&
                 window.couches.res_conduites.getLayers().length > 0) {
+                if (typeof window.actualiserLegendeDwf === 'function') {
+                    window.actualiserLegendeDwf(data);
+                }
                 return;
             }
 
@@ -172,22 +251,8 @@ function _masquerMenuInfobullesSim() {
             // LOT P1.5.3 — traçabilité DWF dans la légende : réutilise la
             // provenance existante (provenance.apports_dwf du résultat),
             // jamais de mécanisme parallèle.
-            const _dwfProv = (data && data.provenance && data.provenance.apports_dwf)
-                || (data && data.kpis && data.kpis.provenance
-                    ? data.kpis.provenance.apports_dwf : null);
-            const _dwfLeg = document.getElementById('sim-legend-dwf-info');
-            if (_dwfLeg) {
-                if (_dwfProv) {
-                    const nInj = Array.isArray(_dwfProv.injectes) ? _dwfProv.injectes.length : 0;
-                    const nIgn = Array.isArray(_dwfProv.ignores) ? _dwfProv.ignores.length : 0;
-                    _dwfLeg.style.display = 'block';
-                    _dwfLeg.innerHTML = nInj > 0
-                        ? `<i class="fas fa-faucet-drip me-1"></i> Apports DWF : <b>${nInj} injecté(s)</b>${nIgn > 0 ? ` — ${nIgn} ignoré(s)` : ''}`
-                        : `<i class="fas fa-faucet-drip me-1"></i> Apports DWF : <b>aucun injecté</b>${nIgn > 0 ? ` — ${nIgn} ignoré(s)` : ''}`;
-                } else {
-                    _dwfLeg.style.display = 'none';
-                    _dwfLeg.innerHTML = '';
-                }
+            if (typeof window.actualiserLegendeDwf === 'function') {
+                window.actualiserLegendeDwf(data);
             }
 
             // P0 — couleur dérivée du STATUT sémantique et des ratios physiques SWMM :
@@ -422,17 +487,28 @@ function _masquerMenuInfobullesSim() {
                 const simNodesSet = new Set((data.meta && data.meta.simulated_nodes || []).map(String));
 
                 const injectesDwfMap = {};
-                const _provDwf = (data && data.provenance && data.provenance.apports_dwf)
-                    || (data && data.kpis && data.kpis.provenance ? data.kpis.provenance.apports_dwf : null);
-                if (_provDwf && Array.isArray(_provDwf.injectes)) {
-                    _provDwf.injectes.forEach(a => {
-                        if (a && a.node_id != null) {
-                            const k = String(a.node_id).trim();
-                            injectesDwfMap[k] = a;
-                            if (k.endsWith('.0')) injectesDwfMap[k.slice(0, -2)] = a;
-                        }
-                    });
+                let _listeInjectesDwf = [];
+                if (typeof window.dwfExtraireProvenance === 'function') {
+                    const _ext = window.dwfExtraireProvenance(data);
+                    if (_ext && Array.isArray(_ext.injectes)) _listeInjectesDwf = _ext.injectes;
                 }
+                if (_listeInjectesDwf.length === 0) {
+                    const _provDwf = (data && data.provenance && data.provenance.apports_dwf)
+                        || (data && data.kpis && data.kpis.provenance ? data.kpis.provenance.apports_dwf : null);
+                    if (_provDwf) {
+                        if (Array.isArray(_provDwf.injectes)) _listeInjectesDwf = _provDwf.injectes;
+                        else if (Array.isArray(_provDwf)) _listeInjectesDwf = _provDwf;
+                    } else if (data && data.meta && Array.isArray(data.meta.apports_dwf)) {
+                        _listeInjectesDwf = data.meta.apports_dwf;
+                    }
+                }
+                _listeInjectesDwf.forEach(a => {
+                    if (a && a.node_id != null) {
+                        const k = String(a.node_id).trim();
+                        injectesDwfMap[k] = a;
+                        if (k.endsWith('.0')) injectesDwfMap[k.slice(0, -2)] = a;
+                    }
+                });
 
                 L.geoJSON(nodesGeo, {
                     pane: 'swmmNodesPane',

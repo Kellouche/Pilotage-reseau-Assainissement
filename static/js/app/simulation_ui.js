@@ -205,6 +205,9 @@ window.dessinerRaccordementsOrphelinsSurCarte = function() {
                 if (leg && window._dernierResultatSimulation) {
                     leg.classList.add('active-legend');
                     leg.style.display = 'block';
+                    if (typeof window.actualiserLegendeDwf === 'function') {
+                        window.actualiserLegendeDwf(window._dernierResultatSimulation);
+                    }
                 }
 
                 // Déclencher un recentrage et zoom fluide précis sur la zone simulée

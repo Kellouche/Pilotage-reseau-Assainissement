@@ -259,6 +259,7 @@
                         <div style="font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">Regards de Visite :</div>
                         <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 3px;"><span style="display:inline-block; width:11px; height:11px; background:#ea580c; border-radius:50%; border:2px solid #ffffff;"></span> Surcharge (dans la cheminée)</div>
                         <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 8px;"><span style="display:inline-block; width:11px; height:11px; background:#dc2626; border-radius:50%; border:2px solid #ffffff;"></span> Débordement (eau déversée au sol)</div>
+                        <div id="sim-legend-dwf-marker-row" style="display:none; align-items: center; gap: 7px; margin-bottom: 8px;"><span style="display:inline-block; width:11px; height:11px; background:#0284c7; border-radius:50%; border:2px solid #06b6d4; box-shadow:0 0 5px #06b6d4;"></span> Regard avec apport DWF</div>
 
                         <!-- LOT P1.5.3 — traçabilité des apports DWF injectés -->
                         <div id="sim-legend-dwf-info" style="display:none; margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(52,211,153,0.3); font-size: 10.5px; color: #6ee7b7;"></div>
@@ -269,6 +270,9 @@
         };
 
         simulationLegendControl.addTo(carte);
+        if (typeof window.actualiserLegendeDwf === 'function' && window._dernierResultatSimulation) {
+            window.actualiserLegendeDwf(window._dernierResultatSimulation);
+        }
 
         // ==========================================
         // BARRE D'OUTILS D'ÉDITION HYDRAULIQUE (CONTRÔLE LEAFLET INTÉGRÉ)
