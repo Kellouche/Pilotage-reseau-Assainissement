@@ -1,8 +1,8 @@
 # SWMM Platform — Plateforme SaaS Collaborative des Réseaux d'Assainissement & Eaux Pluviales
 
 > **Plateforme SaaS Multi-Tenant d'Aide à la Décision, Contrôle Qualité SIG, Analyse Morphologique MNT, Modélisation Dynamique EPA SWMM 5.2 et Synchronisation Mobile Terrain**  
-> **Version :** SaaS 2.0 (FastAPI Unifié, Multi-Tenant PostgreSQL/PostGIS, Stockage S3/MinIO, Worker Asynchrone Celery/Redis, Application Mobile Offline)  
-> **Date :** Octobre 2026
+> **Version :** SaaS 2.0 (API FastAPI unifiée, multi-tenant, stockage d'artefacts S3-compatible, worker asynchrone Celery/Redis, application mobile Flutter)  
+> **Date :** Novembre 2026
 
 ---
 
@@ -57,20 +57,7 @@
 
 ## 🚀 Démarrage Rapide
 
-### 1. Via Docker Compose (Recommandé en Production / Staging)
-
-L'environnement complet (PostgreSQL 16 PostGIS, Redis 7, MinIO S3, Serveur Web FastAPI, Worker Asynchrone Celery, Mailpit) démarre en une seule commande :
-
-```bash
-docker compose up -d
-```
-
-- **Application Web & Cartographie :** `http://localhost:5001/`
-- **Documentation API Interactive (Swagger) :** `http://localhost:5001/docs`
-- **Console MinIO S3 :** `http://localhost:9001` (`minioadmin` / `minioadmin_secret_2026`)
-- **Webmail de Test (Mailpit) :** `http://localhost:8025`
-
-### 2. En Environnement Local (Développement)
+### 1. Environnement Local (Développement)
 
 ```bash
 # Activation de l'environnement virtuel Python
@@ -79,9 +66,26 @@ docker compose up -d
 # Lancement des tests de non-régression hydraulique (Golden Master)
 pytest tests/ -v
 
-# Lancement de l'API unifiée FastAPI
+# Lancement de l'API unifiée FastAPI (port 5002, auto-reload)
 python run_api.py
 ```
+
+- **Application Web & Cartographie :** `http://localhost:5002/`
+- **Documentation API Interactive (Swagger) :** `http://localhost:5002/docs`
+- **Santé du service :** `http://localhost:5002/health`
+
+> **Base de données :** PostgreSQL est la cible de production ; en
+> développement l'API bascule automatiquement sur SQLite
+> (`swmm_platform.db`) si PostgreSQL est indisponible. Les artefacts sont
+> stockés localement (`LocalStore`) ou sur S3/MinIO via les variables `S3_*`.
+
+### 2. Conteneurisation (cible d'industrialisation)
+
+L'architecture cible vise PostgreSQL/PostGIS, Redis, MinIO S3, l'API FastAPI,
+un worker Celery et un reverse proxy TLS (voir
+[13_ROADMAP_SAAS.md](13_ROADMAP_SAAS.md) phase 7 et les ADR 0003–0005).
+Le `docker-compose` de production est un livrable de la phase
+d'industrialisation — il n'est pas encore livré dans ce dépôt.
 
 ---
 

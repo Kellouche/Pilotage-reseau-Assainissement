@@ -2,14 +2,7 @@
 
 ## Statut retenu
 
-La piste mobile officielle de la phase 1 est l'application Flutter située
-dans `mobile/`.
-
-Les autres pistes restent à part :
-
-- `swmm_mobile_flutter/` : prototype Flutter expérimental, à archiver ou confirmer ;
-- `mobile_app.html` : prototype web autonome, utile pour comparaison mais non officiel ;
-- scripts `final_fix.bat`, `fix_and_launch.bat`, `launch_final.bat`, `launch_mobile_app.bat` : scripts ponctuels à auditer avant conservation.
+La piste mobile officielle est l'application Flutter située dans `mobile/`.
 
 ## Lancement
 
@@ -28,31 +21,26 @@ cd mobile
 flutter run -d chrome
 ```
 
-Remarque : la compilation native Android a été vérifiée en phase 1. Le mode web
-reste utile pour les essais rapides, mais il devra être stabilisé séparément si la
-plateforme web mobile devient un livrable officiel.
+Remarque : la compilation native Android a été vérifiée. Le mode web
+reste utile pour les essais rapides.
 
 ## Configuration de l'API
 
-L'application lit l'URL du backend depuis le fichier `.env`.
-
-Créer un fichier local `mobile/.env` à partir de :
+L'application lit l'URL du backend via la variable d'environnement compilée
+`API_BASE_URL` (`String.fromEnvironment` dans
+`mobile/lib/services/api_service.dart`, défaut `http://127.0.0.1:5002`).
+Elle se passe à la compilation avec `--dart-define` :
 
 ```bash
-copy mobile\.env.example mobile\.env
+cd mobile
+flutter run --dart-define=API_BASE_URL=http://127.0.0.1:5002
 ```
 
-Valeur par défaut :
+Pour un téléphone physique, `127.0.0.1` pointe vers le téléphone lui-même.
+Il faut utiliser l'adresse IP locale de la machine qui exécute FastAPI :
 
-```env
-API_BASE_URL=http://127.0.0.1:5001
-```
-
-Pour un téléphone physique, `127.0.0.1` pointe vers le téléphone lui-même. Il faut
-utiliser l'adresse IP locale de la machine qui exécute FastAPI, par exemple :
-
-```env
-API_BASE_URL=http://192.168.1.10:5001
+```bash
+flutter run --dart-define=API_BASE_URL=http://192.168.1.10:5002
 ```
 
 ## Contenu versionné
@@ -70,7 +58,6 @@ API_BASE_URL=http://192.168.1.10:5001
 
 - `mobile/build/`
 - `mobile/.dart_tool/`
-- `mobile/.env`
 
 ## Tests et vérifications
 

@@ -1,205 +1,401 @@
-# Documentation Complète des Endpoints API — SWMM Platform SaaS
+# Documentation des Endpoints API — DrainPilot 5.2
 
-> **Plateforme SaaS Multi-Tenant de Diagnostic, Qualité et Modélisation Hydraulique des Réseaux d'Assainissement (EPA SWMM 5.2)**  
-> **Dernière mise à jour :** 28 Octobre 2026  
-> **Architecture :** API unifiée FastAPI (`api.main:app`), Multi-Tenant PostgreSQL/PostGIS, Stockage S3/MinIO, Worker Asynchrone Celery/Redis, RBAC et Passerelle Mobile Offline-First.  
-> **Format d'échange :** JSON (UTF-8), GeoJSON pour les couches spatiales, binaire pour les rasters et exports `.inp`/PDF.
-
----
-
-## 1. Vue d'Ensemble de l'Architecture API
-
-L'API de SWMM Platform SaaS expose une architecture RESTful moderne sous le préfixe universel `/api/v1` et des canaux WebSocket pour les événements temps réel sous `/ws`.
-
-### Rôles et Niveaux d'Accès RBAC :
-- **`superadmin`** : Opérateur général de la plateforme SaaS. Accès exclusif à la console `/api/v1/admin/*` avec règle d'invisibilité stricte (renvoie `404 Not Found` pour tout autre utilisateur).
-- **`admin` (Owner Org)** : Administrateur de l'organisation locataire (`org_id`). Gestion de l'équipe, devis proforma, bons de commande et licences.
-- **`engineer`** : Ingénieur d'études et hydraulicien. Droit d'importation des réseaux, correction des anomalies, lancement de simulations SWMM 5.2 et génération de rapports.
-- **`field_operator`** : Technicien et agent d'exploitation de terrain. Accès à la synchronisation mobile offline, signalement et mise à jour des anomalies in situ.
-- **`viewer`** : Observateur institutionnel en lecture seule.
+> **Plateforme SaaS Multi-Tenant d'Aide à la Décision, Contrôle Qualité SIG,
+> Analyse Morphologique MNT, Modélisation Dynamique EPA SWMM 5.2 et
+> Synchronisation Mobile Terrain**
+> **Dernière mise à jour :** 22 Novembre 2026
+> **Architecture :** API unifiée FastAPI (`api.main:app`), multi-tenant,
+> stockage d'artefacts `ArtifactStore` (local en dev, S3 en prod),
+> worker asynchrone Celery/Redis, RBAC et passerelle mobile.
+> **Format d'échange :** JSON (UTF-8), GeoJSON pour les couches spatiales,
+> binaire pour les rasters et exports `.inp`/`.rpt`/PDF.
 
 ---
 
-## 2. Administration SaaS & Opérateur Plateforme
+## 1. Vue d'ensemble
 
-*Préfixe : `/api/v1/admin`*  
-*Protection : Dépendance `Depends(require_superadmin)` — Règle d'invisibilité HTTP 404.*
+Toutes les routes métier sont exposées sous le préfixe `/api/v1`.
+Les exceptions notables :
 
-| Méthode | Endpoint | Description | Paramètres / Corps | Statut Succès |
-|---|---|---|---|---|
-| `GET` | `/api/v1/admin/subscribers` | Liste consolidée de tous les locataires abonnés (organisations, plans, compteurs). | `status`, `plan`, `page`, `limit` | `200 OK` |
-| `POST` | `/api/v1/admin/subscribers/{org_id}/extend-trial` | Prolongation manuelle d'une période d'évaluation (+14 jours par défaut). | `days: int` | `200 OK` |
-| `POST` | `/api/v1/admin/subscribers/{org_id}/change-plan` | Mutation de plan forcée (`demo`, `education`, `bet`, `exploitation`). | `new_plan: str`, `reason: str` | `200 OK` |
-| `POST` | `/api/v1/admin/subscribers/{org_id}/toggle-status` | Suspension conservatoire ou réactivation immédiate d'une organisation. | `active: bool` | `200 OK` |
-| `GET` | `/api/v1/admin/licenses` | Registre des bons de commande administratifs en attente de validation. | `filter_status: str` | `200 OK` |
-| `POST` | `/api/v1/admin/licenses/{order_id}/approve` | Approbation officielle d'un bon de commande et émission du jeton de licence. | `order_id: UUID` | `200 OK` |
-| `POST` | `/api/v1/admin/licenses/{order_id}/reject` | Rejet d'un bon de commande avec motif officiel notifié à l'organisation. | `reason: str` | `200 OK` |
-| `POST` | `/api/v1/admin/licenses/create-token` | Génération directe d'un jeton de licence cryptographique autonome. | `org_id`, `plan`, `expires_at`, `max_nodes` | `201 Created` |
+- `GET /health` — sonde de santé à la racine (pas sous `/api/v1`) ;
+- `GET /api/v1/jobs/ws/{job_id}` — WebSocket temps réel de progression des jobs.
 
----
+### Authentification
 
-## 3. Organisation, Collaborateurs & Facturation B2B
+Deux modes acceptés sur les routes protégées :
 
-*Préfixe : `/api/v1/organization`*  
-*Protection : `Depends(get_current_tenant_org)` et rôle `admin`.*
+- **Cookie de session** `access_token` (interface web cockpit) ;
+- **`Authorization: Bearer <JWT>`** (mobile, scripts, intégrations).
 
-| Méthode | Endpoint | Description | Paramètres / Corps | Statut Succès |
-|---|---|---|---|---|
-| `GET` | `/api/v1/organization/profile` | Informations légales et quotas d'utilisation de l'organisation courante. | — | `200 OK` |
-| `GET` | `/api/v1/organization/collaborators` | Annuaire des collaborateurs de l'organisation et rôles associés. | — | `200 OK` |
-| `POST` | `/api/v1/organization/collaborators/invite` | Invitation d'un nouveau collaborateur (Ingénieur, Opérateur terrain, etc.). | `email`, `role`, `full_name` | `201 Created` |
-| `PUT` | `/api/v1/organization/collaborators/{user_id}/role` | Modification du rôle d'un membre de l'équipe sous contrôle de quota. | `role: str` | `200 OK` |
-| `DELETE` | `/api/v1/organization/collaborators/{user_id}` | Révocation d'un membre de l'organisation (préservation des données créées). | — | `204 No Content` |
-| `GET` | `/api/v1/organization/license` | État de la licence active, jours restants et historique des commandes. | — | `200 OK` |
-| `GET` | `/api/v1/organization/license/proforma` | Génération et téléchargement instantané du devis proforma officiel (PDF). | `plan`, `duration_months`, `currency` | `200 OK (PDF)` |
-| `POST` | `/api/v1/organization/license/purchase-order` | Soumission du bon de commande administratif avec fichier justificatif scanné. | `multipart/form-data` (file, reference) | `202 Accepted` |
-| `POST` | `/api/v1/organization/license/activate-token` | Activation d'une licence par saisie du jeton cryptographique officiel. | `token: str` | `200 OK` |
+### Rôles RBAC
+
+| Rôle | Niveau | Usage |
+|---|---|---|
+| `superadmin` | Plateforme | Console opérateur `/api/v1/admin/*` — invisibilité stricte (404) pour les autres |
+| `owner` / `admin` | Organisation | Équipe, licences, facturation proforma, bons de commande |
+| `engineer` | Organisation | Import réseaux, corrections, simulations SWMM, exports |
+| `field_operator` | Organisation | Synchronisation mobile, terrain, incidents |
+| `viewer` | Organisation | Lecture seule |
+
+Le contexte tenant est injecté par `TenantContext` (`api/core/security.py`) ;
+l'acteur authentifié est `ctx.actor`, l'organisation `ctx.org`.
 
 ---
 
-## 4. Authentification, Sessions & Profils
+## 2. Authentification & Sessions — `/api/v1/auth`
 
-*Préfixe : `/api/v1/auth`*  
-*Protection : Publique pour login/register ; session active pour `me` et `logout`.*
-
-| Méthode | Endpoint | Description | Paramètres / Corps | Statut Succès |
-|---|---|---|---|---|
-| `POST` | `/api/v1/auth/register` | Création d'une nouvelle organisation et du compte administrateur associé. | `org_name`, `email`, `password`, `full_name` | `201 Created` |
-| `POST` | `/api/v1/auth/login` | Connexion par identifiants (renvoie cookie de session web et JWT Bearer mobile). | `username` (email), `password` | `200 OK` |
-| `POST` | `/api/v1/auth/refresh` | Renouvellement du token JWT d'accès court via le refresh token mobile. | `refresh_token: str` | `200 OK` |
-| `POST` | `/api/v1/auth/logout` | Déconnexion, révocation du jeton en base et suppression des cookies. | — | `200 OK` |
-| `GET` | `/api/v1/auth/me` | Profil de l'utilisateur connecté, permissions et informations de son organisation. | — | `200 OK` |
-| `PUT` | `/api/v1/auth/me/password` | Modification du mot de passe avec re-hachage immédiat en Argon2id. | `old_password`, `new_password` | `200 OK` |
-
----
-
-## 5. Gestion des Projets et Réseaux d'Assainissement
-
-*Préfixe : `/api/v1/networks`*  
-*Protection : `Depends(get_current_tenant_org)` et rôle `engineer` ou supérieur.*
-
-| Méthode | Endpoint | Description | Paramètres / Corps | Statut Succès |
-|---|---|---|---|---|
-| `GET` | `/api/v1/networks` | Liste des réseaux et projets d'assainissement de l'organisation. | `page`, `limit` | `200 OK` |
-| `POST` | `/api/v1/networks/upload` | Téléversement d'un nouveau réseau (GeoPackage, Shapefile zippé ou `.inp`). | `file: UploadFile`, `name: str` | `202 Accepted` |
-| `GET` | `/api/v1/networks/{network_id}` | Détail d'un réseau (statistiques : nombre de regards, collecteurs, STEP, statut). | `network_id: UUID` | `200 OK` |
-| `DELETE` | `/api/v1/networks/{network_id}` | Suppression sécurisée d'un réseau et de ses artefacts associés sur S3. | `network_id: UUID` | `204 No Content` |
-| `GET` | `/api/v1/networks/{network_id}/nodes` | Récupération des regards/nœuds au format GeoJSON optimisé avec pagination. | `bbox`, `type`, `limit`, `offset` | `200 OK (GeoJSON)` |
-| `GET` | `/api/v1/networks/{network_id}/conduits` | Récupération des conduites/collecteurs au format GeoJSON avec attributs hydrauliques. | `bbox`, `diametre_min`, `limit` | `200 OK (GeoJSON)` |
-| `GET` | `/api/v1/networks/{network_id}/stats` | Statistiques globales : linéaire total (km), répartition par diamètre et matériau. | — | `200 OK` |
-| `GET` | `/api/v1/network/subcatchments` | Découpage et extraction des 59 sous-bassins versants Voronoï au format GeoJSON avec surfaces ($ha$), imperméabilisation, pente et regard exutoire. | — | `200 OK (GeoJSON)` |
-| `POST` | `/api/v1/network/load-demo` | Chargement instantané de l'échantillon réseau témoin (58 conduites, 59 regards, 1 rejet). | — | `200 OK` |
+| Méthode | Endpoint | Description | Statut |
+|---|---|---|---|
+| `POST` | `/api/v1/auth/register` | Création organisation + compte admin (201) | `201` |
+| `POST` | `/api/v1/auth/verify-email` | Vérification email / activation du compte | `200` |
+| `POST` | `/api/v1/auth/resend-code` | Renvoi du code de vérification | `200` |
+| `GET` | `/api/v1/auth/check-email` | Vérifie la disponibilité d'un email | `200` |
+| `POST` | `/api/v1/auth/login` | Connexion (cookie session + JWT Bearer) | `200` |
+| `POST` | `/api/v1/auth/refresh` | Renouvellement du token d'accès | `200` |
+| `POST` | `/api/v1/auth/logout` | Déconnexion, révocation du jeton | `200` |
+| `GET` | `/api/v1/auth/me` | Profil utilisateur, rôle, organisation | `200` |
+| `PATCH` | `/api/v1/auth/profile` | Mise à jour du profil | `200` |
+| `POST` | `/api/v1/auth/change-password` | Changement de mot de passe (re-hachage Argon2id) | `200` |
+| `GET` | `/api/v1/auth/api-keys` | Liste des clés API personnelles | `200` |
+| `POST` | `/api/v1/auth/api-keys` | Création d'une clé API (201) | `201` |
+| `DELETE` | `/api/v1/auth/api-keys/{key_id}` | Révocation d'une clé API | `204` |
 
 ---
 
-## 6. Audit Qualité & Détection d'Anomalies Topologiques
+## 3. Réseau d'assainissement — `/api/v1/network`
 
-*Préfixe : `/api/v1/qualite`*  
-*Protection : `Depends(get_current_tenant_org)`.*
+CRUD sur les couches métier du GeoPackage actif du projet, données servies
+en WGS84 pour Leaflet.
 
-| Méthode | Endpoint | Description | Paramètres / Corps | Statut Succès |
-|---|---|---|---|---|
-| `GET` | `/api/v1/qualite/{network_id}/analyse` | Rapport complet d'audit de santé du réseau avec score global (0 à 100). | `network_id: UUID` | `200 OK` |
-| `GET` | `/api/v1/qualite/{network_id}/anomalies` | Liste filtrable de toutes les anomalies détectées (contre-pentes, sauts, doublons). | `type`, `severite`, `statut` | `200 OK` |
-| `GET` | `/api/v1/qualite/{network_id}/anomalies/{type}` | Détail et localisation des anomalies pour un type précis (ex: `contre_pente`). | `type: str` | `200 OK` |
-| `POST` | `/api/v1/qualite/{network_id}/anomalies/{anomaly_id}/corriger` | Application d'un correctif topologique (inversion de sens, ajustement de cote). | `nouveau_radier`, `motif` | `200 OK` |
-| `GET` | `/api/v1/qualite/{network_id}/scores` | Décomposition détaillée des sous-scores de qualité (géométrie, connectivité, pente). | — | `200 OK` |
-| `POST` | `/api/v1/qualite/{network_id}/export-csv` | Export tabulaire complet des anomalies pour traitement bureautique externe. | `filtres` | `200 OK (CSV)` |
+| Méthode | Endpoint | Description | Statut |
+|---|---|---|---|
+| `GET` | `/api/v1/network/regards` | Liste des regards (pagination/filtres) | `200` |
+| `GET` | `/api/v1/network/regards/{regard_id}` | Détail d'un regard | `200` |
+| `POST` | `/api/v1/network/regards` | Création d'un regard | `201` |
+| `PATCH` | `/api/v1/network/regards/{regard_id}` | Modification d'un regard | `200` |
+| `DELETE` | `/api/v1/network/regards/{regard_id}` | Suppression d'un regard | `204` |
+| `GET` | `/api/v1/network/conduites` | Liste des conduites/collecteurs | `200` |
+| `GET` | `/api/v1/network/conduites/{conduite_id}` | Détail d'une conduite | `200` |
+| `POST` | `/api/v1/network/conduites` | Création d'une conduite | `201` |
+| `PATCH` | `/api/v1/network/conduites/{conduite_id}` | Modification d'une conduite | `200` |
+| `DELETE` | `/api/v1/network/conduites/{conduite_id}` | Suppression d'une conduite | `204` |
+| `GET` | `/api/v1/network/rejets` | Liste des rejets/exutoires | `200` |
+| `POST` | `/api/v1/network/rejets` | Création d'un rejet | `201` |
 
----
+### Projets, datasets & imports
 
-## 7. Graphe Hydraulique & Clusters de Bassins
+| Méthode | Endpoint | Description | Statut |
+|---|---|---|---|
+| `GET` | `/api/v1/network/datasets` | Liste des datasets/projets de l'organisation (+ `active_project`) | `200` |
+| `POST` | `/api/v1/network/load-dataset/{dataset_id}` | Active un dataset existant comme projet courant | `200` |
+| `POST` | `/api/v1/network/load-demo` | Charge le réseau témoin de démonstration | `200` |
+| `POST` | `/api/v1/network/load-master` | Charge le réseau maître de référence | `200` |
+| `POST` | `/api/v1/network/reset` | Réinitialise le contexte réseau actif | `200` |
+| `POST` | `/api/v1/network/upload` | Import d'un réseau (GeoPackage, shapefile zippé, `.inp`) | `200/202` |
+| `GET` | `/api/v1/network/subcatchments` | Sous-bassins Voronoï au format GeoJSON (surfaces ha, imperméabilisation, pente, exutoire) | `200 (GeoJSON)` |
+| `GET` | `/api/v1/network/orphelins/geojson` | Regards orphelins / non raccordés au format GeoJSON | `200 (GeoJSON)` |
+| `GET` | `/api/v1/network/export/inp` | Export du modèle SWMM `.inp` du réseau courant | `200 (INP)` |
 
-*Préfixe : `/api/v1/clusters`*  
-*Protection : `Depends(get_current_tenant_org)`.*
-
-| Méthode | Endpoint | Description | Paramètres / Corps | Statut Succès |
-|---|---|---|---|---|
-| `GET` | `/api/v1/clusters/{network_id}` | Liste des clusters hydrauliques identifiés (sous-réseaux connexes gravitaires). | — | `200 OK` |
-| `GET` | `/api/v1/clusters/{network_id}/{cluster_id}/graphe` | Graphe orienté amont-aval du cluster avec sens d'écoulement et débits cumulés. | `cluster_id: str` | `200 OK (JSON)` |
-| `GET` | `/api/v1/clusters/{network_id}/exutoires` | Identification de tous les points bas, déversoirs d'orage et rejets exutoires. | — | `200 OK` |
-| `POST` | `/api/v1/clusters/{network_id}/recalculer` | Lancement asynchrone du partitionnement de graphe suite à des corrections topologiques. | — | `202 Accepted` |
-
----
-
-## 8. Analyse Morphologique MNT & Bassins Versants
-
-*Préfixe : `/api/v1/mnt`*  
-*Protection : `Depends(get_current_tenant_org)` et vérification du Feature Gating.*
-
-| Méthode | Endpoint | Description | Paramètres / Corps | Statut Succès |
-|---|---|---|---|---|
-| `POST` | `/api/v1/mnt/{network_id}/upload` | Téléversement d'un raster Modèle Numérique de Terrain (`.tif`) vers le stockage S3. | `file: UploadFile` | `202 Accepted` |
-| `POST` | `/api/v1/mnt/{network_id}/extraire-bassins` | Lancement de la tâche asynchrone de délimitation des sous-bassins par analyse de crêtes. | `resolution: float`, `seuil_accumulation: int` | `202 Accepted` |
-| `GET` | `/api/v1/mnt/{network_id}/bassins` | Récupération des polygones de sous-bassins versants générés au format GeoJSON. | — | `200 OK (GeoJSON)` |
-| `GET` | `/api/v1/mnt/{network_id}/profil-long` | Extraction du profil en long (terrain naturel vs radier) sur un parcours de collecteur. | `start_node`, `end_node` | `200 OK` |
+> **Contexte spatial (snapshot)** : les endpoints de lecture spatiale
+> (`/layers`, `/simulations/latest`, `/aux-layers/*`, etc.) acceptent le
+> paramètre `snapshot` (version_id ou sha256) pour lire le GeoPackage
+> **exact** ayant produit une simulation archivée — jamais le réseau courant.
 
 ---
 
-## 9. Simulations Hydrauliques EPA SWMM 5.2 & Jobs Asynchrones
+## 4. Qualité du réseau — `/api/v1/qualite`
 
-*Préfixes : `/api/v1/simulations` et `/api/v1/jobs`*  
-*Protection : `Depends(get_tenant_context_optional)` / session active.*
+Analyse topologique du réseau actif (anti-inversions, sauts de radier,
+doublons, cohérence amont/aval…). Le réseau analysé est celui du contexte
+projet actif ; `project_id` peut être passé en query pour cibler un projet.
 
-### 9.1 Endpoints du Solveur SWMM 5.2 Natif (DYNWAVE) :
-
-| Méthode | Endpoint | Description | Paramètres / Corps | Statut Succès |
-|---|---|---|---|---|
-| `GET` | `/api/v1/simulations/scenarios` | Liste des scénarios pluviométriques prédéfinis (Montana / Chicago, durées, solver DYNWAVE). | — | `200 OK` |
-| `POST` | `/api/v1/simulations/run` | Exécution de la simulation hydrodynamique native EPA SWMM 5.2 avec Saint-Venant 1D, découpage Voronoï et infiltration Horton. | `scenario_key: str`, `duree_heures: float`, `pas_routage_sec: int` | `200 OK (Synthèse & Cartographies)` |
-| `GET` | `/api/v1/simulations/latest` | Récupération immédiate des résultats et couches thématiques de la dernière simulation (persistance sans recalcul). | — | `200 OK` |
-| `GET` | `/api/v1/simulations/download/inp` | Téléchargement direct du fichier source modèle `.INP` assemblé pour la dernière simulation. | — | `200 OK (INP)` |
-| `GET` | `/api/v1/simulations/download/rpt` | Téléchargement officiel du rapport de calcul complet `.RPT` certifié EPA SWMM. | — | `200 OK (RPT)` |
-| `GET` | `/api/v1/simulations/profil-en-long` | Calcul du profil en long hydraulique et de la ligne de charge ($HGL$) le long du chemin amont-aval sélectionné. | `node_amont: str`, `node_aval: str` | `200 OK (Profil & Alertes)` |
-
-### 9.2 Endpoints des Tâches Asynchrones & Historique :
-
-| Méthode | Endpoint | Description | Paramètres / Corps | Statut Succès |
-|---|---|---|---|---|
-| `POST` | `/api/v1/simulations/{network_id}/generer-inp` | Compilation et génération du modèle officiel SWMM 5.2 (`.inp`) depuis le réseau assaini. | `options_calcul: dict` | `201 Created` |
-| `POST` | `/api/v1/simulations/{network_id}/lancer` | Lancement d'une simulation dynamique SWMM en tâche de fond sur le worker Celery. | `scenario_pluie`, `duree_heures` | `202 Accepted (job_id)`|
-| `GET` | `/api/v1/jobs/{job_id}` | Consultation du statut d'avancement d'un job asynchrone (pourcentage, étape, erreurs). | `job_id: UUID` | `200 OK` |
-| `DELETE` | `/api/v1/jobs/{job_id}` | Annulation d'une simulation en cours d'exécution. | `job_id: UUID` | `200 OK` |
-| `GET` | `/api/v1/simulations/{sim_id}/resultats` | Synthèse des résultats de calcul : nœuds inondés, collecteurs en charge, hydrogrammes. | `sim_id: UUID` | `200 OK` |
-| `GET` | `/api/v1/simulations/{sim_id}/series-temporelles` | Extraction des chroniques de débit ou hauteur sur un nœud ou une conduite précise. | `element_id`, `variable` | `200 OK` |
-| `GET` | `/api/v1/simulations/{sim_id}/telecharger-inp` | Téléchargement du fichier d'entrée `.inp` complet pour réouverture sous SWMM Desktop. | — | `200 OK (INP)` |
+| Méthode | Endpoint | Description | Statut |
+|---|---|---|---|
+| `GET` | `/api/v1/qualite/analyse` | Rapport complet d'audit qualité | `200` |
+| `GET` | `/api/v1/qualite/diagnostic` | Diagnostic tunnel / vue synthétique | `200` |
+| `GET` | `/api/v1/qualite/anomalies/{type_anomalie}` | Détail des anomalies d'un type donné | `200` |
+| `GET` | `/api/v1/qualite/scores` | Décomposition des sous-scores de qualité | `200` |
+| `GET` | `/api/v1/qualite/scores-bassins` | Scores de qualité par bassin versant | `200` |
+| `GET` | `/api/v1/qualite/statistiques` | Statistiques globales du réseau | `200` |
+| `POST` | `/api/v1/qualite/valider-incremental` | Validation incrémentale d'anomalies | `200` |
+| `POST` | `/api/v1/qualite/export-csv` | Export CSV des anomalies | `200 (CSV)` |
+| `GET` | `/api/v1/qualite/cache/status` | État du cache d'analyse | `200` |
+| `DELETE` | `/api/v1/qualite/cache` | Purge du cache d'analyse | `200` |
 
 ---
 
-## 10. Passerelle Mobile Terrain & Synchronisation Déconnectée
+## 5. Corrections topologiques — `/api/v1/corrections`
 
-*Préfixes : `/api/v1/sync` et `/api/v1/terrain`*  
-*Protection : JWT valide, organisation active et rôle `field_operator` ou supérieur.*
-
-| Méthode | Endpoint | Description | Paramètres / Corps | Statut Succès |
-|---|---|---|---|---|
-| `GET` | `/api/v1/sync/pull` | Téléchargement du lot de données pour utilisation mobile déconnectée (depuis timestamp).| `since_timestamp: str`, `network_id` | `200 OK (Delta)` |
-| `POST` | `/api/v1/sync/push` | Soumission du lot de mutations enregistrées hors-ligne sur le smartphone. | `mutations: list[dict]` | `200 OK (Rapport)` |
-| `POST` | `/api/v1/terrain/photos/upload` | Téléversement d'une photo géolocalisée d'inspection vers le bucket S3 sécurisé. | `file: UploadFile`, `element_id` | `201 Created` |
-| `GET` | `/api/v1/terrain/inspections/{network_id}` | Historique complet des contrôles et interventions réalisés par les agents mobiles. | `page`, `limit` | `200 OK` |
-| `GET` | `/api/v1/terrain/audit-trail` | Journal d'audit légal et immuable des modifications de cotes et géométries terrain. | `element_id`, `date_debut` | `200 OK` |
+| Méthode | Endpoint | Description | Statut |
+|---|---|---|---|
+| `POST` | `/api/v1/corrections/manuel/{fid}` | Correction manuelle ciblée d'un objet | `200` |
+| `GET` | `/api/v1/corrections/hybride/suggestable_fids` | Liste des objets corrigeables en mode hybride | `200` |
+| `GET` | `/api/v1/corrections/hybride/suggest` | Suggestions de correction hybrides (règles + ML) | `200` |
+| `GET` | `/api/v1/corrections/profile/{fid}` | Profil longitudinal / fiche détaillée d'un objet | `200` |
+| `POST` | `/api/v1/corrections/automatique` | Campagne de corrections automatiques | `200` |
 
 ---
 
-## 11. Rapports d'Audit & Exports Réglementaires
+## 6. Clusters & graphe hydraulique — `/api/v1/clusters`
 
-*Préfixe : `/api/v1/reports`*  
-*Protection : `Depends(get_current_tenant_org)`.*
-
-| Méthode | Endpoint | Description | Paramètres / Corps | Statut Succès |
-|---|---|---|---|---|
-| `POST` | `/api/v1/reports/{network_id}/audit-pdf` | Génération asynchrone du rapport de schéma directeur certifié en PDF haute définition. | `titre`, `inclure_cartes`, `logo` | `202 Accepted` |
-| `GET` | `/api/v1/reports/{report_id}/telecharger` | Téléchargement direct du rapport PDF généré (URL signée S3). | — | `200 OK (PDF)` |
-| `GET` | `/api/v1/reports/{network_id}/export-geopackage` | Export du réseau nettoyé et validé au format standard OGC GeoPackage (`.gpkg`). | — | `200 OK (GPKG)` |
+| Méthode | Endpoint | Description | Statut |
+|---|---|---|---|
+| `GET` | `/api/v1/clusters` | Liste des clusters/bassins hydrauliques | `200` |
+| `GET` | `/api/v1/clusters/status` | Statut du partitionnement courant | `200` |
+| `POST` | `/api/v1/clusters/graph/rebuild` | Reconstruction du graphe de connectivité | `200` |
+| `GET` | `/api/v1/clusters/recalculate-all` | Recalcul global (GET, interne) | `200` |
+| `POST` | `/api/v1/clusters/recalculate-all` | Recalcul global du partitionnement | `200/202` |
+| `POST` | `/api/v1/clusters/manual-basin` | Création d'un bassin manuel (polygone tracé) | `201` |
+| `DELETE` | `/api/v1/clusters/manual-basin/{bassin_id}` | Suppression d'un bassin manuel | `204` |
+| `GET` | `/api/v1/clusters/manual-basin` | Liste des bassins manuels | `200` |
+| `GET` | `/api/v1/clusters/{cluster_id}` | Détail d'un cluster | `200` |
+| `POST` | `/api/v1/clusters/{cluster_id}/recalculate` | Recalcul ciblé d'un cluster | `200/202` |
+| `GET` | `/api/v1/clusters/{cluster_id}/geojson` | Géométrie GeoJSON du cluster | `200 (GeoJSON)` |
+| `GET` | `/api/v1/clusters/{cluster_id}/ouvrages-proches` | Ouvrages à proximité du cluster | `200` |
 
 ---
 
-## 12. Endpoints de Santé et Métriques Système
+## 7. Simulations EPA SWMM 5.2 — `/api/v1/simulations`
 
-*Préfixe : `/api/v1/health`*  
-*Protection : Publique / Monitoring d'infrastructure.*
+Moteur : PySWMM / Saint-Venant 1D (`DYNWAVE`), découpage Voronoï,
+infiltration Horton, hyétographes Chicago/Montana, DWF.
+Exécution synchrone (`/run`) ou asynchrone via Celery (`POST /`).
 
-| Méthode | Endpoint | Description | Paramètres | Statut Succès |
-|---|---|---|---|---|
-| `GET` | `/api/v1/health` | Vérification de l'état global du service (FastAPI, PostgreSQL, Redis, MinIO). | — | `200 OK` |
-| `GET` | `/api/v1/health/ping` | Sonde de vivacité simple (Liveness probe pour conteneurs). | — | `200 OK {"ping": "pong"}` |
+### Pilotage & référentiels
+
+| Méthode | Endpoint | Description | Statut |
+|---|---|---|---|
+| `GET` | `/api/v1/simulations` | Historique des simulations de l'organisation | `200` |
+| `POST` | `/api/v1/simulations` | Lancement asynchrone (retourne `job_id`, 202) | `202` |
+| `GET` | `/api/v1/simulations/scenarios` | Scénarios pluviométriques prédéfinis | `200` |
+| `GET` | `/api/v1/simulations/typologies-sol` | Typologies de sol / paramètres d'infiltration | `200` |
+| `GET` | `/api/v1/simulations/pluviometrie/referentiel` | Référentiel IDF pluviométrie Algérie | `200` |
+| `GET` | `/api/v1/simulations/pluviometrie/stations` | Stations pluviométriques du référentiel | `200` |
+| `POST` | `/api/v1/simulations/pluviometrie/bms-preview` | Aperçu BMS (bulletin météorologique) | `200` |
+| `GET` | `/api/v1/simulations/ouvrages-proches` | Ouvrages proches pour calage spatial | `200` |
+
+### Exécution & résultats
+
+| Méthode | Endpoint | Description | Statut |
+|---|---|---|---|
+| `POST` | `/api/v1/simulations/run` | Exécution synchrone SWMM 5.2 (synthèse + couches thématiques) | `200` |
+| `GET` | `/api/v1/simulations/latest` | Résultats de la dernière simulation (accepte `snapshot`, `simulation_id`) | `200` |
+| `GET` | `/api/v1/simulations/{simulation_id}` | Détail d'une simulation | `200` |
+| `GET` | `/api/v1/simulations/{simulation_id}/resultat` | Résultats persistés d'une simulation archivée | `200` |
+| `DELETE` | `/api/v1/simulations/{simulation_id}` | Suppression d'une simulation | `204` |
+| `GET` | `/api/v1/simulations/job/{job_id}` | Simulation associée à un job | `200` |
+| `GET` | `/api/v1/simulations/status/{job_id}` | Statut d'avancement d'un job | `200` |
+| `GET` | `/api/v1/simulations/cluster/{cluster_id}` | Simulations d'un cluster/bassin | `200` |
+| `GET` | `/api/v1/simulations/bassin/{cluster_id}` | Résultats simulés d'un bassin | `200` |
+| `GET` | `/api/v1/simulations/bassin/{cluster_id}/historique` | Historique des simulations du bassin | `200` |
+| `GET` | `/api/v1/simulations/timeseries` | Séries temporelles Q(t)/y(t) — accepte `simulation_id` et `snapshot` | `200` |
+| `GET` | `/api/v1/simulations/recherche-element` | Recherche d'un regard/conduite par numéro ou nom | `200` |
+| `POST` | `/api/v1/simulations/validate-buffer` | Validation d'un buffer d'étude (extraction pochoir) | `200` |
+| `GET` | `/api/v1/simulations/cotes-suspectes` | Registre des cotes altimétriques suspectes | `200` |
+| `POST` | `/api/v1/simulations/cotes-suspectes/valider` | Validation/correction d'une cote suspecte | `200` |
+
+### Profils, rapports & exports
+
+| Méthode | Endpoint | Description | Statut |
+|---|---|---|---|
+| `GET` | `/api/v1/simulations/profil-en-long` | Profil en long hydraulique HGL le long d'un chemin | `200` |
+| `GET` | `/api/v1/simulations/download/inp` | `.inp` SWMM de la dernière simulation | `200 (INP)` |
+| `GET` | `/api/v1/simulations/download/rpt` | Rapport `.rpt` officiel EPA SWMM | `200 (RPT)` |
+| `GET` | `/api/v1/simulations/rapport-diagnostic-pdf` | Rapport diagnostic PDF haute définition | `200 (PDF)` |
+| `GET` | `/api/v1/simulations/bms/ordre-mission-pdf` | Ordre de mission BMS en PDF | `200 (PDF)` |
+| `GET` | `/api/v1/simulations/agents/interpretation` | Interprétation multi-agents des résultats | `200` |
+
+---
+
+## 8. Apports de temps sec (DWF) — `/api/v1/apports`
+
+Gestion des débits de temps sec injectés dans le modèle SWMM.
+`project_id` est passé en query parameter sur la plupart des routes.
+
+| Méthode | Endpoint | Description | Statut |
+|---|---|---|---|
+| `GET` | `/api/v1/apports` | Liste des apports DWF du projet | `200` |
+| `POST` | `/api/v1/apports` | Création d'un apport (`code_apport` auto `AP-YYYY-NNNN`) | `201` |
+| `GET` | `/api/v1/apports/{apport_id}` | Détail d'un apport | `200` |
+| `PUT` | `/api/v1/apports/{apport_id}` | Modification d'un apport | `200` |
+| `DELETE` | `/api/v1/apports/{apport_id}` | Suppression (204) | `204` |
+| `POST` | `/api/v1/apports/{apport_id}/revalider` | Re-validation d'un apport incompatible | `200` |
+| `GET` | `/api/v1/apports/profils` | Profils DWF disponibles | `200` |
+| `GET` | `/api/v1/apports/noeuds` | Nœuds candidats à l'injection | `200` |
+| `GET` | `/api/v1/apports/a-reconcilier` | Apports en attente de réconciliation GPKG | `200` |
+| `GET` | `/api/v1/apports/history` | Journal global des apports | `200` |
+| `GET` | `/api/v1/apports/{apport_id}/history` | Historique d'un apport | `200` |
+| `POST` | `/api/v1/apports/purger-orphelins` | Purge des apports orphelins | `200` |
+
+---
+
+## 9. Couches SIG satellite & altimétrie — `/api/v1/projets/{project_id}/aux-layers`
+
+Import et exploitation de couches externes (shapefile, GeoJSON…) rattachées
+à un projet : altimétrie, topographie, référentiels. Le paramètre `snapshot`
+est supporté pour l'isolation par version.
+
+| Méthode | Endpoint | Description | Statut |
+|---|---|---|---|
+| `POST` | `.../aux-layers` | Import d'une couche satellite | `201` |
+| `GET` | `.../aux-layers` | Liste des couches du projet | `200` |
+| `GET` | `.../aux-layers/{layer_id}` | Métadonnées d'une couche | `200` |
+| `DELETE` | `.../aux-layers/{layer_id}` | Suppression d'une couche | `204` |
+| `GET` | `.../aux-layers/{layer_id}/geojson` | Contenu GeoJSON de la couche | `200 (GeoJSON)` |
+| `GET` | `.../aux-layers/{layer_id}/elevation` | Interpolation de cote (IDW) en un point | `200` |
+| `GET` | `.../aux-layers/{layer_id}/regards-terrain` | Injection des cotes terrain sur les regards | `200` |
+| `POST` | `.../aux-layers/{layer_id}/regards-terrain/recalculer` | Recalcul des cotes terrain | `200` |
+| `GET` | `.../aux-layers/{layer_id}/apercu-inp` | Aperçu de l'impact sur le `.inp` généré | `200` |
+| `GET` | `.../aux-layers/{layer_id}/suspects-ecoulement` | File de revue P1 : sens d'écoulement suspects | `200` |
+| `GET` | `.../aux-layers/{layer_id}/raccordements-orphelins` | Regards orphelins et scoring P2 des raccordements candidats | `200` |
+
+---
+
+## 10. Extraction par pochoir — `/api/v1/projets/{project_id}/extraction-pochoir`
+
+| Méthode | Endpoint | Description | Statut |
+|---|---|---|---|
+| `POST` | `/api/v1/projets/{project_id}/extraction-pochoir` | Extraction des entités intersectant un polygone pochoir → zip Shapefiles + GPKG fusionné | `200/202` |
+
+---
+
+## 11. Garde-fou hydraulicien — `/api/v1/projets/{project_id}/garde-fou`
+
+Configuration par projet des seuils de garde-fou (presets et profils réseau).
+
+| Méthode | Endpoint | Description | Statut |
+|---|---|---|---|
+| `GET` | `.../garde-fou` | Configuration garde-fou du projet | `200` |
+| `PUT` | `.../garde-fou` | Mise à jour de la configuration | `200` |
+| `POST` | `.../garde-fou/reaudit` | Relance de l'audit avec la nouvelle configuration | `200` |
+
+---
+
+## 12. MNT / Modèle Numérique de Terrain — `/api/v1/mnt`
+
+| Méthode | Endpoint | Description | Statut |
+|---|---|---|---|
+| `POST` | `/api/v1/mnt/analyser-bassins` | Analyse des bassins versants depuis un DEM TIFF (`dem_path`) | `200` |
+| `GET` | `/api/v1/mnt/cache/status` | État du cache d'analyse MNT | `200` |
+| `DELETE` | `/api/v1/mnt/cache` | Purge du cache MNT | `200` |
+| `GET` | `/api/v1/mnt/statut` | Statut du module MNT | `200` |
+
+> L'extraction MNT lourde est déléguée au worker Celery
+> (`workers/tasks/mnt_tasks.py`).
+
+---
+
+## 13. Jobs asynchrones & WebSocket — `/api/v1/jobs`
+
+| Méthode | Endpoint | Description | Statut |
+|---|---|---|---|
+| `GET` | `/api/v1/jobs` | Liste des jobs de l'organisation (`network_id`, `status`, pagination) | `200` |
+| `GET` | `/api/v1/jobs/{job_id}` | Détail/statut d'un job | `200` |
+| `WS` | `/api/v1/jobs/ws/{job_id}` | Progression temps réel d'un job (WebSocket) | `WS` |
+
+---
+
+## 14. Artefacts & stockage — `/api/v1/artifacts`
+
+| Méthode | Endpoint | Description | Statut |
+|---|---|---|---|
+| `GET` | `/api/v1/artifacts/download` | Téléchargement d'un artefact (clé ou URL présignée) | `200` |
+
+Le stockage sous-jacent est `ArtifactStore` (`api/core/storage.py`) :
+`LocalStore` en développement, `S3Store` (S3/MinIO) en production via
+variables `S3_*`. Les artefacts sont organisés par `org_id`/`project_id`.
+
+---
+
+## 15. Traçabilité & audit — `/api/v1/audit`
+
+| Méthode | Endpoint | Description | Statut |
+|---|---|---|---|
+| `GET` | `/api/v1/audit/logs` | Journal d'audit de l'organisation | `200` |
+| `GET` | `/api/v1/audit/logs/{record_id}` | Détail d'une entrée d'audit | `200` |
+| `GET` | `/api/v1/audit/regards/{regard_id}/history` | Historique des modifications d'un regard | `200` |
+| `GET` | `/api/v1/audit/conduites/{conduite_id}/history` | Historique des modifications d'une conduite | `200` |
+
+---
+
+## 16. Organisation & équipe — `/api/v1/organization`
+
+| Méthode | Endpoint | Description | Statut |
+|---|---|---|---|
+| `GET` | `/api/v1/organization/collaborators` | Membres de l'organisation et rôles | `200` |
+| `POST` | `/api/v1/organization/collaborators` | Ajout/invitation d'un collaborateur | `201` |
+| `DELETE` | `/api/v1/organization/collaborators/{user_id}` | Retrait d'un collaborateur | `200` |
+
+---
+
+## 17. Licences & facturation B2B — `/api/v1/license`
+
+| Méthode | Endpoint | Description | Statut |
+|---|---|---|---|
+| `GET` | `/api/v1/license/status` | État de la licence active de l'organisation | `200` |
+| `GET` | `/api/v1/license/orders` | Bons de commande de l'organisation | `200` |
+| `POST` | `/api/v1/license/order` | Soumission d'un bon de commande | `201` |
+| `POST` | `/api/v1/license/activate` | Activation par jeton de licence | `200` |
+| `GET` | `/api/v1/license/proforma` | Devis proforma PDF (DZD/EUR) | `200 (PDF)` |
+
+---
+
+## 18. Console superadmin — `/api/v1/admin`
+
+Règle d'invisibilité : tout non-superadmin reçoit `404`.
+
+| Méthode | Endpoint | Description | Statut |
+|---|---|---|---|
+| `GET` | `/api/v1/admin/orders` | Bons de commande en attente de validation | `200` |
+| `POST` | `/api/v1/admin/orders/{order_id}/approve` | Approbation + émission du jeton de licence | `200` |
+| `POST` | `/api/v1/admin/orders/{order_id}/reject` | Rejet motivé du bon de commande | `200` |
+| `GET` | `/api/v1/admin/organizations` | Liste consolidée des organisations | `200` |
+| `POST` | `/api/v1/admin/organizations/{org_id}/extend-trial` | Prolongation de la période d'évaluation | `200` |
+
+---
+
+## 19. Synchronisation mobile — `/api/v1/sync`
+
+| Méthode | Endpoint | Description | Statut |
+|---|---|---|---|
+| `GET` | `/api/v1/sync/delta` | Modifications depuis `since_version` (`tables=regards,conduites,rejets`) | `200` |
+| `POST` | `/api/v1/sync/push` | Poussée de mutations hors-ligne (rate-limité, résolution de conflits) | `200` |
+| `POST` | `/api/v1/sync/session` | Ouverture de session de synchronisation | `200` |
+
+---
+
+## 20. Collecte terrain — `/api/v1/terrain`
+
+| Méthode | Endpoint | Description | Statut |
+|---|---|---|---|
+| `POST` | `/api/v1/terrain/inspections` | Création d'une inspection terrain | `201` |
+| `GET` | `/api/v1/terrain/inspections` | Liste des inspections | `200` |
+| `GET` | `/api/v1/terrain/inspections/{object_type}/{object_id}` | Inspections d'un objet | `200` |
+| `POST` | `/api/v1/terrain/incidents` | Signalement d'un incident | `201` |
+| `GET` | `/api/v1/terrain/incidents` | Liste des incidents | `200` |
+| `PATCH` | `/api/v1/terrain/incidents/{incident_id}` | Mise à jour d'un incident | `200` |
+
+---
+
+## 21. Santé — `/health`
+
+| Méthode | Endpoint | Description | Statut |
+|---|---|---|---|
+| `GET` | `/health` | État global du service (base de données, `status: healthy/degraded`) | `200` |
+
+---
+
+## 22. Écarts notables par rapport aux versions antérieures
+
+Ce document remplace la version du 28 Octobre 2026, qui décrivait une
+architecture cible plus que l'API réelle. Principaux écarts corrigés :
+
+- Préfixe réseau : `/api/v1/network` (et non `/api/v1/networks`) ;
+- Routes qualite sans `network_id` dans le path (contexte projet actif) ;
+- Nouveaux modules documentés : `apports` (DWF), `aux-layers`, `garde-fou`,
+  `extractions`, `corrections`, `artifacts`, `audit`, `licensing`, `admin` ;
+- Suppression d'endpoints inexistants : `/terrain/photos/upload`,
+  `/terrain/audit-trail`, `/reports/*`, `/mnt/{id}/upload`,
+  `/mnt/{id}/extraire-bassins`, `/mnt/{id}/bassins`, `/mnt/{id}/profil-long`,
+  `/sync/pull` (remplacé par `/sync/delta`), `/api/v1/health` (→ `/health`) ;
+- WebSocket réel : `/api/v1/jobs/ws/{job_id}` (et non `/ws/*`).

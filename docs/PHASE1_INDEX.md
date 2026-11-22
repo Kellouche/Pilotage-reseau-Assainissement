@@ -1,5 +1,12 @@
 # 📚 Phase 1 — Documentation Index
 
+> ⚠️ **Document historique (POC)** : cette série décrit l'ancienne interface
+> Flask/`carte.html` et les validateurs `src/validateurs/` de la phase 1.
+> L'interface officielle actuelle est le **cockpit FastAPI**
+> (`templates/index.html` + `static/js/app/`) et l'API de référence est
+> documentée dans [09_ENDPOINTS_DOCUMENTATION.md](09_ENDPOINTS_DOCUMENTATION.md).
+> Les validateurs topologiques restent utilisés par `src/qualite_reseau.py`.
+
 **Organisée pour rapide navigation et référence**
 
 ---

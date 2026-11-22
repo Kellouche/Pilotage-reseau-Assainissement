@@ -1,4 +1,4 @@
-# Inventaire du projet - Phase 1
+# Inventaire du projet — état au 22 novembre 2026
 
 ## Objectif
 
@@ -9,7 +9,7 @@ archivage.
 ## Statuts utilisés
 
 - **Actif** : composant à conserver et maintenir.
-- **Historique** : composant utile mais hérité de l'ancienne version.
+- **Historique** : composant utile mais hérité d'une version antérieure.
 - **Expérimental** : prototype ou piste à confirmer.
 - **Local/généré** : fichier produit localement, à ne pas pousser vers GitHub.
 - **À vérifier** : élément présent mais rôle exact à confirmer avant décision.
@@ -18,67 +18,79 @@ archivage.
 
 | Élément | Statut | Rôle |
 |---|---|---|
-| `api/` | Actif | API FastAPI moderne : réseau, clusters, synchronisation, simulations. |
-| `config/` | Actif | Configuration centralisée du projet. |
-| `docs/` | Actif | Documentation structurante de la phase 1. |
-| `src/domain/` | Actif | Logique métier hydraulique et réseau. |
-| `src/infrastructure/` | Actif | Chargement, reprojection et préparation des données. |
-| `src/controllers/` | Historique | Contrôleurs Flask et génération SWMM initiale. |
-| `src/views/` | Historique | Interface Leaflet historique. |
-| `tests/` | Actif | Tests unitaires et tests de génération SWMM. |
-| `workers/` | Expérimental | Préparation des traitements asynchrones SWMM/Celery. |
-| `server.py` | Historique | Serveur Flask historique sur le port `5000`. |
-| `run_api.py` | Actif | Lanceur de développement FastAPI. |
+| `api/` | Actif | API FastAPI unique : 18 routeurs (`auth`, `network`, `simulations`, `clusters`, `qualite`, `corrections`, `sync`, `terrain`, `mnt`, `audit`, `jobs`, `artifacts`, `licensing`, `admin`, `organization`, `apports`, `garde_fou`, `aux_layers`, `extractions`). |
+| `api/websocket.py` | Actif | Support WebSocket (progression des jobs). |
+| `config/` | Actif | Configuration centralisée (`settings.py` : port 5002, DB, GPKG_PATH). |
+| `docs/` | Actif | Documentation structurante de la plateforme. |
+| `src/domain/` | Actif | Logique métier hydraulique SWMM (générateur `.inp`, hydro-, timeseries, référentiel pluvio). |
+| `src/infrastructure/` | Actif | Chargement, reprojection et préparation des données SIG. |
+| `src/controllers/`, `src/views/` | Historique | Contrôleurs Flask et visualiseur historique (serveur `server.py` retiré). |
+| `src/validateurs/` | Actif | Validateurs topologiques Phase 1 (utilisés par `src/qualite_reseau.py`). |
+| `static/` | Actif | Frontend cockpit : `static/js/app/` (30 modules ES), Leaflet, Chart.js. |
+| `templates/` | Actif | Templates Jinja : `index.html` (cockpit), `partials/`, pages annexes (`carte.html`, `map.html`, `qualite.html`, `tunnel.html`, `auth/`). |
+| `tests/` | Actif | Suite pytest (600+ tests) + Golden Master hydraulique. |
+| `workers/` | Actif | Workers Celery (`swmm_tasks`, `mnt_tasks`) pour calculs asynchrones. |
+| `mobile/` | Actif | Application mobile officielle Flutter (offline-first, `--dart-define=API_BASE_URL`). |
+| `run_api.py` | Actif | Lanceur FastAPI avec auto-reload (`API_RELOAD`). |
 | `run_server.py` | Actif | Lanceur FastAPI sans auto-reload. |
-| `launch_api.bat` | Actif | Lanceur Windows pour l'API FastAPI. |
-| `launch_server.bat` | Historique | Lanceur Windows pour le serveur Flask historique. |
-| `migrate_gpkg_to_postgres.py` | À vérifier | Script de migration vers PostgreSQL/PostGIS. |
-| `README.md` | Actif | Entrée principale du dépôt. |
-| `README_PLATFORM.md` | Actif | Vision plateforme collaborative. |
-| `TODO.md` | Historique | Suivi ancien des tâches. |
-| `Regles.txt` | Historique | Règles initiales du projet, à consolider dans `docs/`. |
+| `launch_api.bat` | Actif | Lanceur Windows API (l'écho « Port: 5001 » est obsolète ; port réel 5002). |
+| `launch_server.bat` | Historique | Ancien lanceur Flask ; `server.py` n'existe plus. |
+| `lancer_plateforme.bat` | À vérifier | Script de lancement groupé à auditer. |
+| `migrate_gpkg_to_postgres.py` | Historique | Migration GPKG → PostgreSQL, déjà jouée ou à archiver. |
+| `README.md`, `README_PLATFORM.md` | Actif | Entrées principales du dépôt. |
+| `TODO.md` | Actif | Suivi opérationnel de la roadmap SaaS. |
+| `Regles.txt` | Historique | Règles initiales du projet, à consolider. |
 | `Rapport_Methodologique_Clusters_Bassins.md` | Actif | Rapport métier/méthodologique. |
 | `methodologie_partitionnement_hydraulique.md` | Actif | Note méthodologique sur le partitionnement. |
+| `SHP.md`, `AGENTS.md`, `GEMINI.md` | Actif | Règles et consignes agents/outils. |
+| `alembic/` | Actif | Migrations de schéma SQLAlchemy. |
+| `e2e/` | Actif | Tests end-to-end Playwright. |
+| `prototypes/` | Expérimental | POC UI à qualifier. |
 
-## Éléments locaux non suivis à classer
-
-Ces éléments existent dans le workspace mais ne sont pas encore suivis par Git.
-Ils ne doivent pas être poussés sans revue.
+## Éléments locaux non suivis / à classer
 
 | Élément | Statut proposé | Décision recommandée |
 |---|---|---|
-| `mobile/` | Actif | Application mobile officielle Flutter de la phase 1. |
-| `swmm_mobile_flutter/` | Expérimental | Prototype alternatif, à archiver ou confirmer. |
-| `mobile_app.html` | Expérimental | Prototype mobile web autonome, à archiver si Flutter est retenu. |
-| `static/` | À vérifier | Ressources web ajoutées localement, à relier à une interface officielle. |
-| `templates/map.html` | À vérifier | Template utilisé par les changements locaux de `api/main.py`. |
-| `api/websocket.py` | À vérifier | Support WebSocket local, lié aux changements de synchronisation. |
-| `LANCER_WEB.md`, `LANCER_MOBILE.md` | À vérifier | Docs ponctuelles à fusionner dans `docs/LANCEMENT.md`. |
-| `MOBILE_README.md`, `MOBILE_ALTERNATIVE_README.md` | À vérifier | Docs mobiles à consolider dans une future `docs/MOBILE.md`. |
-| `INSTRUCTIONS_FINALES.txt` | À vérifier | Instructions locales à intégrer ou archiver. |
-| `diagnostic_mobile.ps1` | À vérifier | Diagnostic local mobile. |
-| `install_*.bat`, `install_*.ps1` | À vérifier | Scripts d'installation ponctuels. |
-| `final_fix.bat`, `fix_and_launch.bat`, `launch_final.bat`, `launch_mobile_app.bat` | À vérifier | Scripts mobiles temporaires. |
-| `test_*.bat`, `test_server.py`, `test_sync.py`, `test_visu_contours.py` | À vérifier | Tests manuels ou expérimentaux à déplacer sous `tests/` si utiles. |
-| `swmm_platform.db` | Local/généré | Base SQLite locale, ne pas pousser. |
-| `output/` | Local/généré | Exports et résultats locaux, ne pas pousser. |
-| fichiers `AST14DEM_*` | Local/généré | Raster/contours volumineux, ne pas pousser. |
-| `package-lock.json` racine | À vérifier | À conserver seulement si un package Node racine existe. |
-| `nul` | Local/généré | Fichier parasite Windows, à supprimer après validation. |
+| `swmm_platform.db`, `database.db`, `test_swmm_platform.db` | Local/généré | Bases SQLite locales — ne jamais pousser. |
+| `output/`, `exports/`, `uploads/`, `logs/`, `scratch/` | Local/généré | Données et artefacts produits localement. |
+| `*.inp`, `*.rpt` à la racine | Local/généré | Sorties SWMM de tests manuels — nettoyage conseillé. |
+| `p*.png`, `wx_*.inp/rpt`, `prof.json`, `_t_*.inp/rpt` | Local/généré | Captures et artefacts de debug — nettoyage conseillé. |
+| `nul` | Local/généré | Fichier parasite Windows — supprimer. |
+| `pytest-cache-files-*` | Local/généré | Caches pytest — ignorer. |
+| `2-ASS/` | À vérifier | Jeu de données GIS source (couches satellite) — à documenter dans DONNEES.md si actif. |
 
-## Décisions de phase 1
+## Inventaire des pistes abandonnées (à supprimer des docs)
 
-- L'API FastAPI est le backend moderne de référence.
-- Le port API de référence est `5001`.
-- Le serveur Flask historique reste disponible sur `5000`.
-- La documentation structurante doit vivre dans `docs/`.
-- Les fichiers de données lourdes et bases locales restent hors Git.
-- La piste mobile officielle de phase 1 est `mobile/` en Flutter.
+Les éléments suivants **n'existent plus** dans le dépôt et ne doivent plus
+être mentionnés comme pistes actives :
+
+- `server.py` (serveur Flask historique) — **supprimé** ;
+- `swmm_mobile_flutter/` (prototype Flutter alternatif) — **supprimé** ;
+- `mobile_app.html` (prototype web mobile) — **supprimé** ;
+- `test_api.py`, `test_ws.py`, `test_server.py`, `test_sync.py` à la racine —
+  doublons de tests manuels (la suite officielle est sous `tests/`).
+
+## Décisions structurantes actuelles
+
+- **Backend unique** : FastAPI (`api.main:app`), port `5002` par défaut.
+- **Base de données** : PostgreSQL cible, **fallback SQLite automatique**
+  (`swmm_platform.db`) si PostgreSQL est indisponible ; tests sur
+  `test_swmm_platform.db`.
+- **Stockage d'artefacts** : `ArtifactStore` — `LocalStore` en dev,
+  `S3Store` (S3/MinIO) en production via variables `S3_*`.
+- **Calculs lourds** : Celery/Redis (`workers/`) — simulations SWMM et
+  extraction MNT ; repli synchrone pour les petits calculs.
+- **Données SIG** : GeoPackage par projet avec **versionnement immuable**
+  (snapshots par sha256) — toute lecture historique se fait sur le snapshot
+  producteur, jamais sur le réseau courant.
+- **Multi-tenant** : isolation stricte par `org_id`, stealth 404.
+- **Documentation structurante** : `docs/` — voir `09_ENDPOINTS_DOCUMENTATION.md`
+  pour le référentiel API à jour.
 
 ## Prochaines actions
 
-1. Consolider les documents mobiles ponctuels dans `docs/MOBILE.md`.
-2. Auditer `swmm_mobile_flutter/` et `mobile_app.html` avant archivage ou suppression.
-3. Auditer les scripts `.bat` et `.ps1` non suivis avant ajout ou archivage.
-4. Déplacer les tests manuels utiles dans `tests/` ou les documenter comme outils de diagnostic.
-5. Supprimer ou ignorer explicitement les fichiers locaux parasites après validation utilisateur.
+1. Nettoyer les artefacts locaux à la racine (`*.inp`, `*.rpt`, `p*.png`,
+   `nul`, `pytest-cache-files-*`).
+2. Corriger l'écho « Port: 5001 » dans `launch_api.bat`.
+3. Archiver `docs/PHASE1_*` comme documentation historique du POC.
+4. Vérifier le rôle de `2-ASS/` et `prototypes/`.
