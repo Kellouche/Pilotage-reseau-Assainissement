@@ -62,6 +62,21 @@
   - [x] Attribution d'un exutoire personnalisé (nom, type de rejet, coordonnées)
   - [x] Endpoints CRUD complets (`/api/v1/clusters/manual-basins`) et persistance étanche par organisation (`manual_overrides_{org_id}.json`)
 
+- [x] **6.J — Module de Simulation BMS (ONM) & Ordres de Mission Préventifs**
+  - [x] Modélisation hydrodynamique prédictive sur Bulletins Météorologiques Spéciaux de l'ONM Algérie (cumul mm, durée h, profils de pluie en cloche Huff ou orage concentré)
+  - [x] Générateur automatique d'Ordres de Mission terrain (`bms_ordre_mission.py`) pour les régies d'assainissement (ONA) et brigades d'intervention
+  - [x] Ciblage préventif des regards critiques à curer et des avaloirs à déboucher avant l'arrivée de la pluie avec qualification du niveau d'alerte météo (jaune, orange, rouge)
+
+- [x] **6.K — Système d'Expertise Multi-Agents IA & Garde-Fou Hydraulicien**
+  - [x] Chaîne d'analyse collaborative à 7 agents spécialisés : Agent 0 Garde-Fou Hydraulicien, Agent 1 Diagnostic surcharges, Agent 2 Génie Civil, Agent 3 GDO/Variante 0, Agent 4 Risques de submersion voirie, Agent 5 Finance BPU DZD, Agent 6 Synthèse exécutive
+  - [x] Orchestrateur multi-agents consolidant les avis techniques dans le rapport d'expertise A4 ReportLab
+  - [x] API de paramétrage fin du garde-fou et de ré-audit a posteriori (`/api/v1/projets/{project_id}/garde-fou`)
+
+- [x] **6.L — Diagnostic Qualité Réseau & Corrections Topologiques Supervisées**
+  - [x] Détection systématique des anomalies d'infrastructure (contre-pentes, sauts de radier, diamètres non normalisés, règles NP 650)
+  - [x] Tableau de bord des scores de conformité géométrique et altimétrique par commune et par bassin versant avec export CSV/Excel
+  - [x] Moteur de suggestions hybrides statistiques/terrain (`/corrections/{fid}/hybride`) et application supervisée des corrections sans rupture de topologie
+
 ---
 
 ## 🥈 CHANTIERS HYDRAULIQUES IMMÉDIATS (Extension Cœur Métier)
