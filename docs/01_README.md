@@ -66,13 +66,16 @@
 # Lancement des tests de non-régression hydraulique (Golden Master)
 pytest tests/ -v
 
-# Lancement de l'API unifiée FastAPI (port 5002, auto-reload)
+# Lancement de l'API unifiée FastAPI (auto-reload)
 python run_api.py
 ```
 
-- **Application Web & Cartographie :** `http://localhost:5002/`
-- **Documentation API Interactive (Swagger) :** `http://localhost:5002/docs`
-- **Santé du service :** `http://localhost:5002/health`
+Le port est défini par `API_PORT` dans `config/settings.py` (ou variable
+d'environnement) — adaptez les URL ci-dessous en conséquence :
+
+- **Application Web & Cartographie :** `http://localhost:<API_PORT>/`
+- **Documentation API Interactive (Swagger) :** `http://localhost:<API_PORT>/docs`
+- **Santé du service :** `http://localhost:<API_PORT>/health`
 
 > **Base de données :** PostgreSQL est la cible de production ; en
 > développement l'API bascule automatiquement sur SQLite

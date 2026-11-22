@@ -20,7 +20,7 @@ archivage.
 |---|---|---|
 | `api/` | Actif | API FastAPI unique : 18 routeurs (`auth`, `network`, `simulations`, `clusters`, `qualite`, `corrections`, `sync`, `terrain`, `mnt`, `audit`, `jobs`, `artifacts`, `licensing`, `admin`, `organization`, `apports`, `garde_fou`, `aux_layers`, `extractions`). |
 | `api/websocket.py` | Actif | Support WebSocket (progression des jobs). |
-| `config/` | Actif | Configuration centralisée (`settings.py` : port 5002, DB, GPKG_PATH). |
+| `config/` | Actif | Configuration centralisée (`settings.py` : `API_HOST`/`API_PORT`, DB, GPKG_PATH). |
 | `docs/` | Actif | Documentation structurante de la plateforme. |
 | `src/domain/` | Actif | Logique métier hydraulique SWMM (générateur `.inp`, hydro-, timeseries, référentiel pluvio). |
 | `src/infrastructure/` | Actif | Chargement, reprojection et préparation des données SIG. |
@@ -33,9 +33,8 @@ archivage.
 | `mobile/` | Actif | Application mobile officielle Flutter (offline-first, `--dart-define=API_BASE_URL`). |
 | `run_api.py` | Actif | Lanceur FastAPI avec auto-reload (`API_RELOAD`). |
 | `run_server.py` | Actif | Lanceur FastAPI sans auto-reload. |
-| `launch_api.bat` | Actif | Lanceur Windows API (l'écho « Port: 5001 » est obsolète ; port réel 5002). |
-| `launch_server.bat` | Historique | Ancien lanceur Flask ; `server.py` n'existe plus. |
-| `lancer_plateforme.bat` | À vérifier | Script de lancement groupé à auditer. |
+| `launch_api.bat` | Actif | Lanceur Windows API. |
+| `lancer_plateforme.bat` | Actif | Lanceur Windows groupé (API FastAPI). |
 | `migrate_gpkg_to_postgres.py` | Historique | Migration GPKG → PostgreSQL, déjà jouée ou à archiver. |
 | `README.md`, `README_PLATFORM.md` | Actif | Entrées principales du dépôt. |
 | `TODO.md` | Actif | Suivi opérationnel de la roadmap SaaS. |
@@ -72,7 +71,7 @@ Les éléments suivants **n'existent plus** dans le dépôt et ne doivent plus
 
 ## Décisions structurantes actuelles
 
-- **Backend unique** : FastAPI (`api.main:app`), port `5002` par défaut.
+- **Backend unique** : FastAPI (`api.main:app`), port défini par `API_PORT`.
 - **Base de données** : PostgreSQL cible, **fallback SQLite automatique**
   (`swmm_platform.db`) si PostgreSQL est indisponible ; tests sur
   `test_swmm_platform.db`.
@@ -91,6 +90,4 @@ Les éléments suivants **n'existent plus** dans le dépôt et ne doivent plus
 
 1. Nettoyer les artefacts locaux à la racine (`*.inp`, `*.rpt`, `p*.png`,
    `nul`, `pytest-cache-files-*`).
-2. Corriger l'écho « Port: 5001 » dans `launch_api.bat`.
-3. Archiver `docs/PHASE1_*` comme documentation historique du POC.
 4. Vérifier le rôle de `2-ASS/` et `prototypes/`.

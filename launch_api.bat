@@ -1,9 +1,9 @@
 @echo off
-REM Lancement de la plateforme SWMM POC - API FastAPI
+REM Lancement de la plateforme DrainPilot - API FastAPI
 
 echo.
 echo ========================================
-echo   SWMM Platform POC - API Server
+echo   DrainPilot 5.2 - API Server
 echo ========================================
 echo.
 
@@ -16,8 +16,7 @@ if errorlevel 1 (
 )
 
 echo [API] Demarrage du serveur FastAPI...
-echo [API] Port: 5001
-echo [API] Documentation: http://localhost:5001/docs
+echo [API] Port: definie par API_PORT (config/settings.py)
 echo.
 
 python run_api.py

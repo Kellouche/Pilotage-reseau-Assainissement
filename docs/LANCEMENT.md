@@ -27,23 +27,23 @@ Commande recommandée :
 python run_api.py
 ```
 
-URL attendue :
+Le port est défini par `API_PORT` dans `config/settings.py` (ou variable
+d'environnement `API_PORT`) — il n'est pas figé dans la documentation.
+Adapter les URL ci-dessous en conséquence :
 
 ```text
-http://localhost:5002
-http://localhost:5002/docs
+http://localhost:<API_PORT>
+http://localhost:<API_PORT>/docs
 ```
 
 Remarque :
 
-- `run_api.py` et `run_server.py` lancent `api.main:app` sur le port `5002`
-  (configurable via `API_HOST` / `API_PORT` dans `config/settings.py` ou
-  variables d'environnement).
+- `run_api.py` et `run_server.py` lancent `api.main:app` ; l'hôte et le port
+  viennent de `API_HOST` / `API_PORT`.
 - `run_api.py` active l'auto-reload WatchFiles ; `run_server.py` démarre
   sans reload.
 - Mode silencieux : `API_RELOAD=false` + redirection vers `logs/api_server.log`.
-- Le script Windows associé est `launch_api.bat` (l'écho « Port: 5001 » du
-  script est obsolète — le port réel est 5002).
+- Le script Windows associé est `launch_api.bat`.
 
 ### Application mobile Flutter
 
@@ -62,9 +62,9 @@ cd mobile
 flutter run -d chrome
 ```
 
-La configuration de l'URL API se fait via `API_BASE_URL` (variable
-d'environnement compilée, voir `mobile/lib/services/api_service.dart`,
-défaut `http://127.0.0.1:5002`) ou `mobile/.env`.
+L'application lit l'URL de l'API via la variable d'environnement compilée
+`API_BASE_URL` (voir `mobile/lib/services/api_service.dart`) ou
+`mobile/.env.example`. Le port doit correspondre à `API_PORT` côté backend.
 Voir [Application mobile](MOBILE.md).
 
 ## Base de données
@@ -95,6 +95,6 @@ python run_api.py
 Puis ouvrir :
 
 ```text
-http://localhost:5002/health
-http://localhost:5002/docs
+http://localhost:<API_PORT>/health
+http://localhost:<API_PORT>/docs
 ```

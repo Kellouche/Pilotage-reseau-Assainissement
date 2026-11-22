@@ -28,19 +28,19 @@ reste utile pour les essais rapides.
 
 L'application lit l'URL du backend via la variable d'environnement compilée
 `API_BASE_URL` (`String.fromEnvironment` dans
-`mobile/lib/services/api_service.dart`, défaut `http://127.0.0.1:5002`).
-Elle se passe à la compilation avec `--dart-define` :
+`mobile/lib/services/api_service.dart`). Elle se passe à la compilation avec
+`--dart-define` — le port doit correspondre à `API_PORT` côté backend :
 
 ```bash
 cd mobile
-flutter run --dart-define=API_BASE_URL=http://127.0.0.1:5002
+flutter run --dart-define=API_BASE_URL=http://127.0.0.1:<API_PORT>
 ```
 
 Pour un téléphone physique, `127.0.0.1` pointe vers le téléphone lui-même.
 Il faut utiliser l'adresse IP locale de la machine qui exécute FastAPI :
 
 ```bash
-flutter run --dart-define=API_BASE_URL=http://192.168.1.10:5002
+flutter run --dart-define=API_BASE_URL=http://192.168.1.10:<API_PORT>
 ```
 
 ## Contenu versionné
