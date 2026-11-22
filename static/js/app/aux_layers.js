@@ -158,6 +158,24 @@
         }
     }
 
+    function _lirePrefCouche(layerId) {
+        try {
+            const val = localStorage.getItem('drainpilot_aux_pref_' + layerId);
+            if (val !== null) return val === 'true';
+        } catch (_) {}
+        if (AUX._prefs[layerId] !== undefined) return AUX._prefs[layerId];
+        // Règle d'or : aucune couche satellite lourde ne démarre cochée automatiquement.
+        // L'activation est un choix explicite et volontaire de l'utilisateur.
+        return false;
+    }
+
+    function _sauverPrefCouche(layerId, checked) {
+        AUX._prefs[layerId] = !!checked;
+        try {
+            localStorage.setItem('drainpilot_aux_pref_' + layerId, checked ? 'true' : 'false');
+        } catch (_) {}
+    }
+
     function rendreListe(couches) {
         const cont = document.getElementById('aux-layers-list');
         const vide = document.getElementById('aux-layers-vide');
@@ -173,10 +191,8 @@
             const couleur = (c.type === 'altimetrie_points') ? TYPE_COULEURS[c.type] : st.couleur;
             const lib = TYPE_LIBELLES[c.type] || 'SIG';
             const estTopo = c.type === 'altimetrie_points' && c.statut === 'ok';
-            // État initial : choix explicite de l'utilisateur prioritaire ;
-            // à défaut, les couches altimétriques « ok » démarrent cochées.
-            const cocheInitial = (AUX._prefs[c.id] !== undefined)
-                ? AUX._prefs[c.id] : estTopo;
+            // Choix utilisateur persistant dans localStorage (décoché par défaut)
+            const cocheInitial = _lirePrefCouche(c.id);
             const div = document.createElement('div');
             div.className = 'layer-item';
             div.style.cssText = 'display:flex; align-items:center; gap:6px; flex-wrap:wrap;';
@@ -190,10 +206,7 @@
                 <button type="button" class="aux-del-btn" data-id="${c.id}" title="Supprimer définitivement cette couche satellite" style="background:rgba(248,113,113,0.12); border:1px solid rgba(248,113,113,0.35); color:#fca5a5; border-radius:5px; padding:1px 6px; font-size:0.65rem; cursor:pointer; flex:none;">🗑</button>
             `;
             div.querySelector('input[type=checkbox]').addEventListener('change', (e) => {
-                // Mémoriser le choix explicite : les rechargements de liste
-                // (changement de projet/snapshot) ne doivent pas réactiver
-                // une couche que l'utilisateur a désactivée.
-                AUX._prefs[c.id] = e.target.checked;
+                _sauverPrefCouche(c.id, e.target.checked);
                 basculerCouche(c.id, e.target.checked);
             });
             const btnSonde = div.querySelector('.aux-sonde-btn');
