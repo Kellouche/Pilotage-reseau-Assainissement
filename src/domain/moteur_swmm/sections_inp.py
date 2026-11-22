@@ -9,6 +9,7 @@ Objet : Génération textuelle des blocs et sections de modélisation du fichier
 ================================================================================
 """
 
+import math
 import logging
 from typing import Dict, Any, Optional, Tuple, List, Set, Union
 import pandas as pd
@@ -18,6 +19,44 @@ from src.domain.moteur_swmm.constants import _clean_node_id
 from src.domain.moteur_swmm.assainissement_topologique import _resoudre_altimetrie_noeuds
 
 logger = logging.getLogger("swmm_platform.moteur_swmm.sections_inp")
+
+
+def _determiner_rugosite(materiau: Any) -> float:
+    """Détermine le coefficient de Manning n en fonction du matériau réel du SIG (Chantier 1.4)."""
+    mat = str(materiau or "").strip().lower()
+    if any(k in mat for k in ("pehd", "polyethyl", "polyéthyl")):
+        return 0.010
+    elif "pvc" in mat:
+        return 0.011
+    elif any(k in mat for k in ("prv", "resine", "résine")):
+        return 0.011
+    elif any(k in mat for k in ("acier", "fonte")):
+        return 0.012
+    elif any(k in mat for k in ("beton", "béton")):
+        return 0.013
+    elif any(k in mat for k in ("maconnerie", "maçonnerie")):
+        return 0.015
+    return 0.013  # Défaut documenté comme hypothèse
+
+
+def _determiner_forme_section(c: pd.Series, diam_m: float) -> Tuple[str, float, float, int]:
+    """Détermine la forme géométrique transversale dans [XSECTIONS] (Chantier 1.3)."""
+    forme_str = str(c.get("FORMESECT") or c.get("forme_sect") or c.get("FORME") or "").strip().lower()
+    if any(k in forme_str for k in ("rect", "carr")):
+        h_raw = c.get("HAUTEUR") or c.get("hauteur")
+        b_raw = c.get("GDEBASE") or c.get("gdebase") or c.get("largeur") or c.get("BASE")
+        try:
+            h_m = float(h_raw) / 1000.0 if pd.notna(h_raw) and float(h_raw) > 0 else diam_m
+        except Exception:
+            h_m = diam_m
+        try:
+            b_m = float(b_raw) / 1000.0 if pd.notna(b_raw) and float(b_raw) > 0 else diam_m
+        except Exception:
+            b_m = diam_m
+        h_m = max(0.2, round(h_m, 3))
+        b_m = max(0.2, round(b_m, 3))
+        return ("RECTANGULAR", h_m, b_m, 1)
+    return ("CIRCULAR", max(0.2, round(diam_m, 3)), 0.0, 1)
 
 
 def generer_lignes_sections_inp(
@@ -48,6 +87,9 @@ def generer_lignes_sections_inp(
     elevations_terrain: Optional[Dict[str, float]] = None,
     altimetrie_meta: Optional[Dict[str, Any]] = None,
     cotes_validations: Optional[Dict[str, float]] = None,
+    stations_relevage: Optional[gpd.GeoDataFrame] = None,
+    ouvrages_speciaux: Optional[gpd.GeoDataFrame] = None,
+    gpkg_counts: Optional[Dict[str, Any]] = None,
 ) -> Tuple[List[str], Dict[str, Any]]:
     """
     Génère la liste de lignes de toutes les sections .inp et le dictionnaire meta.
@@ -179,22 +221,7 @@ def generer_lignes_sections_inp(
     # produirait un réseau plat (tous radier à la même cote). On résout
     # alors le nœud d'exutoire réel = le sink du sous-réseau le plus
     # proche de l'ouvrage demandé (choix déterministe).
-    conduit_nodes = set()
-    upstream_nodes = set()
-    downstream_nodes = set()
-    for _, c in canalisations.iterrows():
-        u = _clean_node_id(c.get("ID_AMONT"))
-        d = _clean_node_id(c.get("ID_AVAL"))
-        if u and d and u != d:
-            conduit_nodes.add(u)
-            upstream_nodes.add(u)
-            conduit_nodes.add(d)
-            downstream_nodes.add(d)
-
-    outfall_demande = outfall_code
-    noeuds_conduits = upstream_nodes | downstream_nodes
-    sinks_disponibles = downstream_nodes - upstream_nodes
-
+    # ── Résolution de l'exutoire physique et topologie du modèle ────────
     coord_noeuds: Dict[str, Tuple[float, float]] = {}
     for _, r in regards.iterrows():
         _nid = _clean_node_id(r.get("Code"))
@@ -203,6 +230,114 @@ def generer_lignes_sections_inp(
                 coord_noeuds[_nid] = (float(r.geometry.x), float(r.geometry.y))
             except Exception:
                 pass
+
+    if rejets is not None and not rejets.empty:
+        for idx, rj in rejets.iterrows():
+            _rid = _clean_node_id(rj.get("Code") or rj.get("CODE") or rj.get("id") or rj.get("NOM"), fallback=f"REJ_{idx+1}")
+            if _rid and hasattr(rj, "geometry") and rj.geometry is not None and not rj.geometry.is_empty:
+                try:
+                    coord_noeuds[_rid] = (float(rj.geometry.x), float(rj.geometry.y))
+                except Exception:
+                    pass
+
+    if stations_relevage is not None and not stations_relevage.empty:
+        for idx, st in stations_relevage.iterrows():
+            _sid = _clean_node_id(st.get("Code") or st.get("CODEPRR") or st.get("NOMOUVR") or st.get("id"), fallback=f"SR_{idx+1}")
+            if _sid and hasattr(st, "geometry") and st.geometry is not None and not st.geometry.is_empty:
+                try:
+                    coord_noeuds[_sid] = (float(st.geometry.x), float(st.geometry.y))
+                except Exception:
+                    pass
+
+    # Index spatial KD-Tree pour le raccordement ciblé des orphelins résiduels (Chantier 3)
+    tree_noeuds = None
+    noeuds_connus_ids: List[str] = []
+    if coord_noeuds:
+        noeuds_connus_ids = list(coord_noeuds.keys())
+        try:
+            from scipy.spatial import cKDTree
+            tree_noeuds = cKDTree([coord_noeuds[nid] for nid in noeuds_connus_ids])
+        except Exception:
+            tree_noeuds = None
+
+    raccordements_spatiaux: List[Dict[str, Any]] = []
+    noeuds_spatiaux_crees: Dict[str, Tuple[float, float]] = {}
+
+    conduit_nodes = set()
+    upstream_nodes = set()
+    downstream_nodes = set()
+    conduits_resolus: List[Dict[str, Any]] = []
+
+    for idx, c in canalisations.iterrows():
+        cid = f"C_{idx+1}"
+        u_node = _clean_node_id(c.get("ID_AMONT"))
+        d_node = _clean_node_id(c.get("ID_AVAL"))
+
+        pt_start, pt_end = None, None
+        geom = c.geometry if hasattr(c, "geometry") else None
+        if geom is not None and not geom.is_empty:
+            try:
+                if geom.geom_type == "LineString":
+                    coords = list(geom.coords)
+                    pt_start = (float(coords[0][0]), float(coords[0][1]))
+                    pt_end = (float(coords[-1][0]), float(coords[-1][1]))
+                elif geom.geom_type == "MultiLineString" and len(geom.geoms) > 0:
+                    c_first = list(geom.geoms[0].coords)
+                    c_last = list(geom.geoms[-1].coords)
+                    pt_start = (float(c_first[0][0]), float(c_first[0][1]))
+                    pt_end = (float(c_last[-1][0]), float(c_last[-1][1]))
+            except Exception:
+                pass
+
+        # Filet de sécurité spatial amont (Chantier 3)
+        if not u_node:
+            if pt_start and tree_noeuds is not None:
+                d_c, i_c = tree_noeuds.query(pt_start)
+                if d_c <= 0.50:
+                    u_node = noeuds_connus_ids[i_c]
+                    raccordements_spatiaux.append({"cid": cid, "extremite": "amont", "noeud": u_node, "distance_m": round(float(d_c), 3)})
+            if not u_node and pt_start:
+                u_node = f"N_{cid}_U"
+                coord_noeuds[u_node] = pt_start
+                noeuds_spatiaux_crees[u_node] = pt_start
+
+        # Filet de sécurité spatial aval (Chantier 3)
+        if not d_node:
+            if pt_end and tree_noeuds is not None:
+                d_c, i_c = tree_noeuds.query(pt_end)
+                if d_c <= 0.50:
+                    d_node = noeuds_connus_ids[i_c]
+                    raccordements_spatiaux.append({"cid": cid, "extremite": "aval", "noeud": d_node, "distance_m": round(float(d_c), 3)})
+            if not d_node and pt_end:
+                d_node = f"N_{cid}_D"
+                coord_noeuds[d_node] = pt_end
+                noeuds_spatiaux_crees[d_node] = pt_end
+
+        if u_node and d_node and u_node == d_node:
+            d_node = f"N_{cid}_D"
+            if pt_end:
+                coord_noeuds[d_node] = pt_end
+                noeuds_spatiaux_crees[d_node] = pt_end
+
+        if u_node and d_node:
+            conduit_nodes.add(u_node)
+            upstream_nodes.add(u_node)
+            conduit_nodes.add(d_node)
+            downstream_nodes.add(d_node)
+
+        conduits_resolus.append({
+            "idx": idx,
+            "cid": cid,
+            "u_node": u_node,
+            "d_node": d_node,
+            "row": c,
+            "pt_start": pt_start,
+            "pt_end": pt_end,
+        })
+
+    outfall_demande = outfall_code
+    noeuds_conduits = upstream_nodes | downstream_nodes
+    sinks_disponibles = downstream_nodes - upstream_nodes
 
     pt_exutoire_demande = None
     if target_ex_id and exutoires_map:
@@ -355,6 +490,43 @@ def generer_lignes_sections_inp(
             "node": _sink, "outfall": _out_bnd,
             "elev_node": _z_sink, "diam_mm": _d_sink_mm,
         })
+    # Déversoirs d'orage (DVO) issus d'Ouvrages_Speciaux (Chantier 1.5)
+    weir_lines = []
+    deversoirs_traites = []
+    if ouvrages_speciaux is not None and not ouvrages_speciaux.empty:
+        import unicodedata
+        for o_idx, ouv in ouvrages_speciaux.iterrows():
+            raw_t = str(ouv.get("TYPEOUVR") or ouv.get("Type") or "")
+            norm_t = "".join(ch for ch in unicodedata.normalize("NFD", raw_t) if unicodedata.category(ch) != "Mn").lower()
+            if "deversoir" in norm_t or "dvo" in norm_t:
+                wid = f"W_{_clean_node_id(ouv.get('Code'), fallback=f'DVO_{o_idx+1}')}"
+                o_pt = None
+                if hasattr(ouv, "geometry") and ouv.geometry is not None and not ouv.geometry.is_empty:
+                    o_pt = (float(ouv.geometry.x), float(ouv.geometry.y))
+
+                u_weir = None
+                if o_pt and tree_noeuds is not None:
+                    d_w, i_w = tree_noeuds.query(o_pt)
+                    if d_w <= 45.0:
+                        u_weir = noeuds_connus_ids[i_w]
+
+                if u_weir and u_weir in conduit_nodes:
+                    w_out = f"OUT_{wid}"
+                    if w_out in seen_outfall_names:
+                        w_out = f"OUT_{wid}_{o_idx+1}"
+                    seen_outfall_names.add(w_out)
+                    z_reg = node_elevs.get(u_weir, 100.0)
+                    z_w_out = round(z_reg - 0.20, 3)
+                    lines.append(f"{w_out:<16} {z_w_out:<10.3f} FREE                        NO")
+                    h_seuil_raw = ouv.get("H_de_Seuil") or ouv.get("loSeuil")
+                    try:
+                        h_seuil = float(h_seuil_raw) if pd.notna(h_seuil_raw) and float(h_seuil_raw) > 0 else 0.50
+                    except Exception:
+                        h_seuil = 0.50
+                    weir_lines.append(f"{wid:<16} {u_weir:<16} {w_out:<16} TRANSVERSE   {h_seuil:<10.3f} 1.800      NO       0        0.000    NO")
+                    coord_noeuds[w_out] = (o_pt[0] + 5.0, o_pt[1] + 5.0) if o_pt else (100.0, 100.0)
+                    deversoirs_traites.append({"wid": wid, "u_node": u_weir, "outfall": w_out, "h_seuil": h_seuil})
+
     lines.append("")
 
     lines.append("[CONDUITS]")
@@ -362,32 +534,100 @@ def generer_lignes_sections_inp(
 
     conduit_lines = []
     xsec_lines = []
+    pump_lines = []
+    curve_lines = []
     conduit_endpoints = {}
-    for idx, c in canalisations.iterrows():
-        cid = f"C_{idx+1}"
-        u_node = _clean_node_id(c.get("ID_AMONT"))
-        d_node = _clean_node_id(c.get("ID_AVAL"))
+    refoulements_traites = []
+    sections_rectangulaires = []
+
+    for cr in conduits_resolus:
+        cid = cr["cid"]
+        u_node = cr["u_node"]
+        d_node = cr["d_node"]
+        c = cr["row"]
         if not u_node or not d_node or u_node == d_node:
             continue
         length = float(c["Longeur"]) if ("Longeur" in c and pd.notna(c["Longeur"]) and c["Longeur"] > 0) else float(c.geometry.length)
         length = max(1.0, round(length, 2))
-        rough = 0.013
+        
+        # Rugosité dynamique par matériau réel (Chantier 1.4)
+        rough = _determiner_rugosite(c.get("MATERIAU"))
+        
         diam_mm = float(c["DIAMETRE"]) if ("DIAMETRE" in c and pd.notna(c["DIAMETRE"]) and c["DIAMETRE"] > 0) else 600.0
         diam_m = max(0.2, diam_mm / 1000.0)
+
+        # Forme géométrique transversale (Chantier 1.3)
+        shape, geom1, geom2, barrels = _determiner_forme_section(c, diam_m)
+        if shape == "RECTANGULAR":
+            sections_rectangulaires.append({"cid": cid, "hauteur_m": geom1, "largeur_m": geom2})
+
+        # Détection de refoulement (Chantier 1.1)
+        fct = str(c.get("FONCTIONMT") or c.get("fonctionmt") or "").strip().lower()
+        is_refoulement = ("refoul" in fct or "pompage" in fct)
+
         nom_v = str(c.get("NOM-VOIE") or c.get("NOMVOIE") or c.get("nom_voie") or "").strip()
         if nom_v.lower() in ("nan", "none", "null", ""):
             nom_v = ""
 
-        conduit_endpoints[cid] = {
-            "u": u_node,
-            "d": d_node,
-            "length": length,
-            "diam_mm": diam_mm,
-            "material": str(c.get("MATERIAU", "Béton")),
-            "nom_voie": nom_v
-        }
-        conduit_lines.append(f"{cid:<16} {u_node:<16} {d_node:<16} {length:<10.2f} {rough:<10.4f} 0.000      0.000      0.000      0.000")
-        xsec_lines.append(f"{cid:<16} CIRCULAR     {diam_m:<16.3f} 0.000      0.000      0.000      1")
+        if is_refoulement:
+            # Modélisation physique SWMM 5.2 : [PUMPS] alimentée par courbe [CURVES] + conduite en charge aval
+            n_ref_node = f"N_REF_{cid}"
+            coord_u = coord_noeuds.get(u_node, (100.0, 100.0))
+            coord_noeuds[n_ref_node] = (coord_u[0] + 1.0, coord_u[1] + 1.0)
+            noeuds_spatiaux_crees[n_ref_node] = coord_noeuds[n_ref_node]
+            conduit_nodes.add(n_ref_node)
+
+            pump_id = f"PMP_{cid}"
+            curve_id = f"CURV_PMP_{cid}"
+            pump_lines.append(f"{pump_id:<16} {u_node:<16} {n_ref_node:<16} {curve_id:<16} ON       0.000      0.000")
+
+            # Courbe de pompe caractéristique Type 1 débit/hauteur selon diamètre nominal
+            q_nom = round(math.pi * (diam_m / 2.0)**2 * 1.5, 4)
+            curve_lines.append(f"{curve_id:<16} PUMP       0.000      35.00")
+            curve_lines.append(f"{curve_id:<16}            {q_nom:<10.4f} 25.00")
+            curve_lines.append(f"{curve_id:<16}            {round(q_nom * 1.5, 4):<10.4f} 10.00")
+
+            conduit_lines.append(f"{cid:<16} {n_ref_node:<16} {d_node:<16} {length:<10.2f} {rough:<10.4f} 0.000      0.000      0.000      0.000")
+            if shape == "RECTANGULAR":
+                xsec_lines.append(f"{cid:<16} RECTANGULAR  {geom1:<16.3f} {geom2:<10.3f} 0.000      0.000      {barrels}")
+            else:
+                xsec_lines.append(f"{cid:<16} CIRCULAR     {geom1:<16.3f} 0.000      0.000      0.000      {barrels}")
+
+            conduit_endpoints[cid] = {
+                "u": n_ref_node,
+                "d": d_node,
+                "length": length,
+                "diam_mm": diam_mm,
+                "material": str(c.get("MATERIAU", "PEHD")),
+                "nom_voie": nom_v,
+                "fonction": "refoulement",
+                "pompe": pump_id
+            }
+            refoulements_traites.append({
+                "cid": cid,
+                "pompe": pump_id,
+                "station_amont": u_node,
+                "exutoire_aval": d_node,
+                "diametre_mm": diam_mm,
+                "longueur_m": length,
+                "debit_nominal_m3s": q_nom
+            })
+        else:
+            conduit_lines.append(f"{cid:<16} {u_node:<16} {d_node:<16} {length:<10.2f} {rough:<10.4f} 0.000      0.000      0.000      0.000")
+            if shape == "RECTANGULAR":
+                xsec_lines.append(f"{cid:<16} RECTANGULAR  {geom1:<16.3f} {geom2:<10.3f} 0.000      0.000      {barrels}")
+            else:
+                xsec_lines.append(f"{cid:<16} CIRCULAR     {geom1:<16.3f} 0.000      0.000      0.000      {barrels}")
+
+            conduit_endpoints[cid] = {
+                "u": u_node,
+                "d": d_node,
+                "length": length,
+                "diam_mm": diam_mm,
+                "material": str(c.get("MATERIAU", "Béton")),
+                "nom_voie": nom_v,
+                "fonction": "gravitaire"
+            }
 
     if creer_exutoire_dedie:
         cid_out = f"C_OUT_{outfall_code}"
@@ -431,10 +671,28 @@ def generer_lignes_sections_inp(
     lines.extend(conduit_lines)
     lines.append("")
 
+    if pump_lines:
+        lines.append("[PUMPS]")
+        lines.append(";;Name           From Node        To Node          Pump Curve       Status   Startup  Shutoff")
+        lines.extend(pump_lines)
+        lines.append("")
+
+    if weir_lines:
+        lines.append("[WEIRS]")
+        lines.append(";;Name           From Node        To Node          Type         CrestHt    Cd         Gated    EndCon   EndCoeff Surcharge")
+        lines.extend(weir_lines)
+        lines.append("")
+
     lines.append("[XSECTIONS]")
     lines.append(";;Link           Shape        Geom1            Geom2      Geom3      Geom4      Barrels    Culvert")
     lines.extend(xsec_lines)
     lines.append("")
+
+    if curve_lines:
+        lines.append("[CURVES]")
+        lines.append(";;Name           Type       X-Value    Y-Value")
+        lines.extend(curve_lines)
+        lines.append("")
 
     # ------------------------------------------------------------------
     # LOT P1.3 — Apports de temps sec (DWF)
@@ -552,6 +810,12 @@ def generer_lignes_sections_inp(
             if _pt is not None:
                 lines.append(f"{_out_bnd:<16} {float(_pt[0]):<18.3f} {float(_pt[1]):<18.3f}")
                 coords_traitees.add(_out_bnd)
+
+    # Complétude spatiale : garantir que chaque nœud présent dans le modèle a ses coordonnées dans [COORDINATES]
+    for nid, pt in coord_noeuds.items():
+        if nid not in coords_traitees:
+            lines.append(f"{nid:<16} {pt[0]:<18.3f} {pt[1]:<18.3f}")
+            coords_traitees.add(nid)
     lines.append("")
 
     lines.append("[POLYGONS]")
@@ -649,7 +913,37 @@ def generer_lignes_sections_inp(
         "apports_dwf": apports_meta,
         "apports_dwf_ignores": apports_ignores,
         "raccordements_orphelins": [item[0] for item in racc_orph_valides],
+        "refoulements_traites": refoulements_traites,
+        "raccordements_spatiaux": raccordements_spatiaux,
+        "sections_rectangulaires": sections_rectangulaires,
+        "deversoirs_traites": deversoirs_traites,
     }
+
+    try:
+        from src.domain.moteur_swmm.audit_exclusions import generer_bilan_reconciliation
+        sections_presents = {l.strip()[1:-1] for l in lines if l.startswith("[") and l.endswith("]")}
+        inp_counts = {
+            "canalisations_gravitaires": len(conduit_lines) - len(refoulements_traites),
+            "canalisations_refoulement": len(refoulements_traites),
+            "regards": len([l for l in lines if l.startswith(";;") is False and len(l.split()) >= 6 and "[" not in l]),
+            "rejets": len([l for l in lines if "FREE" in l and "[" not in l]),
+            "stations_relevage": len(refoulements_traites),
+            "deversoirs_orage": len(deversoirs_traites),
+        }
+        meta["reconciliation"] = generer_bilan_reconciliation(
+            gpkg_counts=gpkg_counts or {},
+            inp_counts=inp_counts,
+            exclusions=[],
+            sections_inp_presents=sections_presents,
+            hypotheses=[
+                {"domaine": "pompes", "detail": "Courbe caractéristique Type 1 estimée à partir du diamètre nominal"},
+                {"domaine": "rugosite", "detail": "Formulation Manning différenciée selon la colonne MATERIAU"},
+                {"domaine": "sections", "detail": f"{len(sections_rectangulaires)} sections rectangulaires prises en compte (FORMESECT, HAUTEUR, GDEBASE)"},
+                {"domaine": "raccordements_spatiaux", "detail": f"{len(raccordements_spatiaux)} tronçons raccordés par tolérance spatiale <= 0.50m"},
+            ]
+        )
+    except Exception as e_rec:
+        logger.warning(f"Bilan de réconciliation non calculé: {e_rec}")
 
     return lines, meta
 

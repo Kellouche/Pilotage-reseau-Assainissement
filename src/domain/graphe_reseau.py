@@ -152,7 +152,16 @@ class ConstructeurGrapheReseau:
             if not math.isfinite(_long_f):
                 _long_f = 0.0
             longueur = _long_f
-            type_conduite = str(row.get('type', row.get('nature', row.get('Fonction_1', 'gravitaire')))).lower()
+            # Propagation de FONCTIONMT (Chantier A.1) : détection des refoulements, pompages ou gravitaires
+            raw_type = (
+                row.get('FONCTIONMT')
+                or row.get('fonctionmt')
+                or row.get('type')
+                or row.get('nature')
+                or row.get('Fonction_1')
+                or 'gravitaire'
+            )
+            type_conduite = str(raw_type).strip().lower()
 
             point_depart, point_arrivee = self._extremites(geom)
 

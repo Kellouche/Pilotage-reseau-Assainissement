@@ -57,3 +57,26 @@ def test_orientation_hydraulique_amont_aval():
     # T3 crée un cycle N1 -> N2 -> N3 -> N1
     cycles = [a for a in constructeur.anomalies_topologiques if a['type'] == 'boucle_fermee']
     assert len(cycles) > 0
+
+
+def test_orientation_avec_fonctionmt_refoulement_gpkg():
+    """Vérifie que la colonne réelle du GPKG FONCTIONMT='Refoulement' empêche l'inversion de sens."""
+    noeuds = gpd.GeoDataFrame({
+        'id': ['SR_01', 'REG_HAUT'],
+        'COORDZ': [10.0, 50.0],
+        'PROFRADI': [0.0, 0.0],
+        'geometry': [Point(0, 0), Point(10, 10)]
+    })
+    troncons = gpd.GeoDataFrame({
+        'id': ['REF_01'],
+        'noeud_amont': ['SR_01'],
+        'noeud_aval': ['REG_HAUT'],
+        'FONCTIONMT': ['Refoulement'],
+        'longueur': [100.0],
+        'geometry': [LineString([(0, 0), (10, 10)])]
+    })
+    constructeur = ConstructeurGrapheReseau()
+    G = constructeur.construire_graphe(noeuds, troncons)
+    assert G.has_edge('SR_01', 'REG_HAUT')
+    assert G.edges['SR_01', 'REG_HAUT']['inverse_automatiquement'] is False
+    assert 'refoulement' in G.edges['SR_01', 'REG_HAUT']['type']

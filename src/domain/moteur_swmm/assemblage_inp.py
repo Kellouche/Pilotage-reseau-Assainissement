@@ -102,6 +102,9 @@ def assembler_modele_inp_impl(
     scen = scenarios_actifs[scenario_key]
     duree_sim = duree_heures if (duree_heures and duree_heures > 0) else scen["duree_heures"]
 
+    stations_relevage = gpd.GeoDataFrame()
+    ouvrages_speciaux = gpd.GeoDataFrame()
+
     if regards_gdf is not None and canalisations_gdf is not None:
         regards = regards_gdf.copy()
         canalisations = canalisations_gdf.copy()
@@ -111,6 +114,8 @@ def assembler_modele_inp_impl(
         regard_layer = next((l for l in layers if "regard" in l.lower()), None)
         pipe_layer = next((l for l in layers if any(k in l.lower() for k in ["canalisat", "conduit", "pipe", "troncon"]) and "désaffect" not in l.lower() and "desaffect" not in l.lower()), None)
         rejet_layer = next((l for l in layers if any(k in l.lower() for k in ["rejet", "exutoire", "outfall"])), None)
+        station_layer = next((l for l in layers if any(k in l.lower() for k in ["station", "pompe", "relevage"])), None)
+        ouvrages_layer = next((l for l in layers if any(k in l.lower() for k in ["ouvrage", "special", "speciaux"])), None)
 
         if not regard_layer or not pipe_layer:
             raise ValueError("Le fichier GeoPackage doit contenir les couches regards et canalisations.")
@@ -118,6 +123,28 @@ def assembler_modele_inp_impl(
         regards = gpd.read_file(str(gpkg_path), layer=regard_layer)
         canalisations = gpd.read_file(str(gpkg_path), layer=pipe_layer)
         rejets = gpd.read_file(str(gpkg_path), layer=rejet_layer) if rejet_layer else gpd.GeoDataFrame()
+        stations_relevage = gpd.read_file(str(gpkg_path), layer=station_layer) if station_layer else gpd.GeoDataFrame()
+        ouvrages_speciaux = gpd.read_file(str(gpkg_path), layer=ouvrages_layer) if ouvrages_layer else gpd.GeoDataFrame()
+
+    # Inventaire initial SIG pour le bilan de réconciliation 1:1 (Chantier 2)
+    repart_mat = canalisations["MATERIAU"].value_counts().to_dict() if "MATERIAU" in canalisations.columns else {}
+    repart_formes = canalisations["FORMESECT"].value_counts().to_dict() if "FORMESECT" in canalisations.columns else {}
+    repart_diam = canalisations["DIAMETRE"].value_counts().head(10).to_dict() if "DIAMETRE" in canalisations.columns else {}
+    nb_refoul_sig = int((canalisations["FONCTIONMT"].astype(str).str.lower() == "refoulement").sum()) if "FONCTIONMT" in canalisations.columns else 0
+    nb_grav_sig = len(canalisations) - nb_refoul_sig
+
+    gpkg_counts = {
+        "canalisations_total": len(canalisations),
+        "canalisations_gravitaires": nb_grav_sig,
+        "canalisations_refoulement": nb_refoul_sig,
+        "regards": len(regards),
+        "rejets": len(rejets),
+        "stations_relevage": len(stations_relevage),
+        "deversoirs_orage": len(ouvrages_speciaux[ouvrages_speciaux["TYPEOUVR"].astype(str).str.lower().str.contains("deversoir|dvo")]) if ("TYPEOUVR" in ouvrages_speciaux.columns and not ouvrages_speciaux.empty) else 0,
+        "repartition_materiaux": {str(k): int(v) for k, v in repart_mat.items()},
+        "repartition_formes": {str(k): int(v) for k, v in repart_formes.items()},
+        "repartition_diametres": {str(k): int(v) for k, v in repart_diam.items()},
+    }
 
     # Filtrage du sous-réseau par bassin
     (
@@ -207,7 +234,10 @@ def assembler_modele_inp_impl(
         apports_dwf=apports_dwf,
         elevations_terrain=elevations_terrain,
         altimetrie_meta=altimetrie_meta,
-        cotes_validations=cotes_validations
+        cotes_validations=cotes_validations,
+        stations_relevage=stations_relevage,
+        ouvrages_speciaux=ouvrages_speciaux,
+        gpkg_counts=gpkg_counts,
     )
 
     contenu_inp = "\n".join(lines)
