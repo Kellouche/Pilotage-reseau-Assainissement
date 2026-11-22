@@ -249,6 +249,11 @@ def generer_lignes_sections_inp(
                 except Exception:
                     pass
 
+    # Résolveur topologique canonique (ID -> alias -> snap <=0.50 m).
+    # Source unique de connectivité partagée avec le graphe de bassins.
+    from src.domain.topologie import ResoluteurNoeuds, PROV_ALIAS, PROV_SNAP
+    resolveur = ResoluteurNoeuds(coord_noeuds, tolerance_snap_m=0.50)
+
     # Index spatial KD-Tree pour le raccordement ciblé des orphelins résiduels (Chantier 3)
     tree_noeuds = None
     noeuds_connus_ids: List[str] = []
@@ -270,8 +275,6 @@ def generer_lignes_sections_inp(
 
     for idx, c in canalisations.iterrows():
         cid = f"C_{idx+1}"
-        u_node = _clean_node_id(c.get("ID_AMONT"))
-        d_node = _clean_node_id(c.get("ID_AVAL"))
 
         pt_start, pt_end = None, None
         geom = c.geometry if hasattr(c, "geometry") else None
@@ -289,29 +292,34 @@ def generer_lignes_sections_inp(
             except Exception:
                 pass
 
-        # Filet de sécurité spatial amont (Chantier 3)
-        if not u_node:
-            if pt_start and tree_noeuds is not None:
-                d_c, i_c = tree_noeuds.query(pt_start)
-                if d_c <= 0.50:
-                    u_node = noeuds_connus_ids[i_c]
-                    raccordements_spatiaux.append({"cid": cid, "extremite": "amont", "noeud": u_node, "distance_m": round(float(d_c), 3)})
-            if not u_node and pt_start:
-                u_node = f"N_{cid}_U"
-                coord_noeuds[u_node] = pt_start
-                noeuds_spatiaux_crees[u_node] = pt_start
+        # Résolution canonique : ID -> alias (RJ<n>) -> snap <= 0.50 m.
+        # Le snap n'est jamais tenté quand l'ID est présent et valide.
+        res_u = resolveur.resoudre(c.get("ID_AMONT"), pt_start)
+        res_d = resolveur.resoudre(c.get("ID_AVAL"), pt_end)
 
-        # Filet de sécurité spatial aval (Chantier 3)
-        if not d_node:
-            if pt_end and tree_noeuds is not None:
-                d_c, i_c = tree_noeuds.query(pt_end)
-                if d_c <= 0.50:
-                    d_node = noeuds_connus_ids[i_c]
-                    raccordements_spatiaux.append({"cid": cid, "extremite": "aval", "noeud": d_node, "distance_m": round(float(d_c), 3)})
-            if not d_node and pt_end:
-                d_node = f"N_{cid}_D"
-                coord_noeuds[d_node] = pt_end
-                noeuds_spatiaux_crees[d_node] = pt_end
+        for ext, res in (("amont", res_u), ("aval", res_d)):
+            if res.provenance == PROV_SNAP and res.noeud:
+                raccordements_spatiaux.append({
+                    "cid": cid, "extremite": ext, "noeud": res.noeud,
+                    "distance_m": round(res.distance_m, 3), "provenance": "snap"})
+            elif res.provenance == PROV_ALIAS and res.noeud:
+                raccordements_spatiaux.append({
+                    "cid": cid, "extremite": ext, "noeud": res.noeud,
+                    "distance_m": 0.0, "provenance": "alias"})
+
+        # Filet de sécurité : nœud spatial à la coordonnée réelle
+        # (uniquement si ni ID/alias ni snap n'ont résolu l'extrémité).
+        u_node = res_u.noeud
+        if not u_node and pt_start:
+            u_node = f"N_{cid}_U"
+            coord_noeuds[u_node] = pt_start
+            noeuds_spatiaux_crees[u_node] = pt_start
+
+        d_node = res_d.noeud
+        if not d_node and pt_end:
+            d_node = f"N_{cid}_D"
+            coord_noeuds[d_node] = pt_end
+            noeuds_spatiaux_crees[d_node] = pt_end
 
         if u_node and d_node and u_node == d_node:
             d_node = f"N_{cid}_D"
