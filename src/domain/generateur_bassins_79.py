@@ -92,9 +92,15 @@ def partitionner_79_bassins_versants(
 
     _log_part(f"[partitionnement] Construction du graphe depuis {gpkg_p.name}...", flush=True)
     G = construire_graphe(str(gpkg_p))
-    exutoires_physiques = trouver_exutoires_physiques(G)
-    nb_exutoires = len(exutoires_physiques)
-    _log_part(f"[partitionnement] {nb_exutoires} exutoires physiques identifiés.", flush=True)
+    # Attribution : exutoires physiques + nœuds morts (exutoires implicites).
+    # Un fragment connecté aboutissant à un nœud sans sortie n'est PAS orphelin :
+    # il est rattaché à son exutoire implicite et soumis à revue.
+    exutoires_attribution = trouver_exutoires_physiques(G, inclure_exutoires_implicites=True)
+    nb_exutoires = len(exutoires_attribution)
+    nb_exutoires_physiques = sum(
+        1 for i in exutoires_attribution.values() if i.get('type') != 'exutoire_implicite'
+    )
+    _log_part(f"[partitionnement] {nb_exutoires} exutoires identifiés ({nb_exutoires_physiques} physiques, {nb_exutoires - nb_exutoires_physiques} implicites).", flush=True)
 
     # 1. Neutraliser les boucles / cycles pour un parcours amont strict
     try:
@@ -106,11 +112,11 @@ def partitionner_79_bassins_versants(
 
     # 2. Attribution de chaque nœud au premier exutoire aval rencontré
     #    Chaque exutoire draine son réseau amont direct jusqu'aux exutoires amont voisins
-    ex_set = set(exutoires_physiques.keys())
+    ex_set = set(exutoires_attribution.keys())
     node_to_exutoire: Dict[str, str] = {}
 
     # Tri par priorité hydraulique
-    exutoires_tries = sorted(exutoires_physiques.items(), key=lambda x: x[1].get('priorite', 99))
+    exutoires_tries = sorted(exutoires_attribution.items(), key=lambda x: x[1].get('priorite', 99))
 
     for ex_id, _ in exutoires_tries:
         node_to_exutoire[ex_id] = ex_id
@@ -123,6 +129,22 @@ def partitionner_79_bassins_versants(
                     queue.append(pred)
 
     _log_part(f"[partitionnement] {len(node_to_exutoire)} nœuds connectés directement aux {nb_exutoires} exutoires.", flush=True)
+
+    # Exutoires retenus pour la création de bassins versants fusionnés :
+    # - exutoires physiques : toujours ;
+    # - exutoires implicites : uniquement si le fragment drainé est significatif
+    #   (>= SEUIL_NOEUDS_IMPLICITE nœuds attribués, miroir du min_edges=10 des clusters).
+    # Les fragments plus petits restent rattachés (is_orphelin=0) mais sans
+    # bassin propre : ils relèvent de la file de revue, pas de la simulation.
+    SEUIL_NOEUDS_IMPLICITE = 10
+    _comptage_noeuds = Counter(node_to_exutoire.values())
+    exutoires_bassins = {
+        ex_id: info for ex_id, info in exutoires_attribution.items()
+        if info.get('type') != 'exutoire_implicite'
+        or _comptage_noeuds.get(ex_id, 0) >= SEUIL_NOEUDS_IMPLICITE
+    }
+    _log_part(f"[partitionnement] {len(exutoires_bassins)} exutoires retenus pour les bassins versants "
+              f"({sum(1 for i in exutoires_bassins.values() if i.get('type') == 'exutoire_implicite')} implicites significatifs).", flush=True)
 
     # 3. Charger les couches Regards et Canalisations du GPKG
     layers = gpd.list_layers(str(gpkg_p))['name'].tolist()
@@ -149,7 +171,7 @@ def partitionner_79_bassins_versants(
 
     if not connected_points:
         # Fallback si aucun regard n'est connecté par code : utiliser la position des exutoires
-        for ex_id, ex_data in exutoires_physiques.items():
+        for ex_id, ex_data in exutoires_attribution.items():
             if 'x' in ex_data and 'y' in ex_data:
                 connected_points.append(Point(float(ex_data['x']), float(ex_data['y'])))
                 connected_ex_ids.append(ex_id)
@@ -157,9 +179,9 @@ def partitionner_79_bassins_versants(
 
     conn_tree = STRtree(connected_points)
 
-    # Palette de couleurs
-    palette = generer_palette_couleurs(nb_exutoires)
-    exutoire_id_list = list(exutoires_physiques.keys())
+    # Palette de couleurs (exutoires validés pour les bassins fusionnés)
+    palette = generer_palette_couleurs(len(exutoires_bassins))
+    exutoire_id_list = list(exutoires_bassins.keys())
     ex_to_color = {ex_id: palette[i % len(palette)] for i, ex_id in enumerate(exutoire_id_list)}
     ex_to_num = {ex_id: i + 1 for i, ex_id in enumerate(exutoire_id_list)}
 
@@ -199,11 +221,11 @@ def partitionner_79_bassins_versants(
         assigned_ex = None
         cand_ex = node_to_exutoire.get(str(raw_code)) or node_to_exutoire.get(str_code)
         if cand_ex:
-            # Vérification anti-collision : si le regard a le même identifiant textuel qu'un exutoire physique
+            # Vérification anti-collision : si le regard a le même identifiant textuel qu'un exutoire
             # (ex: Ouvrage 11 vs Regard 11.0 distant de 3 km), on n'accepte la correspondance directe
             # que s'ils sont physiquement au même emplacement (< 60 m).
-            if cand_ex in exutoires_physiques:
-                ex_info = exutoires_physiques[cand_ex]
+            if cand_ex in exutoires_attribution:
+                ex_info = exutoires_attribution[cand_ex]
                 ex_x = ex_info.get('x')
                 ex_y = ex_info.get('y')
                 if ex_x is not None and ex_y is not None:
@@ -222,7 +244,7 @@ def partitionner_79_bassins_versants(
             orphelins_regards_records.append({
                 "code_regard": str_code,
                 "exutoire_proche": nearest_ex,
-                "nom_exutoire_proche": exutoires_physiques.get(nearest_ex, {}).get('nom', str(nearest_ex)),
+                "nom_exutoire_proche": exutoires_attribution.get(nearest_ex, {}).get('nom', str(nearest_ex)),
                 "noeud_proche": str(nearest_node),
                 "distance_rattachement_m": dist_snap,
                 "commune": row.get('COMMUNE', ''),
@@ -243,8 +265,8 @@ def partitionner_79_bassins_versants(
         area_ha = round(area_m2 / 10000.0, 4)
         width_m = round(max(math.sqrt(area_m2), 5.0), 2)
 
-        if not is_orphelin and assigned_ex is not None:
-            ex_info = exutoires_physiques.get(assigned_ex, {})
+        if not is_orphelin and assigned_ex is not None and assigned_ex in exutoires_bassins:
+            ex_info = exutoires_attribution.get(assigned_ex, {})
             b_num = ex_to_num.get(assigned_ex, 1)
             b_color = ex_to_color.get(assigned_ex, "#3498db")
 
@@ -272,6 +294,33 @@ def partitionner_79_bassins_versants(
             })
 
             bassin_polygons_map[assigned_ex].append(clipped_cell)
+        elif not is_orphelin and assigned_ex is not None:
+            # Fragment connecté à un exutoire implicite non significatif :
+            # rattaché (is_orphelin=0) mais sans bassin versant propre —
+            # relève de la file de revue, pas de la simulation.
+            ex_info = exutoires_attribution.get(assigned_ex, {})
+            voronoi_records.append({
+                "subcatchment_id": f"SB_{str_code}",
+                "outlet": str_code,
+                "id_bassin": None,
+                "exutoire_id": str(assigned_ex),
+                "nom_bassin": "Fragment à exutoire non déclaré",
+                "type_exutoire": "exutoire_implicite",
+                "nom_voie": str(row.get('NOMVOIE', '') or (G.nodes.get(str_code, {}).get('nom_voie', '') if str_code in G.nodes else '')),
+                "area_ha": area_ha,
+                "area_m2": area_m2,
+                "imperv_pct": 70.0,
+                "width_m": width_m,
+                "slope_pct": 0.5,
+                # Infiltration Horton
+                "f0": 75.0,
+                "fc": 10.0,
+                "decay_k": 4.0,
+                "is_orphelin": 0,
+                "dist_snap_m": 0.0,
+                "couleur": "#64748b",
+                "geometry": clipped_cell
+            })
         else:
             # Regard orphelin : sa cellule Voronoï est isolée hors des 79 bassins versants d'exutoires
             voronoi_records.append({
@@ -313,7 +362,7 @@ def partitionner_79_bassins_versants(
     _log_part(f"[partitionnement] Fusion spatiale des macro-bassins versants urbains ({len(bassin_polygons_map)} exutoires)...", flush=True)
 
     for ex_id, geoms in bassin_polygons_map.items():
-        ex_info = exutoires_physiques.get(ex_id, {})
+        ex_info = exutoires_bassins.get(ex_id, {})
         b_num = ex_to_num.get(ex_id, 1)
         b_color = ex_to_color.get(ex_id, "#3498db")
 
@@ -422,6 +471,7 @@ def partitionner_79_bassins_versants(
     # 7. Identifier et colorier les canalisations par bassin versant
     pipes_by_exutoire: Dict[str, List[Dict[str, Any]]] = {ex_id: [] for ex_id in exutoire_id_list}
     orphelins_pipes_features: List[Dict[str, Any]] = []
+    fragments_pipes_features: List[Dict[str, Any]] = []
 
     _log_part("[partitionnement] Classification topologique des conduites par exutoire...", flush=True)
     try:
@@ -489,6 +539,26 @@ def partitionner_79_bassins_versants(
                         }
                     }
                     pipes_by_exutoire[assigned_pipe_ex].append(feat_pipe)
+                elif assigned_pipe_ex:
+                    # Fragment connecté à un exutoire implicite non significatif :
+                    # rattaché (is_orphelin=0) mais sans bassin versant propre.
+                    feat_pipe = {
+                        "type": "Feature",
+                        "geometry": mapping(geom_wgs84),
+                        "properties": {
+                            "conduit_id": pipe_id,
+                            "cluster_id": None,
+                            "exutoire_id": str(assigned_pipe_ex),
+                            "exutoire_type": "exutoire_implicite",
+                            "couleur": "#64748b",
+                            "diametre": diametre,
+                            "longueur": longueur,
+                            "materiau": materiau,
+                            "type": "conduite",
+                            "is_orphelin": 0
+                        }
+                    }
+                    fragments_pipes_features.append(feat_pipe)
                 else:
                     feat_pipe = {
                         "type": "Feature",
@@ -551,6 +621,24 @@ def partitionner_79_bassins_versants(
                         }
                     }
                     pipes_by_exutoire[assigned_pipe_ex].append(feat_pipe)
+                elif assigned_pipe_ex:
+                    feat_pipe = {
+                        "type": "Feature",
+                        "geometry": mapping(geom_wgs84),
+                        "properties": {
+                            "conduit_id": pipe_id,
+                            "cluster_id": None,
+                            "exutoire_id": str(assigned_pipe_ex),
+                            "exutoire_type": "exutoire_implicite",
+                            "couleur": "#64748b",
+                            "diametre": diametre,
+                            "longueur": longueur,
+                            "materiau": materiau,
+                            "type": "conduite",
+                            "is_orphelin": 0
+                        }
+                    }
+                    fragments_pipes_features.append(feat_pipe)
                 else:
                     feat_pipe = {
                         "type": "Feature",
@@ -569,6 +657,7 @@ def partitionner_79_bassins_versants(
                     orphelins_pipes_features.append(feat_pipe)
 
         _log_part(f"[partitionnement] {sum(len(p) for p in pipes_by_exutoire.values())} conduites connectées réparties sur les {len(gdf_bassins_79)} bassins.", flush=True)
+        _log_part(f"[partitionnement] {len(fragments_pipes_features)} conduites en fragments à exutoire implicite.", flush=True)
         _log_part(f"[partitionnement] {len(orphelins_pipes_features)} tronçons orphelins isolés.", flush=True)
     except Exception as e:
         _log_part(f"[partitionnement] Erreur classification conduites: {e}", flush=True)
@@ -653,7 +742,7 @@ def partitionner_79_bassins_versants(
         cluster_features = [feat]
 
         # Ajouter l'exutoire ponctuel s'il a des coordonnées valides
-        ex_info = exutoires_physiques.get(ex_id_str, {})
+        ex_info = exutoires_bassins.get(ex_id_str, {})
         if 'x' in ex_info and 'y' in ex_info:
             try:
                 pt_ex = Point(float(ex_info['x']), float(ex_info['y']))
@@ -719,17 +808,23 @@ def partitionner_79_bassins_versants(
         orph_reg_geojson = json.loads(gdf_orph_wgs84.to_json(na="drop")) if not gdf_orph_wgs84.empty else {"type": "FeatureCollection", "features": []}
         clusters_cache_data = {
             "status": "success",
-            "exutoires_physiques": nb_exutoires,
+            "exutoires_physiques": nb_exutoires_physiques,
+            "exutoires_implicites": nb_exutoires - nb_exutoires_physiques,
             "clusters_crees": len(gdf_bassins_79),
             "surface_totale_ha": total_surface_ha,
             "nb_sous_bassins_voronoi": len(gdf_voronoi),
             "nb_regards_orphelins": len(gdf_orphelins_regards),
             "nb_troncons_orphelins": len(orphelins_pipes_features),
+            "nb_conduites_fragments": len(fragments_pipes_features),
             "troncons_connectes": total_troncons_assignes,
             "bassins_geojson": bassins_geojson,
             "orphelins_conduites": {
                 "type": "FeatureCollection",
                 "features": orphelins_pipes_features
+            },
+            "fragments_conduites": {
+                "type": "FeatureCollection",
+                "features": fragments_pipes_features
             },
             "orphelins_regards": orph_reg_geojson,
             "resultats": results_formatted
