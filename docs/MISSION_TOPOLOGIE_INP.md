@@ -1,5 +1,8 @@
 # MISSION D'INGÉNIERIE : TRANSFERT FIDÈLE GPKG → SWMM 5.2 « ZÉRO PERTE »
 
+> **Statut** : document d'analyse — la version contractuelle consolidée est
+> **[CAHIER_DE_CHARGES_RESTITUTION_INP.md](CAHIER_DE_CHARGES_RESTITUTION_INP.md)**
+
 > **Statut** : version corrigée — fondée sur l'audit mesuré du GPKG réel
 > (`Assainissement_Ville.gpkg`, 10 295 canalisations, 10 538 regards,
 > 79 rejets, 5 stations de relevage, 38 ouvrages spéciaux)
