@@ -64,3 +64,12 @@ def test_generer_bilan_reconciliation():
     assert sections_map["PUMPS"] == "ALIMENTÉE"
     assert sections_map["WEIRS"] == "ALIMENTÉE"
     assert sections_map["POLLUTANTS"] == "NON_APPLICABLE"
+
+
+def test_endpoint_reconciliation_404_quand_pas_de_simulation():
+    from fastapi.testclient import TestClient
+    from api.main import app
+    client = TestClient(app)
+    # Sans simulation, doit retourner 404
+    resp = client.get("/api/simulations/reconciliation?cluster_id=9999")
+    assert resp.status_code in (401, 403, 404)

@@ -1689,6 +1689,43 @@ def download_latest_rpt(
     )
 
 
+@router.get("/reconciliation")
+def get_simulation_reconciliation(
+    cluster_id: Optional[str] = None,
+    project_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+    tenant: TenantContext = Depends(get_tenant_context)
+):
+    """
+    Bilan de réconciliation 1:1 entre le SIG source (GPKG) et le modèle SWMM (.inp).
+    Présente l'inventaire avant/après, la ventilation du parc (matériaux, formes, diamètres),
+    la matrice d'écarts type des sections SWMM 5.2 et le registre des exclusions auditées.
+    """
+    _org_id_requete(tenant)
+    ctx = _contexte_simulation_autorise(
+        db, tenant, cluster_id=cluster_id, project_id=project_id)
+    if not ctx or not ctx.data:
+        raise HTTPException(
+            status_code=404,
+            detail="Aucune simulation disponible pour ce contexte."
+        )
+
+    meta = ctx.data.get("meta", {})
+    reconciliation = meta.get("reconciliation")
+    if not reconciliation:
+        raise HTTPException(
+            status_code=404,
+            detail="Bilan de réconciliation non disponible pour cette simulation."
+        )
+
+    return {
+        "status": "success",
+        "simulation_id": ctx.data.get("simulation_id"),
+        "cluster_id": cluster_id,
+        "reconciliation": reconciliation
+    }
+
+
 # ============================================================
 # ORDRE DE MISSION TERRAIN BMS (PDF POUR ÉQUIPES D'ASTREINTE ONA)
 # ============================================================
