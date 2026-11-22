@@ -1,8 +1,8 @@
-# Fiche Produit & Cadrage Stratégique — SWMM Platform SaaS
+# Fiche Produit & Cadrage Stratégique — DrainPilot 5.2 SaaS
 
-> **Plateforme Collaborative de Gestion Dynamique, Diagnostic de Qualité et Modélisation Hydraulique des Réseaux d'Assainissement & Eaux Pluviales**  
-> **Version** : 1.0 (Phase 0 — Cadrage SaaS)  
-> **Date** : Octobre 2026  
+> **Plateforme Collaborative de Gestion Dynamique, Diagnostic de Qualité, Alerte Prédictive BMS et Modélisation Hydraulique des Réseaux d'Assainissement & Eaux Pluviales**  
+> **Version** : DrainPilot 5.2 (SaaS Industriel)  
+> **Date** : Novembre 2026  
 > **Statut** : Document de référence validé  
 
 ---
@@ -17,8 +17,8 @@ L'exploitation, la gestion patrimoniale et la modélisation hydraulique des rés
 - **La vulnérabilité accrue aux inondations urbaines** : Face à l'imperméabilisation croissante et aux épisodes pluvieux intenses, les collectivités manquent d'un outil prédictif rapide pour localiser les goulots d'étranglement, dimensionner les bassins de rétention et évaluer l'impact des débordements en surface.
 
 ### 1.2 Notre Mission
-**SWMM Platform SaaS** unifie l'analyse géospatiale, le contrôle qualité de données, la simulation hydraulique d'assainissement et la collecte mobile terrain dans une plateforme cloud collaborative unique :
-> *"Permettre à chaque gestionnaire, régie communale et bureau d'études d'assainissement d'auditer la qualité de ses réseaux, de modéliser les écoulements de temps sec et de temps de pluie via le moteur certifié EPA SWMM 5.2, et de synchroniser en temps réel les données de terrain, directement dans le navigateur et sur smartphone."*
+**DrainPilot 5.2** unifie l'analyse géospatiale, le contrôle qualité de données, la simulation hydraulique d'assainissement, l'alerte prédictive météo (BMS) et la collecte mobile terrain dans une plateforme cloud collaborative unique :
+> *"Permettre à chaque gestionnaire, régie communale et bureau d'études d'assainissement d'auditer la qualité de ses réseaux, de modéliser les écoulements de temps sec et de temps de pluie via le moteur certifié EPA SWMM 5.2 (Saint-Venant 1D), d'anticiper les crues extrêmes (BMS ONM) et de synchroniser en temps réel les données de terrain, directement dans le navigateur et sur smartphone."*
 
 ---
 

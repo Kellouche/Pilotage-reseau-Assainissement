@@ -1,163 +1,178 @@
-# SWMM Platform — Pilotage & Modélisation Réseau d'Assainissement SaaS
+# DrainPilot 5.2 — Plateforme SaaS d'Ingénierie & Modélisation Hydraulique d'Assainissement
 
-## 📚 Référentiel Documentaire SaaS 2.0 (Officiel)
+[![SWMM 5.2](https://img.shields.io/badge/Solver-EPA%20SWMM%205.2.4-blue.svg)](https://www.epa.gov/water-research/storm-water-management-model-swmm)
+[![FastAPI](https://img.shields.io/badge/Backend-FastAPI%200.115-teal.svg)](https://fastapi.tiangolo.com)
+[![Leaflet HD](https://img.shields.io/badge/Frontend-Leaflet%20HD%20Cockpit-green.svg)](https://leafletjs.com)
+[![Multi-Tenant](https://img.shields.io/badge/Architecture-Multi--Tenant%20Stealth%20404-orange.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-100%25%20Validés-success.svg)]()
 
-- **[Guide Master SaaS](docs/01_README.md)**
-- **[Référentiel National Pluviométrique & IDF Algérie (ANRH/UHBC/ONA)](docs/REFERENTIEL_PLUVIOMETRIE_ALGERIE.md)**
-- **[Feuille de Route SaaS (Phases 0 à 7)](docs/13_ROADMAP_SAAS.md)**
-- **[Fiche Produit & Cadrage Stratégique](docs/14_FICHE_PRODUIT_CADRAGE.md)**
-- **[Glossaire et Garanties Métier (Non-Régression)](docs/14_GLOSSAIRE_ET_GARANTIES.md)**
-- **[Grille Tarifaire & Plans B2B](docs/15_PLANS_TARIFAIRES.md)**
-- **[Documentation Complète des Endpoints API](docs/09_ENDPOINTS_DOCUMENTATION.md)**
-- **[Dossier des Décisions d'Architecture (ADR 0001 à 0008)](docs/adr/)**
+> **DrainPilot 5.2** est la plateforme SaaS industrielle de référence pour l'audit patrimonial, le diagnostic de qualité géospatiale, la modélisation hydrodynamique certifiée EPA SWMM 5.2 (Saint-Venant 1D) et la gestion de crise pluviale des réseaux d'assainissement et d'eaux pluviales.
 
 ---
 
-## Documentation Historique du POC
+## 📚 Référentiel Documentaire Officiel
 
-- [Feuille de route POC](docs/ROADMAP.md)
-- [Organisation du projet](docs/ORGANISATION_PROJET.md)
-- [Inventaire du projet](docs/INVENTAIRE_PROJET.md)
-- [Lancement du projet](docs/LANCEMENT.md)
-- [Données du projet](docs/DONNEES.md)
-- [Application mobile](docs/MOBILE.md)
-- [Vision plateforme](README_PLATFORM.md)
+- **[Guide Master SaaS](docs/01_README.md)** : Vue d'ensemble de la plateforme SaaS, installation et démarrage rapide.
+- **[Feuille de Route SaaS (Phases 0 à 7)](docs/13_ROADMAP_SAAS.md)** : Spécifications complètes de l'architecture industrielle, chiffrage et jalons mesurables.
+- **[Suivi des Phases Opérationnelles 4 à 7](docs/TODO_PHASES_4_7.md)** : Checklist détaillée des travaux et priorités immédiates.
+- **[Feuille de Route Pluriannuelle 2027–2029](docs/FEUILLE_DE_ROUTE_2027_2029.md)** : Visions stratégiques et extensions futures (DAO AutoCAD, Jumeau numérique).
+- **[Documentation des Endpoints API](docs/09_ENDPOINTS_DOCUMENTATION.md)** : Référentiel exhaustif des 19 routeurs et 137 endpoints FastAPI.
+- **[Spécification Couches Satellites & Pochoir (SHP.md)](SHP.md)** : Architecture des données SIG externes, altimétrie IDW et extraction par pochoir.
+- **[Référentiel Pluviométrique & IDF Algérie](docs/REFERENTIEL_PLUVIOMETRIE_ALGERIE.md)** : Quantiles Gumbel et lois de Montana certifiées (ANRH/UHBC/ONA).
+- **[Fiche Produit & Cadrage Stratégique](docs/14_FICHE_PRODUIT_CADRAGE.md)** : Proposition de valeur, personas et parcours utilisateurs.
+- **[Grille Tarifaire & Plans B2B](docs/15_PLANS_TARIFAIRES.md)** : Modèle économique, quotas et monétisation.
+- **[Dossier des Décisions d'Architecture (ADR)](docs/adr/)** : ADR 0001 à 0008 (Auth Argon2id, Multi-tenancy, Celery, MinIO S3, Docker, etc.).
 
-Outils de visualisation interactive et de génération de fichiers SWMM 5.2 à partir de données GeoPackage.
+---
 
-## Fonctionnalités Clés du Moteur SWMM 5.2 & SIG
+## 🚀 Capacités & Fonctionnalités Clés du SaaS
 
-- **Visualisation cartographique interactive** (Leaflet.js) avec gestion multi-couches (conduites, regards, exutoires, sous-bassins Voronoï, éléments orphelins).
-- **Partitionnement topologique hydraulique strict** :
-  - Découpage automatique des bassins versants d'exutoires physiques sans chevauchement.
-  - Détermination des sous-bassins élémentaires par cellules de Voronoï bornées par le rayon de drainage urbain et le corridor de conduite (15 m).
-  - Résolution anti-collision d'identifiants entre couches hétérogènes (regards, rejets, ouvrages) et validation géométrique de proximité amont/aval ($\le 25\text{ m}$) éliminant tout raccordement aberrant ou "trou de ver".
-  - Garantie de contiguïté stricte : élimination des MultiPolygones disjoints, chaque bassin constitue un polygone unique compact et connexe.
-- **Gestion des éléments orphelins & Raccordement Pré-Simulation (Variante 0 Opportuniste)** :
-  - Isolation rigoureuse des tronçons et regards sans exutoire physique documenté dans une couche dédiée (`elements_orphelins_regards`) et export GeoJSON indépendant (`elements_orphelins.geojson`).
-  - Suppression de tout "snapping" euclidien aveugle vers des exutoires distants.
-  - **Détection Automatique d'Ouvrages Spéciaux Proches (< 120 m)** : identification des déversoirs d'orage (DVO), trop-pleins de réseau, stations de relevage (SR) et rejets oueds isolés dans le SIG à proximité des regards du bassin.
-  - **Panneau Pré-Simulation Interactif & Tracé Dynamique** : sélection interactive par cases à cocher avec coût unitaire BPU (45 000 DZD/ml) et rendu cartographique dynamique en tiretés cyan (`dashArray: 8, 8`) reliant le regard amont à l'ouvrage déporté.
-  - **Injection Hydrodynamique SWMM 5.2 & Évaluation Multi-Agents** : raccordement physique des ouvrages validés dans le fichier `.inp` (`[OUTFALLS]`, `[CONDUITS]`, `[XSECTIONS]`, `[COORDINATES]`), soulageant les mises en charge du réseau amont et intégré au rapport d'expertise en **Variante 0 : Raccordement Opportuniste Immédiat** (économie de > 90% par rapport aux travaux lourds sous voirie).
-- **Moteur de Simulation Hydrodynamique SWMM 5.2** :
-  - Sectorisation obligatoire par exutoire avant calcul.
-  - **Référentiel Pluviométrique National Certifié (ANRH / UHBC / ONA)** : intégration de 7 stations hydro-météorologiques dans la Wilaya de Chlef (Chlef Siège, Oum Drou, Oued Fodda, Bénaïria, Domaine Si Tayeb, Ténès, Boukadir) avec quantiles Gumbel $P_{24}$ et coefficients de Montana $a, b$ certifiés par l'Université Hassiba Ben Bouali de Chlef.
-  - Hyétogrammes de projet Chicago centrés ($r=0.40$), contrôle automatique pluie-débit (méthode rationnelle $Q_{\text{rat}} = C \cdot I \cdot A / 360$) et champ de saisie manuelle de l'intensité $I_{\max}$ pour scénarios personnalisés.
-  - Sélecteur de typologie urbaine dominante (Centre urbain dense, Collectif, Pavillonnaire, Mixte, Périurbain) et surcharge manuelle du taux d'imperméabilisation (`% Imperv`).
-  - Diagnostic hydraulique en temps réel : débits de pointe, erreurs de continuité, mise en charge des conduites ($Q/Q_{\max}$), identification des surcharges et des débordements en surface.
-  - Restitution cartographique aux normes d'ingénierie : cercles nets et discrets (Débordement 5.5 px, Surcharge 4.0 px, Normal 2.5 px), sans animation pulsante invasive.
-- **Profil en Long Hydraulique & Ligne de Charge (HGL)** :
-  - Tracé longitudinal amont-aval interactif (Terrain naturel MNT, Génératrice supérieure / haut de conduite, Cote radier / fil d'eau).
-  - Ligne de charge piézométrique réelle ($HGL$) issue de la résolution Saint-Venant 1D complète (`pyswmm` / `DYNWAVE`).
-  - Affichage du plan d'eau réel (**Water Surface Profile / WSP**) en remplissage bleu dans la conduite.
-  - Hachurage géométrique distinctif de la zone de mise en charge sous pression entre l'extrados et la HGL ($HGL > z_{\text{haut conduite}}$).
-  - Détection automatique et surbrillance des points de débordement critique au sol ($HGL \ge z_{\text{terrain}}$).
-  - Saisie interactive par sélection sur carte ou édition manuelle directe des regards Amont / Aval (`input-profil-amont`, `input-profil-aval`).
-  - Volet de préconisations d'ingénierie par tronçon (recalibrage DN, réfection de pente, création de bassin tampon).
-- **Animation Temporelle de l'Onde de Crue (Time Slider)** :
-  - Propagation spatio-temporelle dynamique de l'onde de submersion le long des collecteurs gravitaires.
-  - Graphe interactif de l'hydrogramme de crue à l'exutoire avec curseur temporel synchronisé ($T$).
-  - Mise à jour en temps réel de la cartographie Leaflet (coloration des tronçons selon $Q(t)/Q_{\max}$ et statut des regards : sain, en charge dans la cheminée, ou débordant au sol).
-  - Compteurs instantanés de crise : nombre de tronçons en surcharge et de regards débordants à chaque pas de temps.
-  - Commandes de lecture multimédia (Play, Pause, vitesses $1\times, 2\times, 5\times$).
-- **Analyse Pluie ↔ Débit (Hyétogramme & Hydrogramme - Format A)** :
-  - Panneau flottant déplaçable (draggable) avec double-axe superposé / inversé aux normes internationales d'ingénierie hydrologique.
-  - **Hyétogramme de pluie descendant** (axe Y inversé, barres bleues $I(t)$ en mm/h) illustrant la pluie de projet (Chicago / Montana).
-  - **Hydrogramme de crue montant** (axe Y normal, courbe cyan avec remplissage $Q(t)$ en $\text{m}^3/\text{s}$) traduisant la réponse hydrodynamique Saint-Venant 1D à l'exutoire.
-  - Calcul et affichage dynamique des KPIs d'ingénierie : intensité crête $I_{\max}$, débit de pointe $Q_{\max}$, temps de réponse / lag time ($\Delta t = t_{Q_{\max}} - t_{I_{\max}}$), volume précipité brut ($V_{\text{pluie}}$), volume écoulé ($V_{\text{écoulé}}$) et coefficient de ruissellement effectif ($C_{\text{eff}}$).
-  - Curseur vertical orange synchronisé en temps réel avec le Time Slider et la carte Leaflet (clic sur le graphe pour naviguer dans le temps).
-  - Bouton d'export d'image haute définition (PNG).
-- **Barre d'Outils Flottante & Ergonomie UI/UX** :
-  - Barre d'actions d'ingénierie repositionnée sur le bord gauche pour libérer l'espace cartographique.
-  - Boîte à outils flottante entièrement déplaçable (draggable) à la souris avec possibilité de repli et de réouverture instantanée.
-- **Rapport d'Expertise Technique A4 Haute Définition (PDF / Impression)** :
-  - Synthèse automatisée complète sans dépendance externe, formatée pour l'impression A4 et l'export PDF vectoriel.
-  - Consolidation des 5 agents d'expertise IA : Diagnostic causal (Agent 1), Prescriptions Génie Civil et recalibrage (Agent 2), Gestion Durable des Eaux Pluviales / GDO (Agent 3), Matrice de criticité et priorités P1/P2/P3 (Agent 4), et Analyse financière multi-variantes (Agent 5).
-  - Décomposition analytique du Bordereau des Prix Unitaires (BPU) : terrassement, fourniture des tuyaux, pose et remblai, réfection de chaussée.
-  - Évaluation de rentabilité socio-économique : coût par ml rénové, coût par habitant équivalent protégé, dommages annuels moyens évités (EAD), délai de récupération (Payback), TRI et VAN actualisée sur 20 ans.
-- **Gestion dynamique des jeux de données & caches multi-tenants** :
-  - Invalidation et synchronisation immédiate des mémoires caches (graphe, clusters, sous-bassins, dernière simulation) lors du téléversement ou du changement de jeu de données.
-  - Actualisation dynamique des statistiques d'en-tête et du panneau latéral selon la zone ou le projet sélectionné.
-- **Reprojection automatique** UTM Zone 31N (EPSG:32631) → WGS84 (EPSG:4326).
-- **Analyse de qualité réseau** : détection d'anomalies topologiques, scores de qualité et rapports d'expertise.
+### 1. Ingestion Multi-Formats & Versionnement Immuable
+- **Téléversement Direct** : Prise en charge native des fichiers **GeoPackage (`.gpkg`)** et des fichiers **EPA SWMM (`.inp`)** avec conversion automatique et transparente vers GeoPackage.
+- **Versionnement Immuable (Snapshots)** : Chaque import génère une empreinte SHA-256 avec archivage sécurisé. Les simulations historiques pointent toujours sur le snapshot exact producteur.
+- **Bibliothèque de Benchmarks Embarqués** : Chargement instantané des modèles de référence EPA (Example 1 Drainage, Example 3 Unitaire & DVO, Example 4 Rétention, Example 6 Techniques Alternatives LID), Quartier Démo (59 regards) et Master Métropole (+11 000 tronçons).
+- **Couches Satellites Auxiliaires ([SHP.md](SHP.md))** : Import piloté de Shapefiles `.shp` complets (avec `.shx/.dbf/.prj/.cpg` ou sous forme de `.zip`), GeoJSON et GPKG externes (cadastre, voirie, cours d'eau, réseaux divers) sans impacter le modèle de calcul.
 
-## Installation
+### 2. Outil SIG d'Extraction par Pochoir Spatial
+- **Découpage Géométrique à la Volée** : Sélection spatiale d'une zone d'étude par un polygone GeoJSON (tracé interactif ou importé).
+- **Règle d'Or Spatiale d'INTERSECTION** : Tout élément du réseau ou des couches satellites qui touche la frontière est conservé **en entier** pour garantir la continuité topologique et hydraulique.
+- **Livrable Zip Téléchargeable** : Production instantanée d'une archive contenant les Shapefiles thématiques par couche (`{nom}_regards.shp`, `{nom}_canalisations.shp`), le GeoPackage unifié `{nom}.gpkg` fusionné avec le polygone `pochoir`, et le fichier `manifeste.json` (statistiques et traçabilité).
 
+### 3. Diagnostic Qualité Réseau & Corrections Supervisées
+- **Audit Topologique Automatisé** : Détection des contre-pentes, des sauts de radier anormaux, des diamètres non normalisés, des conduites orphelines et calcul des débits théoriques selon NP 650 et Manning-Strickler.
+- **Scores par Commune et par Bassin** : Évaluation objective de la santé de la donnée (0 à 100) et export des anomalies en CSV/Excel.
+- **Suggestions Hybrides et Profil Altimétrique** : Propositions statistiques de rattrapage de pente selon le diamètre et le matériau (`/corrections/{fid}/hybride`) avec validation supervisée par l'ingénieur.
+
+### 4. Moteur Hydrodynamique PySWMM 5.2 (Saint-Venant 1D)
+- **Résolution Onde Dynamique (`DYNWAVE`)** : Résolution numérique complète des équations de Saint-Venant 1D via les binaires officiels EPA SWMM 5.2.4 x64 compilés (aucun binaire externe requis).
+- **Bilan de Continuité Massique Strict** : Contrôle automatique de conservation des masses avec une erreur systématiquement inférieure à $0.2\%$ (typiquement $-0.166\%$).
+- **Hydrologie de Surface Voronoï & Horton** : Découpage automatisé de sous-bassins élémentaires Voronoï/Thiessen bornés aux linéaires de canalisation, calcul de pente, largeur $W$, imperméabilisation (`%Imperv`) et infiltration de Horton ($f_0, f_c, k$).
+- **Hyétogrammes de Projet & Pluviométrie Réelle** : Lois de Montana certifiées, averses de Chicago (décennale, cinquantennale, centennale), orages violents de 2h et chroniques au pas de 5 min.
+
+### 5. Module d'Alerte & Simulation BMS (ONM Algérie)
+- **Modélisation sur Bulletins Météorologiques Spéciaux** : Simulation prédictive sur les alertes de l'Office National de la Météorologie (cumul mm, durée h, profils de pluie en cloche Huff ou orage concentré).
+- **Générateur d'Ordres de Mission Préventifs** : Édition automatique des ordres de mission terrain pour les régies d'assainissement (ONA) ciblant les regards et avaloirs à curer d'urgence avant l'arrivée de la pluie selon le niveau d'alerte (Jaune, Orange, Rouge).
+
+### 6. Gestion Avancée des Apports de Temps Sec (DWF)
+- **Injection Multi-Profils** : Sollicitations d'eaux usées domestiques (profil horaire journalier urbain), apports continus et rejets industriels.
+- **Modes de Saisie Flexibles** : Équivalents-Habitants (EH) avec dotation en L/j/hab ou débit direct en L/s et $\text{m}^3/\text{j}$.
+- **Sélecteur Cartographique HD** : Sélection interactive au clic sur la carte Leaflet avec masquage temporaire de la modale et neutralisation des popups parasites.
+- **Légende Cartographique Dynamique** : Anneau fluorescent cyan/bleu marquant les regards injectés et affichage du débit journalier cumulé en L/s en temps réel.
+- **Réconciliation & Traçabilité** : Réconciliation automatique avec le GeoPackage source et journal d'audit immuable (`apports_dwf_history`).
+
+### 7. Contrôle Altimétrique & Registre des Cotes Suspectes
+- **Nuage de Points Réels TOPO Chlef** : Intégration de 84 302 points cotés réels avec index spatial et interpolation IDW locale.
+- **Détection des Sauts de Radier Aberrants** : Blocage préventif du tracé de profil en long en cas d'incohérence altimétrique critique (> 20 m).
+- **Registre Interactif de Validation** : Interface ingénieur permettant de valider ou corriger instantanément les cotes suspectes avec persistance immédiate.
+
+### 8. Contrôle de Cohérence Pluie-Débit (Rationnel vs Saint-Venant)
+- **Contrôle Rationnel de Premier Niveau** : Calcul du débit attendu brut ($Q = C \cdot I \cdot A / 360$) en amont de la simulation.
+- **Qualification du Laminage Hydraulique** : Comparaison systématique avec le débit de pointe Saint-Venant 1D pour identifier le laminage et le stockage capacitif en réseau.
+
+### 9. Cockpit d'Exploitation Leaflet HD & Profil en Long HGL
+- **Profil en Long Hydraulique Interactif** : Ligne de charge piézométrique ($HGL$), cotes radiers amont/aval, génératrice supérieure, terrain naturel interpolé IDW, plan d'eau dynamique (WSP) et hachures de mise en charge sous pression ($HGL > \text{extrados}$).
+- **Animation Temporelle de l'Onde de Crue (Time Slider)** : Curseur temporel 0h $\rightarrow$ 24h exploitant les séries binaires `.out`, coloration dynamique selon $Q(t)/Q_{\max}$ et radars visuels de débordement aux nœuds inondés.
+- **Hydrogramme Dynamique aux Exutoires** : Graphique interactif Chart.js mis à jour à chaque pas de temps avec navigation temporelle au clic.
+- **Isolation des Ouvrages Non Simulables** : Préservation de l'intégrité du rendu sur les sous-réseaux isolés.
+
+### 10. Système d'Expertise Multi-Agents IA & Rapport A4 (PDF / BPU)
+- **Chaîne Collaborative à 7 Agents Spécialisés** :
+  - *Agent 0 (Garde-Fou Hydraulicien)* : Contrôle de cohérence physique et de pente.
+  - *Agent 1 (Diagnostic)* : Analyse des débits de pointe et nœuds inondés.
+  - *Agent 2 (Génie Civil)* : Recalibrage des diamètres et prescriptions structurelles.
+  - *Agent 3 (GDO / Variante 0)* : Reconnexion opportuniste des singularités et déversoirs orphelins (gain > 90%).
+  - *Agent 4 (Risques)* : Vulnérabilité voirie et piétons.
+  - *Agent 5 (Finance & BPU)* : Chiffrage estimatif en DZD avec bordereau des prix unitaires.
+  - *Agent 6 (Synthèse)* : Synthèse exécutive consolidée.
+- **Rapport Réglementaire en 1 Clic** : Générateur PDF A4 haute définition (ReportLab) intégrant cartographie du réseau, bilans de masse et planches d'anomalies.
+
+---
+
+## 🏗️ Architecture Technique
+
+```
+                            ┌──────────────────────────────────────────────┐
+                            │      Cockpit Web Bureau (Ingénieurs/BET)     │
+                            │  Cartographie Leaflet HD, Profils HGL, SIG   │
+                            └──────────────────────┬───────────────────────┘
+                                                   │ HTTPS
+                                          ┌────────▼────────┐
+                                          │  Reverse Proxy  │  Caddy / Nginx (SSL, TLS, Gzip)
+                                          └────────┬────────┘
+                                                   │
+                            ┌──────────────────────▼──────────────────────┐
+                            │           DrainPilot Web API                │
+                            │             (FastAPI Unifié)                │
+                            │  - Routeurs modulaires (/api/v1/*)          │
+                            │  - Authentification Argon2id & JWT/Cookies  │
+                            │  - Isolation Multi-Tenant (Stealth 404)     │
+                            │  - Moteur de Quotas B2B & Licences          │
+                            │  - Solveur PySWMM 5.2.4 x64 Embarqué        │
+                            └───────┬──────────────┬──────────────┬───────┘
+                                    │              │              │
+                         ┌──────────▼───┐   ┌──────▼──────┐   ┌───▼──────────┐
+                         │  PostgreSQL  │   │    Redis    │   │   S3/MinIO   │
+                         │   + PostGIS  │   │  - Cache    │   │  - Artifacts │
+                         │  - Tenants   │   │  - Broker   │   │  - .INP/.RPT │
+                         │  - Réseaux   │   │  - Statuts  │   │  - Rasters   │
+                         │  - Licences  │   └──────┬──────┘   │  - PDF / Zip │
+                         └──────────────┘          │          └──────────────┘
+                                            ┌──────▼──────┐
+                                            │ Worker Async│
+                                            │   Celery    │  Calculs lourds SWMM
+                                            └─────────────┘
+```
+
+---
+
+## 💻 Installation & Démarrage Rapide
+
+### Prérequis
+- Python 3.11 ou 3.12 (64-bit recommandé pour les binaires SWMM 5.2).
+- Environnement virtuel Python activé.
+
+### 1. Installation des dépendances
 ```bash
+python -m venv .venv
+.venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-## Utilisation
-
-### Lancer la plateforme (API FastAPI)
-
+### 2. Lancement du serveur API & Cockpit Web
 ```bash
-# Point d'entrée unique — NE PAS utiliser server.py (archivé dans legacy/)
-python run_server.py
-# ou : uvicorn api.main:app --host 0.0.0.0 --port 5001 --reload
-# Interfaces : http://localhost:5001/cockpit  http://localhost:5001/carte
-```
-
-### Tests
-
-```bash
-python -m pytest tests/ -v
-```
-
-### Analyse qualité réseau
-
-```bash
-# Démarrer l'API
+# Lancement de la plateforme unifiée FastAPI
 python run_server.py
 
-# Ouvrir les interfaces
-# http://localhost:5001/qualite - Tableau de bord qualité
-# http://localhost:5001/carte - Carte opérationnelle interactive
-
-# API qualité réseau
-# GET /api/v1/qualite/analyse - Analyse complète
-# GET /api/v1/qualite/anomalies/{type} - Anomalies par type
-# GET /api/v1/qualite/scores - Scores de qualité
-# POST /api/v1/qualite/export-csv - Export CSV
+# Ou avec rechargement automatique en développement :
+python run_api.py
 ```
 
-### Carte opérationnelle
+### 3. Accès aux interfaces
+- **Cockpit Cartographique Leaflet HD** : `http://localhost:5002/`
+- **Documentation API Swagger Interactive** : `http://localhost:5002/docs`
+- **Sonde de Santé** : `http://localhost:5002/health`
 
-Interface cartographique interactive pour :
-- **Visualiser** le réseau d'assainissement
-- **Localiser** les anomalies détectées
-- **Filtrer** par type et sévérité
-- **Corriger** les anomalies directement sur la carte
+---
 
-## Structure du projet
+## 🧪 Validation & Non-Régression Continue
 
+DrainPilot 5.2 applique une politique de tolérance zéro aux régressions :
+- **Golden Master de Référence** : `tests/test_golden_master.py` garantit la stricte invariance des calculs hydrauliques Saint-Venant 1D.
+- **Intégrité Syntaxique JS** : Validation automatique Node.js sur tous les modules `static/js/`.
+- **Livraison Continue Autonome (Zero-Prompt Git)** : Validation automatique à 100% avant chaque commit et push distant.
+
+```bash
+# Exécution de la suite de tests complète
+pytest -v
+
+# Exécution du Golden Master et des modules clés
+pytest -q tests/test_golden_master.py tests/test_js_syntax_integrity.py tests/test_dwf_injection.py
 ```
-src/
-  controllers/     Contrôleurs Flask et générateur SWMM
-  domain/          Logique métier (traitement nœuds, conduites, pompes)
-  infrastructure/  Chargement GeoPackage, configuration
-  views/           Interface web (HTML, CSS, JS)
-tests/             Tests unitaires et d'intégration
-```
 
-Voir TODO.md pour l'arborescence détaillée.
+---
 
-## Données
+## 👤 Auteur & Propriété Intellectuelle
 
-| Élément              | Nombre  |
-|----------------------|---------|
-| Regards              | 10 538  |
-| Rejets               | 79      |
-| Canalisations        | 10 295  |
-| Ouvrages spéciaux    | 38      |
-| Stations de relevage | 5       |
-| STEP                 | 1       |
-
-## Dépendances
-
-- geopandas, pandas, shapely, numpy — traitement géospatial
-- flask — serveur web
-
-## Auteur
-
-Dr Abdelhakim Kellouche
+**Dr Abdelhakim KELLOUCHE**  
+Docteur en Génie Hydraulique & Expert en Modélisation d'Assainissement Urbain  
+*DrainPilot 5.2 — Tous droits réservés.*

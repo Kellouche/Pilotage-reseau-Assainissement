@@ -1,20 +1,23 @@
-# SWMM Platform — Plateforme SaaS Collaborative des Réseaux d'Assainissement & Eaux Pluviales
+# DrainPilot 5.2 — Plateforme SaaS Collaborative des Réseaux d'Assainissement & Eaux Pluviales
 
-> **Plateforme SaaS Multi-Tenant d'Aide à la Décision, Contrôle Qualité SIG, Analyse Morphologique MNT, Modélisation Dynamique EPA SWMM 5.2 et Synchronisation Mobile Terrain**  
-> **Version :** SaaS 2.0 (API FastAPI unifiée, multi-tenant, stockage d'artefacts S3-compatible, worker asynchrone Celery/Redis, application mobile Flutter)  
-> **Date :** Novembre 2026
+> **Plateforme SaaS Multi-Tenant d'Aide à la Décision, Contrôle Qualité SIG, Analyse Morphologique MNT, Modélisation Dynamique EPA SWMM 5.2 (Saint-Venant 1D) et Synchronisation Mobile Terrain**  
+> **Version :** DrainPilot 5.2 / SaaS 2.0 (API FastAPI unifiée, isolation multi-tenant Stealth 404, stockage S3/MinIO, workers Celery/Redis, cockpit Leaflet HD)  
+> **Dernière mise à jour :** Novembre 2026
 
 ---
 
 ## 🎯 Présentation du Projet
 
-**SWMM Platform SaaS** modernise la gestion patrimoniale et la modélisation hydraulique des réseaux d'assainissement (eaux usées, pluviales et unitaires). Conçue pour combler la rupture historique entre les modélisateurs en bureau d'études et les techniciens d'exploitation sur le terrain, la plateforme permet de :
+**DrainPilot 5.2** modernise la gestion patrimoniale et la modélisation hydraulique des réseaux d'assainissement (eaux usées, pluviales et unitaires). Conçue pour combler la rupture historique entre les modélisateurs en bureau d'études et les techniciens d'exploitation sur le terrain, la plateforme permet de :
 
 1. **Auditer automatiquement la qualité géospatiale** de réseaux comptant plus de 10 000 regards et collecteurs (détection des contre-pentes, sauts de radier, doublons et calcul des débits nominaux selon la formule NP 650 et Manning-Strickler).
-2. **Analyser le relief par MNT** (Modèle Numérique de Terrain raster) pour délimiter les bassins versants topographiques réels et orienter les écoulements de surface.
-3. **Générer et simuler à la demande des modèles EPA SWMM 5.2 officiels** pour anticiper les crues, identifier les tronçons saturés et quantifier les volumes d'inondation en surface.
-4. **Synchroniser en temps réel les relevés de terrain** via une application mobile Flutter fonctionnant en mode déconnecté (Offline-First) avec capture photo géolocalisée et traçabilité immuable (Audit Trail).
-5. **Générer des rapports d'audit certifiés** et des exports réglementaires complets (OGC GeoPackage, SWMM `.inp`, PDF haute définition).
+2. **Analyser le relief par MNT et nuages altimétriques réels** (Modèle Numérique de Terrain raster et 84 302 points IDW de TOPO Chlef) pour caler les cotes de terrain et orienter les écoulements de surface.
+3. **Simuler en dynamique sur le moteur officiel EPA SWMM 5.2** (Saint-Venant 1D `DYNWAVE`) pour anticiper les crues, identifier les tronçons saturés et quantifier les volumes d'inondation en surface.
+4. **Modéliser les alertes météorologiques réelles (BMS ONM Algérie)** et générer automatiquement des ordres de mission terrain préventifs de curage.
+5. **Injecter des apports de temps sec (DWF)** multi-profils (domestique, industriel, continu) avec sélecteur cartographique interactif et légende dynamique en temps réel.
+6. **Extraire des sous-réseaux par pochoir spatial (SHP.md)** selon une règle stricte d'intersection produisant une archive zip clé en main.
+7. **Mobiliser une chaîne d'expertise multi-agents IA** (7 agents spécialisés : garde-fou, diagnostic, génie civil, GDO, risques, finance BPU, synthèse) consolidée dans un rapport d'audit PDF A4 haute définition.
+8. **Synchroniser en temps réel les relevés de terrain** via une passerelle mobile fonctionnant en mode déconnecté (Offline-First) avec traçabilité immuable (Audit Trail).
 
 ---
 
@@ -70,12 +73,11 @@ pytest tests/ -v
 python run_api.py
 ```
 
-Le port est défini par `API_PORT` dans `config/settings.py` (ou variable
-d'environnement) — adaptez les URL ci-dessous en conséquence :
+Le port par défaut est `5002` (configurable par `API_PORT` dans `config/settings.py` ou variable d'environnement) :
 
-- **Application Web & Cartographie :** `http://localhost:<API_PORT>/`
-- **Documentation API Interactive (Swagger) :** `http://localhost:<API_PORT>/docs`
-- **Santé du service :** `http://localhost:<API_PORT>/health`
+- **Application Web & Cartographie Leaflet HD :** `http://localhost:5002/`
+- **Documentation API Interactive (Swagger) :** `http://localhost:5002/docs`
+- **Santé du service :** `http://localhost:5002/health`
 
 > **Base de données :** PostgreSQL est la cible de production ; en
 > développement l'API bascule automatiquement sur SQLite

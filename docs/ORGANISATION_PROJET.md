@@ -42,26 +42,18 @@ Fichiers importants :
 - `api/models.py` : modèles SQLAlchemy ;
 - `api/database.py` : connexion base.
 
-### Backend historique Flask
+### Architecture Web & Cockpit d'Exploitation (FastAPI Unifié)
 
 Chemins principaux :
+- `api/main.py` : point d'entrée unique de l'application FastAPI (port 5002) ;
+- `api/routes/` : routeurs modulaires REST (19 routeurs spécialisés) ;
+- `api/services/` : logique applicative découplée (DWF, altimétrie, pochoir, simulation, etc.) ;
+- `templates/` : templates HTML Jinja2 (`index.html` cockpit principal, modals HD) ;
+- `static/js/` : frontend modulaire ES6 (carte Leaflet HD, profils en long HGL, Time Slider binaire, DWF).
 
-- `server.py`
-- `src/controllers/routeur_flask.py`
-- `src/views/`
-
-Rôle :
-
-- visualisation cartographique historique ;
-- chargement GeoPackage ;
-- génération SWMM initiale ;
-- logique métier géospatiale existante.
-
-Décision recommandée :
-
-- conserver temporairement comme module historique stable ;
-- documenter clairement la différence avec FastAPI ;
-- migrer progressivement les fonctions utiles vers l'API moderne.
+Statut :
+- Le serveur historique Flask (`server.py`) a été **entièrement retiré et supprimé**.
+- L'ensemble des services web, des flux cartographiques et des APIs est servi sous FastAPI de manière unifiée et performante.
 
 ### Domaine métier
 
