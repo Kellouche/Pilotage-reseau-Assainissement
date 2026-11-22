@@ -492,6 +492,7 @@ def generer_lignes_sections_inp(
         })
     # Déversoirs d'orage (DVO) issus d'Ouvrages_Speciaux (Chantier 1.5)
     weir_lines = []
+    weir_xsec_lines: List[str] = []
     deversoirs_traites = []
     if ouvrages_speciaux is not None and not ouvrages_speciaux.empty:
         import unicodedata
@@ -519,13 +520,26 @@ def generer_lignes_sections_inp(
                     z_w_out = round(z_reg - 0.20, 3)
                     lines.append(f"{w_out:<16} {z_w_out:<10.3f} FREE                        NO")
                     h_seuil_raw = ouv.get("H_de_Seuil") or ouv.get("loSeuil")
+                    h_seuil_defaut = True
                     try:
                         h_seuil = float(h_seuil_raw) if pd.notna(h_seuil_raw) and float(h_seuil_raw) > 0 else 0.50
+                        h_seuil_defaut = not (pd.notna(h_seuil_raw) and float(h_seuil_raw) > 0)
                     except Exception:
                         h_seuil = 0.50
+                    # Largeur de seuil : LaSeuil/loSeuil si renseigné, sinon 1.00 m (hypothèse)
+                    la_seuil_raw = ouv.get("LaSeuil") or ouv.get("loSeuil")
+                    largeur_defaut = True
+                    try:
+                        largeur_seuil = float(la_seuil_raw) if pd.notna(la_seuil_raw) and float(la_seuil_raw) > 0 else 1.00
+                        largeur_defaut = not (pd.notna(la_seuil_raw) and float(la_seuil_raw) > 0)
+                    except Exception:
+                        largeur_seuil = 1.00
                     weir_lines.append(f"{wid:<16} {u_weir:<16} {w_out:<16} TRANSVERSE   {h_seuil:<10.3f} 1.800      NO       0        0.000    NO")
+                    # Section [XSECTIONS] obligatoire pour tout lien [WEIRS] :
+                    # Geom1 = hauteur de l'ouverture (2.00 m, hypothèse), Geom2 = largeur du seuil.
+                    weir_xsec_lines.append(f"{wid:<16} RECT_OPEN     {2.0:<16.3f} {largeur_seuil:<10.3f} 0.000      0.000      1")
                     coord_noeuds[w_out] = (o_pt[0] + 5.0, o_pt[1] + 5.0) if o_pt else (100.0, 100.0)
-                    deversoirs_traites.append({"wid": wid, "u_node": u_weir, "outfall": w_out, "h_seuil": h_seuil})
+                    deversoirs_traites.append({"wid": wid, "u_node": u_weir, "outfall": w_out, "h_seuil": h_seuil, "h_seuil_defaut": h_seuil_defaut, "largeur_seuil_m": largeur_seuil, "largeur_defaut": largeur_defaut})
 
     lines.append("")
 
@@ -533,12 +547,25 @@ def generer_lignes_sections_inp(
     lines.append(";;Name           From Node        To Node          Length     Roughness  InOffset   OutOffset  InitFlow   MaxFlow")
 
     conduit_lines = []
-    xsec_lines = []
+    xsec_lines = list(weir_xsec_lines)
     pump_lines = []
     curve_lines = []
+    nref_junction_lines: List[str] = []
     conduit_endpoints = {}
     refoulements_traites = []
     sections_rectangulaires = []
+    exclusions_conduits: List[Dict[str, Any]] = []
+
+    # Une pompe par tête de chaîne de refoulement : un tronçon "Refoulement"
+    # dont le nœud amont est lui-même l'exutoire d'un autre tronçon de
+    # refoulement est un segment de refoulement (conduite sous pression),
+    # pas une pompe supplémentaire.
+    refoulement_aval: Set[str] = set()
+    for cr0 in conduits_resolus:
+        _row0 = cr0["row"]
+        _f0 = str(_row0.get("FONCTIONMT") or _row0.get("fonctionmt") or "").strip().lower()
+        if ("refoul" in _f0 or "pompage" in _f0) and cr0["d_node"]:
+            refoulement_aval.add(cr0["d_node"])
 
     for cr in conduits_resolus:
         cid = cr["cid"]
@@ -546,6 +573,13 @@ def generer_lignes_sections_inp(
         d_node = cr["d_node"]
         c = cr["row"]
         if not u_node or not d_node or u_node == d_node:
+            exclusions_conduits.append({
+                "cid": cid,
+                "id_amont": str(c.get("ID_AMONT", "")),
+                "id_aval": str(c.get("ID_AVAL", "")),
+                "u_node": u_node,
+                "d_node": d_node,
+            })
             continue
         length = float(c["Longeur"]) if ("Longeur" in c and pd.notna(c["Longeur"]) and c["Longeur"] > 0) else float(c.geometry.length)
         length = max(1.0, round(length, 2))
@@ -569,27 +603,33 @@ def generer_lignes_sections_inp(
         if nom_v.lower() in ("nan", "none", "null", ""):
             nom_v = ""
 
-        if is_refoulement:
-            # Modélisation physique SWMM 5.2 : [PUMPS] alimentée par courbe [CURVES] + conduite en charge aval
+        is_tete_refoulement = is_refoulement and u_node not in refoulement_aval
+        if is_tete_refoulement:
+            # Modélisation physique SWMM 5.2 : [PUMPS] alimentée par courbe [CURVES] Type 3 + conduite en charge aval
             n_ref_node = f"N_REF_{cid}"
             coord_u = coord_noeuds.get(u_node, (100.0, 100.0))
             coord_noeuds[n_ref_node] = (coord_u[0] + 1.0, coord_u[1] + 1.0)
             noeuds_spatiaux_crees[n_ref_node] = coord_noeuds[n_ref_node]
             conduit_nodes.add(n_ref_node)
+            z_nref = node_elevs.get(d_node, node_elevs.get(u_node, 100.0))
+            nref_junction_lines.append(f"{n_ref_node:<16} {z_nref:<10.3f} 2.000      0.000      0.000      0.000")
 
             pump_id = f"PMP_{cid}"
             curve_id = f"CURV_PMP_{cid}"
-            pump_lines.append(f"{pump_id:<16} {u_node:<16} {n_ref_node:<16} {curve_id:<16} ON       0.000      0.000")
+            # Contrôle intrinsèque SWMM : démarrage à 0.30 m de calage au nœud
+            # d'aspiration, arrêt à 0.10 m (hypothèse documentée — les attributs
+            # de commande réels des stations ne sont pas renseignés dans le SIG).
+            pump_lines.append(f"{pump_id:<16} {u_node:<16} {n_ref_node:<16} {curve_id:<16} ON       0.300      0.100")
 
-            # Courbe de pompe caractéristique Type 1 débit/hauteur selon diamètre nominal
+            # Courbe de pompe caractéristique Type 3 (débit/hauteur) selon diamètre nominal
             q_nom = round(math.pi * (diam_m / 2.0)**2 * 1.5, 4)
-            curve_lines.append(f"{curve_id:<16} PUMP       0.000      35.00")
+            curve_lines.append(f"{curve_id:<16} PUMP3      0.000      35.00")
             curve_lines.append(f"{curve_id:<16}            {q_nom:<10.4f} 25.00")
             curve_lines.append(f"{curve_id:<16}            {round(q_nom * 1.5, 4):<10.4f} 10.00")
 
             conduit_lines.append(f"{cid:<16} {n_ref_node:<16} {d_node:<16} {length:<10.2f} {rough:<10.4f} 0.000      0.000      0.000      0.000")
             if shape == "RECTANGULAR":
-                xsec_lines.append(f"{cid:<16} RECTANGULAR  {geom1:<16.3f} {geom2:<10.3f} 0.000      0.000      {barrels}")
+                xsec_lines.append(f"{cid:<16} RECT_CLOSED   {geom1:<16.3f} {geom2:<10.3f} 0.000      0.000      {barrels}")
             else:
                 xsec_lines.append(f"{cid:<16} CIRCULAR     {geom1:<16.3f} 0.000      0.000      0.000      {barrels}")
 
@@ -610,12 +650,15 @@ def generer_lignes_sections_inp(
                 "exutoire_aval": d_node,
                 "diametre_mm": diam_mm,
                 "longueur_m": length,
-                "debit_nominal_m3s": q_nom
+                "debit_nominal_m3s": q_nom,
+                "tete_refoulement": True
             })
         else:
+            # Segment aval d'une chaîne de refoulement : conduite sous pression
+            # alimentée par la pompe de tête (pas de pompe supplémentaire).
             conduit_lines.append(f"{cid:<16} {u_node:<16} {d_node:<16} {length:<10.2f} {rough:<10.4f} 0.000      0.000      0.000      0.000")
             if shape == "RECTANGULAR":
-                xsec_lines.append(f"{cid:<16} RECTANGULAR  {geom1:<16.3f} {geom2:<10.3f} 0.000      0.000      {barrels}")
+                xsec_lines.append(f"{cid:<16} RECT_CLOSED   {geom1:<16.3f} {geom2:<10.3f} 0.000      0.000      {barrels}")
             else:
                 xsec_lines.append(f"{cid:<16} CIRCULAR     {geom1:<16.3f} 0.000      0.000      0.000      {barrels}")
 
@@ -626,8 +669,19 @@ def generer_lignes_sections_inp(
                 "diam_mm": diam_mm,
                 "material": str(c.get("MATERIAU", "Béton")),
                 "nom_voie": nom_v,
-                "fonction": "gravitaire"
+                "fonction": "refoulement" if is_refoulement else "gravitaire"
             }
+            if is_refoulement:
+                refoulements_traites.append({
+                    "cid": cid,
+                    "pompe": None,
+                    "station_amont": u_node,
+                    "exutoire_aval": d_node,
+                    "diametre_mm": diam_mm,
+                    "longueur_m": length,
+                    "debit_nominal_m3s": None,
+                    "tete_refoulement": False
+                })
 
     if creer_exutoire_dedie:
         cid_out = f"C_OUT_{outfall_code}"
@@ -667,6 +721,10 @@ def generer_lignes_sections_inp(
             "material": "Frontière de sous-réseau",
             "nom_voie": "Exutoire frontière (tronçon coupé)"
         }
+
+    if nref_junction_lines:
+        _idx_outfalls = lines.index("[OUTFALLS]")
+        lines[_idx_outfalls:_idx_outfalls] = nref_junction_lines
 
     lines.extend(conduit_lines)
     lines.append("")
@@ -922,23 +980,44 @@ def generer_lignes_sections_inp(
     try:
         from src.domain.moteur_swmm.audit_exclusions import generer_bilan_reconciliation
         sections_presents = {l.strip()[1:-1] for l in lines if l.startswith("[") and l.endswith("]")}
+        _nb_conduits_synth = len([
+            l for l in conduit_lines
+            if l.split() and l.split()[0].startswith(("C_OUT_", "C_RACC_", "C_BND_"))
+        ])
         inp_counts = {
-            "canalisations_gravitaires": len(conduit_lines) - len(refoulements_traites),
+            "canalisations_gravitaires": len(conduit_lines) - len(refoulements_traites) - _nb_conduits_synth,
             "canalisations_refoulement": len(refoulements_traites),
             "regards": len([l for l in lines if l.startswith(";;") is False and len(l.split()) >= 6 and "[" not in l]),
             "rejets": len([l for l in lines if "FREE" in l and "[" not in l]),
-            "stations_relevage": len(refoulements_traites),
+            "stations_relevage": sum(1 for r in refoulements_traites if r.get("tete_refoulement")),
             "deversoirs_orage": len(deversoirs_traites),
         }
+        exclusions_audit = [
+            {
+                "id": e["cid"],
+                "type_objet": "canalisation",
+                "motif": "id_inconnu",
+                "description_motif": "Identifiant de nœud amont/aval non résolu dans le référentiel",
+                "detail": f"Nœud amont/aval non résolu (ID_AMONT={e['id_amont']!r}, ID_AVAL={e['id_aval']!r})",
+                "attributs": {
+                    "id_amont": e["id_amont"],
+                    "id_aval": e["id_aval"],
+                    "u_node": e["u_node"],
+                    "d_node": e["d_node"],
+                },
+            }
+            for e in exclusions_conduits
+        ]
         meta["reconciliation"] = generer_bilan_reconciliation(
             gpkg_counts=gpkg_counts or {},
             inp_counts=inp_counts,
-            exclusions=[],
+            exclusions=exclusions_audit,
             sections_inp_presents=sections_presents,
             hypotheses=[
-                {"domaine": "pompes", "detail": "Courbe caractéristique Type 1 estimée à partir du diamètre nominal"},
+                {"domaine": "pompes", "detail": "Une pompe par tête de chaîne de refoulement ; courbe Type 3 (débit/hauteur) estimée à partir du diamètre nominal ; marche/arrêt par calage 0.30/0.10 m (attributs de commande absents du SIG)"},
                 {"domaine": "rugosite", "detail": "Formulation Manning différenciée selon la colonne MATERIAU"},
                 {"domaine": "sections", "detail": f"{len(sections_rectangulaires)} sections rectangulaires prises en compte (FORMESECT, HAUTEUR, GDEBASE)"},
+                {"domaine": "deversoirs", "detail": f"{sum(1 for d in deversoirs_traites if d.get('h_seuil_defaut'))} DVO avec seuil par défaut 0.50 m (H_de_Seuil/loSeuil absents du SIG)"},
                 {"domaine": "raccordements_spatiaux", "detail": f"{len(raccordements_spatiaux)} tronçons raccordés par tolérance spatiale <= 0.50m"},
             ]
         )

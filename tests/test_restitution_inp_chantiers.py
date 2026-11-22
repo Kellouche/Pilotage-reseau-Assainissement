@@ -129,14 +129,28 @@ def test_generation_sections_completes_avec_pompes_et_weirs():
     assert "[WEIRS]" in inp_text
     assert "[XSECTIONS]" in inp_text
 
-    # 2. Vérifier la section rectangulaire
-    assert "RECTANGULAR" in inp_text
+    # 2. Vérifier la section rectangulaire (mot-clé SWMM valide : RECT_CLOSED)
+    assert "RECT_CLOSED" in inp_text
     assert "1.500" in inp_text
     assert "2.000" in inp_text
 
-    # 3. Vérifier la pompe de refoulement et sa courbe
+    # 3. Vérifier la pompe de refoulement et sa courbe (Type 3 = Q/H)
     assert "PMP_C_2" in inp_text
     assert "CURV_PMP_C_2" in inp_text
+    # Le nœud de refoulement N_REF doit être déclaré en [JUNCTIONS]
+    # (sinon SWMM rejette le .inp : ERROR 209 undefined object)
+    junc_block = inp_text.split("[JUNCTIONS]")[1].split("[")[0]
+    assert "N_REF_C_2" in junc_block
+    assert "ON       0.300      0.100" in inp_text  # contrôle marche/arrêt
+    # Type de courbe valide SWMM (PUMP1..PUMP5), pas le mot-clé inexistant "PUMP"
+    import re
+    courbes_block = inp_text.split("[CURVES]")[1]
+    assert re.search(r"CURV_PMP_C_2\s+PUMP3\s", courbes_block)
+    # Tout lien [WEIRS] doit avoir sa section [XSECTIONS] (sinon ERROR 143)
+    weirs_block = inp_text.split("[WEIRS]")[1].split("[")[0]
+    xsecs_block = inp_text.split("[XSECTIONS]")[1]
+    for wid in re.findall(r"^(W_\S+)", weirs_block, re.M):
+        assert re.search(rf"^{wid}\s", xsecs_block, re.M)
 
     # 4. Vérifier le déversoir d'orage
     assert "W_DVO_01" in inp_text

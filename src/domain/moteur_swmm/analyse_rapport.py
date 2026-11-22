@@ -207,6 +207,12 @@ def analyser_rapport_swmm_impl(rpt_text: str, meta: Dict[str, Any]) -> Dict[str,
                     except Exception:
                         pass
             elif len(parts) >= 4:
+                # La 2e colonne est le "Flow Freq. (%)" : les lignes d'en-tête
+                # du tableau (ex. "%  CMS  CMS  10^6 ltr") ne sont pas des exutoires.
+                try:
+                    float(parts[1])
+                except Exception:
+                    continue
                 _lignes_exutoire.append((parts[0], parts))
                 try:
                     _outfalls_dict[parts[0]] = {
