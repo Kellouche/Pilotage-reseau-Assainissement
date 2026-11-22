@@ -14,7 +14,12 @@ from src.domain.moteur_swmm import MoteurSWMM
 from src.domain.ouvrages_orphelins import detecter_ouvrages_orphelins_proches
 
 def test_resolution_cluster_id_variants():
-    """Vérifie que '25_ouvrages_speciaux_348883', 92, '92' résolvent le même bassin de 86.54 ha."""
+    """Vérifie que '25_ouvrages_speciaux_348883', 92, '92' résolvent le même bassin.
+
+    Rebaselinage 2026-11 : 86.54 -> 89.27 ha. Les stations de relèvement avec
+    refoulement sortant (SR_HC, 434) ne sont plus des exutoires terminaux :
+    leurs bassins d'aspiration et leurs têtes de refoulement sont rattachés
+    au bassin de l'ouvrage aval, ce qui ajoute ~2.73 ha de surface."""
     gpkg_path = Path("uploads/a66e32ad-f32b-4529-acc3-7a6026eb5a8a/network_Assainissement_Ville.gpkg")
     if not gpkg_path.exists():
         pytest.skip("GeoPackage de test non présent")
@@ -30,7 +35,7 @@ def test_resolution_cluster_id_variants():
             duree_heures=2.0,
             pente_moyenne_pct=1.0
         )
-        assert meta["total_area_ha"] == 86.54, f"Pour variant {var}, surface attendue 86.54 ha mais reçu {meta['total_area_ha']}"
+        assert meta["total_area_ha"] == 89.27, f"Pour variant {var}, surface attendue 89.27 ha mais reçu {meta['total_area_ha']}"
         assert "25_ouvrages_speciaux" in meta["bassin_nom"], f"Pour variant {var}, nom attendu contenant 25_ouvrages_speciaux mais reçu {meta['bassin_nom']}"
 
 def test_invariance_scenarios_ab_complet():

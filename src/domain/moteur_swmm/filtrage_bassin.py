@@ -180,6 +180,17 @@ def extraire_sous_reseau_bassin(
         target_nodes = set([target_ex_id])
         queue = [target_ex_id]
         ex_set = set(exutoires_map.keys())
+        # Les exutoires qui sont des sources pures (in_degree=0, out_degree>0)
+        # — têtes de refoulement, stations de relèvement — ne sont PAS des
+        # frontières de bassin : leur tronçon de refoulement appartient au
+        # bassin de l'exutoire aval. Les exclure du blocage permet au
+        # générateur .inp de produire la pompe en tête de chaîne.
+        ex_set_frontiere = {
+            e for e in ex_set
+            if not (G_topo.has_node(e)
+                    and G_topo.in_degree(e) == 0
+                    and G_topo.out_degree(e) > 0)
+        }
 
         if regard_proche and G_topo.has_node(regard_proche) and (est_deporte or G_topo.in_degree(target_ex_id) == 0):
             target_nodes.add(regard_proche)
@@ -188,7 +199,7 @@ def extraire_sous_reseau_bassin(
         while queue:
             curr = queue.pop(0)
             for pred in G_topo.predecessors(curr):
-                if pred not in ex_set and pred not in target_nodes:
+                if pred not in ex_set_frontiere and pred not in target_nodes:
                     target_nodes.add(pred)
                     queue.append(pred)
 

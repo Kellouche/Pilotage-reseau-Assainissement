@@ -63,6 +63,19 @@ def classifier_type_hydraulique(
         return ('step', "Station d'épuration (STEP)", '#22c55e')
     return ('regard', "Regard de visite", '#64748b')
 
+def _a_refoulement_sortant(G: nx.DiGraph, noeud) -> bool:
+    """Vrai si le nœud a une arête sortante de type refoulement/pompage."""
+    try:
+        for out_e in G.out_edges(noeud, data=True):
+            d_out = out_e[-1]
+            t_out = str(d_out.get('type', '')).lower()
+            if 'refoulement' in t_out or 'pompage' in t_out:
+                return True
+    except Exception:
+        return False
+    return False
+
+
 def _iterer_aretes_avec_data(G: nx.Graph):
     if G.is_multigraph():
         for u, v, k, data in G.edges(keys=True, data=True):
@@ -92,6 +105,13 @@ def trouver_exutoires_physiques(
                 break
 
         if matched_type:
+            # Une station de relèvement avec un refoulement sortant n'est pas
+            # un exutoire : c'est une pompe. La classer exutoire tronquerait
+            # la chaîne au niveau de la tête (tronçon pompe exclu du bassin
+            # aval) et isolerait son petit bassin d'aspiration dans un
+            # pseudo-bassin sans suite hydraulique.
+            if matched_type.startswith('station') and _a_refoulement_sortant(G, noeud):
+                continue
             exutoires_bruts.append((noeud, matched_type, data))
 
     # Trouver les nœuds connectés pour le snapping
@@ -130,6 +150,13 @@ def trouver_exutoires_physiques(
             
             # Seuil de tolérance topologique stricte (bibliographique standard: <= 1.0 m)
             if dist_min <= tolerance_snap_m:
+                # Si le nœud snapped est une tête de refoulement, l'ouvrage
+                # déporté n'est pas un exutoire mais une pompe : ne pas
+                # créer d'exutoire sur ce nœud (le refoulement appartient
+                # au bassin de l'exutoire aval).
+                if (matched_type.startswith('station')
+                        and _a_refoulement_sortant(G, meilleur_noeud)):
+                    continue
                 to_ouv = data.get('type_ouvrage') or G.nodes[meilleur_noeud].get('type_ouvrage')
                 h_seuil = data.get('h_seuil') or G.nodes[meilleur_noeud].get('h_seuil')
                 milieu_rec = data.get('milieu_rec') or G.nodes[meilleur_noeud].get('milieu_rec')

@@ -127,6 +127,66 @@ def test_station_de_relevage_draine_tout_son_reseau_amont_par_raccordement():
     assert bassins["SR1"]["edges"] == {("R1", "R2"), ("R2", "SR1")}
 
 
+def test_station_avec_refoulement_sortant_n_est_pas_un_exutoire():
+    """Une station de relèvement avec un refoulement sortant est une pompe,
+    pas un exutoire : sa tête de chaîne et son aspiration doivent rester
+    dans le bassin de l'exutoire aval."""
+    graphe = nx.DiGraph()
+    for node, point, node_type in [
+        ("R1", Point(0, 0), "regard"),
+        ("SR1", Point(1, 0), "station_relevage"),
+        ("N1", Point(2, 0), "regard"),
+        ("EX", Point(3, 0), "rejet"),
+    ]:
+        graphe.add_node(node, geometry=point, x=point.x, y=point.y, type=node_type)
+    graphe.add_edge("R1", "SR1", length=1, type="gravitaire")
+    graphe.add_edge("SR1", "N1", length=1, type="refoulement")
+    graphe.add_edge("N1", "EX", length=1, type="gravitaire")
+
+    exutoires = trouver_exutoires_physiques(graphe)
+    bassins = partitionner_bassins_exclusifs(graphe, exutoires)
+
+    assert "SR1" not in exutoires
+    assert "EX" in exutoires
+    assert bassins["EX"]["edges"] == {
+        ("R1", "SR1"), ("SR1", "N1"), ("N1", "EX"),
+    }
+
+
+def test_station_deporte_sur_refoulement_ne_cree_pas_exutoire():
+    """Un ouvrage station déporté, snapped sur un regard tête de refoulement,
+    ne doit pas devenir un exutoire : le refoulement appartient au bassin aval."""
+    graphe = nx.DiGraph()
+    for node, point, node_type in [
+        ("N1", Point(0, 0), "regard"),
+        ("M1", Point(1, 0), "regard"),
+        ("EX", Point(2, 0), "rejet"),
+        ("SR_DEP", Point(0.5, 0), "station_relevage"),
+    ]:
+        graphe.add_node(node, geometry=point, x=point.x, y=point.y, type=node_type)
+    graphe.add_edge("N1", "M1", length=1, type="refoulement")
+    graphe.add_edge("M1", "EX", length=1, type="gravitaire")
+
+    exutoires = trouver_exutoires_physiques(graphe, tolerance_snap_m=1.0)
+
+    assert set(exutoires) == {"EX"}
+
+
+def test_station_sans_refoulement_reste_un_exutoire():
+    """Invariant : une station sans sortie reste un exutoire terminal."""
+    graphe = nx.DiGraph()
+    for node, point, node_type in [
+        ("R1", Point(0, 0), "regard"),
+        ("SR1", Point(1, 0), "station_relevage"),
+    ]:
+        graphe.add_node(node, geometry=point, x=point.x, y=point.y, type=node_type)
+    graphe.add_edge("R1", "SR1", length=1, type="gravitaire")
+
+    exutoires = trouver_exutoires_physiques(graphe)
+
+    assert "SR1" in exutoires
+
+
 def test_station_propose_un_raccordement_et_un_polygone_estime():
     graphe = nx.DiGraph()
     graphe.add_node("SR1", type="station", geometry=Point(2, 0), x=2, y=0)
