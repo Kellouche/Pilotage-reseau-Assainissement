@@ -5,7 +5,9 @@ du profil en long jusqu'à validation utilisateur (Human-in-the-Loop).
 ================================================================================
 """
 
+import glob
 import os
+from pathlib import Path
 from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
@@ -32,7 +34,17 @@ def ctx_cotes(tmp_path):
     mem = Membership(org_id=org.id, user_id=user.id, role="engineer")
     # Trouver le projet Assainissement_Ville ou le GeoPackage existant
     real_proj = db.query(Project).filter(Project.name.contains("Assainissement_Ville")).first()
-    gpkg_key = real_proj.source_gpkg_key if real_proj else "tests/data/golden_dataset/network_test.gpkg"
+    gpkg_key = None
+    if real_proj and real_proj.source_gpkg_key and Path(real_proj.source_gpkg_key).exists():
+        gpkg_key = real_proj.source_gpkg_key
+    elif Path(r"D:\IA Water Data Analysis\Assainissement\Assainissement_Ville.gpkg").exists():
+        gpkg_key = r"D:\IA Water Data Analysis\Assainissement\Assainissement_Ville.gpkg"
+    else:
+        cands = glob.glob("uploads/**/network_Assainissement_Ville.gpkg", recursive=True)
+        if cands:
+            gpkg_key = cands[0]
+        else:
+            pytest.skip("GeoPackage Assainissement_Ville introuvable pour test_cotes_suspectes_validation.")
     proj = Project(
         id="proj_cotes_test",
         org_id=org.id,

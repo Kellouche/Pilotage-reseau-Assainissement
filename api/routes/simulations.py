@@ -2096,7 +2096,9 @@ def get_profil_en_long(
                 sim_data = restored
                 active_gpkg = gpkg_rest if (gpkg_rest and gpkg_rest.exists()) else gpkg_effectif
         except GpkgSimulationError as e:
-            raise HTTPException(status_code=409, detail=str(e))
+            logger.warning("Simulation legacy disque non résoluble: %s", e)
+            sim_data = {}
+            active_gpkg = gpkg_effectif
         except Exception as e_rest:
             logger.warning("Échec restauration simulation pour profil en long: %s", e_rest)
 
