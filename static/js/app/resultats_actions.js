@@ -32,12 +32,32 @@ window.reinitialiserAffichageSimulation = function() {
             }
 
             // Conduites / regards : restaurer le style standard du réseau
+            // (refoulements/pompage en rouge pointillé = réseau sous pression)
+            const _estRefoulementCouche = (props) => {
+                const f = String((props && (props.FONCTIONMT || props.fonctionmt || props.FonctionMT || props.FONCTION)) || '').toLowerCase();
+                return f.includes('refoul') || f.includes('pompage');
+            };
+            // Les couches contiennent des FeatureGroup imbriqués : il faut
+            // descendre jusqu'aux tronçons (Path) pour lire feature.properties.
+            const _restylerConduite = function(layer) {
+                if (!layer) return;
+                if (layer._layers && typeof layer.eachLayer === 'function') {
+                    Object.keys(layer._layers).forEach(k => _restylerConduite(layer._layers[k]));
+                    return;
+                }
+                if (typeof layer.setStyle !== 'function') return;
+                const f = (layer.feature && layer.feature.properties) || {};
+                if (_estRefoulementCouche(f)) {
+                    layer.setStyle({ color: '#dc2626', weight: 4, opacity: 0.95, dashArray: '7 4' });
+                } else {
+                    layer.setStyle({ color: '#38bdf8', weight: 2.5, opacity: 1.0, dashArray: null });
+                }
+            };
             if (couches.conduites) {
-                couches.conduites.eachLayer(function(l) {
-                    if (l && typeof l.setStyle === 'function') {
-                        l.setStyle({ color: '#3498db', weight: 3, opacity: 1.0 });
-                    }
-                });
+                Object.keys(couches.conduites._layers || {}).forEach(k => _restylerConduite(couches.conduites._layers[k]));
+                if (!couches.conduites._layers) {
+                    couches.conduites.eachLayer(_restylerConduite);
+                }
             }
             if (couches.regards) {
                 couches.regards.eachLayer(function(l) {

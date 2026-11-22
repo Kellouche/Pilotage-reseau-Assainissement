@@ -236,13 +236,20 @@
             const rawDiam = p.DIAMETRE !== undefined ? p.DIAMETRE : (p.diametre !== undefined ? p.diametre : p.DIAM);
             const diamTxt = (rawDiam !== undefined && rawDiam !== null && !isNaN(rawDiam)) ? `${parseFloat(rawDiam).toFixed(0)} mm` : '600 mm';
             const mat = p.MATERIAU || p.materiau || 'Béton';
+            const fct = String(p.FONCTIONMT || p.fonctionmt || p.FonctionMT || p.FONCTION || 'Gravitaire');
+            const _fctLow = fct.toLowerCase();
+            const estRefoulement = _fctLow.includes('refoul') || _fctLow.includes('pompage');
+            const fctBadge = estRefoulement
+                ? `<span style="display:inline-block; background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5; border-radius:4px; padding:0 5px; font-weight:700; font-size:10px;">⛽ ${fct} — sous pression</span>`
+                : `<span style="color:#475569;">${fct}</span>`;
 
-            return `<div style="font-family: inherit; font-size: 12px; color: #1e293b; min-width: 210px; line-height: 1.4;">
-                <div style="font-weight: 800; font-size: 13px; color: #0284c7; margin-bottom: 5px; display: flex; align-items: center; gap: 5px;">
-                    <i class="fas fa-water"></i> Conduite C_${index + 1}
+            return `<div style="font-family: inherit; font-size: 12px; color: #1e293b; min-width: 230px; line-height: 1.4;">
+                <div style="font-weight: 800; font-size: 13px; ${estRefoulement ? 'color:#dc2626;' : 'color:#0284c7;'} margin-bottom: 5px; display: flex; align-items: center; gap: 5px;">
+                    <i class="fas ${estRefoulement ? 'fa-gas-pump' : 'fa-water'}"></i> Conduite ${estRefoulement ? '⛽ ' : ''}C_${index + 1}
                 </div>
                 <div style="background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 8px; margin-bottom: 8px; font-size: 11px;">
                     <div><span style="color: #64748b;">Raccordement :</span> <b style="color: #0369a1;">${cName}</b></div>
+                    <div><span style="color: #64748b;">Fonction :</span> ${fctBadge}</div>
                     <div><span style="color: #64748b;">Diamètre :</span> <b>${diamTxt}</b></div>
                     <div><span style="color: #64748b;">Longueur :</span> <b>${longTxt}</b></div>
                     <div><span style="color: #64748b;">Matériau :</span> <b>${mat}</b></div>

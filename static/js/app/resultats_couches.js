@@ -407,12 +407,19 @@ window.addEventListener('DOMContentLoaded', initSaaSNavbar);
                 }
             }
 
+            // Réseau sous pression : pompes et tronçons de refoulement modélisés
+            const _rfTraites = Array.isArray(meta.refoulements_traites) ? meta.refoulements_traites : [];
+            const _nbPompes = _rfTraites.filter(x => x && x.tete_refoulement).length;
+            const _rfTxt = _rfTraites.length > 0
+                ? ` · ⛽ <b style="color:#fca5a5;">${_nbPompes} pompe(s)</b>, ${_rfTraites.length} tronçon(s) sous pression`
+                : '';
+
             const subLeg = document.getElementById('subcatchments-legend');
             if (subLeg) {
                 if (isTargeted) {
-                    subLeg.innerHTML = `Périmètre simulé : <b style="color: #38bdf8;">${meta.cluster_nom || meta.bassin_nom || ('Bassin ' + meta.cluster_id)}</b> (${meta.total_area_ha} ha drainés vers l'exutoire ${meta.outfall_code || ''}).`;
+                    subLeg.innerHTML = `Périmètre simulé : <b style="color: #38bdf8;">${meta.cluster_nom || meta.bassin_nom || ('Bassin ' + meta.cluster_id)}</b> (${meta.total_area_ha} ha drainés vers l'exutoire ${meta.outfall_code || ''})${_rfTxt}.`;
                 } else {
-                    subLeg.innerHTML = `Surface drainée totale : <b>${meta.total_area_ha} ha</b> sur <b>${meta.subcatchments_count} sous-bassins</b>.`;
+                    subLeg.innerHTML = `Surface drainée totale : <b>${meta.total_area_ha} ha</b> sur <b>${meta.subcatchments_count} sous-bassins</b>${_rfTxt}.`;
                 }
             }
 

@@ -122,10 +122,20 @@ function chargerDonneesInitiales() {
                         ' | Regards: <b>' + (d.compteurs.regards || 0) + '</b>';
 
                     window.conduitProperties = [];
-                    // Conduites (lignes)
+                    // Conduites (lignes) : gravitaires en bleu plein,
+                    // refoulements/pompage en rouge pointillé (réseau sous pression)
+                    const _estRefoulement = (props) => {
+                        const f = String((props && (props.FONCTIONMT || props.fonctionmt || props.FonctionMT || props.FONCTION)) || '').toLowerCase();
+                        return f.includes('refoul') || f.includes('pompage') || f.includes('refoulement');
+                    };
                     L.geoJSON(d.couches.conduites, {
                         pane: 'pipesPane',
-                        style: { color: '#3498db', weight: 3 },
+                        style: (feature) => {
+                            if (_estRefoulement(feature.properties)) {
+                                return { color: '#dc2626', weight: 4, dashArray: '7 4', opacity: 0.95 };
+                            }
+                            return { color: '#38bdf8', weight: 2.5 };
+                        },
                         onEachFeature: (feature, layer) => {
                             const index = window.conduitProperties.length;
                             window.conduitProperties.push(feature.properties);

@@ -379,6 +379,28 @@ window._afficherResultatsSimulationNu = function(data, force = false) {
                 return null;
             };
 
+            // Réseau sous pression : conduites de refoulement/pompage issues du
+            // modèle .inp (meta.conduit_endpoints["fonction"] et meta.refoulements_traites)
+            const _endpointsMeta = (data.meta && data.meta.conduit_endpoints) || {};
+            const _refoulementsMeta = Array.isArray(data.meta && data.meta.refoulements_traites)
+                ? data.meta.refoulements_traites : [];
+            const refoulementCids = new Set();
+            const pompeParCid = {};
+            Object.keys(_endpointsMeta).forEach(cid => {
+                const ep = _endpointsMeta[cid] || {};
+                if (String(ep.fonction || '').toLowerCase() === 'refoulement') {
+                    refoulementCids.add(String(cid));
+                    if (ep.pompe) pompeParCid[String(cid)] = ep.pompe;
+                }
+            });
+            _refoulementsMeta.forEach(rf => {
+                if (rf && rf.cid) refoulementCids.add(String(rf.cid));
+                if (rf && rf.cid && rf.pompe) pompeParCid[String(rf.cid)] = rf.pompe;
+            });
+            const _estRefoulementResultat = function(r) {
+                return !!(r && refoulementCids.has(String(r.link_id || '')));
+            };
+
             // 1. Conduites : coloration dynamique selon taux de charge Q/Qmax & remplissage
             if (window._rawNetworkData && window._rawNetworkData.couches && window._rawNetworkData.couches.conduites) {
                 const pipesGeo = window._rawNetworkData.couches.conduites;
@@ -396,12 +418,14 @@ window._afficherResultatsSimulationNu = function(data, force = false) {
                         const isCritique = (r.status === 'critique' || (r.depth_ratio >= 0.8));
                         const isModeree = (r.status === 'moderee' || (r.depth_ratio >= 0.5) || (r.flow_ratio >= 0.5));
                         const w = isSurcharge ? 6.5 : (isCritique ? 5.5 : (isModeree ? 4.8 : 4.0));
+                        const estRef = _estRefoulementResultat(r);
                         return {
                             color: col,
                             weight: w,
                             opacity: 1.0,
                             lineCap: 'round',
-                            lineJoin: 'round'
+                            lineJoin: 'round',
+                            dashArray: estRef ? '6 4' : null
                         };
                     },
                     onEachFeature: (feature, layer) => {
@@ -414,6 +438,8 @@ window._afficherResultatsSimulationNu = function(data, force = false) {
 
                         const qPct = (r.flow_ratio * 100).toFixed(0);
                         const dPct = (r.depth_ratio * 100).toFixed(0);
+                        const estRef = _estRefoulementResultat(r);
+                        const pompeId = pompeParCid[String(r.link_id || '')] || '';
                         const popupHtml = `
                             <div style="font-family: inherit; font-size: 12px; min-width: 230px; line-height: 1.45;">
                                 <div style="font-weight: 800; font-size: 13px; color: ${_couleurConduite(r)}; margin-bottom: 6px; border-bottom: 1px solid rgba(0,0,0,0.1); padding-bottom: 4px;">
@@ -422,6 +448,9 @@ window._afficherResultatsSimulationNu = function(data, force = false) {
                                 <div style="margin-bottom: 5px; font-weight: 700; color: ${_couleurConduite(r)}; font-size: 11.5px;">
                                     Taux de charge : ${r.label || 'Normal'}
                                 </div>
+                                ${estRef ? `<div style="margin-bottom: 5px; font-weight: 700; color: #dc2626; font-size: 11.5px;">
+                                    ⛽ Réseau sous pression — refoulement${pompeId ? ` · Pompe <b>${pompeId}</b>` : ''}
+                                </div>` : ''}
                                 <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
                                     <tr><td style="color:#64748b; padding:2px 0;">Charge Q/Qmax :</td><td style="font-weight:700; text-align:right; color:${_couleurConduite(r)};">${qPct} %</td></tr>
                                     <tr><td style="color:#64748b; padding:2px 0;">Remplissage H/D :</td><td style="font-weight:700; text-align:right;">${dPct} %</td></tr>
