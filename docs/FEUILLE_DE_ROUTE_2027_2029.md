@@ -132,6 +132,9 @@ flowchart TD
 > **Différenciation majeure — Cible : Q4 2027**  
 > **Objectif** : Donner une crédibilité scientifique et contractuelle incontestable aux calculs présentés aux commissions techniques.
 
+> [!NOTE]
+> **Avance de phase 2026** : Le contrôle de cohérence pluie-débit de premier niveau (Méthode rationnelle $C \cdot I \cdot A / 360$ vs débit de pointe Saint-Venant 1D avec détection explicite du laminage hydraulique et stockage en réseau) a été anticipé et intégré avec succès dans le cockpit Leaflet HD dès novembre 2026. La Phase 3 (2027) étendra cette validation aux formules de Caquot spécifiques, aux coefficients de forme d'impluvium et aux pastilles de conformité contractuelle multi-bassins.
+
 #### 3.1 Moteur Comparatif Multi-Modèles
 - **Comparaison systématique à l'échelle du sous-bassin** :
   - Débit de pointe hydrodynamique dynamique : $Q_{SWMM}$ (DynWave)

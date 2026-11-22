@@ -1,7 +1,14 @@
 # Feuille de route — SWMM Platform (Historique POC & Transition SaaS)
 
-> ⚠️ **Document de transition** : La feuille de route officielle et complète pour la transformation SaaS industrielle de la plateforme est désormais consignée dans **[13_ROADMAP_SAAS.md](13_ROADMAP_SAAS.md)** (Phases 0 à 7, chiffrage des tâches S/M/L/XL, architecture FastAPI/Celery/PostGIS/S3, quotas et jalons d'acceptation stricts).  
-> Ce document conserve l'historique des premières phases de cadrage du POC initial.
+> ⚠️ **Document de transition & historique** : La feuille de route officielle et complète pour la transformation SaaS industrielle de la plateforme est consignée dans **[13_ROADMAP_SAAS.md](13_ROADMAP_SAAS.md)** (Phases 0 à 7, chiffrage des tâches S/M/L/XL, architecture FastAPI/Celery/PostGIS/S3, quotas et jalons d'acceptation stricts) et le suivi opérationnel quotidien dans **[TODO.md](../TODO.md)** et **[TODO_PHASES_4_7.md](TODO_PHASES_4_7.md)**.  
+> 
+> **État d'avancement au 22 Novembre 2026** :  
+> - **FastAPI unifié & Multi-tenant (Stealth 404)** : Opérationnel et certifié.  
+> - **Moteur Hydrodynamique PySWMM 5.2.4 x64** : Découpage Voronoï, infiltration Horton, pluies Chicago/Montana, Saint-Venant 1D (`DYNWAVE`).  
+> - **Apports de Temps Sec (DWF)** : Injection multi-profils, sélecteur cartographique interactif, légende dynamique et réconciliation GPKG.  
+> - **Diagnostic & Altimétrie** : Profil en long HGL interactif, contrôle de cohérence pluie-débit (Rationnel vs Saint-Venant), registre des cotes suspectes et altimétrie IDW TOPO Chlef.  
+> - **Animation Temporelle & Rapports** : Time slider binaire 0h-24h et export officiel PDF A4 ReportLab avec BPU.  
+> - **Chantiers immédiats** : Conduites de refoulement sous pression (`FORCE_MAIN` & pompes Type 3) et Dégradation structurelle / Sédimentation (`Geom3` & DWA-A 110).
 
 ---
 

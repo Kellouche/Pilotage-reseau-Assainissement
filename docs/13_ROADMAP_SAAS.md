@@ -211,8 +211,25 @@ Les décisions d'architecture sont formalisées dans les fiches ADR dédiées :
 | 2bis.5 | Extraction et décodeur du rapport de calcul officiel SWMM (`.rpt`) | ✅ FAIT | M | Extraction automatisée des KPIs : bilan de continuité, débit de pointe exutoire, détection des nœuds inondés (durée, débit crête, volume $m^3$), classification des conduites selon le taux de charge $Q/Q_{max}$ et remplissage $H/D$. |
 | 2bis.6 | Cockpit SIG d'Ingénierie & Visualisation cartographique des couches thématiques | ✅ FAIT | L | Sidebar structurée en 4 volets thématiques, affichage immédiat de la sectorisation Voronoï avant calcul avec surfaces en $ha$, couches de résultats post-simulation ($Q/Q_{max}$ par couleurs vert/jaune/orange/rouge et regards débordants), et persistance permanente `/api/v1/simulations/latest`. |
 | 2bis.7 | Détection spatiale des ouvrages orphelins & Raccordement pré-simulation (Variante 0 Opportuniste) | ✅ FAIT | M | Scan spatial automatique (< 120 m) des déversoirs d'orage (DVO), trop-pleins et stations de relevage orphelins ; interface interactive pré-simulation avec cases à cocher et tracés dynamiques en tiretés cyan (`dashArray: 8, 8`) sur Leaflet ; injection hydrodynamique SWMM et évaluation financière multi-agents (Variante 0, gain > 90%). |
+| 2bis.8 | Injection des Apports de Temps Sec (DWF — Phases P1.1 à P1.5.4) | ✅ FAIT | L | Injection d'eaux usées multi-profils (journalier urbain, constant, industriel), modes de détermination (EH ou débit L/s), sélecteur cartographique interactif avec masquage modal, légende dynamique (pastille fluorescente cyan/bleu + débit journalier cumulé en L/s), réconciliation GeoPackage et audit trail (`apports_dwf_history`). |
+| 2bis.9 | Contrôle de Cohérence Pluie-Débit (Rationnel vs Saint-Venant 1D) | ✅ FAIT | M | Évaluation du débit rationnel brut attendu ($Q = C \cdot I \cdot A / 360$) en amont du calcul hydrodynamique et comparaison automatique avec le débit de pointe simulé par Saint-Venant 1D ; qualification explicite du laminage hydraulique en réseau et du stockage temporaire. |
+| 2bis.10 | Registre des Cotes Suspectes & Altimétrie IDW (TOPO Chlef) | ✅ FAIT | M | Détection automatique des sauts de radier anormaux (> 20m ou anomalies MNT) avec suspension du tracé de profil en long ; registre interactif de validation/correction des cotes par l'ingénieur ; intégration du nuage altimétrique réel TOPO Chlef (84 302 points IDW) avec mémorisation sans conflit d'affichage. |
 
-> **Jalon Phase 2bis [VALIDÉ ✅]** : Simulation hydrodynamique native EPA SWMM 5.2 opérationnelle en 1 seconde sur le réseau témoin (erreur de routage $-0.166\%$) ; sectorisation de surface visible en amont (59 SB, 13.02 ha) ; affichage cartographique thématique des surcharges et débits de crête ; téléchargement des artefacts officiels `.INP` et `.RPT` ; détection et raccordement pré-simulation des ouvrages spéciaux orphelins.
+> **Jalon Phase 2bis [VALIDÉ ✅]** : Simulation hydrodynamique native EPA SWMM 5.2 opérationnelle en 1 seconde sur le réseau témoin (erreur de routage $-0.166\%$) ; sectorisation de surface visible en amont (59 SB, 13.02 ha) ; affichage cartographique thématique des surcharges et débits de crête ; téléchargement des artefacts officiels `.INP` et `.RPT` ; détection et raccordement pré-simulation des ouvrages orphelins ; module DWF complet ; contrôle de cohérence pluie-débit et registre des cotes suspectes.
+
+---
+
+### Phase 2ter — Extensions Hydrauliques Avancées : Refoulement & Vieillissement du Réseau
+
+> **Objectif** : Couvrir les singularités sous pression (stations de pompage et conduites forcées) et l'impact de la sédimentation/vieillissement du réseau sur le transit hydraulique.
+
+| Réf | Tâche | Statut | Taille | Livrables / Critères d'acceptation |
+|---|---|---|---|---|
+| 2ter.1 | Conduites de refoulement sous pression & Stations de relevage | ⏳ CADRAGE | L | Quadruplet topologique SWMM (`STORAGE` bâche $\rightarrow$ `PUMP` Type 3 HMT vs Q $\rightarrow$ `FORCE_MAIN` conduite en charge Hazen-Williams / Darcy-Weisbach $\rightarrow$ `JUNCTION` chambre de rupture gravitaire). Amortissement `INERTIAL_DAMPING FULL` et pas de temps de routage fin ($\Delta t \le 1\text{ à }5\text{ s}$). Affichage HGL continu sous pression sans décrochement artificiel. |
+| 2ter.2 | État du réseau, sédimentation et vieillissement (Normes EN 13508-2 / DWA-A 110) | ⏳ CADRAGE | L | Intégration du paramètre natif SWMM 5.2 `Geom3` ($h_{\text{séd}}$) dans `[XSECTIONS]`, calcul du diamètre effectif $D_{\text{eff}}$, majoration de la rugosité de Manning $n$ selon l'encrassement (0.013 $\rightarrow$ 0.018 - 0.025) et scénarios comparatifs *Avant / Après curage* avec cubage des sédiments. |
+| 2ter.3 | Déconnexion manuelle d'exutoires & Correction des frontières de bassins | ⏳ CADRAGE | M | Outil interactif de coupure de tronçons frontières, filtrage d'exutoires secondaires dans la modale de calcul et requalification d'ouvrages spéciaux en parois étanches. |
+
+> **Jalon Phase 2ter** : Modélisation sans divergence numérique des postes de refoulement sous pression et simulation de l'impact de l'ensablement sur les débordements de surface.
 
 ---
 
@@ -268,15 +285,16 @@ Les décisions d'architecture sont formalisées dans les fiches ADR dédiées :
 
 > **Objectif** : Unifier l'expérience utilisateur dans un tableau de bord web moderne, réactif et professionnel servi par FastAPI.
 
-| Réf | Tâche | Taille | Livrables / Critères d'acceptation |
-|---|---|---|---|
-| 6.1 | Suppression définitive de Flask et unification sous FastAPI | M | Port des templates Jinja2 et des fichiers statiques Leaflet sous FastAPI (`StaticFiles` et `Jinja2Templates`). |
-| 6.2 | Refonte de la barre de navigation et de l'espace organisation | M | Affichage du logo de l'organisation cliente, du plan actif, du compte à rebours de licence et du sélecteur de projets. |
-| 6.3 | Intégration de la carte interactive d'anomalies | L | Affichage temps réel des contre-pentes, doublons, sens d'écoulement et profils en long hydrauliques. |
-| 6.4 | Visualiseur de résultats de simulation SWMM | L | Affichage dynamique des hydrogrammes de débit aux exutoires, des courbes de submersion et des conduites saturées. |
-| 6.5 | Module de génération de rapports d'audit PDF | M | Génération d'un rapport de schéma directeur complet en un clic (planches cartographiques, tableau des anomalies, KPIs). |
+| Réf | Tâche | Statut | Taille | Livrables / Critères d'acceptation |
+|---|---|---|---|---|
+| 6.1 | Suppression définitive de Flask et unification sous FastAPI | ✅ FAIT | M | Port complet des templates Jinja2 et des modules JavaScript/CSS sous FastAPI (`StaticFiles` et `Jinja2Templates` sur le port 5002) avec suppression de la dette technique Flask. |
+| 6.2 | Refonte de la barre de navigation et de l'espace organisation | ✅ FAIT | M | Affichage du logo de l'organisation cliente, du badge de plan actif, de l'état des licences et du sélecteur de bassins/projets. |
+| 6.3 | Intégration du Cockpit Leaflet HD & Profils en long HGL | ✅ FAIT | L | Tracé interactif du profil altimétrique (cotes radiers, terrain MNT/TOPO Chlef, génératrice supérieure), ligne de charge piézométrique (HGL), hachures sous pression, accordéon rétractable et export PNG en 1 clic. |
+| 6.4 | Visualiseur dynamique & Animation temporelle (Time Slider) | ✅ FAIT | L | Curseur temporel 0h $\rightarrow$ 24h exploitant les chroniques binaires `.out`, coloration dynamique des tronçons selon $Q/Q_{\max}$, radars visuels de débordement et hydrogramme de crête interactif aux exutoires. |
+| 6.5 | Module de génération de rapports d'expertise technique PDF | ✅ FAIT | M | Édition réglementaire en 1 clic (ReportLab) : cartographie du réseau, bilans de continuité massique SWMM, anomalies critiques, volumes inondés et bordereau estimatif de prix unitaires (BPU). |
+| 6.6 | Optimisation des performances cartographiques Leaflet HD | ✅ FAIT | M | Rendu vectoriel Canvas/SVG stabilisé, isolation des bassins non simulables, boîte de résultats HD plein écran et réduction de 77% des requêtes réseau redondantes. |
 
-> **Jalon Phase 6** : L'interface web unique permet à un utilisateur de mener à bien l'intégralité du cycle de travail (import $\rightarrow$ audit $\rightarrow$ MNT $\rightarrow$ simulation $\rightarrow$ rapport).
+> **Jalon Phase 6 [VALIDÉ ✅]** : L'interface web unique permet à l'ingénieur de mener à bien l'intégralité du cycle de travail (import $\rightarrow$ audit qualité $\rightarrow$ interpolation altimétrique $\rightarrow$ apports DWF $\rightarrow$ simulation Saint-Venant 1D $\rightarrow$ animation temporelle $\rightarrow$ profil en long HGL $\rightarrow$ rapport officiel PDF). 100% opérationnel et validé par les tests de non-régression.
 
 ---
 
@@ -299,18 +317,21 @@ Les décisions d'architecture sont formalisées dans les fiches ADR dédiées :
 ## 6. Planning Synthétique et Jalons du MVP
 
 ```
-Mois 1 : Fondations & Sécurité
-├── Phase 0 : Corpus documentaire & Golden Master [Jalon 0]
-└── Phase 1 : Auth Argon2id, Multi-Tenant & PostgreSQL/PostGIS [Jalon 1]
+Mois 1 : Fondations & Sécurité [VALIDÉ ✅]
+├── Phase 0 : Corpus documentaire & Golden Master [Jalon 0 - VALIDÉ ✅]
+└── Phase 1 : Auth Argon2id, Multi-Tenant & PostgreSQL/PostGIS [Jalon 1 - VALIDÉ ✅]
 
-Mois 2 : Scalabilité & Cœur Hydraulique
-├── Phase 2 : Tâches asynchrones Celery & Stockage S3/MinIO [Jalon 2]
-└── Phase 3 : Feature Gating, Plans B2B & Console Opérateur [Jalon 3]
+Mois 2 : Scalabilité, Cœur Hydraulique & Cockpit HD [VALIDÉ ✅]
+├── Phase 2 : Tâches asynchrones Celery & Stockage S3/MinIO [Jalon 2 - VALIDÉ ✅]
+├── Phase 2bis : Moteur Hydrodynamique PySWMM 5.2, Voronoï, DWF & Cotes [Jalon 2bis - VALIDÉ ✅]
+├── Phase 3 : Feature Gating, Plans B2B & Console Opérateur [Jalon 3 - VALIDÉ ✅]
+└── Phase 6 : Cockpit Leaflet HD, Profils HGL, Time Slider & Rapports PDF [Jalon 6 - VALIDÉ ✅]
 
-Mois 3 : Mobilité & Industrialisation
-├── Phase 4 : Synchronisation Mobile Terrain Offline [Jalon 4]
-├── Phase 5 & 6 : API Publique, Frontend Leaflet Unifié & Rapports [Jalon 5 & 6]
-└── Phase 7 : Dockerisation complète, CI/CD & Lancement Officiel [Jalon 7 — GO LIVE]
+Mois 3 : Extensions Hydrauliques, Mobilité & Déploiement [EN COURS ⏳]
+├── Phase 2ter : Refoulement sous pression (FORCE_MAIN) & Sédimentation (Geom3) [Jalon 2ter - EN COURS]
+├── Phase 5 : API Publique, flux QGIS WFS/MVT & GeoPackage [Jalon 5 - À FAIRE]
+├── Phase 4 : Synchronisation Mobile Terrain Offline-First [Jalon 4 - À FAIRE]
+└── Phase 7 : Docker-compose complet, CI/CD & Lancement Officiel [Jalon 7 — GO LIVE]
 ```
 
 ---

@@ -1,164 +1,147 @@
-# TODO — Réseau d'Assainissement
+# TODO — DrainPilot 5.2 (SWMM Platform)
 
-**Date :** 02-04-2026 07:12
-**Utilisateur :** Hakim
-
----
-
-## À faire — Priorité hydraulique
-
-### Phase 0 — Diagnostic qualité existant (base)
-
-- [X] Anomalie détection : champs manquants, géométries invalides, pentes
-- [X] Intégrer auto-lancement après chargement carte (pas d'attente utilisateur)
-- [X] Regrouper les icônes par phase d'analyse (🔧 topologie, ⛰ pente, 📊 débit, 🌊 MNT)
-- [X] Adapter boîte correction par type anomaly (pas profil pour coords invalides)
-
-### Phase 1 — Fondations topologiques (immédiat)
-
-- [X] Validation des connexions amont-aval (tolérance 50cm)
-- [X] Détection des chevauchements géométriques (conduites se croisant sans nœud)
-- [X] Détection des doublons regards à < 2m
-
-### Phase 2 — Analyse de pente et profil
-
-- [ ] Calcul continu des pentes avec vérification de débitilité
-- [ ] Détection des sauts de pente > 2m (inversion brutale)
-- [ ] Courbes caractéristiques longueur-cumul / profondeur-cumul
-
-### Phase 3 — Capacité débitaire
-
-- [ ] Calcul débit nominal selon NP 650 (Q = 3.1 * D^2.2)
-- [ ] Détection conduites sous-dimensionnées (défaut de charge)
-- [ ] Vérification vitesse d'écoulement (0.3 - 3 m/s)
-
-### Phase 4 — Limites MNT intégrées
-
-- [ ] Intégrer MNT/DEM pour bassins versants réels
-- [ ] Comparaison avec bassins topologiques
-- [ ] Détection des hors-bassin (écoulement inversé géographique)
+**Dernière mise à jour :** 22-11-2026  
+**Auteur :** Dr Abdelhakim KELLOUCHE & DrainPilot Engineering Team  
+**Architecture active :** FastAPI 0.115+ unifié, PySWMM 5.2.4 x64 (Saint-Venant 1D), Leaflet HD Cockpit, Multi-tenancy strict (Stealth 404).
 
 ---
 
-## À faire — UI/UX cartographique
+## 🏆 Synthèse de l'Avancement Global
 
-### Phase 5 — Visualisation hydraulique
-
-- [ ] Mode "flux continu" animation sens débit
-- [ ] Coloration par ordre topologique (débit cumulé)
-- [ ] Heatmap débit maximal par bassin
-
-### Phase 6 — Diagnostic spatial
-
-- [ ] Panel scores qualité par bassin (rouge/orange/vert)
-- [ ] Timeline modifications avec lien carto
-- [ ] Mode "contrôle terrain" validation terrain
-
-### Phase 7 — Mobile terrain
-
-- [ ] Synchronisation offline
-- [ ] Capture GPS + photo anomalies
-- [ ] Mode orientation flèche débit
-
-### Phase 7bis — Moteur Hydrodynamique EPA SWMM 5.2 Réel
-
-- [X] Générateur hydrologique de surface Voronoï/Thiessen (`[SUBCATCHMENTS]`, `%Imperv`, Horton)
-- [X] Hyétogrammes de pluie de projet Montana / Chicago (`[RAINGAGES]`, `[TIMESERIES]`)
-- [X] Sollicitations de temps sec (`[DWF]`) avec patterns horaires journaliers
-- [X] Traduction des singularités (`[WEIRS]`, `[PUMPS]`, `[STORAGE]`, `[OUTFALLS]`)
-- [X] Intégration du moteur natif compilé `pyswmm` (Saint-Venant 1D / `DYNWAVE`)
-- [X] Parser binaire `.out` pour extraction des chroniques temporelles ($Q(t), y(t), V(t)$)
-- [X] Time Slider temporel et animation dynamique de l'onde de crue sur la carte Leaflet
-- [X] Profil en long hydraulique interactif & Ligne de Charge (HGL Saint-Venant 1D, WSP, hachures sous pression)
-- [X] Édition et impression du Rapport d'Expertise Technique A4 (PDF multi-agents & BPU)
+| Domaine / Module | Description | Statut |
+|---|---|---|
+| **Socle FastAPI & Multi-Tenant** | Architecture REST moderne, isolation stricte `org_id`, règle furtive 404, sessions et tokens JWT | ✅ Réalisé |
+| **Gouvernance & Licences B2B** | Quotas par plan, clés de licence cryptographiques `SP-LIC-...`, devis proforma DZD, console SuperAdmin | ✅ Réalisé |
+| **Stockage Sécurisé ArtifactStore** | Abstraction MinIO/S3 et stockage local partitionné par organisation | ✅ Réalisé |
+| **Moteur Hydrodynamique PySWMM 5.2** | Intégration binaire officielle 5.2.4 x64, résolution `DYNWAVE` Saint-Venant 1D, bilans massiques stricts (< 0.2% d'erreur) | ✅ Réalisé |
+| **Hydrologie de Surface Voronoï** | Découpage Voronoï/Thiessen borné (59 sous-bassins, 13.02 ha), attribution d'exutoires, infiltration de Horton ($f_0, f_c, k$) | ✅ Réalisé |
+| **Hyétogrammes Pluvieux & Événements** | Lois de Montana locales, pluies de projet Chicago (décennale, cinquantennale, orage d'été 2h, temps sec pur) | ✅ Réalisé |
+| **Gestion des Apports de Temps Sec (DWF)** | Injection multi-profils (journalier, constant, industriel), modes EH/débit direct, sélecteur cartographique interactif avec masquage modal, légende dynamique (pastille fluorescente + débit L/s), réconciliation GPKG et traçabilité d'audit | ✅ Réalisé |
+| **Contrôle Qualité Altimétrique & MNT** | Détection automatique des sauts de radier aberrants (> 20m ou MNT tronqué), registre interactif de validation/correction par l'ingénieur, intégration du nuage altimétrique TOPO Chlef (84 302 points IDW) | ✅ Réalisé |
+| **Contrôle de Cohérence Pluie-Débit** | Confrontation débit de pointe Saint-Venant 1D vs Débit rationnel brut ($Q = C \cdot I \cdot A / 360$), qualification automatique du laminage et stockage temporaire en réseau | ✅ Réalisé |
+| **Cockpit Leaflet HD & Profil en Long** | Profil en long HGL interactif (ligne piézométrique, génératrice supérieure, hachures sous pression), isolation des bassins non simulables, optimisation de chargement (-77% de requêtes), modal de résultats HD | ✅ Réalisé |
+| **Animation Temporelle (Time Slider)** | Extraction des chroniques depuis le fichier binaire `.out` (0h → 24h), coloration dynamique du taux de charge $Q/Q_{\max}$, radars visuels de débordement | ✅ Réalisé |
+| **Rapport d'Expertise Technique A4** | Générateur PDF réglementaire en 1 clic (ReportLab) avec planches cartographiques, tableaux des surcharges, durées de submersion et bordereau estimatif de travaux (BPU) | ✅ Réalisé |
 
 ---
 
-## À faire — Architecture
+## 🚀 À FAIRE — Chantiers Prioritaires Immédiats
 
-### Phase 8 — Performance
+### 1. Conduites de Refoulement Sous Pression & Stations de Relevage
 
-- [ ] Cache calculs topologiques (graphe statique)
-- [ ] Validation incrémentale par bassin
-- [ ] Batch processing parallèle
+> **Objectif :** Intégrer fidèlement la modélisation hydraulique des conduites de refoulement sous pression alimentées par des postes de pompage sans instabilité numérique.
 
-### Phase 9 — Traçabilité
-
-- [ ] Versionning géométries (timestamp)
-- [ ] Audit trail modifications
-- [ ] Impact hydraulique calculé à la volée
-
-### Phase 10 — Déconnexion manuelle d'exutoires & Correction des frontières de bassins (Point 4)
-
-> [!WARNING]
-> **Remarque importante (Non encore validé) :** Avant de passer à la réalisation de cette fonctionnalité, une discussion approfondie doit être menée avec l'utilisateur pour cadrer précisément l'ergonomie :
-> 1. Coupure manuelle interactive d'un tronçon frontière sur la carte (ex: canalisation Ø800 de 83.5m reliant le DVO 166 au trop-plein 171).
-> 2. Filtrage/décochage d'exutoires secondaires directement dans le modal de paramétrage de simulation SWMM.
-> 3. Requalification d'un ouvrage spécial (ex: DVO) en frontière étanche de bassin interdisant la remontée amont.
-
----
-
-## Fait
-
-## Fait
-
-- [X] Restructuration MVC du projet (règles 1-5)
-- [X] En-têtes de module standardisés (auteur, version, dates, objectif)
-- [X] Découpage des fichiers >250 lignes en sous-modules
-- [X] Architecture : src/controllers, src/domain, src/infrastructure, src/views, tests
-- [X] Sens d'écoulement hydraulique (cotes de radier, inversion des coordonnées)
-- [X] Noms de rues comme labels sur la carte (134 rues depuis les regards)
-- [X] Flèches de sens d'écoulement visibles à partir du zoom 14
-- [X] Labels noms de rues visibles à partir du zoom 13
-- [X] Taille des symboles adaptative selon le zoom
-- [X] Centre de la carte calculé automatiquement depuis les données
-- [X] Filtrage des colonnes GeoPackage → performance (58s → 6s)
-- [X] Popups enrichis (rue, commune, diamètre, profondeur, matériau)
-- [X] Clustering Leaflet désactivé (points individuels)
-- [X] Supprimer Streamlit, garder Flask uniquement
-- [X] Supprimer graph_analysis.py et toute logique de clustering
-- [X] Simplifier server.py (chargement GeoPackage → API JSON)
-- [X] Simplifier index.html (6 couches, pas de clusters)
-- [X] Corriger les accents UTF-8 (console Windows + interface web)
-- [X] Ajouter en-têtes anti-cache dans Flask (Cache-Control)
-- [X] Corriger le zoom (fitBounds uniquement au chargement initial)
+- [ ] **1.1 Formalisation topologique du quadruplet SWMM :**
+  - Bâche de pompage : Déclaration en nœud de type `[STORAGE]` avec loi hauteur-volume $V(h)$ et cotes de marnage (démarrage/arrêt).
+  - Ouvrage de pompage : Déclaration en lien de type `[PUMPS]` avec courbe caractéristique de pompe Type 3 (HMT en fonction du débit $Q$).
+  - Conduite de refoulement : Déclaration en lien de type `[CONDUITS]` avec section `[XSECTIONS]` en conduite forcée `FORCE_MAIN` (diamètre, équation de perte de charge Hazen-Williams $C_{\text{HW}}$ ou Darcy-Weisbach $\epsilon$).
+  - Chambre de rupture gravitaire : Déclaration du nœud aval en `[JUNCTIONS]` avec cote de déversement à l'atmosphère.
+- [ ] **1.2 Paramétrage de stabilité du solveur hydrodynamique :**
+  - Réduction automatique du pas de temps de routage hydraulique ($\Delta t \le 1$ à 5 s) dès présence d'une `FORCE_MAIN`.
+  - Activation de l'amortissement d'inertie `INERTIAL_DAMPING FULL`.
+  - Pas de temps variable basé sur le critère de Courant (`VARIABLE_STEP 0.75`).
+- [ ] **1.3 Rendu cartographique & Profil en long HGL sous pression :**
+  - Affichage spécifique des conduites de refoulement sur la carte Leaflet (tracé violet/indigo distinctif avec icône de station de pompage).
+  - Tracé du profil en long HGL adapté aux conduites forcées : continuité de la ligne piézométrique en charge au-dessus de la génératrice supérieure jusqu'à la chambre de rupture sans décrochement artificiel.
+- [ ] **1.4 Tests de non-régression hydraulique :**
+  - Validation sur cas test canonique (Station de relevage refoulant vers collecteur gravitaire principal).
+  - Vérification de la continuité massique (erreur $< 0.5\%$).
 
 ---
 
-## Arborescence du projet
+### 2. État du Réseau, Sédimentation & Vieillissement des Conduites
+
+> **Objectif :** Quantifier l'impact du vieillissement structurel, de l'entartrage et de la sédimentation sur la capacité d'évacuation hydraulique du réseau.
+
+- [ ] **2.1 Intégration de la sédimentation de fond de radier (`Geom3`) :**
+  - Exploitation du paramètre natif EPA SWMM 5.2 `Geom3` (hauteur de dépôts de sédiments au fond de la canalisation $h_{\text{séd}}$) dans la section `[XSECTIONS]`.
+  - Calcul automatique de la réduction de section d'écoulement et de la perte de capacité théorique.
+- [ ] **2.2 Ajustement de rugosité et réduction de diamètre effectif (Normes EN 13508-2 / DWA-A 110) :**
+  - Prise en compte de la rugosité accrue due aux dépôts et à l'abrasion : ajustement dynamique du coefficient de Manning $n$ (ex. passage de 0.013 à 0.018 - 0.025).
+  - Déduction du diamètre effectif $D_{\text{eff}} = D_{\text{nominal}} - 2 \cdot e_{\text{croûte}}$.
+- [ ] **2.3 Scénarios d'exploitation comparatifs (Avant / Après curage) :**
+  - Modal de simulation avec bascule "État du réseau" : *Neuf / Réhabilité*, *Exploitation normale*, *Réseau encrassé / Sédimenté (20% radier)*.
+  - Visualisation comparative sur le cockpit : surcharges induites par l'encrassement, apparition de débordements prématurés.
+  - Chiffrage estimatif du volume de boues à curer ($m^3$) dans le rapport de diagnostic.
+
+---
+
+### 3. Déconnexion Manuelle d'Exutoires & Correction des Frontières de Bassins
+
+> **Objectif :** Permettre à l'ingénieur d'ajuster interactivement le modèle topologique pour isoler ou corriger les bassins d'exutoires.
+
+- [ ] **3.1 Coupure interactive de tronçons frontières sur la carte :**
+  - Outil "Ciseau / Déconnexion" pour scinder ou désactiver un tronçon frontière (ex. liaison DVO 166 vers trop-plein 171).
+  - Recalcul instantané des bassins versants amont et des ordres topologiques.
+- [ ] **3.2 Filtrage d'exutoires secondaires dans la modal de paramétrage :**
+  - Sélection / désélection des exutoires pris en compte dans le sous-modèle de calcul.
+- [ ] **3.3 Requalification d'ouvrages spéciaux :**
+  - Définition d'un seuil ou d'une vanne comme frontière étanche interdisant la remontée amont.
+
+---
+
+### 4. Phase 5 — API Publique & Interopérabilité SIG (QGIS / GeoJSON)
+
+- [ ] **4.1** Clés d'API persistantes (`sp_live_...`) avec permissions granulaires pour requêtes externes.
+- [ ] **4.2** Endpoints d'export à la volée du réseau filtré en GeoPackage (`.gpkg`) et GeoJSON.
+- [ ] **4.3** Flux de tuiles vectorielles (MVT / WFS) pour les très grands réseaux (> 50 000 regards).
+- [ ] **4.4** Documentation Swagger / OpenAPI 3.0 certifiée avec schémas Pydantic.
+
+---
+
+### 5. Phase 7 — Industrialisation Docker & Déploiement Production
+
+- [ ] **5.1** Fichier `docker-compose.yml` multi-services complet (FastAPI, Celery, PostgreSQL 16 PostGIS, Redis 7, MinIO, Caddy SSL).
+- [ ] **5.2** Dockerfile multi-étapes optimisé avec compilation C/C++ (GDAL, GEOS, PROJ, EPA SWMM 5.2.4 Toolkit).
+- [ ] **5.3** Pipeline CI/CD GitHub Actions (pytest, Golden Master, intégrité syntaxique JS).
+- [ ] **5.4** Journalisation structurée JSON, métriques de santé `/api/v1/health` et checklist Go-Live OWASP.
+
+---
+
+### 6. Phase 4 — Mobilité Terrain & Synchronisation Déconnectée (Flutter)
+
+- [ ] **6.1** Protocole Delta Sync différentiel avec curseur temporel (`since_timestamp`) et gestion des suppressions.
+- [ ] **6.2** Cache local SQLite mobile et file d'attente hors-ligne.
+- [ ] **6.3** Téléversement des photographies d'anomalies vers MinIO/S3 avec liaison d'ouvrage.
+- [ ] **6.4** Journal d'audit terrain immuable (`field_audit_logs`) et moteur de réconciliation des conflits.
+
+---
+
+## 📁 Arborescence Réelle du Projet
 
 ```
-server.py                          Point d'entrée Flask
-requirements.txt                   Dépendances Python
-launch_server.bat                  Lanceur Windows
-Regles.txt                         Règles du projet
-TODO.md                            Suivi des tâches
-README.md                          Documentation
+main.py / src/main.py              Point d'entrée FastAPI unifié (port 5002)
+requirements.txt                   Dépendances Python (FastAPI, PySWMM, GeoPandas, ReportLab...)
+pytest.ini                         Configuration des suites de tests automatisés
+TODO.md                            Feuille de route opérationnelle immédiate
+docs/
+  13_ROADMAP_SAAS.md               Feuille de route SaaS industrielle complète (Phases 0 à 7)
+  TODO_PHASES_4_7.md               Suivi détaillé des phases 4 à 7
+  FEUILLE_DE_ROUTE_2027_2029.md    Orientations stratégiques pluriannuelles DrainPilot
+  16_METHODOLOGIE_SIMULATION_SWMM.md  Méthodologie scientifique et équations SWMM 5.2
 
 src/
-  controllers/
-    routeur_flask.py               Routes Flask (/ et /get-data)
-    generateur_swmm.py             Orchestration génération .inp
-    generateur_noeuds.py           Sections TITLE, OPTIONS, JUNCTIONS, OUTFALLS, STORAGE, COORDINATES, MAP
-    generateur_liens.py            Sections CONDUITS, PUMPS, XSECTIONS, ORIFICES, WEIRS, LOSSES
-    generateur_donnees.py          Sections INFLOWS, DWF, CURVES, TIMESERIES, REPORT, TAGS
+  presentation/
+    api/v1/                        Routeurs FastAPI modulaires (simulations, apports DWF, cotes, santé...)
+    web/                           Contrôleurs web servant les templates et la cartographie
+  application/
+    simulation_service.py          Orchestration des simulations SWMM et extraction des KPIs
+    dwf_service.py                 Gestion et injection des apports de temps sec
+    pdf_report_service.py          Génération du rapport d'expertise A4 ReportLab
   domain/
-    aides.py                       Utilitaires (recherche nœud proche, mappage types)
-    processeur_noeuds.py           Traitement regards, rejets, ouvrages, stations, STEP
-    processeur_conduites.py        Traitement canalisations
-    processeur_pompes.py           Traitement pompes de relevage
+    moteur_swmm.py                 Générateur de fichiers .INP officiel SWMM 5.2
+    hydrologie.py                  Découpage Voronoï, Horton et hyétogrammes Chicago/Montana
+    pyswmm_wrapper.py              Solveur PySWMM 5.2.4 x64 Saint-Venant 1D
+    timeseries_extractor.py        Parser binaire des chroniques d'écoulement (.out)
+    altimetrie_idw.py              Interpolation altimétrique IDW sur nuage de points réels
   infrastructure/
-    config.py                      Configuration (CRS, paramètres SWMM)
-    chargeur_geopackage.py         Chargement GeoPackage, cache, centre zone
-    orientation_conduites.py       Orientation hydraulique amont → aval
-    labels_rues.py                 Génération labels noms de rues
-  views/
-    index.html                     Interface Leaflet
-    styles.css                     Styles CSS
-    carte.js                       Logique JavaScript carte
+    storage/                       Gestionnaire d'artefacts (S3/MinIO ou système de fichiers local)
+    persistence/                   Gestion des connexions PostgreSQL/PostGIS et GeoPackage
+    config.py                      Paramètres applicatifs 12-Factor (.env)
 
-tests/
-    test_processeur_noeuds.py      Tests unitaires nœuds
-    test_processeur_conduites.py   Tests unitaires conduites
-    test_generateur_swmm.py        Tests unitaires génération SWMM
+static/
+  js/                              Cockpit Leaflet HD modulaire (carte, profils HGL, DWF, slider...)
+  css/                             Feuilles de styles cartographiques et cockpit d'ingénierie
+templates/                         Templates HTML Jinja2 (cockpit d'exploitation, modals HD)
+tests/                             Suite complète de validation continue (Golden Master, DWF, cotes...)
 ```
