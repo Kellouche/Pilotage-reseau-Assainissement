@@ -384,8 +384,15 @@ function _masquerMenuInfobullesSim() {
                             this.setStyle({ weight: initW, opacity: 1.0 });
                         });
 
-                        // Clic sur conduite en mode profil en long : capture le regard cible sans ouvrir de popup
+                        // Clic sur conduite en mode profil en long ou sélection DWF : capture sans ouvrir de popup
                         layer.on('click', function(e) {
+                            if (window._dwfPickModeActive) {
+                                L.DomEvent.stop(e);
+                                const cMap = window.carte || window.map;
+                                if (cMap) cMap.closePopup();
+                                if (this.closePopup) this.closePopup();
+                                return false;
+                            }
                             if (window.profilLongState && window.profilLongState.active) {
                                 L.DomEvent.stop(e);
                                 const cMap = window.carte || window.map;
@@ -396,6 +403,13 @@ function _masquerMenuInfobullesSim() {
                                     window.handleRegardClickForProfil(targetNode, e.latlng);
                                 }
                                 return false;
+                            }
+                        });
+                        layer.on('popupopen', function() {
+                            if (window._dwfPickModeActive) {
+                                const cMap = window.carte || window.map;
+                                if (cMap) cMap.closePopup();
+                                if (this.closePopup) this.closePopup();
                             }
                         });
                     }
@@ -493,9 +507,23 @@ function _masquerMenuInfobullesSim() {
                         const r = nRes[cleanNid] || nRes[nid] || (cleanNid ? nRes[parseInt(cleanNid)] : null);
                         const dwfInj = injectesDwfMap[cleanNid] || injectesDwfMap[nid];
 
-                        // Interception pour le Profil en Long hydraulique (Phase 6.A)
+                        // Interception pour la sélection DWF ou le Profil en Long hydraulique (Phase 6.A)
                         // Doit être attachée même sans résultat détaillé (écoulement normal)
                         layer.on('click', function(e) {
+                            if (window._dwfPickModeActive) {
+                                L.DomEvent.stop(e);
+                                const cMap = window.carte || window.map;
+                                if (cMap) cMap.closePopup();
+                                if (this.closePopup) this.closePopup();
+                                setTimeout(() => {
+                                    if (cMap) cMap.closePopup();
+                                    if (this.closePopup) this.closePopup();
+                                }, 10);
+                                if (cleanNid && typeof window.dwfAppliquerNoeudSelectionne === 'function') {
+                                    window.dwfAppliquerNoeudSelectionne(cleanNid, e.latlng);
+                                }
+                                return false;
+                            }
                             if (window.profilLongState && window.profilLongState.active) {
                                 L.DomEvent.stop(e);
                                 const cMap = window.carte || window.map;
@@ -562,7 +590,7 @@ function _masquerMenuInfobullesSim() {
                         window._enregistrerInfobulleSim(layer, `<b>${isFlooded ? '🚨 Débordement' : (isSurcharged ? '⚠️ Surcharge' : 'Regard')} : ${cleanNid}</b>${dwfTooltipExtra}${isFlooded ? ` (${volTooltipStr})` : ''}`, { direction: 'top', offset: [0, -6], opacity: 0.98 });
                         
                         layer.on('popupopen', function() {
-                            if (window.profilLongState && window.profilLongState.active) {
+                            if (window._dwfPickModeActive || (window.profilLongState && window.profilLongState.active)) {
                                 const cMap = window.carte || window.map;
                                 if (cMap) cMap.closePopup();
                                 if (this.closePopup) this.closePopup();
@@ -652,6 +680,25 @@ function _masquerMenuInfobullesSim() {
                         `);
                         window._enregistrerInfobulleSim(markerActif, `🎯 <b>${ro.nom}</b><br><span style="color:#10b981; font-weight:700;">Mise en eau confirmée (Variante 0)</span>`, { sticky: true });
 
+                        markerActif.on('click', function(e) {
+                            if (window._dwfPickModeActive) {
+                                L.DomEvent.stop(e);
+                                const cMap = window.carte || window.map;
+                                if (cMap) cMap.closePopup();
+                                if (this.closePopup) this.closePopup();
+                                if (ro.regard_proche_id && typeof window.dwfAppliquerNoeudSelectionne === 'function') {
+                                    window.dwfAppliquerNoeudSelectionne(ro.regard_proche_id, e.latlng);
+                                }
+                                return false;
+                            }
+                        });
+                        markerActif.on('popupopen', function() {
+                            if (window._dwfPickModeActive) {
+                                const cMap = window.carte || window.map;
+                                if (cMap) cMap.closePopup();
+                                if (this.closePopup) this.closePopup();
+                            }
+                        });
                         couches.res_conduites.addLayer(polyRacc);
                         couches.res_regards.addLayer(markerActif);
                     }

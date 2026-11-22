@@ -121,8 +121,21 @@ window.ouvrirModalApportsDwf = async function() {
 
 window.fermerModalApportsDwf = function() {
     const el = document.getElementById('modal-apports-dwf');
-    if (el) el.style.display = 'none';
+    if (el) el.style.setProperty('display', 'none', 'important');
     detruireChartDwf();
+
+    // Restaurer les modales parentes suspendues lors du pick sur carte (ex: modal-simulation)
+    if (window._dwfSuspendedModals && window._dwfSuspendedModals.length > 0) {
+        window._dwfSuspendedModals.forEach(item => {
+            if (item.id !== 'modal-apports-dwf') {
+                const parentEl = document.getElementById(item.id);
+                if (parentEl) {
+                    parentEl.style.setProperty('display', item.prevDisplay || 'flex', 'important');
+                }
+            }
+        });
+        window._dwfSuspendedModals = [];
+    }
 };
 
 // ---------------------------------------------------------------------------
@@ -801,7 +814,9 @@ document.addEventListener('DOMContentLoaded', () => {
 // ---------------------------------------------------------------------------
 
 window._dwfPickModeActive = false;
+window._dwfSuspendedModals = [];
 let _dwfMapClickListener = null;
+let _dwfPopupOpenListener = null;
 let _dwfEscKeyListener = null;
 
 function _creerOuAfficherBanniereDwf() {
@@ -857,6 +872,10 @@ function _nettoyerEcouteursSelectionDwf() {
         cMap.off('click', _dwfMapClickListener);
         _dwfMapClickListener = null;
     }
+    if (cMap && _dwfPopupOpenListener) {
+        cMap.off('popupopen', _dwfPopupOpenListener);
+        _dwfPopupOpenListener = null;
+    }
     if (_dwfEscKeyListener) {
         window.removeEventListener('keydown', _dwfEscKeyListener);
         _dwfEscKeyListener = null;
@@ -905,22 +924,54 @@ window.dwfActiverSelectionCarte = function() {
     // Fermer immédiatement toute infobulle ouverte sur la carte
     if (cMap) cMap.closePopup();
 
-    // 1. Masquer complètement la modale pour supprimer l'effet flou et libérer l'accès à la carte
+    // 1. Fermer tous les menus déroulants de topbar
+    ['actions-dropdown', 'topbar-bassin-dropdown', 'resources-dropdown', 'user-profile-dropdown'].forEach(id => {
+        const d = document.getElementById(id);
+        if (d) d.style.display = 'none';
+    });
+
+    // 2. Mémoriser et masquer TOUTES les modales actuellement visibles (y compris modal-simulation, modal-simulations-bassin, etc.)
+    window._dwfSuspendedModals = [];
+    document.querySelectorAll('div[id^="modal-"]').forEach(m => {
+        const comp = window.getComputedStyle(m);
+        if (comp.display !== 'none' && comp.visibility !== 'hidden' && comp.opacity !== '0') {
+            window._dwfSuspendedModals.push({
+                id: m.id,
+                prevDisplay: m.style.display || comp.display
+            });
+            m.style.setProperty('display', 'none', 'important');
+        }
+    });
+
+    // S'assurer que modal-apports-dwf est masqué pour supprimer l'effet flou et libérer l'accès à la carte
     if (modalEl) {
         modalEl.style.setProperty('display', 'none', 'important');
         modalEl.style.opacity = '1';
         modalEl.style.pointerEvents = 'auto';
     }
 
-    // 2. Afficher la bannière flottante de sélection
+    // 3. Afficher la bannière flottante de sélection
     _creerOuAfficherBanniereDwf();
 
-    // 3. Curseur crosshair
+    // 4. Curseur crosshair
     if (mapEl) {
         mapEl.style.cursor = 'crosshair';
     }
 
-    // 4. Écouteur de clic sur le fond de carte (recherche de proximité)
+    // 5. Intercepteur global de popup Leaflet pour empêcher toute ouverture d'infobulle (débordement, etc.)
+    if (cMap && !_dwfPopupOpenListener) {
+        _dwfPopupOpenListener = function(e) {
+            if (window._dwfPickModeActive) {
+                try { cMap.closePopup(); } catch(_) {}
+                if (e && e.popup && e.popup._source && typeof e.popup._source.closePopup === 'function') {
+                    try { e.popup._source.closePopup(); } catch(_) {}
+                }
+            }
+        };
+        cMap.on('popupopen', _dwfPopupOpenListener);
+    }
+
+    // 6. Écouteur de clic sur le fond de carte (recherche de proximité)
     if (cMap && !_dwfMapClickListener) {
         _dwfMapClickListener = function(e) {
             if (!window._dwfPickModeActive) return;
@@ -936,7 +987,7 @@ window.dwfActiverSelectionCarte = function() {
         cMap.on('click', _dwfMapClickListener);
     }
 
-    // 5. Touche Échap pour annuler
+    // 7. Touche Échap pour annuler
     if (!_dwfEscKeyListener) {
         _dwfEscKeyListener = function(ev) {
             if (ev.key === 'Escape' && window._dwfPickModeActive) {
