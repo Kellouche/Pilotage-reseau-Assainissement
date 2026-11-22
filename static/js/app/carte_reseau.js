@@ -325,7 +325,7 @@ function chargerDonneesInitiales() {
                                 });
 
                                 layer.on('popupopen', () => {
-                                    if (window.profilLongState && window.profilLongState.active) {
+                                    if (window._dwfPickModeActive || (window.profilLongState && window.profilLongState.active)) {
                                         const cMap = window.carte || window.map;
                                         if (cMap) cMap.closePopup();
                                         if (layer.closePopup) layer.closePopup();

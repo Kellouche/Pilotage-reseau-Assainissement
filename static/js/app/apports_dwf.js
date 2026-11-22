@@ -902,9 +902,12 @@ window.dwfActiverSelectionCarte = function() {
 
     window._dwfPickModeActive = true;
 
+    // Fermer immédiatement toute infobulle ouverte sur la carte
+    if (cMap) cMap.closePopup();
+
     // 1. Masquer complètement la modale pour supprimer l'effet flou et libérer l'accès à la carte
     if (modalEl) {
-        modalEl.style.display = 'none';
+        modalEl.style.setProperty('display', 'none', 'important');
         modalEl.style.opacity = '1';
         modalEl.style.pointerEvents = 'auto';
     }
@@ -956,9 +959,12 @@ window.dwfAnnulerSelectionCarte = function() {
     const mapEl = document.getElementById('map');
     if (mapEl) mapEl.style.cursor = '';
 
+    const cMap = window.carte || window.map;
+    if (cMap) cMap.closePopup();
+
     const modalEl = document.getElementById('modal-apports-dwf');
     if (modalEl) {
-        modalEl.style.display = 'flex';
+        modalEl.style.setProperty('display', 'flex', 'important');
         modalEl.style.opacity = '1';
         modalEl.style.pointerEvents = 'auto';
     }
@@ -972,11 +978,14 @@ window.dwfAppliquerNoeudSelectionne = function(nodeId, latlng) {
     const mapEl = document.getElementById('map');
     if (mapEl) mapEl.style.cursor = '';
 
+    const cMap = window.carte || window.map;
+    if (cMap) cMap.closePopup();
+
     const modalEl = document.getElementById('modal-apports-dwf');
     const inputNode = document.getElementById('dwf-f-node');
 
     if (modalEl) {
-        modalEl.style.display = 'flex';
+        modalEl.style.setProperty('display', 'flex', 'important');
         modalEl.style.opacity = '1';
         modalEl.style.pointerEvents = 'auto';
     }

@@ -288,6 +288,34 @@
         tbody.innerHTML = html;
     };
 
+    function _actualiserCompteursLocaux() {
+        const total = _cotesSuspectesData.length;
+        const aValider = _cotesSuspectesData.filter(item => item.statut === 'a_valider').length;
+        const valides = _cotesSuspectesData.filter(item => item.statut === 'valide').length;
+        const brutes = _cotesSuspectesData.filter(item => item.statut === 'conserve_brut').length;
+
+        const elTotal = document.getElementById('cotes-stat-total');
+        const elAValider = document.getElementById('cotes-stat-a-valider');
+        const elValide = document.getElementById('cotes-stat-valide');
+        const elBrut = document.getElementById('cotes-stat-brut');
+        const elBadgePending = document.getElementById('badge-modal-cotes-pending');
+
+        if (elTotal) elTotal.textContent = total;
+        if (elAValider) elAValider.textContent = aValider;
+        if (elValide) elValide.textContent = valides;
+        if (elBrut) elBrut.textContent = brutes;
+        if (elBadgePending) elBadgePending.textContent = `${aValider} à certifier`;
+
+        const cAll = document.getElementById('cotes-count-filtre-tous');
+        const cPend = document.getElementById('cotes-count-filtre-a-valider');
+        const cVal = document.getElementById('cotes-count-filtre-valide');
+        const cBrut = document.getElementById('cotes-count-filtre-brut');
+        if (cAll) cAll.textContent = total;
+        if (cPend) cPend.textContent = aValider;
+        if (cVal) cVal.textContent = valides;
+        if (cBrut) cBrut.textContent = brutes;
+    }
+
     window.validerCoteLigne = async function (nodeId, champ) {
         const inp = document.getElementById(`input-cote-${nodeId}-${champ}`);
         if (!inp) return;
@@ -295,6 +323,17 @@
         if (isNaN(val) || val <= 0) {
             alert('Veuillez renseigner une valeur numérique strictement positive.');
             return;
+        }
+
+        // Mise à jour optimiste instantanée (0 ms)
+        const it = _cotesSuspectesData.find(x => String(x.node_id) === String(nodeId) && x.champ === champ);
+        const ancienStatut = it ? it.statut : 'a_valider';
+        const ancienneVal = it ? it.valeur_validee : null;
+        if (it) {
+            it.statut = 'valide';
+            it.valeur_validee = val;
+            _actualiserCompteursLocaux();
+            window.rendreTableauCotesSuspectes();
         }
 
         try {
@@ -316,17 +355,29 @@
             });
 
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const data = await res.json();
-            if (window.toastSucces) {
-                window.toastSucces(`Cote du regard ${nodeId} certifiée à ${val.toFixed(2)} m.`);
-            }
-            window.chargerRegistreCotesSuspectes();
+            window.actualiserBadgeCotesSuspectes();
         } catch (e) {
+            if (it) {
+                it.statut = ancienStatut;
+                it.valeur_validee = ancienneVal;
+                _actualiserCompteursLocaux();
+                window.rendreTableauCotesSuspectes();
+            }
             alert(`Erreur lors de la validation : ${e.message}`);
         }
     };
 
     window.conserverCoteBruteLigne = async function (nodeId, champ, valBrute) {
+        const it = _cotesSuspectesData.find(x => String(x.node_id) === String(nodeId) && x.champ === champ);
+        const ancienStatut = it ? it.statut : 'a_valider';
+        const ancienneVal = it ? it.valeur_validee : null;
+        if (it) {
+            it.statut = 'conserve_brut';
+            it.valeur_validee = valBrute;
+            _actualiserCompteursLocaux();
+            window.rendreTableauCotesSuspectes();
+        }
+
         try {
             const token = localStorage.getItem('token') || '';
             const res = await fetch('/api/v1/simulations/cotes-suspectes/valider', {
@@ -346,11 +397,14 @@
             });
 
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            if (window.toastSucces) {
-                window.toastSucces(`Valeur brute (${valBrute} m) conservée pour le regard ${nodeId}.`);
-            }
-            window.chargerRegistreCotesSuspectes();
+            window.actualiserBadgeCotesSuspectes();
         } catch (e) {
+            if (it) {
+                it.statut = ancienStatut;
+                it.valeur_validee = ancienneVal;
+                _actualiserCompteursLocaux();
+                window.rendreTableauCotesSuspectes();
+            }
             alert(`Erreur lors de la conservation brute : ${e.message}`);
         }
     };
@@ -372,6 +426,14 @@
             statut: 'valide'
         }));
 
+        // Mise à jour optimiste
+        aValider.forEach(it => {
+            it.statut = 'valide';
+            it.valeur_validee = it.valeur_suggeree !== null && it.valeur_suggeree !== undefined ? it.valeur_suggeree : it.valeur_brute;
+        });
+        _actualiserCompteursLocaux();
+        window.rendreTableauCotesSuspectes();
+
         try {
             const token = localStorage.getItem('token') || '';
             const res = await fetch('/api/v1/simulations/cotes-suspectes/valider', {
@@ -384,13 +446,10 @@
             });
 
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const data = await res.json();
-            if (window.toastSucces) {
-                window.toastSucces(`${payload.length} cotes certifiées avec succès.`);
-            }
-            window.chargerRegistreCotesSuspectes();
+            window.actualiserBadgeCotesSuspectes();
         } catch (e) {
             alert(`Erreur lors de la validation en masse : ${e.message}`);
+            window.chargerRegistreCotesSuspectes();
         }
     };
 

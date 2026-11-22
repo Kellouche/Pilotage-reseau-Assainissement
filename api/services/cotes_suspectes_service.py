@@ -102,10 +102,23 @@ def synchroniser_cotes_suspectes_projet(db: Session, project: Project) -> List[N
 
 
 def lister_cotes_suspectes_projet(
-    db: Session, project: Project, statut: Optional[str] = None
+    db: Session, project: Project, statut: Optional[str] = None, force_rescan: bool = False
 ) -> List[NodeCoteValidation]:
-    """Retourne la liste des cotes suspectes consignées pour un projet."""
-    synchroniser_cotes_suspectes_projet(db, project)
+    """
+    Retourne la liste des cotes suspectes consignées pour un projet.
+    Ne déclenche la synchronisation lourde depuis le GPKG que si aucun enregistrement
+    n'existe encore en base de données ou si un rescan explicite est demandé.
+    """
+    if force_rescan:
+        synchroniser_cotes_suspectes_projet(db, project)
+    else:
+        nb_existants = db.query(NodeCoteValidation).filter(
+            NodeCoteValidation.project_id == project.id,
+            NodeCoteValidation.org_id == project.org_id,
+        ).count()
+        if nb_existants == 0:
+            synchroniser_cotes_suspectes_projet(db, project)
+
     q = db.query(NodeCoteValidation).filter(
         NodeCoteValidation.project_id == project.id,
         NodeCoteValidation.org_id == project.org_id,
@@ -122,11 +135,9 @@ def valider_cotes_suspectes_service(
     user_id: Optional[str] = None,
 ) -> List[NodeCoteValidation]:
     """
-    Valide ou confirme un ensemble de cotes suspectes.
+    Valide ou confirme un ensemble de cotes suspectes de manière instantanée.
     Chaque item : { "node_id": str, "champ": str, "action": "valider"|"conserve_brut", "valeur_validee": float|None }
     """
-    from api.routes.simulations import _PROFIL_TOPO_CACHE, _PROFIL_TOPO_CACHE_LOCK
-
     modifies = []
     maintenant = datetime.now(timezone.utc)
 
@@ -180,10 +191,6 @@ def valider_cotes_suspectes_service(
     db.commit()
     for m in modifies:
         db.refresh(m)
-
-    # Invalider le cache topologique en mémoire pour recharger les cotes validées
-    with _PROFIL_TOPO_CACHE_LOCK:
-        _PROFIL_TOPO_CACHE.clear()
 
     return modifies
 
