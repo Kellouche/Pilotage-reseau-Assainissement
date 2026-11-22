@@ -301,7 +301,7 @@ function chargerDonneesInitiales() {
                                         const p = feature.properties || {};
                                         const code = p.Code || p.code || p.CODE || p.id || p.ID || p.Id || p.nom || p.NOM || p.Nom || p.CODEPRR || p.NUMERO || feature.id;
                                         if (code && typeof window.dwfAppliquerNoeudSelectionne === 'function') {
-                                            window.dwfAppliquerNoeudSelectionne(code);
+                                            window.dwfAppliquerNoeudSelectionne(code, e.latlng);
                                         }
                                         return false;
                                     }

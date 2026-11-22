@@ -801,60 +801,200 @@ document.addEventListener('DOMContentLoaded', () => {
 // ---------------------------------------------------------------------------
 
 window._dwfPickModeActive = false;
+let _dwfMapClickListener = null;
+let _dwfEscKeyListener = null;
+
+function _creerOuAfficherBanniereDwf() {
+    let banner = document.getElementById('dwf-selection-banner');
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'dwf-selection-banner';
+        banner.style.cssText = `
+            position: fixed;
+            top: 68px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 3500;
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(14px);
+            border: 2px solid #38bdf8;
+            border-radius: 9999px;
+            padding: 9px 20px;
+            color: #f8fafc;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7);
+            font-size: 0.84rem;
+            animation: fadeInScale 0.2s ease-out;
+            user-select: none;
+        `;
+        banner.innerHTML = `
+            <div style="width: 26px; height: 26px; border-radius: 50%; background: rgba(56, 189, 248, 0.2); border: 1px solid #38bdf8; display: flex; align-items: center; justify-content: center; color: #38bdf8;">
+                <i class="fas fa-crosshairs fa-spin" style="font-size: 13px;"></i>
+            </div>
+            <span style="font-weight: 700;">Cliquez sur un regard sur la carte (directement ou à proximité)</span>
+            <button onclick="dwfAnnulerSelectionCarte()" style="background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #fca5a5; padding: 4px 12px; border-radius: 20px; font-size: 0.76rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 5px; transition: all 0.15s;" onmouseover="this.style.background='rgba(239,68,68,0.35)'" onmouseout="this.style.background='rgba(239,68,68,0.2)'">
+                <i class="fas fa-times"></i> Annuler
+            </button>
+        `;
+        document.body.appendChild(banner);
+    } else {
+        banner.style.display = 'flex';
+    }
+}
+
+function _masquerBanniereDwf() {
+    const banner = document.getElementById('dwf-selection-banner');
+    if (banner) {
+        banner.style.display = 'none';
+    }
+}
+
+function _nettoyerEcouteursSelectionDwf() {
+    const cMap = window.carte || window.map;
+    if (cMap && _dwfMapClickListener) {
+        cMap.off('click', _dwfMapClickListener);
+        _dwfMapClickListener = null;
+    }
+    if (_dwfEscKeyListener) {
+        window.removeEventListener('keydown', _dwfEscKeyListener);
+        _dwfEscKeyListener = null;
+    }
+}
+
+function _trouverRegardLePlusProche(latlng, distanceMaxMetres) {
+    const maxM = distanceMaxMetres || 100;
+    const cMap = window.carte || window.map;
+    if (!cMap || !latlng) return null;
+
+    let meilleurNoeud = null;
+    let distanceMin = maxM;
+
+    const rawData = window._rawNetworkData;
+    if (rawData && rawData.couches) {
+        const types = ['regards', 'rejets', 'ouvrages', 'stations'];
+        types.forEach(t => {
+            const couche = rawData.couches[t];
+            if (!couche || !couche.features) return;
+            for (const f of couche.features) {
+                if (!f.geometry || !f.geometry.coordinates) continue;
+                const coords = f.geometry.coordinates;
+                const fLatLng = L.latLng(coords[1], coords[0]);
+                const dist = cMap.distance(latlng, fLatLng);
+                if (dist < distanceMin) {
+                    distanceMin = dist;
+                    const p = f.properties || {};
+                    const code = p.Code || p.code || p.CODE || p.id || p.ID || p.Id || p.nom || p.NOM || p.Nom || p.CODEPRR || p.NUMERO || f.id;
+                    meilleurNoeud = { code: code, latlng: fLatLng, distance: dist };
+                }
+            }
+        });
+    }
+
+    return meilleurNoeud;
+}
 
 window.dwfActiverSelectionCarte = function() {
-    const btn = document.getElementById('dwf-btn-pick-map');
     const modalEl = document.getElementById('modal-apports-dwf');
-    if (window._dwfPickModeActive) {
-        window._dwfPickModeActive = false;
-        if (btn) {
-            btn.innerHTML = '<i class="fas fa-crosshairs"></i> Sur la carte';
-            btn.style.background = 'rgba(6, 182, 212, 0.15)';
-        }
-        if (modalEl) {
-            modalEl.style.opacity = '1';
-            modalEl.style.pointerEvents = 'auto';
-        }
-        return;
-    }
+    const mapEl = document.getElementById('map');
+    const cMap = window.carte || window.map;
 
     window._dwfPickModeActive = true;
-    if (btn) {
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Cliquez un regard…';
-        btn.style.background = 'rgba(245, 158, 11, 0.35)';
-        btn.style.borderColor = '#f59e0b';
+
+    // 1. Masquer complètement la modale pour supprimer l'effet flou et libérer l'accès à la carte
+    if (modalEl) {
+        modalEl.style.display = 'none';
+        modalEl.style.opacity = '1';
+        modalEl.style.pointerEvents = 'auto';
     }
 
-    if (modalEl) {
-        modalEl.style.opacity = '0.3';
-        modalEl.style.pointerEvents = 'none';
+    // 2. Afficher la bannière flottante de sélection
+    _creerOuAfficherBanniereDwf();
+
+    // 3. Curseur crosshair
+    if (mapEl) {
+        mapEl.style.cursor = 'crosshair';
+    }
+
+    // 4. Écouteur de clic sur le fond de carte (recherche de proximité)
+    if (cMap && !_dwfMapClickListener) {
+        _dwfMapClickListener = function(e) {
+            if (!window._dwfPickModeActive) return;
+            const nearest = _trouverRegardLePlusProche(e.latlng, 100);
+            if (nearest && nearest.code) {
+                window.dwfAppliquerNoeudSelectionne(nearest.code, nearest.latlng);
+            } else {
+                if (typeof window.afficherNotification === 'function') {
+                    window.afficherNotification("Aucun regard à proximité immédiate de ce clic. Cliquez plus près d'un nœud.", "warning");
+                }
+            }
+        };
+        cMap.on('click', _dwfMapClickListener);
+    }
+
+    // 5. Touche Échap pour annuler
+    if (!_dwfEscKeyListener) {
+        _dwfEscKeyListener = function(ev) {
+            if (ev.key === 'Escape' && window._dwfPickModeActive) {
+                window.dwfAnnulerSelectionCarte();
+            }
+        };
+        window.addEventListener('keydown', _dwfEscKeyListener);
     }
 
     if (typeof window.afficherNotification === 'function') {
-        window.afficherNotification('Mode sélection actif : cliquez directement sur un regard du réseau sur la carte.', 'info');
+        window.afficherNotification('Mode sélection DWF actif : cliquez sur un regard sur la carte.', 'info');
     }
 };
 
-window.dwfAppliquerNoeudSelectionne = function(nodeId) {
+window.dwfAnnulerSelectionCarte = function() {
     window._dwfPickModeActive = false;
-    const btn = document.getElementById('dwf-btn-pick-map');
+    _nettoyerEcouteursSelectionDwf();
+    _masquerBanniereDwf();
+
+    const mapEl = document.getElementById('map');
+    if (mapEl) mapEl.style.cursor = '';
+
+    const modalEl = document.getElementById('modal-apports-dwf');
+    if (modalEl) {
+        modalEl.style.display = 'flex';
+        modalEl.style.opacity = '1';
+        modalEl.style.pointerEvents = 'auto';
+    }
+};
+
+window.dwfAppliquerNoeudSelectionne = function(nodeId, latlng) {
+    window._dwfPickModeActive = false;
+    _nettoyerEcouteursSelectionDwf();
+    _masquerBanniereDwf();
+
+    const mapEl = document.getElementById('map');
+    if (mapEl) mapEl.style.cursor = '';
+
     const modalEl = document.getElementById('modal-apports-dwf');
     const inputNode = document.getElementById('dwf-f-node');
 
     if (modalEl) {
+        modalEl.style.display = 'flex';
         modalEl.style.opacity = '1';
         modalEl.style.pointerEvents = 'auto';
     }
-    if (btn) {
-        btn.innerHTML = '<i class="fas fa-crosshairs"></i> Sur la carte';
-        btn.style.background = 'rgba(6, 182, 212, 0.15)';
-        btn.style.borderColor = 'rgba(6, 182, 212, 0.4)';
-    }
+
     if (inputNode && nodeId) {
         inputNode.value = String(nodeId).trim();
         inputNode.dispatchEvent(new Event('input', { bubbles: true }));
         inputNode.focus();
+
+        // Accentuation visuelle verte pour confirmer la prise en compte
+        inputNode.style.borderColor = '#10b981';
+        inputNode.style.boxShadow = '0 0 0 3px rgba(16, 185, 129, 0.35)';
+        setTimeout(() => {
+            inputNode.style.borderColor = 'rgba(255,255,255,0.15)';
+            inputNode.style.boxShadow = 'none';
+        }, 1800);
     }
+
     if (typeof window.afficherNotification === 'function') {
         window.afficherNotification(`Regard N° ${nodeId} sélectionné pour l'apport DWF.`, 'success');
     }
