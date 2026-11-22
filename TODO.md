@@ -13,6 +13,10 @@
 | **Socle FastAPI & Multi-Tenant** | Architecture REST moderne, isolation stricte `org_id`, règle furtive 404, sessions et tokens JWT | ✅ Réalisé |
 | **Gouvernance & Licences B2B** | Quotas par plan, clés de licence cryptographiques `SP-LIC-...`, devis proforma DZD, console SuperAdmin | ✅ Réalisé |
 | **Stockage Sécurisé ArtifactStore** | Abstraction MinIO/S3 et stockage local partitionné par organisation | ✅ Réalisé |
+| **Import Multi-Formats & Versionnement GPKG** | Téléversement direct de GeoPackage (`.gpkg`) et de modèles EPA SWMM (`.inp` avec parser et conversion automatique), versionnement immuable (`_enregistrer_version_gpkg`), catalogue de benchmarks intégrés (EPA Ex 1/3/4/6, Quartier Démo, Master Ville) | ✅ Réalisé |
+| **Couches SIG Satellites Auxiliaires** | Import piloté de couches externes (`.shp` multi-fichiers/zip, `.gpkg`, `.geojson`), typage strict (`altimetrie_points`, `bv_officiel`, `metrologie`, `autre`), normalisation en GPKG mono-couche EPSG:4326, grille altimétrique IDW et artefact dérivé `regards_terrain.json` | ✅ Réalisé |
+| **Extraction par Pochoir (SHP.md)** | Découpage spatial à la volée du réseau et des couches satellites par polygone GeoJSON (règle d'or spatiale d'INTERSECTION préservant l'intégrité des objets), export zip clé en main (Shapefiles thématiques, GeoPackage fusionné avec couche pochoir, manifeste JSON) | ✅ Réalisé |
+| **Gestion Manuelle de Bassins Versants** | Découpage interactif et regroupement manuel de conduites sur la carte pour former un sous-réseau, affectation d'exutoire sur-mesure, CRUD complet (`/api/v1/clusters/manual-basins`) et persistance isolée `manual_overrides_{org_id}.json` | ✅ Réalisé |
 | **Moteur Hydrodynamique PySWMM 5.2** | Intégration binaire officielle 5.2.4 x64, résolution `DYNWAVE` Saint-Venant 1D, bilans massiques stricts (< 0.2% d'erreur) | ✅ Réalisé |
 | **Hydrologie de Surface Voronoï** | Découpage Voronoï/Thiessen borné (59 sous-bassins, 13.02 ha), attribution d'exutoires, infiltration de Horton ($f_0, f_c, k$) | ✅ Réalisé |
 | **Hyétogrammes Pluvieux & Événements** | Lois de Montana locales, pluies de projet Chicago (décennale, cinquantennale, orage d'été 2h, temps sec pur) | ✅ Réalisé |
@@ -110,38 +114,48 @@
 ## 📁 Arborescence Réelle du Projet
 
 ```
-main.py / src/main.py              Point d'entrée FastAPI unifié (port 5002)
-requirements.txt                   Dépendances Python (FastAPI, PySWMM, GeoPandas, ReportLab...)
-pytest.ini                         Configuration des suites de tests automatisés
-TODO.md                            Feuille de route opérationnelle immédiate
-docs/
-  13_ROADMAP_SAAS.md               Feuille de route SaaS industrielle complète (Phases 0 à 7)
-  TODO_PHASES_4_7.md               Suivi détaillé des phases 4 à 7
-  FEUILLE_DE_ROUTE_2027_2029.md    Orientations stratégiques pluriannuelles DrainPilot
-  16_METHODOLOGIE_SIMULATION_SWMM.md  Méthodologie scientifique et équations SWMM 5.2
+api/
+  main.py                          Application FastAPI (port 5002)
+  routes/
+    network.py                     Upload GPKG/INP, benchmarks EPA, regards, conduites, rejets
+    aux_layers.py                  Upload couches satellites (.shp, .gpkg, .zip), altimétrie IDW
+    extractions.py                 Extraction par pochoir spatial (SHP.md → zip thématique)
+    clusters.py                    Graphe topologique, bassins d'exutoires, bassins manuels
+    simulations.py                 Orchestration SWMM 5.2, cotes suspectes, HGL, Time Slider
+    apports.py                     Injection des apports de temps sec (DWF)
+    qualite.py                     Diagnostic des anomalies, contre-pentes, sauts de radier
+  services/
+    extraction_pochoir_service.py  Découpage géométrique par intersection stricte et packaging zip
+    aux_layers_service.py          Normalisation GPKG mono-couche et gestion du cycle de vie
+    aux_altimetrie_service.py      Grille IDW, sonde d'altitude, regards_terrain.json
+    simulation_service.py          Résolution GPKG effectif, cache et exécution PySWMM
+  core/
+    storage.py                     ArtifactStore (MinIO / S3 / Local sécurisé)
+    security.py                    TenantContext, isolation stricte multi-tenant et stealth 404
+    quotas.py                      Contrôle des quotas par plan de licence
 
 src/
-  presentation/
-    api/v1/                        Routeurs FastAPI modulaires (simulations, apports DWF, cotes, santé...)
-    web/                           Contrôleurs web servant les templates et la cartographie
-  application/
-    simulation_service.py          Orchestration des simulations SWMM et extraction des KPIs
-    dwf_service.py                 Gestion et injection des apports de temps sec
-    pdf_report_service.py          Génération du rapport d'expertise A4 ReportLab
   domain/
-    moteur_swmm.py                 Générateur de fichiers .INP officiel SWMM 5.2
-    hydrologie.py                  Découpage Voronoï, Horton et hyétogrammes Chicago/Montana
-    pyswmm_wrapper.py              Solveur PySWMM 5.2.4 x64 Saint-Venant 1D
+    moteur_swmm.py                 Générateur de fichiers .INP officiel EPA SWMM 5.2
+    hydrologie.py                  Découpage Voronoï/Thiessen, Horton et hyétogrammes Chicago/Montana
+    pyswmm_wrapper.py              Solveur PySWMM 5.2.4 x64 Saint-Venant 1D (DYNWAVE)
     timeseries_extractor.py        Parser binaire des chroniques d'écoulement (.out)
-    altimetrie_idw.py              Interpolation altimétrique IDW sur nuage de points réels
+    inp_parser.py                  Parser et convertisseur transparent .inp vers .gpkg
+    ouvrages_orphelins.py          Scan spatial et raccordement opportuniste (Variante 0)
+    rapport_diagnostic.py          Génération du rapport d'expertise A4 ReportLab avec BPU
   infrastructure/
-    storage/                       Gestionnaire d'artefacts (S3/MinIO ou système de fichiers local)
-    persistence/                   Gestion des connexions PostgreSQL/PostGIS et GeoPackage
-    config.py                      Paramètres applicatifs 12-Factor (.env)
+    persistance_manuelle.py        Persistance isolée des bassins manuels (manual_overrides)
+    chargeur_geopackage.py         Lecture optimisée et cache des couches GeoPackage
 
 static/
   js/                              Cockpit Leaflet HD modulaire (carte, profils HGL, DWF, slider...)
   css/                             Feuilles de styles cartographiques et cockpit d'ingénierie
 templates/                         Templates HTML Jinja2 (cockpit d'exploitation, modals HD)
+docs/
+  13_ROADMAP_SAAS.md               Feuille de route SaaS industrielle complète (Phases 0 à 7)
+  TODO_PHASES_4_7.md               Suivi détaillé des phases 4 à 7
+  FEUILLE_DE_ROUTE_2027_2029.md    Orientations stratégiques pluriannuelles DrainPilot
+  16_METHODOLOGIE_SIMULATION_SWMM.md  Méthodologie scientifique et équations SWMM 5.2
+SHP.md                             Spécification d'architecture des couches satellites & pochoir
 tests/                             Suite complète de validation continue (Golden Master, DWF, cotes...)
 ```

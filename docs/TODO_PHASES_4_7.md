@@ -46,6 +46,22 @@
   - [x] Comparaison automatique avec le débit de pointe simulé par Saint-Venant 1D
   - [x] Détection et qualification du laminage hydraulique en réseau et du stockage temporaire dans les collecteurs
 
+- [x] **6.G — Import Multi-Formats, Benchmark EPA & Couches Satellites**
+  - [x] Téléversement direct de fichiers GeoPackage (`.gpkg`) et conversion automatique transparente des fichiers `.inp` EPA SWMM vers GPKG
+  - [x] Versionnement immuable des réseaux téléversés avec intégrité stricte (`_enregistrer_version_gpkg`)
+  - [x] Bibliothèque intégrée de benchmarks officiels EPA (Ex 1, 3, 4, 6 LID), jeu Quartier Démo (59 regards) et Master Réseau Ville
+  - [x] Import piloté de couches SIG satellites auxiliaires (`.shp` avec sidecars/zip, `.gpkg`, `.geojson`) : typage (`altimetrie_points`, `bv_officiel`, `metrologie`), normalisation GPKG mono-couche EPSG:4326 et calcul de grille IDW
+
+- [x] **6.H — Outil SIG d'Extraction par Pochoir Spatial (SHP.md)**
+  - [x] Découpage spatial à la volée du réseau et des couches satellites par un polygone GeoJSON (Polygon / MultiPolygon)
+  - [x] Règle spatiale absolue d'INTERSECTION : les objets qui coupent le pochoir sont conservés entiers pour sanctuariser l'intégrité hydraulique
+  - [x] Génération et téléchargement sécurisé d'un livrable zip (Shapefiles thématiques `.shp`, GeoPackage fusionné avec couche `pochoir` et `manifeste.json` de métadonnées)
+
+- [x] **6.I — Découpage & Édition Manuelle de Bassins Versants (Clusters)**
+  - [x] Sélection et regroupement manuel de conduites sur la carte pour former un sous-réseau personnalisé
+  - [x] Attribution d'un exutoire personnalisé (nom, type de rejet, coordonnées)
+  - [x] Endpoints CRUD complets (`/api/v1/clusters/manual-basins`) et persistance étanche par organisation (`manual_overrides_{org_id}.json`)
+
 ---
 
 ## 🥈 CHANTIERS HYDRAULIQUES IMMÉDIATS (Extension Cœur Métier)

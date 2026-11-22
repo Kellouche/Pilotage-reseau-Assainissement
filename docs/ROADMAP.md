@@ -4,6 +4,8 @@
 > 
 > **État d'avancement au 22 Novembre 2026** :  
 > - **FastAPI unifié & Multi-tenant (Stealth 404)** : Opérationnel et certifié.  
+> - **Import Multi-Formats & Satellites** : Téléversement direct `.gpkg`, conversion `.inp` vers GPKG, versionnement immuable, benchmarks EPA et couches satellites externes (`.shp`, `.zip`, `.geojson`).  
+> - **Outils SIG d'Ingénierie & Bassins** : Outil d'extraction par pochoir spatial (règle d'intersection stricte $\rightarrow$ zip Shapefiles + GPKG fusionné), et édition manuelle de bassins versants / sous-réseaux sur la carte avec persistance étanche.  
 > - **Moteur Hydrodynamique PySWMM 5.2.4 x64** : Découpage Voronoï, infiltration Horton, pluies Chicago/Montana, Saint-Venant 1D (`DYNWAVE`).  
 > - **Apports de Temps Sec (DWF)** : Injection multi-profils, sélecteur cartographique interactif, légende dynamique et réconciliation GPKG.  
 > - **Diagnostic & Altimétrie** : Profil en long HGL interactif, contrôle de cohérence pluie-débit (Rationnel vs Saint-Venant), registre des cotes suspectes et altimétrie IDW TOPO Chlef.  
