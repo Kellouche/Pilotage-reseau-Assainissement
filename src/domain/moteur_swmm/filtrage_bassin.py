@@ -61,7 +61,10 @@ def extraire_sous_reseau_bassin(
             exutoires_map = _EXUTOIRES_MAP_CACHE[cache_key]
         else:
             from src.domain.detecteur_clusters import trouver_exutoires_physiques
-            exutoires_map = trouver_exutoires_physiques(G_topo)
+            # Inclure les exutoires implicites pour rester cohérent avec la
+            # partition des clusters (les bassins 'exutoire_implicite' doivent
+            # être résolubles lors du filtrage vers la simulation).
+            exutoires_map = trouver_exutoires_physiques(G_topo, inclure_exutoires_implicites=True)
             _EXUTOIRES_MAP_CACHE[cache_key] = exutoires_map
 
     cid_str = str(cluster_id).strip()

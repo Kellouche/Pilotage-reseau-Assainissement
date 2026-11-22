@@ -49,7 +49,7 @@ def _alias_identifiants(nid: str) -> Tuple[str, ...]:
     convention de nommage, pas une incertitude spatiale.
     """
     alias = []
-    m = re.match(r"^RJ_?0*(\d+)$", nid)
+    m = re.match(r"^RJ[\s_]?0*(\d+)$", nid)
     if m:
         alias.append(m.group(1))
     return tuple(alias)
@@ -73,9 +73,15 @@ class ResoluteurNoeuds:
         self,
         noeuds: Mapping[str, Tuple[float, float]],
         tolerance_snap_m: float = 0.50,
+        normalizer=None,
     ):
         self.noeuds: Dict[str, Tuple[float, float]] = dict(noeuds)
         self.tolerance_snap_m = float(tolerance_snap_m)
+        # Normalisation des identifiants requêtés : _clean_node_id par défaut
+        # (espace -> '_'). Le graphe de bassins injecte _identifiant_reseau
+        # qui préserve les espaces ('SR HH01') — chaque couche garde son
+        # espace de noms sans divergence.
+        self._normalizer = normalizer or _clean_node_id
         self._ids: list = []
         self._tree = None
         if self.noeuds:
@@ -99,6 +105,10 @@ class ResoluteurNoeuds:
             return self._ids[int(i)], d
         return None
 
+    def snap(self, point: Tuple[float, float]) -> Optional[Tuple[str, float]]:
+        """Snap spatial pur (sans essai d'ID) — utilitaire public."""
+        return self._snap(point)
+
     def resoudre(
         self,
         identifiant_brut,
@@ -109,7 +119,7 @@ class ResoluteurNoeuds:
         colonne ID_AMONT/ID_AVAL ; `point` la coordonnée (x, y) en mètres
         du projet, utilisée uniquement en filet de secours.
         """
-        nid = _clean_node_id(identifiant_brut)
+        nid = self._normalizer(identifiant_brut)
 
         # 1. Identifiant direct
         if nid and nid in self.noeuds:

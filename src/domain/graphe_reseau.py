@@ -31,33 +31,69 @@ class ConstructeurGrapheReseau:
         self.seuil_pente_min = seuil_pente_min
         self.tolerance_raccordement = tolerance_raccordement
         self.anomalies_topologiques: List[Dict[str, Any]] = []
-        self._index_noeuds = {}
+        self._resolveur = None
 
-    def _construire_index_noeuds(self, G: nx.DiGraph):
-        taille = max(self.tolerance_raccordement, 1e-9)
-        self._index_noeuds = {}
+    def _construire_resolveur(self, G: nx.DiGraph):
+        """
+        Construit le résolveur canonique d'extrémités sur les nœuds du graphe.
+        Même chaîne de résolution que le générateur .inp (ID -> alias -> snap),
+        avec _identifiant_reseau comme normalisation (les IDs du graphe
+        conservent leurs espaces, ex. 'SR HH01').
+        """
+        from src.domain.topologie import ResoluteurNoeuds
+        index = {}
         for noeud, data in G.nodes(data=True):
             x, y = data.get('x'), data.get('y')
             if x is None or y is None:
                 continue
-            cellule = (math.floor(float(x) / taille), math.floor(float(y) / taille))
-            self._index_noeuds.setdefault(cellule, []).append((float(x), float(y), noeud))
+            index[noeud] = (float(x), float(y))
+        self._resolveur = ResoluteurNoeuds(
+            index,
+            tolerance_snap_m=self.tolerance_raccordement,
+            normalizer=_identifiant_reseau,
+        )
 
-    def _noeud_proche(self, point: Point, G: nx.DiGraph):
-        candidats = []
-        taille = max(self.tolerance_raccordement, 1e-9)
-        cellule_x = math.floor(point.x / taille)
-        cellule_y = math.floor(point.y / taille)
-        for delta_x in (-1, 0, 1):
-            for delta_y in (-1, 0, 1):
-                for x, y, noeud in self._index_noeuds.get(
-                    (cellule_x + delta_x, cellule_y + delta_y), []
-                ):
-                    candidats.append((point.distance(Point(x, y)), noeud))
-        if not candidats:
-            return None
-        distance, noeud = min(candidats)
-        return noeud if distance <= self.tolerance_raccordement else None
+    def _resoudre_extremite(self, brut, point, G: nx.DiGraph, cote: str, troncon_id):
+        """
+        Résout une extrémité via le résolveur canonique puis applique le
+        post-contrôle géométrique propre au graphe : un ID/alias n'est accepté
+        que si l'extrémité est à <= tolerance_raccordement du nœud ; sinon on
+        retombe sur le snap spatial, à défaut l'extrémité est orpheline.
+        """
+        from src.domain.topologie import PROV_ALIAS, PROV_ID, PROV_SNAP
+        pt = (point.x, point.y) if point is not None else None
+        res = self._resolveur.resoudre(brut, pt)
+        noeud = res.noeud
+        if noeud is None:
+            # Conserver l'identifiant normalisé pour le diagnostic 'noeud_orphelin'
+            return _identifiant_reseau(brut)
+
+        if res.provenance in (PROV_ID, PROV_ALIAS) and noeud in G and point is not None:
+            d = point.distance(Point(G.nodes[noeud].get('x', 0.0), G.nodes[noeud].get('y', 0.0)))
+            if d > self.tolerance_raccordement:
+                hit = self._resolveur.snap(pt)
+                if hit is not None:
+                    self.anomalies_topologiques.append({
+                        'troncon_id': troncon_id,
+                        'type': 'raccordement_geometrique',
+                        'detail': f"Extrémité {cote} : identifiant '{noeud}' incohérent "
+                                  f"({d:.1f} m), raccordée au nœud '{hit[0]}' ({hit[1]:.2f} m)."
+                    })
+                    return hit[0]
+                return None
+            return noeud
+
+        if res.provenance == PROV_SNAP:
+            if res.noeud is not None:
+                self.anomalies_topologiques.append({
+                    'troncon_id': troncon_id,
+                    'type': 'raccordement_geometrique',
+                    'detail': f"Extrémité {cote} raccordée spatialement au nœud "
+                              f"'{res.noeud}' ({res.distance_m:.2f} m)."
+                })
+            return res.noeud
+
+        return noeud
 
     @staticmethod
     def _extremites(geom):
@@ -129,12 +165,12 @@ class ConstructeurGrapheReseau:
                 zone_collecte=row.get('zone_collecte', row.get('ZONECOLLE', row.get('ZONE_COLLE'))),
             )
 
-        self._construire_index_noeuds(G)
+        self._construire_resolveur(G)
 
         for _, row in gdf_troncons.iterrows():
             troncon_id = str(row.get('id', row.get('id_troncon', row.name)))
-            u_init = _identifiant_reseau(row.get('noeud_amont', row.get('amont', row.get('ID_AMONT'))))
-            v_init = _identifiant_reseau(row.get('noeud_aval', row.get('aval', row.get('ID_AVAL'))))
+            u_brut = row.get('noeud_amont', row.get('amont', row.get('ID_AMONT')))
+            v_brut = row.get('noeud_aval', row.get('aval', row.get('ID_AVAL')))
             geom = row.geometry if hasattr(row, 'geometry') else None
             diametre = row.get('diametre', row.get('diametre_mm', row.get('DIAMETRE', 300)))
             longueur = row.get('longueur', row.get('length', row.get('Longeur', 0.0)))
@@ -165,35 +201,10 @@ class ConstructeurGrapheReseau:
 
             point_depart, point_arrivee = self._extremites(geom)
 
-            # Validation géométrique amont : rejeter les raccordements aberrants à des centaines de mètres
-            if u_init in G and point_depart is not None:
-                d_u = point_depart.distance(Point(G.nodes[u_init].get('x', 0), G.nodes[u_init].get('y', 0)))
-                if d_u > self.tolerance_raccordement:
-                    u_init = self._noeud_proche(point_depart, G)
-            elif u_init not in G and point_depart is not None:
-                u_snapped = self._noeud_proche(point_depart, G)
-                if u_snapped is not None:
-                    u_init = u_snapped
-                    self.anomalies_topologiques.append({
-                        'troncon_id': troncon_id,
-                        'type': 'raccordement_geometrique',
-                        'detail': f"Extrémité amont raccordée au nœud '{u_snapped}'."
-                    })
-
-            # Validation géométrique aval : rejeter les raccordements aberrants à des centaines de mètres
-            if v_init in G and point_arrivee is not None:
-                d_v = point_arrivee.distance(Point(G.nodes[v_init].get('x', 0), G.nodes[v_init].get('y', 0)))
-                if d_v > self.tolerance_raccordement:
-                    v_init = self._noeud_proche(point_arrivee, G)
-            elif v_init not in G and point_arrivee is not None:
-                v_snapped = self._noeud_proche(point_arrivee, G)
-                if v_snapped is not None:
-                    v_init = v_snapped
-                    self.anomalies_topologiques.append({
-                        'troncon_id': troncon_id,
-                        'type': 'raccordement_geometrique',
-                        'detail': f"Extrémité aval raccordée au nœud '{v_snapped}'."
-                    })
+            # Résolution canonique des extrémités : ID -> alias -> snap spatial,
+            # identique à la chaîne utilisée par le générateur .inp SWMM.
+            u_init = self._resoudre_extremite(u_brut, point_depart, G, 'amont', troncon_id)
+            v_init = self._resoudre_extremite(v_brut, point_arrivee, G, 'aval', troncon_id)
 
             if not u_init or not v_init or u_init not in G or v_init not in G:
                 self.anomalies_topologiques.append({

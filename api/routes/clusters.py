@@ -479,11 +479,13 @@ def _calculate_clusters(db: Session, persist: bool = True, chemin_gpkg: Optional
             db.rollback()
             _log_cluster(f"[cluster] Erreur lors de la purge des anciens clusters: {e}", flush=True)
 
-    # 1. Exutoires physiques
-    _log_cluster("[cluster] Identification des exutoires physiques…", flush=True)
-    exutoires_physiques = trouver_exutoires_physiques(G)
-    if not exutoires_physiques:
-        exutoires_physiques = trouver_exutoires_physiques(G, inclure_exutoires_implicites=True)
+    # 1. Exutoires physiques + nœuds morts (exutoires implicites)
+    #    Un nœud sans sortie est une extrémité hydraulique légitime : les
+    #    fragments qu'il domine deviennent des bassins 'exutoire_implicite'
+    #    (filtrés par min_edges, tracés et soumis à revue) au lieu d'être
+    #    exclus comme orphelins alors qu'ils sont connectés.
+    _log_cluster("[cluster] Identification des exutoires physiques et implicites…", flush=True)
+    exutoires_physiques = trouver_exutoires_physiques(G, inclure_exutoires_implicites=True)
 
     if not exutoires_physiques:
         return {
