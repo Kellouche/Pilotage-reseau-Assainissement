@@ -75,6 +75,20 @@ async def analyser_bassins_mnt(
     try:
         logger.info(f"Analyse MNT/DEM: {dem_path}")
 
+        # Règle CRS : un raster sans projection déclarée rendrait toutes les
+        # surfaces/surfaciques des contours fausses — on bloque explicitement.
+        import rasterio
+        with rasterio.open(dem_path) as src_check:
+            if src_check.crs is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Le MNT ne déclare aucune projection (CRS absent du raster). "
+                        "Reprojetez le fichier (ex. vers EPSG:32631) avant l'analyse — "
+                        "sans projection fiable, les mesures de surface sont invalides."
+                    ),
+                )
+
         # Étape 1: Extraire les contours directement depuis le DEM
         contours_gdf = extract_contours_from_dem(
             dem_path=dem_path,
@@ -131,6 +145,8 @@ async def analyser_bassins_mnt(
         logger.info(f"Analyse MNT terminée: {len(contours_clipped)} contours générés")
         return resultat
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Erreur analyse MNT: {e}")
         raise HTTPException(
