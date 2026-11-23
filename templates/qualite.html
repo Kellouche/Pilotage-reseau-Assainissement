@@ -605,6 +605,19 @@ Objet : Tableau de bord interactif d'audit et de correction de qualité topologi
                     <div class="stat-subtitle">Problèmes détectés</div>
                 </div>
             `;
+
+            // Connectivité des extrémités (résolveur canonique ID -> alias -> snap)
+            const conn = stats.connectivite;
+            if (conn && conn.extremites_total) {
+                const r = conn.resolues || {};
+                statsGrid.innerHTML += `
+                    <div class="stat-card">
+                        <div class="stat-title">Connectivité extrémités</div>
+                        <div class="stat-value">${conn.taux_resolution_pct ?? 0}%</div>
+                        <div class="stat-subtitle">${conn.extremites_total} extrémités · ${r.par_identifiant || 0} ID · ${r.par_alias || 0} alias · ${r.par_snap || 0} snap · ${conn.non_resolues_spatiales || 0} spatiales · ${conn.non_resolues_absentes || 0} absentes</div>
+                    </div>
+                `;
+            }
         }
 
         // Affichage des anomalies

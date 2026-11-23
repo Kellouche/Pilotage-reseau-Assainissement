@@ -25,6 +25,11 @@ Objet : Panneau flottant Hyétogramme ↔ Hydrogramme (Double-Axe superposé / i
                 <i class="fas fa-file-pdf"></i>
                 <span id="label-hyeto-fiche">Fiche terrain</span>
             </button>
+            <div class="ts-speed-selector" title="Vitesse de lecture de l'animation">
+                <button class="ts-btn-speed active" data-speed="1" onclick="hyetoHydroSetSpeed(1)">1x</button>
+                <button class="ts-btn-speed" data-speed="2" onclick="hyetoHydroSetSpeed(2)">2x</button>
+                <button class="ts-btn-speed" data-speed="5" onclick="hyetoHydroSetSpeed(5)">5x</button>
+            </div>
             <button class="btn-action-hyeto btn-play-sync" id="btn-hyeto-sync-play" onclick="hyetoTogglePlay()" title="Lancer / suspendre l'animation du panneau">
                 <i class="fas fa-play" id="icon-hyeto-play"></i>
                 <span id="label-hyeto-play">Animer</span>

@@ -21,6 +21,10 @@ import geopandas as gpd
 import pandas as pd
 import numpy as np
 
+from src.domain.topologie.resolution_noeuds import (
+    ResoluteurNoeuds, PROV_ID, PROV_ALIAS, PROV_SNAP, PROV_ABSENT,
+)
+
 
 def _clean_id(val: Any) -> str:
     if val is None or pd.isna(val):
@@ -74,6 +78,120 @@ def _col_val(row: Any, *names: str) -> Any:
     return None
 
 
+def _vers_metres_gdf(gdf: Any) -> Any:
+    """Reprojette en CRS métrique (UTM 31N) si la géométrie est géographique."""
+    if gdf is None or gdf.empty:
+        return gdf
+    try:
+        if gdf.crs is not None and gdf.crs.is_geographic:
+            from src.infrastructure.config import TARGET_CRS
+            return gdf.to_crs(TARGET_CRS)
+    except Exception:
+        pass
+    return gdf
+
+
+def _point_geom(gdf_row_geom: Any):
+    """Retourne (x, y) métriques du centroïde/point d'une géométrie."""
+    try:
+        if gdf_row_geom is None or gdf_row_geom.is_empty:
+            return None
+        pt = gdf_row_geom if gdf_row_geom.geom_type == "Point" else gdf_row_geom.centroid
+        return (float(pt.x), float(pt.y))
+    except Exception:
+        return None
+
+
+def _points_extremite(geom: Any) -> List[tuple]:
+    """Points candidats d'une extrémité de tronçon : 1er et dernier vertex."""
+    try:
+        if geom is None or geom.is_empty:
+            return []
+        g = geom
+        if g.geom_type == "MultiLineString":
+            g = max(g.geoms, key=lambda s: s.length, default=None)
+            if g is None:
+                return []
+        if g.geom_type == "LineString":
+            coords = list(g.coords)
+            if not coords:
+                return []
+            return [
+                (float(coords[0][0]), float(coords[0][1])),
+                (float(coords[-1][0]), float(coords[-1][1])),
+            ]
+        c = _point_geom(g)
+        return [c] if c else []
+    except Exception:
+        return []
+
+
+def _construire_resolveur(regards: Any, rejets: Any, gpkg_path: Path,
+                          layers: List[str]) -> Optional[ResoluteurNoeuds]:
+    """
+    Construit le résolveur canonique de nœuds (même source que le graphe de
+    bassins et le générateur .inp) à partir des couches de nœuds du GPKG.
+    Retourne None si aucun nœud exploitable n'est trouvé.
+    """
+    from src.domain.moteur_swmm.constants import _clean_node_id
+
+    noeuds: Dict[str, tuple] = {}
+
+    def _ajouter_couche(gdf: Any):
+        gg = _vers_metres_gdf(gdf)
+        if gg is None or gg.empty:
+            return
+        for _, r in gg.iterrows():
+            nid = _clean_node_id(_col_val(
+                r, "Code", "CODE", "id", "ID", "swmm_id", "SWMM_ID",
+                "NOM", "nom", "INTITULE", "intitule"))
+            if not nid or nid in noeuds:
+                continue
+            pt = _point_geom(getattr(r, "geometry", None))
+            if pt is not None:
+                noeuds[nid] = pt
+
+    _ajouter_couche(regards)
+    _ajouter_couche(rejets)
+
+    # Stations de relèvement, STEP et ouvrages spéciaux : nœuds à part entière
+    for lyr in layers:
+        low = str(lyr).lower()
+        if any(k in low for k in ("station", "step", "ouvrage")):
+            try:
+                _ajouter_couche(gpd.read_file(str(gpkg_path), layer=lyr))
+            except Exception:
+                continue
+
+    if not noeuds:
+        return None
+    return ResoluteurNoeuds(noeuds, tolerance_snap_m=0.50)
+
+
+def _resoudre_extremite(resolveur: ResoluteurNoeuds, nid_brut: str,
+                        points: List[tuple]):
+    """
+    Résout une extrémité via ID -> alias -> snap (1er puis dernier vertex).
+    Retourne (ResolutionNoeud, a_point_disponible).
+    """
+    if not nid_brut and not points:
+        from src.domain.topologie.resolution_noeuds import ResolutionNoeud
+        return ResolutionNoeud(None, PROV_ABSENT, 0.0), False
+
+    p1 = points[0] if points else None
+    res = resolveur.resoudre(nid_brut, point=p1)
+    if res.resolu:
+        return res, True
+    if len(points) > 1:
+        res2 = resolveur.resoudre(nid_brut, point=points[1])
+        if res2.resolu:
+            return res2, True
+        # Conserver la tentative de snap la plus informative
+        if res2.provenance == PROV_SNAP:
+            return res2, True
+    return res, bool(points)
+
+
 def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -> Dict[str, Any]:
     """
     Exécute un audit de qualité géométrique, attributaire et topologique
@@ -96,7 +214,7 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -
     nb_rejets = len(rejets)
     total_elements = nb_regards + nb_pipes + nb_rejets
 
-    # Référentiel des identifiants de nœuds valides
+    # Référentiel des identifiants de nœuds valides (contrôle topologique brut)
     valid_nodes: Dict[str, Any] = {}
     if not regards.empty:
         for idx, r in regards.iterrows():
@@ -107,6 +225,12 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -
         for idx, rj in rejets.iterrows():
             r_id = _clean_id(_col_val(rj, "Code", "CODE", "id", "ID", "NOM", "nom")) or f"REJ_{idx+1}"
             valid_nodes[r_id] = rj
+
+    # Résolveur canonique de nœuds : le verdict de connectivité reflète ce que
+    # la simulation résoudra réellement (ID -> alias RJ -> snap -> spatial),
+    # au lieu du simple test d'appartenance textuelle à valid_nodes.
+    resolveur_noeuds = _construire_resolveur(regards, rejets, gpkg_path, layers)
+    pipes_m = _vers_metres_gdf(pipes)
 
     # Extraction des coordonnées WGS84 pour affichage cartographique
     wgs_pipes = pipes.to_crs("EPSG:4326") if (not pipes.empty and pipes.crs and pipes.crs != "EPSG:4326") else pipes
@@ -123,6 +247,13 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -
 
     upstream_connections = set()
     downstream_connections = set()
+
+    # Statistiques de connectivité par provenance de résolution
+    stats_conn = {
+        "extremites_total": 0,
+        PROV_ID: 0, PROV_ALIAS: 0, PROV_SNAP: 0,
+        "spatial": 0, "absent": 0,
+    }
 
     for idx, c in pipes.iterrows():
         u = _clean_id(_col_val(c, "ID_AMONT", "id_amont", "amont", "AMONT", "NOEUD_AMONT"))
@@ -146,21 +277,49 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -
                 centroid = geom.centroid
                 lat, lon = round(centroid.y, 6), round(centroid.x, 6)
 
-        # A. Conduites sans regards
-        manque_amont = not u or (u not in valid_nodes)
-        manque_aval = not d or (d not in valid_nodes)
+        # A. Extrémités non résolues — résolveur canonique (ID -> alias -> snap)
+        #    Une extrémité avec point de snap disponible mais sans nœud déclaré
+        #    est classée 'spatiale' (nœud créé par la simulation, à vérifier,
+        #    sévérité mineure) ; sans aucun point elle est 'absente' (majeure).
+        geom_m = None
+        if resolveur_noeuds is not None and not pipes_m.empty and idx < len(pipes_m):
+            geom_m = pipes_m.geometry.iloc[idx]
+        points = _points_extremite(geom_m)
+
+        def _statut_extremite(nid_brut):
+            """Retourne (manque: bool, severite: str, detail: str)."""
+            stats_conn["extremites_total"] += 1
+            if resolveur_noeuds is None:
+                # Repli : ancien contrôle textuel strict
+                manque = not nid_brut or nid_brut not in valid_nodes
+                return manque, "majeure", "introuvable (contrôle strict)"
+            res, a_point = _resoudre_extremite(resolveur_noeuds, nid_brut, points)
+            if res.resolu:
+                stats_conn[res.provenance] = stats_conn.get(res.provenance, 0) + 1
+                return False, "", ""
+            if a_point:
+                stats_conn["spatial"] += 1
+                return True, "mineure", "sans nœud déclaré — raccordement spatial à vérifier"
+            stats_conn["absent"] += 1
+            return True, "majeure", "introuvable (ni ID, ni alias, ni snap, ni point)"
+
+        manque_amont, sev_amont, det_amont = _statut_extremite(u)
+        manque_aval, sev_aval, det_aval = _statut_extremite(d)
+
         if manque_amont or manque_aval:
             desc = []
             if manque_amont:
-                desc.append(f"amont '{u or 'Non renseigné'}' introuvable")
+                desc.append(f"amont '{u or 'Non renseigné'}' {det_amont}")
             if manque_aval:
-                desc.append(f"aval '{d or 'Non renseigné'}' introuvable")
+                desc.append(f"aval '{d or 'Non renseigné'}' {det_aval}")
+            severites = [s for m, s in ((manque_amont, sev_amont), (manque_aval, sev_aval)) if m]
+            severite = "majeure" if "majeure" in severites else "mineure"
             anomalies["conduites_sans_regards"].append({
                 "id_conduite": cid,
                 "type": "conduite_sans_regard",
                 "id_amont": u,
                 "id_aval": d,
-                "severite": "majeure",
+                "severite": severite,
                 "description": f"Extrémité déconnectée : {', '.join(desc)}",
                 "latitude": lat,
                 "longitude": lon
@@ -340,6 +499,21 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -
 
     longueur_totale = round(float(pipes.geometry.length.sum()), 1) if not pipes.empty else 0.0
 
+    total_ext = stats_conn["extremites_total"]
+    nb_resolues = stats_conn.get(PROV_ID, 0) + stats_conn.get(PROV_ALIAS, 0) + stats_conn.get(PROV_SNAP, 0)
+    connectivite = {
+        "methode": "résolveur canonique : ID -> alias RJ -> snap <= 0,50 m -> nœud spatial",
+        "extremites_total": total_ext,
+        "resolues": {
+            "par_identifiant": stats_conn.get(PROV_ID, 0),
+            "par_alias": stats_conn.get(PROV_ALIAS, 0),
+            "par_snap": stats_conn.get(PROV_SNAP, 0),
+        },
+        "non_resolues_spatiales": stats_conn.get("spatial", 0),
+        "non_resolues_absentes": stats_conn.get("absent", 0),
+        "taux_resolution_pct": round(100.0 * nb_resolues / total_ext, 2) if total_ext else 100.0,
+    }
+
     statistiques_globales = {
         "nb_regards": nb_regards,
         "nb_conduites": nb_pipes,
@@ -347,7 +521,8 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -
         "nb_communes": nb_communes,
         "longueur_totale_m": longueur_totale,
         "nom_projet": project_name,
-        "gpkg_path": str(gpkg_path)
+        "gpkg_path": str(gpkg_path),
+        "connectivite": connectivite,
     }
 
     rapport = {

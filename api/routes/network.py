@@ -733,13 +733,26 @@ async def upload_network_gpkg(
     project.name = file.filename.rsplit(".", 1)[0]
     project.source_gpkg_key = str(target_path)
     # Étape 3B : versionnement immuable — un GPKG invalide est rejeté (400)
-    _enregistrer_version_gpkg(
+    version = _enregistrer_version_gpkg(
         db, project, target_path,
         filename_original=file.filename,
         created_by_id=getattr(tenant_ctx.user, "id", None) if tenant_ctx else None,
         strict=True,
     )
     db.commit()
+
+    # Inventaire réel de détection (couches reconnues + comptages) issu de la
+    # validation du GPKG — verdict d'import exposé à l'utilisateur.
+    inventaire = getattr(version, "_inventaire_meta", None) or {}
+    rapport_inventaire = {
+        "couches_detectees": inventaire.get("couches", []),
+        "couche_regards": inventaire.get("couche_regards"),
+        "couche_canalisations": inventaire.get("couche_canalisations"),
+        "couche_rejets": inventaire.get("couche_rejets"),
+        "nb_regards": inventaire.get("nb_regards"),
+        "nb_conduites": inventaire.get("nb_conduites"),
+        "nb_rejets": inventaire.get("nb_rejets"),
+    }
 
 
     try:
@@ -764,6 +777,7 @@ async def upload_network_gpkg(
         "status": "ok",
         "message": msg,
         "conversion": conv_summary,
+        "inventaire": rapport_inventaire,
         "project": {
             "id": project.id,
             "name": project.name,

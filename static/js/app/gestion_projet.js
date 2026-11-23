@@ -227,6 +227,27 @@
                 sessionStorage.setItem('projet_charge', 'true');
                 montrerModalProjet(false);
                 chargerDonneesInitiales();
+
+                // Verdict d'import : inventaire réel des objets détectés
+                const inv = data.inventaire;
+                if (inv && typeof window.dialogueNotifier === 'function') {
+                    const lignes = [
+                        `<b>${inv.nb_regards ?? '—'}</b> regards`,
+                        `<b>${inv.nb_conduites ?? '—'}</b> canalisations`,
+                        `<b>${inv.nb_rejets ?? '—'}</b> rejets`,
+                    ].join(' · ');
+                    const manquants = [];
+                    if (!inv.couche_regards) manquants.push('regards');
+                    if (!inv.couche_canalisations) manquants.push('canalisations');
+                    window.dialogueNotifier({
+                        titre: 'Verdict d\'import du réseau',
+                        type: manquants.length ? 'warning' : 'success',
+                        message: `Objets détectés : ${lignes}. ` +
+                            (manquants.length
+                                ? `Couches non reconnues : ${manquants.join(', ')} — vérifiez le rapport Qualité.`
+                                : 'La connectivité et les anomalies sont auditées dans l\'onglet Qualité et le badge orphelins de la carte.')
+                    });
+                }
             } catch (err) {
                 window.dialogueAlerte('Erreur téléversement : ' + err.message, 'erreur');
                 montrerChargement(false);

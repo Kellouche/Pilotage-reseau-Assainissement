@@ -20,7 +20,8 @@
         playing: false,
         currentStep: 0,
         intervalId: null,
-        baseIntervalMs: 500
+        baseIntervalMs: 500,
+        speedMultiplier: 1
     };
 
     /**
@@ -309,8 +310,11 @@
         _hyetoPause();
 
         // Restaurer la coloration standard SWMM de la simulation
+        // (force=true : sans lui, le garde anti-doublon saute le re-rendu
+        // et les couleurs instantanées de l'animation restent affichées
+        // au lieu de l'enveloppe des maximums observés)
         if (window._dernierResultatSimulation && typeof afficherResultatsSimulation === 'function') {
-            afficherResultatsSimulation(window._dernierResultatSimulation);
+            afficherResultatsSimulation(window._dernierResultatSimulation, true);
         }
     };
 
@@ -746,7 +750,7 @@
         state.playing = true;
         _syncHyetoPlayButton();
 
-        const interval = state.baseIntervalMs;
+        const interval = Math.max(100, Math.round(state.baseIntervalMs / (state.speedMultiplier || 1)));
 
         state.intervalId = setInterval(() => {
             let nextIdx = state.currentStep + 1;
@@ -799,6 +803,25 @@
         if (state.playing) {
             _hyetoPause();
         } else {
+            _hyetoPlay();
+        }
+    };
+
+    /**
+     * Règle la vitesse de lecture (1x, 2x, 5x)
+     */
+    window.hyetoHydroSetSpeed = function(multiplier) {
+        const state = window.hyetoHydroState;
+        state.speedMultiplier = parseFloat(multiplier) || 1;
+
+        document.querySelectorAll('#panel-hyeto-hydro .ts-btn-speed').forEach(b => {
+            const s = parseFloat(b.getAttribute('data-speed'));
+            b.classList.toggle('active', s === state.speedMultiplier);
+        });
+
+        // Si l'animation tourne, relancer avec le nouvel intervalle
+        if (state.playing) {
+            _hyetoPause();
             _hyetoPlay();
         }
     };

@@ -377,12 +377,16 @@ def enregistrer_version_gpkg(
         if projet is not None:
             projet.gpkg_version_id = existante.id
         db.flush()
+        # Inventaire de validation exposé à l'appelant (attribut transitoire)
+        existante._inventaire_meta = meta
         return existante
 
-    return _stocker_version(
+    version = _stocker_version(
         db, project.org_id, project.id, sha, source, meta,
         filename_original or source.name, created_by_id,
     )
+    version._inventaire_meta = meta
+    return version
 
 
 # ---------------------------------------------------------------------------
