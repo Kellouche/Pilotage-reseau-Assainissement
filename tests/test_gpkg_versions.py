@@ -482,3 +482,46 @@ def test_import_concurrent_meme_fichier(db, projet_avec_gpkg, env_versions):
     db.expire_all()
     assert db.query(GpkgVersion).filter(
         GpkgVersion.project_id == p.id).count() == 1
+
+
+# ---------------------------------------------------------------------------
+# Détection / application du CRS (règle : jamais de projection silencieuse)
+# ---------------------------------------------------------------------------
+
+def test_detecter_crs_gpkg(tmp_path):
+    f = _creer_gpkg(tmp_path / "avec_crs.gpkg")
+    assert gv.detecter_crs_gpkg(f) is not None
+
+
+def test_detecter_crs_gpkg_absent(tmp_path):
+    """Un GPKG écrit sans déclaration CRS doit être détecté sans CRS."""
+    import geopandas as gpd
+    from shapely.geometry import Point
+    f = tmp_path / "sans_crs.gpkg"
+    gpd.GeoDataFrame(
+        {"id": ["N1"]}, geometry=[Point(3.0, 36.0)], crs=None
+    ).to_file(f, layer="regards", driver="GPKG")
+    assert gv.detecter_crs_gpkg(f) is None
+
+
+def test_appliquer_crs_gpkg(tmp_path):
+    """Round-trip : strip du CRS → application → relecture GeoPandas."""
+    import geopandas as gpd
+    from shapely.geometry import Point
+    f = tmp_path / "sans_crs2.gpkg"
+    gpd.GeoDataFrame(
+        {"id": ["N1", "N2"]},
+        geometry=[Point(600000, 4005000), Point(600100, 4005100)],
+        crs=None,
+    ).to_file(f, layer="regards", driver="GPKG")
+    assert gv.detecter_crs_gpkg(f) is None
+    gv.appliquer_crs_gpkg(f, "EPSG:32631")
+    assert gv.detecter_crs_gpkg(f) == "EPSG:32631"
+    relu = gpd.read_file(f)
+    assert str(relu.crs) == "EPSG:32631"
+
+
+def test_appliquer_crs_gpkg_invalide(tmp_path):
+    f = _creer_gpkg(tmp_path / "avec_crs2.gpkg")
+    with pytest.raises(ValueError):
+        gv.appliquer_crs_gpkg(f, "EPSG:999999")

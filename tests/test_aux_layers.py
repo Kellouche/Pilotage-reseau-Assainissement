@@ -99,6 +99,33 @@ def _ecrire_fichier(gdf, path: Path, fmt="gpkg"):
 # Tests service — import & métadonnées
 # ---------------------------------------------------------------------------
 
+class TestCrsObligatoire:
+    """Règle CRS : aucune projection → blocage, jamais de repli silencieux."""
+
+    def _gdf_sans_crs(self):
+        gdf = gpd.GeoDataFrame(
+            {"z": [10.0, 20.0]},
+            geometry=[Point(600000, 4005000), Point(600100, 4005100)],
+            crs=None,
+        )
+        return gdf
+
+    def test_sans_crs_refuse(self):
+        with pytest.raises(ValueError, match="(?i)crs|projection"):
+            svc._normaliser_4326(self._gdf_sans_crs())
+
+    def test_crs_forcee_accepte(self):
+        gdf, source = svc._normaliser_4326(self._gdf_sans_crs(), crs_forcee="EPSG:32631")
+        assert gdf.crs is not None
+        assert "utilisateur" in source
+        # Reprojection WGS84 effective : coordonnées en degrés
+        assert gdf.total_bounds[0] < 10
+
+    def test_crs_invalide_refuse(self):
+        with pytest.raises(ValueError, match="(?i)invalide"):
+            svc._normaliser_4326(self._gdf_sans_crs(), crs_forcee="EPSG:999999")
+
+
 def test_import_gpkg_et_metadonnees(db, org_projet, tmp_path):
     gdf = _topo_gdf()
     f = tmp_path / "topo.gpkg"

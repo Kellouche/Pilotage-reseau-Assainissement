@@ -723,6 +723,7 @@
         const type    = document.getElementById('aux-type').value;
         const nomBase = (document.getElementById('aux-nom').value || '').trim();
         const cz      = (document.getElementById('aux-colonne-z').value || '').trim();
+        let   crsSaisi = '';
         const multi   = selection.length > 1;
 
         btn.disabled = true;
@@ -746,15 +747,37 @@
             const nomEnvoye = multi ? (nomBase ? `${nomBase} — ${e.nom}` : '') : nomBase;
             if (nomEnvoye) fd.append('nom', nomEnvoye);
             if (cz) fd.append('colonne_z', cz);
+            if (crsSaisi) fd.append('crs', crsSaisi);
 
             try {
-                const r = await fetch(`/api/v1/projets/${encodeURIComponent(pid)}/aux-layers`, {
+                let r = await fetch(`/api/v1/projets/${encodeURIComponent(pid)}/aux-layers`, {
                     method: 'POST',
                     credentials: 'include',
                     headers: authHeaders(),
                     body: fd
                 });
-                const j = await r.json().catch(() => ({}));
+                let j = await r.json().catch(() => ({}));
+                // Projection absente → redemander une fois (jamais de repli
+                // silencieux : des mesures faussées valent pire qu'un blocage).
+                if (!r.ok && r.status === 400 && !crsSaisi &&
+                    /crs|projection/i.test(j.detail || '')) {
+                    const saisie = window.prompt(
+                        `« ${e.nom} » ne déclare pas de projection (CRS).\n` +
+                        'Saisissez le code EPSG de la projection source\n' +
+                        '(ex. EPSG:32631 pour l\'UTM 31N Algérie) :',
+                        'EPSG:32631');
+                    if (saisie && saisie.trim()) {
+                        crsSaisi = saisie.trim();
+                        fd.set('crs', crsSaisi);
+                        r = await fetch(`/api/v1/projets/${encodeURIComponent(pid)}/aux-layers`, {
+                            method: 'POST',
+                            credentials: 'include',
+                            headers: authHeaders(),
+                            body: fd
+                        });
+                        j = await r.json().catch(() => ({}));
+                    }
+                }
                 if (!r.ok) throw new Error(j.detail || r.statusText);
                 resultats.push({ cle: e.cle, ok: true, nom: (j.couche && j.couche.nom) || e.nom, avert: j.avertissement || null });
             } catch (err) {

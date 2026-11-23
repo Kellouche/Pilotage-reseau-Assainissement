@@ -195,6 +195,19 @@ def valider_gpkg(path: Path) -> Dict[str, Any]:
 # Détection & application du CRS (règle : jamais de mesures sans projection)
 # ---------------------------------------------------------------------------
 
+# srs_id marquant l'absence de projection : 0/-1 (spec GPKG) et 99999
+# (« Undefined SRS » écrit par GDAL/pyogrio quand le fichier est créé
+# sans CRS — ne doit JAMAIS être pris pour une projection valide).
+_SRS_ID_UNDEFINED = {0, -1, 99999}
+
+
+def _srs_ids_declares(conn) -> set:
+    """srs_id réellement déclarés dans gpkg_geometry_columns (hors sentinelles)."""
+    return {r[0] for r in conn.execute(
+        "SELECT srs_id FROM gpkg_geometry_columns")
+        if r[0] is not None and r[0] not in _SRS_ID_UNDEFINED}
+
+
 def detecter_crs_gpkg(path: Union[str, Path]) -> Optional[str]:
     """
     Retourne le CRS déclaré par les couches du GeoPackage (ex. "EPSG:32631"),
@@ -209,21 +222,21 @@ def detecter_crs_gpkg(path: Union[str, Path]) -> Optional[str]:
             "SELECT name FROM sqlite_master WHERE type='table'")}
         if "gpkg_geometry_columns" not in tables:
             return None
-        srs_ids = {r[0] for r in conn.execute(
-            "SELECT srs_id FROM gpkg_geometry_columns") if r[0] is not None}
-        declares = sorted(s for s in srs_ids if s > 0)
+        declares = sorted(_srs_ids_declares(conn))
         if not declares:
             return None
-        # Résolution EPSG via gpkg_spatial_ref_sys si disponible
-        if "gpkg_spatial_ref_sys" in tables:
-            for sid in declares:
-                row = conn.execute(
-                    "SELECT organization_coordsys_id FROM gpkg_spatial_ref_sys "
-                    "WHERE srs_id = ? AND organization = 'EPSG'", (sid,)
-                ).fetchone()
-                if row:
-                    return f"EPSG:{row[0]}"
-        return f"EPSG:{declares[0]}"
+        if declares:
+            # Résolution EPSG via gpkg_spatial_ref_sys si disponible
+            if "gpkg_spatial_ref_sys" in tables:
+                for sid in declares:
+                    row = conn.execute(
+                        "SELECT organization_coordsys_id FROM gpkg_spatial_ref_sys "
+                        "WHERE srs_id = ? AND organization = 'EPSG'", (sid,)
+                    ).fetchone()
+                    if row:
+                        return f"EPSG:{row[0]}"
+            return f"EPSG:{declares[0]}"
+        return None
     except sqlite3.Error:
         return None
     finally:
@@ -234,7 +247,8 @@ def detecter_crs_gpkg(path: Union[str, Path]) -> Optional[str]:
 def appliquer_crs_gpkg(path: Union[str, Path], crs_input: str) -> str:
     """
     Déclare `crs_input` (code EPSG, "EPSG:XXXX", WKT ou PROJ) sur toutes les
-    couches du GeoPackage qui n'ont pas de CRS (srs_id <= 0 ou NULL).
+    couches du GeoPackage qui n'ont pas de CRS (srs_id <= 0, NULL ou 99999
+    « Undefined SRS » GDAL).
 
     Retourne le code EPSG normalisé (ex. "EPSG:32631").
     Lève ValueError si l'entrée n'est pas résolvable en EPSG.
@@ -272,7 +286,7 @@ def appliquer_crs_gpkg(path: Union[str, Path], crs_input: str) -> str:
             )
         conn.execute(
             "UPDATE gpkg_geometry_columns SET srs_id = ? "
-            "WHERE srs_id IS NULL OR srs_id <= 0",
+            "WHERE srs_id IS NULL OR srs_id <= 0 OR srs_id = 99999",
             (epsg,),
         )
         conn.commit()

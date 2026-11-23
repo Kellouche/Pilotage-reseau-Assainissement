@@ -134,7 +134,14 @@ def _normaliser_4326(gdf: gpd.GeoDataFrame, crs_forcee: Optional[str] = None) ->
                 "l'exactitude des mesures spatiales."
             )
         from pyproj import CRS
-        gdf = gdf.set_crs(CRS.from_user_input(crs_forcee))
+        from pyproj.exceptions import CRSError
+        try:
+            gdf = gdf.set_crs(CRS.from_user_input(crs_forcee))
+        except CRSError:
+            raise ValueError(
+                f"Code CRS invalide : « {crs_forcee} ». "
+                "Utilisez un code EPSG (ex. EPSG:32631) ou un WKT valide."
+            )
         crs_source = f"utilisateur:{crs_forcee}"
     if str(gdf.crs) != WGS84:
         gdf = gpd.GeoDataFrame(gdf, geometry=gdf.geometry.to_crs(WGS84), crs=WGS84)
