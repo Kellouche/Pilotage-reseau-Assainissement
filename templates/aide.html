@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Centre d'aide — DrainPilot 5.2</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.css">
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.js"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/contrib/auto-render.min.js"></script>
     <style>
         :root {
             --aide-bg: #f1f5f9;
@@ -156,6 +159,27 @@
         const contenu = document.getElementById('aide-contenu');
         let docActive = null;
 
+        // Rendu des formules LaTeX ($…$, $$…$$, \(…\), \[…\]) via KaTeX.
+        const delimitersMath = [
+            { left: '$$', right: '$$', display: true },
+            { left: '\\[', right: '\\]', display: true },
+            { left: '\\(', right: '\\)', display: false },
+            { left: '$', right: '$', display: false }
+        ];
+        function rendreMaths(el, tentatives) {
+            if (window.renderMathInElement) {
+                renderMathInElement(el, {
+                    delimiters: delimitersMath,
+                    throwOnError: false,
+                    ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+                });
+            } else if ((tentatives || 0) < 25) {
+                // KaTeX auto-render est chargé en defer : réessayer jusqu'à
+                // ce qu'il soit disponible (réseau lent toléré).
+                setTimeout(() => rendreMaths(el, (tentatives || 0) + 1), 200);
+            }
+        }
+
         function chargerDocument(id, titre, ancre) {
             docActive = id;
             sidebar.querySelectorAll('.aide-doc-item').forEach(el => {
@@ -171,6 +195,7 @@
                 .then(html => {
                     contenu.innerHTML = html;
                     contenu.classList.remove('aide-loading');
+                    rendreMaths(contenu);
                     if (ancre) {
                         const cible = contenu.querySelector('#' + CSS.escape(ancre));
                         if (cible) cible.scrollIntoView({ behavior: 'smooth', block: 'start' });
