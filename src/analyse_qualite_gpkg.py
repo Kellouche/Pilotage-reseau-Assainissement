@@ -127,7 +127,9 @@ def _points_extremite(geom: Any) -> List[tuple]:
 
 
 def _construire_resolveur(regards: Any, rejets: Any, gpkg_path: Path,
-                          layers: List[str]) -> Optional[ResoluteurNoeuds]:
+                          layers: List[str],
+                          conventions: Optional[Dict[str, Any]] = None
+                          ) -> Optional[ResoluteurNoeuds]:
     """
     Construit le résolveur canonique de nœuds (même source que le graphe de
     bassins et le générateur .inp) à partir des couches de nœuds du GPKG.
@@ -165,7 +167,14 @@ def _construire_resolveur(regards: Any, rejets: Any, gpkg_path: Path,
 
     if not noeuds:
         return None
-    return ResoluteurNoeuds(noeuds, tolerance_snap_m=0.50)
+    conv = conventions or {}
+    alias_noyau = conv.get("alias_noyau") or {}
+    return ResoluteurNoeuds(
+        noeuds,
+        tolerance_snap_m=float(conv.get("snap_tolerance_m") or 0.50),
+        correspondance_noyau=bool(alias_noyau.get("actif")),
+        alias_auto_max_dist_m=float(alias_noyau.get("max_dist_m") or 2.5),
+    )
 
 
 def _resoudre_extremite(resolveur: ResoluteurNoeuds, nid_brut: str,
@@ -226,10 +235,19 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -
             r_id = _clean_id(_col_val(rj, "Code", "CODE", "id", "ID", "NOM", "nom")) or f"REJ_{idx+1}"
             valid_nodes[r_id] = rj
 
+    # Conventions auto-découvertes du GPKG (partagées avec graphe et .inp)
+    conventions_gpkg = None
+    try:
+        from src.domain.topologie.decouverte_conventions import obtenir_conventions
+        conventions_gpkg = obtenir_conventions(gpkg_path)
+    except Exception:
+        conventions_gpkg = None
+
     # Résolveur canonique de nœuds : le verdict de connectivité reflète ce que
     # la simulation résoudra réellement (ID -> alias RJ -> snap -> spatial),
     # au lieu du simple test d'appartenance textuelle à valid_nodes.
-    resolveur_noeuds = _construire_resolveur(regards, rejets, gpkg_path, layers)
+    resolveur_noeuds = _construire_resolveur(
+        regards, rejets, gpkg_path, layers, conventions=conventions_gpkg)
     pipes_m = _vers_metres_gdf(pipes)
 
     # Extraction des coordonnées WGS84 pour affichage cartographique
@@ -500,18 +518,25 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -
     longueur_totale = round(float(pipes.geometry.length.sum()), 1) if not pipes.empty else 0.0
 
     total_ext = stats_conn["extremites_total"]
-    nb_resolues = stats_conn.get(PROV_ID, 0) + stats_conn.get(PROV_ALIAS, 0) + stats_conn.get(PROV_SNAP, 0)
+    nb_resolues = stats_conn.get(PROV_ID, 0) + stats_conn.get(PROV_ALIAS, 0) + stats_conn.get(PROV_SNAP, 0) + stats_conn.get(PROV_ALIAS_AUTO, 0)
     connectivite = {
-        "methode": "résolveur canonique : ID -> alias RJ -> snap <= 0,50 m -> nœud spatial",
+        "methode": "résolveur canonique : ID -> alias RJ -> alias auto (noyau) -> snap <= tolérance -> nœud spatial",
         "extremites_total": total_ext,
         "resolues": {
             "par_identifiant": stats_conn.get(PROV_ID, 0),
             "par_alias": stats_conn.get(PROV_ALIAS, 0),
+            "par_alias_auto": stats_conn.get(PROV_ALIAS_AUTO, 0),
             "par_snap": stats_conn.get(PROV_SNAP, 0),
         },
         "non_resolues_spatiales": stats_conn.get("spatial", 0),
         "non_resolues_absentes": stats_conn.get("absent", 0),
         "taux_resolution_pct": round(100.0 * nb_resolues / total_ext, 2) if total_ext else 100.0,
+        "conventions": {
+            "alias_noyau_actif": bool((conventions_gpkg or {}).get("alias_noyau", {}).get("actif")),
+            "alias_noyau_occurrences": (conventions_gpkg or {}).get("alias_noyau", {}).get("occurrences", 0),
+            "snap_tolerance_m": (conventions_gpkg or {}).get("snap_tolerance_m"),
+            "decouvert_le": (conventions_gpkg or {}).get("decouvert_le"),
+        } if conventions_gpkg else None,
     }
 
     statistiques_globales = {

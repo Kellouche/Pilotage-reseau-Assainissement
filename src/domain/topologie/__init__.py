@@ -9,6 +9,7 @@ de bassins, le générateur .inp SWMM et les profils en long.
 from src.domain.topologie.resolution_noeuds import (
     PROV_ABSENT,
     PROV_ALIAS,
+    PROV_ALIAS_AUTO,
     PROV_ID,
     PROV_SNAP,
     PROV_SPATIAL,
@@ -21,6 +22,7 @@ __all__ = [
     "ResoluteurNoeuds",
     "PROV_ID",
     "PROV_ALIAS",
+    "PROV_ALIAS_AUTO",
     "PROV_SNAP",
     "PROV_SPATIAL",
     "PROV_ABSENT",

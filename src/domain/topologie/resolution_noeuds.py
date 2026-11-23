@@ -21,6 +21,7 @@ from src.domain.moteur_swmm.constants import _clean_node_id
 # Provenances possibles d'une résolution d'extrémité
 PROV_ID = "id"                # identifiant texte résolu directement
 PROV_ALIAS = "alias"          # alias sémantique (ex. RJ12 -> CODE 12 des rejets)
+PROV_ALIAS_AUTO = "alias_auto"  # correspondance par noyau découverte automatiquement
 PROV_SNAP = "snap"            # raccordement spatial <= tolerance
 PROV_SPATIAL = "spatial"      # nœud spatial créé à la coordonnée réelle
 PROV_ABSENT = "absent"        # non résolu (ni ID, ni alias, ni snap, pas de point)
@@ -74,6 +75,8 @@ class ResoluteurNoeuds:
         noeuds: Mapping[str, Tuple[float, float]],
         tolerance_snap_m: float = 0.50,
         normalizer=None,
+        correspondance_noyau: bool = False,
+        alias_auto_max_dist_m: float = 2.5,
     ):
         self.noeuds: Dict[str, Tuple[float, float]] = dict(noeuds)
         self.tolerance_snap_m = float(tolerance_snap_m)
@@ -82,9 +85,18 @@ class ResoluteurNoeuds:
         # qui préserve les espaces ('SR HH01') — chaque couche garde son
         # espace de noms sans divergence.
         self._normalizer = normalizer or _clean_node_id
+        # Convention découverte automatiquement (decouverte_conventions) :
+        # correspondance par noyau d'identifiant confirmée spatialement.
+        self._correspondance_noyau = bool(correspondance_noyau)
+        self._alias_auto_max_dist_m = float(alias_auto_max_dist_m)
+        self._index_num: Dict[int, str] = {}
         self._ids: list = []
         self._tree = None
         if self.noeuds:
+            if self._correspondance_noyau:
+                from src.domain.topologie.decouverte_conventions import (
+                    index_noeuds_numeriques)
+                self._index_num = index_noeuds_numeriques(self.noeuds)
             try:
                 from scipy.spatial import cKDTree
                 self._ids = list(self.noeuds.keys())
@@ -109,6 +121,45 @@ class ResoluteurNoeuds:
         """Snap spatial pur (sans essai d'ID) — utilitaire public."""
         return self._snap(point)
 
+    def plus_proche(self, point: Tuple[float, float]) -> Optional[Tuple[str, float]]:
+        """Nœud le plus proche SANS seuil de tolérance (diagnostic de distance)."""
+        if self._tree is None or point is None:
+            return None
+        try:
+            d, i = self._tree.query(np.array(point, dtype=float))
+            return self._ids[int(i)], float(d)
+        except Exception:
+            return None
+
+    def _resoudre_par_noyau(
+        self,
+        nid: str,
+        point: Optional[Tuple[float, float]],
+    ) -> Optional[ResolutionNoeud]:
+        """
+        Correspondance par noyau d'identifiant découverte automatiquement :
+        'EX_12' -> '12', 'RJ_02' -> nœud '2'. N'aboutit que si EXACTEMENT UN
+        nœud candidat est à <= alias_auto_max_dist_m du point — jamais
+        d'ambiguïté, jamais de lien sans confirmation spatiale.
+        """
+        if not self._correspondance_noyau or point is None:
+            return None
+        from src.domain.topologie.decouverte_conventions import (
+            noyaux_candidats, resoudre_noyau)
+        valides = {}
+        for core in noyaux_candidats(nid):
+            cible = resoudre_noyau(self.noeuds, self._index_num, core)
+            if cible is None or cible in valides:
+                continue
+            cx, cy = self.noeuds[cible]
+            d = float(np.hypot(point[0] - cx, point[1] - cy))
+            if d <= self._alias_auto_max_dist_m:
+                valides[cible] = d
+        if len(valides) == 1:
+            cible, d = next(iter(valides.items()))
+            return ResolutionNoeud(cible, PROV_ALIAS_AUTO, d)
+        return None
+
     def resoudre(
         self,
         identifiant_brut,
@@ -130,6 +181,13 @@ class ResoluteurNoeuds:
             for alias in _alias_identifiants(nid):
                 if alias in self.noeuds:
                     return ResolutionNoeud(alias, PROV_ALIAS, 0.0)
+
+        # 2b. Correspondance par noyau découverte automatiquement
+        #     (confirmation spatiale obligatoire, jamais d'ambiguïté)
+        if nid:
+            res_noyau = self._resoudre_par_noyau(nid, point)
+            if res_noyau is not None:
+                return res_noyau
 
         # 3. Snap spatial (filet de secours, tolérance stricte)
         if point is not None:

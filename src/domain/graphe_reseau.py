@@ -33,12 +33,14 @@ class ConstructeurGrapheReseau:
         self.anomalies_topologiques: List[Dict[str, Any]] = []
         self._resolveur = None
 
-    def _construire_resolveur(self, G: nx.DiGraph):
+    def _construire_resolveur(self, G: nx.DiGraph, conventions: Dict[str, Any] = None):
         """
         Construit le résolveur canonique d'extrémités sur les nœuds du graphe.
         Même chaîne de résolution que le générateur .inp (ID -> alias -> snap),
         avec _identifiant_reseau comme normalisation (les IDs du graphe
         conservent leurs espaces, ex. 'SR HH01').
+        `conventions` = résultat de decouverte_conventions.obtenir_conventions
+        (tolérance snap ajustée + correspondance par noyau auto-découverte).
         """
         from src.domain.topologie import ResoluteurNoeuds
         index = {}
@@ -47,10 +49,18 @@ class ConstructeurGrapheReseau:
             if x is None or y is None:
                 continue
             index[noeud] = (float(x), float(y))
+        conv = conventions or {}
+        alias_noyau = conv.get('alias_noyau') or {}
+        # Le graphe a sa propre tolérance de raccordement (2.0 m) : la
+        # tolérance découverte ne peut que l'augmenter, jamais la réduire.
+        snap_tol = max(self.tolerance_raccordement,
+                       float(conv.get('snap_tolerance_m') or 0.0))
         self._resolveur = ResoluteurNoeuds(
             index,
-            tolerance_snap_m=self.tolerance_raccordement,
+            tolerance_snap_m=snap_tol,
             normalizer=_identifiant_reseau,
+            correspondance_noyau=bool(alias_noyau.get('actif')),
+            alias_auto_max_dist_m=float(alias_noyau.get('max_dist_m') or 2.5),
         )
 
     def _resoudre_extremite(self, brut, point, G: nx.DiGraph, cote: str, troncon_id):
@@ -60,7 +70,7 @@ class ConstructeurGrapheReseau:
         que si l'extrémité est à <= tolerance_raccordement du nœud ; sinon on
         retombe sur le snap spatial, à défaut l'extrémité est orpheline.
         """
-        from src.domain.topologie import PROV_ALIAS, PROV_ID, PROV_SNAP
+        from src.domain.topologie import PROV_ALIAS, PROV_ALIAS_AUTO, PROV_ID, PROV_SNAP
         pt = (point.x, point.y) if point is not None else None
         res = self._resolveur.resoudre(brut, pt)
         noeud = res.noeud
@@ -68,7 +78,7 @@ class ConstructeurGrapheReseau:
             # Conserver l'identifiant normalisé pour le diagnostic 'noeud_orphelin'
             return _identifiant_reseau(brut)
 
-        if res.provenance in (PROV_ID, PROV_ALIAS) and noeud in G and point is not None:
+        if res.provenance in (PROV_ID, PROV_ALIAS, PROV_ALIAS_AUTO) and noeud in G and point is not None:
             d = point.distance(Point(G.nodes[noeud].get('x', 0.0), G.nodes[noeud].get('y', 0.0)))
             if d > self.tolerance_raccordement:
                 hit = self._resolveur.snap(pt)
@@ -81,6 +91,14 @@ class ConstructeurGrapheReseau:
                     })
                     return hit[0]
                 return None
+            if res.provenance == PROV_ALIAS_AUTO:
+                self.anomalies_topologiques.append({
+                    'troncon_id': troncon_id,
+                    'type': 'alias_auto',
+                    'detail': f"Extrémité {cote} : identifiant '{_identifiant_reseau(brut)}' "
+                              f"rattaché au nœud '{noeud}' par correspondance de noyau "
+                              f"découverte automatiquement ({res.distance_m:.2f} m)."
+                })
             return noeud
 
         if res.provenance == PROV_SNAP:
@@ -106,7 +124,8 @@ class ConstructeurGrapheReseau:
     def construire_graphe(
         self,
         gdf_noeuds: gpd.GeoDataFrame,
-        gdf_troncons: gpd.GeoDataFrame
+        gdf_troncons: gpd.GeoDataFrame,
+        conventions: Dict[str, Any] = None,
     ) -> nx.DiGraph:
         G = nx.DiGraph()
         self.anomalies_topologiques.clear()
@@ -165,7 +184,7 @@ class ConstructeurGrapheReseau:
                 zone_collecte=row.get('zone_collecte', row.get('ZONECOLLE', row.get('ZONE_COLLE'))),
             )
 
-        self._construire_resolveur(G)
+        self._construire_resolveur(G, conventions=conventions)
 
         for _, row in gdf_troncons.iterrows():
             troncon_id = str(row.get('id', row.get('id_troncon', row.name)))
@@ -287,6 +306,8 @@ class ConstructeurGrapheReseau:
             pass
 
         G.graph['anomalies_topologiques'] = self.anomalies_topologiques
+        if conventions:
+            G.graph['conventions_decouvertes'] = conventions
         return G
 
 def construire_graphe(chemin_gpkg: str = None) -> nx.DiGraph:
@@ -372,9 +393,18 @@ def construire_graphe(chemin_gpkg: str = None) -> nx.DiGraph:
     if noeuds_gdf.empty and not regards_gdf.empty:
         noeuds_gdf = regards_gdf
     
-    # 3. Construire le graphe
+    # 3. Construire le graphe — conventions auto-découvertes du GPKG
+    #    (alias par noyau + tolérance snap), partagées avec le .inp et l'audit.
+    conventions = None
+    try:
+        from src.domain.topologie.decouverte_conventions import obtenir_conventions
+        conventions = obtenir_conventions(chemin_gpkg)
+    except Exception:
+        conventions = None
+
     constructeur = ConstructeurGrapheReseau()
-    G = constructeur.construire_graphe(noeuds_gdf, canalisations_gdf)
+    G = constructeur.construire_graphe(noeuds_gdf, canalisations_gdf,
+                                       conventions=conventions)
     
     # Store CRS for later reprojection to EPSG:4326
     if not regards_gdf.empty and regards_gdf.crs:

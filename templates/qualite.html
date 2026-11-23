@@ -610,11 +610,16 @@ Objet : Tableau de bord interactif d'audit et de correction de qualité topologi
             const conn = stats.connectivite;
             if (conn && conn.extremites_total) {
                 const r = conn.resolues || {};
+                const conv = conn.conventions || {};
+                const convTxt = conv.alias_noyau_actif
+                    ? ` · alias auto (${conv.alias_noyau_occurrences} occ.) · snap ${conv.snap_tolerance_m} m`
+                    : (conv.snap_tolerance_m && conv.snap_tolerance_m > 0.5
+                        ? ` · snap ${conv.snap_tolerance_m} m` : '');
                 statsGrid.innerHTML += `
                     <div class="stat-card">
                         <div class="stat-title">Connectivité extrémités</div>
                         <div class="stat-value">${conn.taux_resolution_pct ?? 0}%</div>
-                        <div class="stat-subtitle">${conn.extremites_total} extrémités · ${r.par_identifiant || 0} ID · ${r.par_alias || 0} alias · ${r.par_snap || 0} snap · ${conn.non_resolues_spatiales || 0} spatiales · ${conn.non_resolues_absentes || 0} absentes</div>
+                        <div class="stat-subtitle">${conn.extremites_total} extrémités · ${r.par_identifiant || 0} ID · ${r.par_alias || 0} alias · ${r.par_alias_auto || 0} auto · ${r.par_snap || 0} snap · ${conn.non_resolues_spatiales || 0} spatiales · ${conn.non_resolues_absentes || 0} absentes${convTxt}</div>
                     </div>
                 `;
             }

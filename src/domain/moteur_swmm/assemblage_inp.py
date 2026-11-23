@@ -206,6 +206,15 @@ def assembler_modele_inp_impl(
             regards, canalisations, emprise_bassin=emprise_bassin)
     swmm_sec = gh_local.formater_sections_swmm(sb_gdf, rain_gage_name="RG1")
 
+    # Conventions auto-découvertes du GPKG (alias par noyau + snap ajusté),
+    # partagées avec le graphe de bassins et l'audit qualité.
+    conventions_inp = None
+    try:
+        from src.domain.topologie.decouverte_conventions import obtenir_conventions
+        conventions_inp = obtenir_conventions(gpkg_path)
+    except Exception:
+        conventions_inp = None
+
     # Génération des sections
     lines, meta = generer_lignes_sections_inp(
         regards=regards,
@@ -238,6 +247,7 @@ def assembler_modele_inp_impl(
         stations_relevage=stations_relevage,
         ouvrages_speciaux=ouvrages_speciaux,
         gpkg_counts=gpkg_counts,
+        conventions=conventions_inp,
     )
 
     contenu_inp = "\n".join(lines)

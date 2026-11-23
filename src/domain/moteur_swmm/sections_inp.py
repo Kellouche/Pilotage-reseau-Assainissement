@@ -90,6 +90,7 @@ def generer_lignes_sections_inp(
     stations_relevage: Optional[gpd.GeoDataFrame] = None,
     ouvrages_speciaux: Optional[gpd.GeoDataFrame] = None,
     gpkg_counts: Optional[Dict[str, Any]] = None,
+    conventions: Optional[Dict[str, Any]] = None,
 ) -> Tuple[List[str], Dict[str, Any]]:
     """
     Génère la liste de lignes de toutes les sections .inp et le dictionnaire meta.
@@ -251,8 +252,16 @@ def generer_lignes_sections_inp(
 
     # Résolveur topologique canonique (ID -> alias -> snap <=0.50 m).
     # Source unique de connectivité partagée avec le graphe de bassins.
-    from src.domain.topologie import ResoluteurNoeuds, PROV_ALIAS, PROV_SNAP
-    resolveur = ResoluteurNoeuds(coord_noeuds, tolerance_snap_m=0.50)
+    from src.domain.topologie import (
+        ResoluteurNoeuds, PROV_ALIAS, PROV_ALIAS_AUTO, PROV_SNAP)
+    _conv = conventions or {}
+    _alias_noyau = _conv.get('alias_noyau') or {}
+    resolveur = ResoluteurNoeuds(
+        coord_noeuds,
+        tolerance_snap_m=float(_conv.get('snap_tolerance_m') or 0.50),
+        correspondance_noyau=bool(_alias_noyau.get('actif')),
+        alias_auto_max_dist_m=float(_alias_noyau.get('max_dist_m') or 2.5),
+    )
 
     # Index spatial KD-Tree pour le raccordement ciblé des orphelins résiduels (Chantier 3)
     tree_noeuds = None
@@ -306,6 +315,11 @@ def generer_lignes_sections_inp(
                 raccordements_spatiaux.append({
                     "cid": cid, "extremite": ext, "noeud": res.noeud,
                     "distance_m": 0.0, "provenance": "alias"})
+            elif res.provenance == PROV_ALIAS_AUTO and res.noeud:
+                raccordements_spatiaux.append({
+                    "cid": cid, "extremite": ext, "noeud": res.noeud,
+                    "distance_m": round(res.distance_m, 3),
+                    "provenance": "alias_auto"})
 
         # Filet de sécurité : nœud spatial à la coordonnée réelle
         # (uniquement si ni ID/alias ni snap n'ont résolu l'extrémité).
@@ -959,6 +973,7 @@ def generer_lignes_sections_inp(
         "bbox": bbox_wgs84,
         "simulated_nodes": list(clean_target_nodes),
         "conduit_endpoints": conduit_endpoints,
+        "conventions_decouvertes": _conv or None,
         "typologie_sol": typologie_sol or "habitat_mixte",
         "typologie_nom": typ_nom,
         "imperv_pct": active_imperv,
