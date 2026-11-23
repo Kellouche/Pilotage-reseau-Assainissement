@@ -32,6 +32,7 @@ class ConstructeurGrapheReseau:
         self.tolerance_raccordement = tolerance_raccordement
         self.anomalies_topologiques: List[Dict[str, Any]] = []
         self._resolveur = None
+        self._conduits_non_graphes: List[Dict[str, Any]] = []
 
     def _construire_resolveur(self, G: nx.DiGraph, conventions: Dict[str, Any] = None):
         """
@@ -129,6 +130,7 @@ class ConstructeurGrapheReseau:
     ) -> nx.DiGraph:
         G = nx.DiGraph()
         self.anomalies_topologiques.clear()
+        self._conduits_non_graphes.clear()
 
         for _, row in gdf_noeuds.iterrows():
             raw_id = row.get(
@@ -231,6 +233,36 @@ class ConstructeurGrapheReseau:
                     'type': 'noeud_orphelin',
                     'detail': f"Nœud amont '{u_init}' ou aval '{v_init}' introuvable."
                 })
+                # Conduite exclue du graphe : consignée pour le listing des
+                # tronçons orphelins (audit /carte). Les extrémités qui ont
+                # tout de même été résolues (ID/alias/snap) sont conservées
+                # pour le diagnostic ; sinon la valeur brute est gardée.
+                manquantes = []
+                if not u_init or u_init not in G:
+                    manquantes.append('amont')
+                if not v_init or v_init not in G:
+                    manquantes.append('aval')
+                cx = cy = None
+                try:
+                    if geom is not None and not geom.is_empty:
+                        c = geom.centroid
+                        cx, cy = float(c.x), float(c.y)
+                except Exception:
+                    pass
+                self._conduits_non_graphes.append({
+                    'cle': troncon_id,
+                    'index_ligne': row.name,
+                    'amont_brut': _identifiant_reseau(u_brut),
+                    'aval_brut': _identifiant_reseau(v_brut),
+                    'amont_resolu': u_init if (u_init and u_init in G) else None,
+                    'aval_resolu': v_init if (v_init and v_init in G) else None,
+                    'extremites_manquantes': manquantes,
+                    'longueur_m': float(longueur) if longueur else None,
+                    'diametre_mm': float(diametre) if diametre else None,
+                    'type_conduite': type_conduite,
+                    'x': cx,
+                    'y': cy,
+                })
                 continue
 
             # Tentative de récupération des radiers des nœuds
@@ -306,6 +338,7 @@ class ConstructeurGrapheReseau:
             pass
 
         G.graph['anomalies_topologiques'] = self.anomalies_topologiques
+        G.graph['conduits_non_graphes'] = list(self._conduits_non_graphes)
         if conventions:
             G.graph['conventions_decouvertes'] = conventions
         return G

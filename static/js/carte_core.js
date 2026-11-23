@@ -35,7 +35,8 @@ const tabMappings = {
     'connexions': ['conduites_sans_regards', 'incoherences_amont_aval'],
     'geometrie': ['pentes_suspectes', 'geometries_invalides', 'capacite_debit', 'sauts_pente'],
     'donnees': ['champs_manquants'],
-    'topologie': ['troncons_orphelins', 'incoherence_profondeur_topologie', 'chevauchement_geometrique', 'doublon_regards']
+    'topologie': ['troncons_orphelins', 'incoherence_profondeur_topologie', 'chevauchement_geometrique', 'doublon_regards'],
+    'orphelins': ['orphelins_regards', 'orphelins_troncons']
 };
 
 // Initialisation
@@ -437,13 +438,24 @@ function lancerDiagnostic(targetTab) {
         if (statusMsg) statusMsg.textContent = msg;
     }, 100);
 
+    // Inventaire des éléments orphelins (regards isolés + tronçons hors
+    // graphe/sans exutoire) — fetché en parallèle du diagnostic qualité.
+    const _promesseOrphelins = fetch(`${API_BASE_URL}/api/v1/network/orphelins`, { signal: abortController.signal })
+        .then(r => (r && r.ok) ? r.json() : null)
+        .catch(() => null);
+
     // Lancer la requête API réelle
     fetch(`${API_BASE_URL}/api/v1/qualite/analyse`, { signal: abortController.signal })
         .then(async (response) => {
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             return response.json();
         })
-        .then((anomData) => {
+        .then(async (anomData) => {
+            const _orphelins = await _promesseOrphelins;
+            if (_orphelins && typeof fusionnerOrphelins === 'function') {
+                try { fusionnerOrphelins(anomData, _orphelins); }
+                catch (e) { console.warn('Fusion orphelins impossible:', e); }
+            }
             console.log("Diagnostic calculé avec succès", anomData);
 
             // Stopper le chrono
@@ -477,6 +489,11 @@ function lancerDiagnostic(targetTab) {
                     if (typeof populateAnomaliesLists === 'function') await populateAnomaliesLists(anomData.anomalies || anomData);
                 } catch (e) {
                     console.warn('populateAnomaliesLists fallback failed', e);
+                }
+                try {
+                    if (typeof rendreListeOrphelins === 'function') rendreListeOrphelins();
+                } catch (e) {
+                    console.warn('rendreListeOrphelins failed', e);
                 }
             });
 

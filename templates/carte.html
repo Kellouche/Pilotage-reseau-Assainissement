@@ -17,7 +17,7 @@ Objet : Composant cartographique Leaflet autonome pour visualisation de réseau
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="/static/css/carte_style.css">
+    <link rel="stylesheet" href="/static/css/carte_style.css?v=2">
 </head>
 
 <body>
@@ -51,6 +51,7 @@ Objet : Composant cartographique Leaflet autonome pour visualisation de réseau
                                 <button class="tab-btn pending" onclick="switchTab('geometrie')" id="tab-geometrie">Géométrie</button>
                                 <button class="tab-btn pending" onclick="switchTab('donnees')" id="tab-donnees">Données</button>
                                 <button class="tab-btn pending" onclick="switchTab('topologie')" id="tab-topologie">Topologie</button>
+                                <button class="tab-btn pending" onclick="switchTab('orphelins')" id="tab-orphelins">Orphelins</button>
                             </div>
 
                             <div id="tab-content">
@@ -122,6 +123,21 @@ Objet : Composant cartographique Leaflet autonome pour visualisation de réseau
                                                 <option value="">-- Sélectionner --</option>
                                             </select>
                                         </div>
+                                    </div>
+                                </div>
+
+                                <div id="content-orphelins" class="tab-content">
+                                    <div class="diagnostic-panel">
+                                        <h4>Éléments orphelins</h4>
+                                        <div id="stats-orphelins">Veuillez cocher les cases pour lancer l'analyse.</div>
+                                        <div class="filter-group">
+                                            <label><input type="checkbox" class="filter-checkbox" id="type-orphelins_regards" checked> <strong>Regards &amp; nœuds isolés</strong> <span id="count-orphelins_regards"></span></label>
+                                            <label><input type="checkbox" class="filter-checkbox" id="type-orphelins_troncons" checked> <strong>Tronçons orphelins</strong> <span id="count-orphelins_troncons"></span></label>
+                                        </div>
+                                        <div id="orphelins-search-container" style="display:none; margin: 8px 0;">
+                                            <input type="text" id="orphelins-search" placeholder="Filtrer par n°, nom, voie…" class="correction-input" style="width:100%;" oninput="filtrerListeOrphelins()">
+                                        </div>
+                                        <div id="orphelins-list" class="orphelins-list" style="display:none;"></div>
                                     </div>
                                 </div>
                             </div>
@@ -211,8 +227,8 @@ Objet : Composant cartographique Leaflet autonome pour visualisation de réseau
         </div>
     </div>
 
-    <script src="/static/js/carte_core.js?v=6"></script>
-    <script src="/static/js/carte_anomalies.js?v=6"></script>
+    <script src="/static/js/carte_core.js?v=7"></script>
+    <script src="/static/js/carte_anomalies.js?v=7"></script>
     <script src="/static/js/carte_ui.js?v=6"></script>
 </body>
 

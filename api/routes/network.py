@@ -961,6 +961,196 @@ def get_network_orphelins_geojson(
     return {"type": "FeatureCollection", "features": [], "message": "Aucun orphelin trouvé"}
 
 
+@router.get("/orphelins")
+def get_network_orphelins(
+    ctx: TenantContext = Depends(require_role("viewer")),
+    db: Session = Depends(get_db)
+):
+    """
+    Inventaire des éléments orphelins du réseau actif, pour le listing
+    cliquable de la carte opérationnelle (/carte) :
+
+    - noeuds_orphelins : nœuds déclarés (regards, rejets, ouvrages…) sans
+      aucune conduite connectée (degré 0 dans le graphe) ;
+    - troncons_orphelins : conduites exclues du graphe (extrémité non
+      résolue par la chaîne canonique) et conduites des composantes
+      connexes sans exutoire (sous-réseaux qui ne drainent nulle part).
+
+    Coordonnées retournées en WGS84 (EPSG:4326) pour affichage cartographique.
+    """
+    import math
+    import networkx as nx
+    import pyproj
+    from api.routes.clusters import _get_graph
+    from api.services.simulation_service import resoudre_gpkg_effectif_pour_projet
+    from src.domain.detecteur_clusters import trouver_exutoires_physiques
+
+    project = db.query(Project).filter(
+        Project.org_id == ctx.org_id,
+        Project.is_archived.is_(False)
+    ).first()
+    gpkg_path = resoudre_gpkg_effectif_pour_projet(db, project) if project else None
+
+    if not gpkg_path or not gpkg_path.exists():
+        raise HTTPException(status_code=404, detail="Ressource introuvable")
+
+    G = _get_graph(str(gpkg_path))
+    if G is None or len(G.nodes) == 0:
+        return {"noeuds_orphelins": [], "troncons_orphelins": [],
+                "stats": {"noeuds_total": 0, "aretes_total": 0}}
+
+    # --- Projection graphe (métrique) -> WGS84 ---
+    crs_src = G.graph.get('crs') or "EPSG:32631"
+    try:
+        transformer = pyproj.Transformer.from_crs(crs_src, "EPSG:4326", always_xy=True)
+    except Exception:
+        transformer = None
+
+    def _vers_wgs(x, y):
+        if x is None or y is None or transformer is None:
+            return None, None
+        try:
+            lon, lat = transformer.transform(float(x), float(y))
+            if not (math.isfinite(lon) and math.isfinite(lat)):
+                return None, None
+            return round(lat, 6), round(lon, 6)
+        except Exception:
+            return None, None
+
+    def _txt(v):
+        """Chaîne sûre JSON : None pour NaN/None/vide."""
+        if v is None:
+            return None
+        try:
+            if isinstance(v, float) and not math.isfinite(v):
+                return None
+            s = str(v).strip()
+        except Exception:
+            return None
+        if not s or s.lower() in ('nan', 'none', 'null'):
+            return None
+        return s
+
+    def _num(v):
+        try:
+            f = float(v)
+            return f if math.isfinite(f) else None
+        except (TypeError, ValueError):
+            return None
+
+    # --- 1. Nœuds orphelins : déclarés mais aucun tronçon ne s'y rattache ---
+    noeuds_orphelins = []
+    nb_sans_geometrie = 0
+    for noeud, data in G.nodes(data=True):
+        if G.degree(noeud) != 0:
+            continue
+        x, y = data.get('x'), data.get('y')
+        lat, lon = _vers_wgs(x, y)
+        if lat is None:
+            nb_sans_geometrie += 1
+            continue
+        noeuds_orphelins.append({
+            "id": str(noeud),
+            "type_noeud": _txt(data.get('type')) or 'noeud',
+            "nom": _txt(data.get('nom')),
+            "nom_voie": _txt(data.get('nom_voie')),
+            "commune": _txt(data.get('commune')),
+            "type_ouvrage": _txt(data.get('type_ouvrage')),
+            "lat": lat,
+            "lng": lon,
+        })
+    noeuds_orphelins.sort(key=lambda n: (n["type_noeud"], n["id"]))
+
+    # --- 2. Tronçons orphelins ---
+    troncons_orphelins = []
+
+    # 2a. Conduites exclues du graphe (extrémités non résolues)
+    for c in G.graph.get('conduits_non_graphes', []) or []:
+        lat, lon = _vers_wgs(c.get('x'), c.get('y'))
+        manquantes = c.get('extremites_manquantes') or []
+        detail = "Extrémité(s) non résolue(s) : " + ", ".join(manquantes) if manquantes else "Extrémités non résolues"
+        cid = str(c.get('cle') or '')
+        if cid.lower() in ('', 'none', 'nan'):
+            cid = f"ligne_{c.get('index_ligne')}"
+        troncons_orphelins.append({
+            "id": cid,
+            "amont": _txt(c.get('amont_brut')) or _txt(c.get('amont_resolu')),
+            "aval": _txt(c.get('aval_brut')) or _txt(c.get('aval_resolu')),
+            "type_conduite": _txt(c.get('type_conduite')),
+            "longueur_m": _num(c.get('longueur_m')),
+            "diametre_mm": _num(c.get('diametre_mm')),
+            "motif": "hors_graphe",
+            "detail": detail,
+            "lat": lat,
+            "lng": lon,
+        })
+
+    # 2b. Arêtes des composantes connexes sans exutoire (exutoires implicites
+    #     inclus : un fragment qui se termine sur un nœud mort est un bassin
+    #     valide à vérifier, pas un orphelin).
+    try:
+        exutoires_map = trouver_exutoires_physiques(G, inclure_exutoires_implicites=True)
+        ids_exutoire = set(exutoires_map.keys())
+        composantes_orphelines = set()
+        for comp in nx.weakly_connected_components(G):
+            if not any(n in ids_exutoire for n in comp):
+                composantes_orphelines.update(comp)
+        nb_composantes = len([c for c in nx.weakly_connected_components(G)
+                              if not any(n in ids_exutoire for n in c)])
+    except Exception:
+        composantes_orphelines = set()
+        nb_composantes = 0
+
+    nb_aretes_orphelines = 0
+    for u, v, d in G.edges(data=True):
+        if u not in composantes_orphelines or v not in composantes_orphelines:
+            continue
+        nb_aretes_orphelines += 1
+        geom = d.get('geometry')
+        cx = cy = None
+        try:
+            if geom is not None and not geom.is_empty:
+                c = geom.centroid
+                cx, cy = float(c.x), float(c.y)
+        except Exception:
+            pass
+        lat, lon = _vers_wgs(cx, cy)
+        if lat is None:
+            continue
+        eid = d.get('id') or d.get('key')
+        eid = str(eid) if eid is not None else ''
+        if eid.lower() in ('', 'none', 'nan'):
+            eid = f"{u}->{v}"
+        troncons_orphelins.append({
+            "id": eid,
+            "amont": str(u),
+            "aval": str(v),
+            "type_conduite": _txt(d.get('type')),
+            "longueur_m": _num(d.get('length')),
+            "diametre_mm": _num(d.get('diametre_mm')),
+            "motif": "composante_sans_exutoire",
+            "detail": "Sous-réseau isolé : aucune issue vers un exutoire",
+            "lat": lat,
+            "lng": lon,
+        })
+
+    troncons_orphelins.sort(key=lambda t: (t["motif"], str(t["id"])))
+
+    return {
+        "noeuds_orphelins": noeuds_orphelins,
+        "troncons_orphelins": troncons_orphelins,
+        "stats": {
+            "noeuds_total": int(G.number_of_nodes()),
+            "aretes_total": int(G.number_of_edges()),
+            "noeuds_orphelins": len(noeuds_orphelins),
+            "noeuds_orphelins_sans_geometrie": nb_sans_geometrie,
+            "troncons_orphelins": len(troncons_orphelins),
+            "aretes_orphelines_composante": nb_aretes_orphelines,
+            "composantes_sans_exutoire": nb_composantes,
+        },
+    }
+
+
 @router.get("/export/inp")
 def export_network_inp(
     ctx: TenantContext = Depends(require_role("viewer")),

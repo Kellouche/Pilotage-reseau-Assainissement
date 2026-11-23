@@ -22,7 +22,7 @@ import pandas as pd
 import numpy as np
 
 from src.domain.topologie.resolution_noeuds import (
-    ResoluteurNoeuds, PROV_ID, PROV_ALIAS, PROV_SNAP, PROV_ABSENT,
+    ResoluteurNoeuds, PROV_ID, PROV_ALIAS, PROV_ALIAS_AUTO, PROV_SNAP, PROV_ABSENT,
 )
 
 
@@ -269,7 +269,7 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -
     # Statistiques de connectivité par provenance de résolution
     stats_conn = {
         "extremites_total": 0,
-        PROV_ID: 0, PROV_ALIAS: 0, PROV_SNAP: 0,
+        PROV_ID: 0, PROV_ALIAS: 0, PROV_ALIAS_AUTO: 0, PROV_SNAP: 0,
         "spatial": 0, "absent": 0,
     }
 
