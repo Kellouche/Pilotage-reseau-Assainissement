@@ -81,3 +81,27 @@ traçabilité dans `_archive_historique/` (non normatifs).
 2. **Les ADRs sont immuables** : une nouvelle décision d'architecture crée `adr/XXXX-*.md`, elle ne réécrit jamais un ADR existant.
 3. **Les archives ne font pas foi** : `_archive_historique/` est consultable pour l'historique, jamais comme référence contractuelle ou technique.
 4. **Chiffres mesurés uniquement** : interdit de recopier un pourcentage ou un volume d'ancien document sans le remesurer sur le GPKG courant.
+
+## Standard de documentation des formules et équations
+
+Toute formule ou équation citée dans les documents de référence doit être
+**autoportante** — un lecteur ne doit jamais avoir à deviner ce que
+représente un symbole. Pour chaque formule, exiger :
+
+1. **La formulation complète** en notation LaTeX (`$…$` inline, `$$…$$` display), jamais une version approximative ou tronquée.
+2. **La nomenclature des paramètres et coefficients** : tableau ou liste
+   explicite de chaque symbole avec son **unité** et sa **signification**
+   physique (ex. `$n$` = coefficient de rugosité de Manning, sans unité,
+   fonction du matériau ; `$I_{\\max}$` = intensité de pointe en mm/h).
+3. **Les références** : norme, guide ou publication d'origine — ONA,
+   ANRH, UHBC, manuel EPA SWMM 5.2 (ch. hydraulique), documentation
+   normativa algérienne, ou référence bibliographique citée.
+4. **Un exemple référencé** : application numérique type avec valeurs
+   réelles du projet (station, réseau, période de retour) permettant de
+   vérifier le calcul de bout en bout — pas d'exemple générique sorti de
+   contexte.
+5. **Le domaine de validité** : conditions d'application (régime
+   d'écoulement, hypothèses, limites connues) quand la formule en dépend.
+
+Ce standard s'applique en particulier au Doc 3 (ingénierie) mais vaut
+pour tout document citant une relation mathématique ou empirique.

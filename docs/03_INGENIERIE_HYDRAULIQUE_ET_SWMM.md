@@ -23,6 +23,21 @@ $$\frac{\partial Q}{\partial t} + \frac{\partial}{\partial x}\left(\frac{Q^2}{A_
 avec la pente de frottement de Manning-Strickler :
 $$S_f = \frac{n^2 |Q| Q}{A_c^2 R_h^{4/3}}$$
 
+**Nomenclature des paramètres :**
+
+| Symbole | Signification | Unité |
+|---|---|---|
+| $A_c$ | Section mouillée de l'écoulement | m² |
+| $Q$ | Débit instantané | m³/s |
+| $H$ | Cote piézométrique (charge) | m |
+| $S_f$ | Pente de frottement | m/m (sans unité) |
+| $n$ | Coefficient de rugosité de Manning | s/m$^{1/3}$ (fonction du matériau) |
+| $R_h$ | Rayon hydraulique ($A_c / P$) | m |
+
+> **Référence** : équations de Saint-Venant 1D résolues par le moteur
+> dynamique d'EPA SWMM 5.2 — *EPA SWMM 5.2 User's Manual*, chapitre
+> « Hydraulic Computation » (modèle onde dynamique, `DYNWAVE`).
+
 > ⚠️ **Invariance hydraulique** : ces équations ne sont jamais modifiées par le SaaS. La plateforme ajoute de la donnée et de la traçabilité autour du moteur — jamais d'approximation logicielle des lois physiques. Le Golden Master (`tests/test_golden_master.py`) verrouille la non-régression.
 
 ### 1.2 Critères de validité
@@ -34,6 +49,19 @@ $$S_f = \frac{n^2 |Q| Q}{A_c^2 R_h^{4/3}}$$
 
 - **Export** : section `[MAP]` injectée avec `DIMENSIONS` calculées sur l'emprise UTM + marge 8 % → ouverture directe dans EPA SWMM Desktop.
 - **Ingestion** : parsing modulaire (`src/domain/inp_parser.py`) des sections `[JUNCTIONS]`, `[OUTFALLS]`, `[STORAGE]`, `[CONDUITS]`, `[XSECTIONS]`, `[SUBCATCHMENTS]`, `[COORDINATES]`, `[VERTICES]`, `[POLYGONES]` ; détection automatique du CRS ; conversion en GeoPackage standard.
+
+### 1.4 Formats d'entrée : `.inp` natif, GPKG/SHP/ZIP acceptés avec réserves
+
+> ⚠️ **Règle de référence** : le **modèle de calcul de référence est le fichier `.inp` EPA SWMM 5.2** — c'est le format dans lequel toutes les sections hydrauliques (pompes, weirs, sections, contrôles) sont exprimées sans perte et c'est le format d'export officiel du moteur.
+
+La plateforme accepte aussi l'ingestion de données SIG hétérogènes — **GeoPackage (`.gpkg`)**, **Shapefile (`.shp` + `.shx`/`.dbf`/`.prj`/`.cpg` ou `.zip`)**, GeoJSON et couches auxiliaires — mais **la conversion vers le modèle `.inp` peut avoir des conséquences sur la transformation des données** :
+
+- **Perte potentielle d'attributs** : champs non reconnus par le schéma cible (matériau absent, cotes manquantes, sections non standard) sont soit ignorés, soit remplacés par des **hypothèses tracées** — jamais silencieuses (voir §6.5).
+- **Reconstruction topologique** : les extrémités non résolues par identifiant suivent la chaîne canonique §5 (alias → snap adaptatif → spatial → absent) ; chaque rattachement est audité mais **un rattachement spatial n'a pas la même valeur probante qu'une connectivité déclarée par ID**.
+- **Sections et ouvrages** : formes non circulaires, déversoirs, refoulements et stations ne sont restitués que si les attributs sources le permettent ; sinon l'écart est consigné dans le bilan de réconciliation §7.
+- **Conséquence pratique** : un `.inp` fourni par un bureau d'études et réimporté ne subit **aucune conversion de modèle** — il est parsé puis resimulé tel quel ; en revanche un GPKG/SHP importé passe par le générateur `.inp` de DrainPilot, et **le résultat peut différer** du modèle d'origine si les données SIG étaient incomplètes ou ambigües.
+
+> **Recommandation d'ingénierie** : pour une étude contractuelle, privilégier l'export `.inp` final pour la restitution et l'archivage ; utiliser le GPKG/SHP comme source d'inventaire et de géométrie, pas comme vérité hydraulique absolue.
 
 ---
 
