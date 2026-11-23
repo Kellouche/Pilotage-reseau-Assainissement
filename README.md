@@ -12,16 +12,14 @@
 
 ## 📚 Référentiel Documentaire Officiel
 
-- **[Guide Master SaaS](docs/01_README.md)** : Vue d'ensemble de la plateforme SaaS, installation et démarrage rapide.
-- **[Feuille de Route SaaS (Phases 0 à 7)](docs/13_ROADMAP_SAAS.md)** : Spécifications complètes de l'architecture industrielle, chiffrage et jalons mesurables.
-- **[Suivi des Phases Opérationnelles 4 à 7](docs/TODO_PHASES_4_7.md)** : Checklist détaillée des travaux et priorités immédiates.
-- **[Feuille de Route Pluriannuelle 2027–2029](docs/FEUILLE_DE_ROUTE_2027_2029.md)** : Visions stratégiques et extensions futures (DAO AutoCAD, Jumeau numérique).
-- **[Documentation des Endpoints API](docs/09_ENDPOINTS_DOCUMENTATION.md)** : Référentiel exhaustif des 19 routeurs et 137 endpoints FastAPI.
+- **[Guide de lecture `docs/`](docs/README.md)** : index des 4 documents de référence et parcours par profil (décideur, dev, hydraulicien, exploitant). Visible aussi dans le SaaS via le menu **Aide → Centre d'aide** (`/aide`).
+- **[01 — Produit, Cadrage & Tarification](docs/01_PRODUIT_CADRAGE_ET_TARIFICATION.md)** : vision DrainPilot 5.2, personas, garanties métier, grille tarifaire B2B/B2G, périmètre MVP, glossaire.
+- **[02 — Architecture Système & API](docs/02_ARCHITECTURE_SYSTEME_ET_API.md)** : FastAPI, multi-tenant `org_id` + stealth 404, synthèse des 8 ADRs, modèle de données, référentiel complet des endpoints REST/WebSocket, passerelle mobile.
+- **[03 — Ingénierie Hydraulique & SWMM 5.2](docs/03_INGENIERIE_HYDRAULIQUE_ET_SWMM.md)** : Saint-Venant 1D/DYNWAVE, Voronoï & Horton, référentiel pluviométrique Algérie (ANRH/ONA), découverte adaptative des conventions GPKG, chaîne canonique à 6 provenances, restitution `.inp` fidèle, réconciliation 1:1, diagnostic HGL.
+- **[04 — Exploitation, Opérations & Roadmap](docs/04_EXPLOITATION_OPERATIONS_ET_ROADMAP.md)** : commandes de démarrage, mode silencieux, CI/CD Zero-Prompt Git, protocole MCP Playwright, inventaire du dépôt, feuille de route 2026–2029.
+- **[Dossier des Décisions d'Architecture (ADR)](docs/adr/)** : ADR 0001 à 0008 (Auth Argon2id, Multi-tenancy, Celery, MinIO S3, Docker, etc.) — registre immuable.
 - **[Spécification Couches Satellites & Pochoir (SHP.md)](SHP.md)** : Architecture des données SIG externes, altimétrie IDW et extraction par pochoir.
-- **[Référentiel Pluviométrique & IDF Algérie](docs/REFERENTIEL_PLUVIOMETRIE_ALGERIE.md)** : Quantiles Gumbel et lois de Montana certifiées (ANRH/UHBC/ONA).
-- **[Fiche Produit & Cadrage Stratégique](docs/14_FICHE_PRODUIT_CADRAGE.md)** : Proposition de valeur, personas et parcours utilisateurs.
-- **[Grille Tarifaire & Plans B2B](docs/15_PLANS_TARIFAIRES.md)** : Modèle économique, quotas et monétisation.
-- **[Dossier des Décisions d'Architecture (ADR)](docs/adr/)** : ADR 0001 à 0008 (Auth Argon2id, Multi-tenancy, Celery, MinIO S3, Docker, etc.).
+- **Archive historique** : les 18 documents sources consolidés sont conservés dans [`docs/_archive_historique/`](docs/_archive_historique/) (ne pas modifier).
 
 ---
 

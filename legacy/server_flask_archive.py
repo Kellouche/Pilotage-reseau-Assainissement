@@ -11,7 +11,7 @@
 # aucun contrôle d'organisation (fuite multi-tenant démontrée, §2.1 Fuite 4).
 #
 # Point d'entrée officiel : api/main.py (FastAPI, port 5001)
-# Documentation : docs/09_ENDPOINTS_DOCUMENTATION.md
+# Documentation : docs/02_ARCHITECTURE_SYSTEME_ET_API.md
 # =============================================================================
 """
 ================================================================================

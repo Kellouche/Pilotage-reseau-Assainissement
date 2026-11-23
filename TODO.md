@@ -155,10 +155,13 @@ static/
   css/                             Feuilles de styles cartographiques et cockpit d'ingénierie
 templates/                         Templates HTML Jinja2 (cockpit d'exploitation, modals HD)
 docs/
-  13_ROADMAP_SAAS.md               Feuille de route SaaS industrielle complète (Phases 0 à 7)
-  TODO_PHASES_4_7.md               Suivi détaillé des phases 4 à 7
-  FEUILLE_DE_ROUTE_2027_2029.md    Orientations stratégiques pluriannuelles DrainPilot
-  16_METHODOLOGIE_SIMULATION_SWMM.md  Méthodologie scientifique et équations SWMM 5.2
+  README.md                          Guide de lecture — index des 4 documents de référence
+  01_PRODUIT_CADRAGE_ET_TARIFICATION.md   Produit, personas, garanties, tarifs B2B/B2G
+  02_ARCHITECTURE_SYSTEME_ET_API.md       Architecture FastAPI, ADRs, endpoints, mobile
+  03_INGENIERIE_HYDRAULIQUE_ET_SWMM.md    Moteur SWMM 5.2, topologie adaptative, restitution .inp
+  04_EXPLOITATION_OPERATIONS_ET_ROADMAP.md Exploitation, CI/CD, protocole MCP, roadmap 2026-2029
+  adr/                              8 Architecture Decision Records (conservés)
+  _archive_historique/              18 sources consolidées (historique, ne pas modifier)
 SHP.md                             Spécification d'architecture des couches satellites & pochoir
 tests/                             Suite complète de validation continue (Golden Master, DWF, cotes...)
 ```

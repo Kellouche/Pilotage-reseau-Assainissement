@@ -5,7 +5,7 @@ Module : Résolveur topologique canonique des nœuds (ID -> alias -> snap -> spa
 Objet  : Source UNIQUE de résolution des extrémités de tronçons pour tout le
          pipeline (graphe de bassins, génération .inp SWMM, profils en long).
          Chaque résolution est tracée avec sa provenance — jamais silencieuse.
-Référence : docs/CAHIER_DE_CHARGES_RESTITUTION_INP.md (chantier 3)
+Référence : docs/03_INGENIERIE_HYDRAULIQUE_ET_SWMM.md (§5 chaîne canonique 6 provenances)
 ================================================================================
 """
 

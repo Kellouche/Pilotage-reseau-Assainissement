@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Centre d'aide — DrainPilot 5.2</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --aide-bg: #f1f5f9;
+            --aide-panel: #ffffff;
+            --aide-texte: #1e293b;
+            --aide-muet: #64748b;
+            --aide-bordure: #e2e8f0;
+            --aide-accent: #0284c7;
+            --aide-accent-fonce: #0369a1;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', 'Plus Jakarta Sans', system-ui, sans-serif;
+            background: var(--aide-bg);
+            color: var(--aide-texte);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .aide-topbar {
+            background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%);
+            color: #f8fafc;
+            padding: 14px 24px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex: 0 0 auto;
+        }
+        .aide-topbar h1 { font-size: 1.15rem; margin: 0; font-weight: 700; }
+        .aide-topbar .sous-titre { font-size: 0.8rem; color: #94a3b8; }
+        .aide-topbar .retour {
+            margin-left: auto;
+            color: #cbd5e1;
+            text-decoration: none;
+            font-size: 0.82rem;
+            font-weight: 600;
+            padding: 6px 12px;
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+        }
+        .aide-topbar .retour:hover { background: rgba(255,255,255,0.08); color: #fff; }
+        .aide-corps {
+            flex: 1;
+            display: flex;
+            min-height: 0;
+        }
+        .aide-sidebar {
+            width: 300px;
+            flex: 0 0 auto;
+            background: var(--aide-panel);
+            border-right: 1px solid var(--aide-bordure);
+            overflow-y: auto;
+            padding: 12px 0;
+        }
+        .aide-groupe {
+            padding: 10px 18px 4px;
+            font-size: 0.68rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--aide-muet);
+        }
+        .aide-doc-item {
+            display: block;
+            padding: 8px 18px;
+            font-size: 0.83rem;
+            color: var(--aide-texte);
+            text-decoration: none;
+            border-left: 3px solid transparent;
+            cursor: pointer;
+            line-height: 1.35;
+        }
+        .aide-doc-item:hover { background: #f1f5f9; }
+        .aide-doc-item.actif {
+            background: #e0f2fe;
+            border-left-color: var(--aide-accent);
+            color: var(--aide-accent-fonce);
+            font-weight: 600;
+        }
+        .aide-contenu {
+            flex: 1;
+            overflow-y: auto;
+            padding: 28px 40px 60px;
+        }
+        .aide-doc {
+            max-width: 960px;
+            background: var(--aide-panel);
+            border: 1px solid var(--aide-bordure);
+            border-radius: 12px;
+            padding: 32px 44px;
+            box-shadow: 0 1px 3px rgba(15,23,42,0.06);
+        }
+        .aide-doc h1 { font-size: 1.6rem; border-bottom: 2px solid var(--aide-bordure); padding-bottom: 10px; }
+        .aide-doc h2 { font-size: 1.25rem; margin-top: 1.8em; border-bottom: 1px solid var(--aide-bordure); padding-bottom: 6px; }
+        .aide-doc h3 { font-size: 1.05rem; margin-top: 1.5em; }
+        .aide-doc p, .aide-doc li { font-size: 0.92rem; line-height: 1.65; }
+        .aide-doc table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 0.85rem; }
+        .aide-doc th, .aide-doc td { border: 1px solid var(--aide-bordure); padding: 7px 10px; text-align: left; vertical-align: top; }
+        .aide-doc th { background: #f8fafc; }
+        .aide-doc code {
+            background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 4px;
+            padding: 1px 5px; font-family: 'JetBrains Mono', Consolas, monospace; font-size: 0.85em;
+        }
+        .aide-doc pre {
+            background: #0f172a; color: #e2e8f0; border-radius: 8px;
+            padding: 14px 18px; overflow-x: auto; font-size: 0.82rem; line-height: 1.5;
+        }
+        .aide-doc pre code { background: transparent; border: none; color: inherit; padding: 0; }
+        .aide-doc blockquote {
+            border-left: 4px solid var(--aide-accent); background: #f0f9ff;
+            margin: 14px 0; padding: 10px 18px; color: #334155; border-radius: 0 8px 8px 0;
+        }
+        .aide-doc a { color: var(--aide-accent); }
+        .aide-loading, .aide-erreur {
+            padding: 60px 20px; text-align: center; color: var(--aide-muet); font-size: 0.95rem;
+        }
+        .aide-erreur { color: #b91c1c; }
+        @media (max-width: 860px) {
+            .aide-sidebar { width: 220px; }
+            .aide-contenu { padding: 16px; }
+            .aide-doc { padding: 20px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="aide-topbar">
+        <i class="fas fa-book-open" style="font-size:1.3rem;color:#38bdf8;"></i>
+        <div>
+            <h1>Centre d'aide — DrainPilot 5.2</h1>
+            <div class="sous-titre">Documentation de référence : produit, architecture, ingénierie hydraulique, exploitation</div>
+        </div>
+        <a class="retour" href="/"><i class="fas fa-arrow-left"></i> Retour au cockpit</a>
+    </div>
+
+    <div class="aide-corps">
+        <nav class="aide-sidebar" id="aide-sidebar">
+            <div class="aide-loading">Chargement de la documentation…</div>
+        </nav>
+        <main class="aide-contenu">
+            <div id="aide-contenu" class="aide-loading">Sélectionnez un document…</div>
+        </main>
+    </div>
+
+    <script>
+        const sidebar = document.getElementById('aide-sidebar');
+        const contenu = document.getElementById('aide-contenu');
+        let docActive = null;
+
+        function chargerDocument(id, titre, ancre) {
+            docActive = id;
+            sidebar.querySelectorAll('.aide-doc-item').forEach(el => {
+                el.classList.toggle('actif', el.dataset.docId === id);
+            });
+            try { history.replaceState(null, '', '#/' + encodeURIComponent(id)); } catch (e) { /* noop */ }
+            contenu.innerHTML = '<div class="aide-loading"><i class="fas fa-circle-notch fa-spin"></i> Chargement…</div>';
+            fetch('/aide/doc/' + id, { cache: 'no-store' })
+                .then(r => {
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    return r.text();
+                })
+                .then(html => {
+                    contenu.innerHTML = html;
+                    if (ancre) {
+                        const cible = contenu.querySelector('#' + CSS.escape(ancre));
+                        if (cible) cible.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                })
+                .catch(() => {
+                    contenu.innerHTML = '<div class="aide-erreur"><i class="fas fa-exclamation-triangle"></i> Document indisponible.</div>';
+                });
+        }
+
+        // Les liens internes *.md rendus dans le contenu naviguent via le
+        // routeur /aide/doc/ : on les intercepte pour rester dans le centre
+        // d'aide (sidebar conservée) au lieu de charger un fragment isolé.
+        contenu.addEventListener('click', ev => {
+            const a = ev.target.closest('a[href^="/aide/doc/"]');
+            if (!a) return;
+            ev.preventDefault();
+            const href = a.getAttribute('href').replace('/aide/doc/', '');
+            const [docId, ancre] = href.split('#');
+            chargerDocument(docId, '', ancre || null);
+        });
+
+        fetch('/aide/docs')
+            .then(r => r.json())
+            .then(data => {
+                const docs = (data && data.documents) || [];
+                if (!docs.length) {
+                    sidebar.innerHTML = '<div class="aide-erreur" style="padding:20px;">Aucun document disponible.</div>';
+                    return;
+                }
+                const groupes = {};
+                docs.forEach(d => { (groupes[d.groupe] = groupes[d.groupe] || []).push(d); });
+                sidebar.innerHTML = Object.entries(groupes).map(([groupe, items]) => `
+                    <div class="aide-groupe">${groupe}</div>
+                    ${items.map(d => `<a class="aide-doc-item" data-doc-id="${d.id}" data-titre="${(d.titre || '').replace(/"/g, '&quot;')}">${d.titre || d.id}</a>`).join('')}
+                `).join('');
+                sidebar.querySelectorAll('.aide-doc-item').forEach(el => {
+                    el.addEventListener('click', ev => {
+                        ev.preventDefault();
+                        chargerDocument(el.dataset.docId, el.dataset.titre);
+                    });
+                });
+                // Document par défaut : le guide de lecture, ou hash d'URL.
+                const hash = (location.hash || '').replace('#/', '');
+                const defaut = hash && docs.some(d => d.id === decodeURIComponent(hash)) ? decodeURIComponent(hash) : 'README.md';
+                const elDefaut = sidebar.querySelector(`[data-doc-id="${CSS.escape(defaut)}"]`);
+                chargerDocument(defaut, elDefaut ? elDefaut.dataset.titre : defaut);
+            })
+            .catch(() => {
+                sidebar.innerHTML = '<div class="aide-erreur" style="padding:20px;">Impossible de charger l\'index.</div>';
+            });
+    </script>
+</body>
+</html>

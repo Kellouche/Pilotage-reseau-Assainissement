@@ -5,7 +5,7 @@ Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
 Auteur : Dr Abdelhakim KELLOUCHE
 Date : 2026-11-22
 Objet : Module d'Audit des Exclusions et Réconciliation Inventaire 1:1 (SIG ↔ INP)
-Référence : docs/CAHIER_DE_CHARGES_RESTITUTION_INP.md
+Référence : docs/03_INGENIERIE_HYDRAULIQUE_ET_SWMM.md (§7 réconciliation 1:1)
 ================================================================================
 """
 

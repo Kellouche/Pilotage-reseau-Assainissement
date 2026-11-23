@@ -71,6 +71,10 @@ PUBLIC_ALLOWLIST = {
     ("GET", "/carte"),
     ("GET", "/tunnel"),
     ("GET", "/qualite"),
+    # Centre d'aide — pages HTML authentifiées par redirection interne
+    ("GET", "/aide"),
+    ("GET", "/aide/docs"),
+    ("GET", "/aide/doc/{doc_path:path}"),
     # Santé et métadonnées d'API
     ("GET", "/health"),
     ("GET", "/api/info"),

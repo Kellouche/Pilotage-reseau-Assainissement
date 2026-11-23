@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Tests unitaires pour la Restitution Hydraulique Exacte et Réconciliation SWMM 5.2.
-Vérifie les chantiers 1, 2, 3 du CAHIER_DE_CHARGES_RESTITUTION_INP.md.
+Vérifie les chantiers 1, 2, 3 du référentiel docs/03_INGENIERIE_HYDRAULIQUE_ET_SWMM.md.
 """
 import pytest
 import geopandas as gpd
