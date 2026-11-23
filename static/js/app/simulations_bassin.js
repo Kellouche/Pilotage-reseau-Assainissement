@@ -533,7 +533,25 @@
 
         const _set = (id, v) => {
             const el = document.getElementById(id);
-            if (el && v !== undefined && v !== null && v !== '') el.value = String(v);
+            if (!el || v === undefined || v === null || v === '') return;
+            // Selects : comparer numériquement — String(4.0) === "4" ne
+            // correspond pas à <option value="4.0"> et laisserait le champ vide.
+            if (el.tagName === 'SELECT') {
+                const cible = String(v);
+                let trouves = Array.from(el.options).filter(o => o.value === cible);
+                if (!trouves.length) {
+                    const nCible = parseFloat(String(v).replace(',', '.'));
+                    if (!isNaN(nCible)) {
+                        trouves = Array.from(el.options).filter(o => {
+                            const n = parseFloat(o.value);
+                            return !isNaN(n) && Math.abs(n - nCible) < 1e-6;
+                        });
+                    }
+                }
+                if (trouves.length) el.value = trouves[0].value;
+                return;
+            }
+            el.value = String(v);
         };
 
         _set('sim-select-scenario', p.scenario_key || sim.scenario_pluie);
