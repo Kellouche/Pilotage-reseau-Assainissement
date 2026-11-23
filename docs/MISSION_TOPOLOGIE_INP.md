@@ -46,7 +46,12 @@ Ces chiffres conditionnent le périmètre — ne pas les supposer différents :
 | Conduites `FONCTIONMT='Refoulement'` | **12** (PEHD 315–630 mm, IDs amont = codes `SR_*`) |
 | Stations de relevage | **5** (`SR_HH01`, `SR_HH02`, `SR_CL`, `SR_CH`, `SR_HC`) |
 | Références `SR` sans station correspondante | `SR_CL` (Carmella) — à qualifier |
-| Rejets | 79 — les codes `RJxx` des ID_AVAL (73) sont **absents** des tables de nœuds |
+| Rejets | 79 — les codes de rejet portés par les `ID_AVAL` sont **absents** des tables de nœuds |
+
+> **Mise à jour 23/11/2026** : ces codes ne sont plus orphelins — ils
+> suivent une convention de nommage propre au jeu (alias verbeux +
+> zéro-padding) résolue vers le code numérique des rejets (distance
+> mesurée 0,0 m). Voir §7.
 
 **Conséquence mesurée** : la connectivité par `ID_AMONT`/`ID_AVAL` est
 fiable à 99,15 %. La reconstruction topologique **spatiale complète est
@@ -134,9 +139,9 @@ Objectif : honnêteté immédiate — plus aucune perte silencieuse.
    pas des données fabricant. L'UI doit le dire.
 4. **`SR_CL` (Carmella)** : station sans refoulement ni station `.inp` —
    à qualifier avant de l'inventer dans le modèle.
-5. **Les 73 codes `RJxx`** : absents des tables de nœuds — probablement des
-   rejets d'un jeu plus ancien ; à exclure avec motif `id_inconnu`, pas à
-   deviner spatialement.
+5. **Codes de rejet des `ID_AVAL`** : ✅ **résolu** — convention de
+   nommage du jeu (alias + zéro-padding) résolue vers le code des rejets
+   (0,0 m mesuré). Voir §7 ; ne plus traiter comme `id_inconnu`.
 6. **Calibration d'abord** : la Phase A (honnêteté) doit être livrée **avant**
    la Phase B (complexité) — ne jamais accumuler les chantiers.
 
@@ -151,3 +156,80 @@ Objectif : honnêteté immédiate — plus aucune perte silencieuse.
 - Provenance enrichie (hypothèses, rattachements spatiaux, pompes)
 - Golden Dataset re-baseliné + note de justification
 - Documentation `docs/` mise à jour
+
+---
+
+## 7. Stratégie d'ouverture des fichiers GPKG — résolution canonique et découverte automatique (IMPLÉMENTÉ 23/11/2026)
+
+> Statut : **en production**. Le système n'exige **aucune connaissance** du
+> contenu du fichier de la part de l'utilisateur : il lit, analyse et
+> découvre seul les conventions de nommage et la tolérance de snap.
+
+### 7.1 Chaîne de résolution canonique des extrémités
+
+Source unique : `src/domain/topologie/resolution_noeuds.py`
+(`ResoluteurNoeuds`), consommée à l'identique par le graphe de bassins
+(`graphe_reseau.py`), le générateur `.inp` (`sections_inp.py`) et l'audit
+qualité (`analyse_qualite_gpkg.py`) :
+
+```
+ID texte → alias sémantique codé → alias automatique par noyau
+         → snap spatial ≤ tolérance → nœud spatial tracé → absent
+```
+
+Chaque résolution porte sa **provenance** (`id`, `alias`, `alias_auto`,
+`snap`, `spatial`, `absent`) — jamais silencieuse.
+
+### 7.2 Découverte automatique des conventions — adaptative, sans configuration
+
+Module : `src/domain/topologie/decouverte_conventions.py`
+(`obtenir_conventions(gpkg_path)`).
+
+La méthode est **générique** : elle ne présuppose aucune convention de
+nommage. Pour tout GeoPackage, qu'il s'agisse d'un export_SIG français,
+d'un shapefile converti ou d'un fichier propriétaire, le système :
+
+1. ** collecte les extrémités non résolues** par la chaîne de base
+   (ID strict + alias connus + snap par défaut) ;
+2. **analyse les motifs d'identifiants** de ces échecs — tout préfixe,
+   suffixe, séparateur ou convention de zéro-padding est candidat
+   (`PREFIX_123`, `SORTIE-123`, `123_BIS`, `A0123`…) ;
+3. **valide chaque motif candidat par preuve spatiale** : le noyau
+   extrait de l'identifiant doit correspondre à un nœud existant **ET**
+   l'extrémité doit se trouver à ≤ 2 m du nœud cible. Une convention
+   n'est retenue que si ≥ 3 occurrences la confirment toutes — une
+   coïncidence isolée ou une ambiguïté (plusieurs nœuds candidats) ne
+   produit jamais de lien ;
+4. **ajuste la tolérance de snap** sur la distribution réelle des
+   distances au nœud le plus proche : elle n'augmente (plafond 3 m) que
+   si un cluster statistique net existe (≥ 8 échantillons, P75 ≤ 2,5 m),
+   sinon 0,50 m est conservé ;
+5. **persiste le résultat** dans `<fichier>.conventions.json` à côté du
+   GPKG, verrouillé par taille + mtime — la découverte tourne une fois
+   par fichier et est partagée par tous les consommateurs.
+
+Le tout **sans aucune saisie utilisateur** : un utilisateur novice qui
+dépose un fichier inconnu obtient le même traitement qu'un expert —
+les conventions sont découvertes, appliquées et **tracées** (provenance
+`alias_auto` dans le graphe, `raccordements_spatiaux` dans le `.inp`,
+carte « Connectivité extrémités » de l'audit qualité).
+
+Mesure sur le GPKG Ville réel : 95 extrémités non résolues analysées →
+la convention de nommage des codes de rejet est redécouverte par le
+mécanisme (alias + zéro-padding, distance 0,0 m), aucune convention
+supplémentaire, snap 0,50 m conservé. Sur un fichier inconnu avec une
+convention différente, la règle s'activerait automatiquement — ou rien
+ne serait inventé et les extrémités resteraient flaggées.
+
+### 7.3 Verdict d'import et audit
+
+- `POST /api/v1/network/upload` renvoie `inventaire` (couches détectées,
+  nb regards/conduites/rejets) → dialogue de verdict après import.
+- `/api/v1/qualite/analyse` expose `statistiques_globales.connectivite` :
+  extrémités totales, résolues par provenance (ID/alias/alias_auto/snap),
+  spatiales à vérifier, absentes, taux de résolution, conventions
+  découvertes. Mesuré sur le GPKG Ville : **99,85 %** des 20 590
+  extrémités résolues, 31 spatiales (mineures), 0 absente.
+- Le badge orphelins de la carte (partition Voronoï) reflète le même
+  résolveur : plus que les vrais déconnectés (ex. 36 tronçons / 11 regards
+  sur le jeu réel).

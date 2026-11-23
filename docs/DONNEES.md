@@ -68,6 +68,12 @@ Les paramètres PostgreSQL sont configurables avec :
 
 ## Règles de qualité
 
+> **Stratégie d'ouverture** : à l'import d'un GeoPackage, le système
+> découvre automatiquement les conventions de nommage des identifiants
+> (alias par noyau validé spatialement) et la tolérance de snap pertinente
+> pour ce fichier — sans configuration utilisateur. Voir
+> `docs/MISSION_TOPOLOGIE_INP.md` §7.
+
 Avant d'utiliser une donnée dans une simulation ou une analyse métier, vérifier :
 
 - la présence des identifiants ;
