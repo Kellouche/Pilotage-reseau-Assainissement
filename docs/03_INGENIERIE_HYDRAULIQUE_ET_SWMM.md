@@ -4,7 +4,9 @@
 >
 > **Audience** : ingénieurs hydrauliciens, modélisateurs SWMM, hydrologues, chercheurs, bureaux d'études, auditeurs.
 > **Contenu** : cadre scientifique Saint-Venant 1D, démarche hydrologique (Voronoï, Horton), référentiel pluviométrique Algérie, découverte adaptative des conventions GPKG, chaîne canonique de résolution à 6 provenances, restitution physique fidèle du `.inp`, réconciliation 1:1, diagnostic et restitution.
-> **Règle d'or** : les chiffres cités sont **mesurés sur les données réelles** — toute évolution des algorithmes impose de les remesurer avant mise à jour.
+> **Règle d'or** : les chiffres cités sont **mesurés sur des données réelles de projets** — ils illustrent le comportement du moteur, mais **chaque projet client possède son propre réseau, son propre GeoPackage et ses propres résultats**. Les mesures proviennent d'un cas de référence (le réseau « Ville », utilisé comme jeu de démonstration de production) ; elles ne décrivent pas un « projet par défaut » de la plateforme. Toute évolution des algorithmes impose de les remesurer avant mise à jour.
+>
+> **Principe d'isolation** : aucune donnée, mesure ou synthèse d'un projet n'est générique — l'inventaire, la connectivité, les exutoires et les résultats de chaque tenant sont strictement propres à son `org_id`/`project_id` (voir Doc 2 §3).
 
 ---
 
@@ -42,7 +44,7 @@ $$S_f = \frac{n^2 |Q| Q}{A_c^2 R_h^{4/3}}$$
 
 ### 1.2 Critères de validité
 
-- **Bilan de continuité massique** : erreur < ±5 % exigée par l'US EPA ; mesurée à **−0,166 %** (routage) et **−4,182 %** (ruissellement) sur le réseau témoin.
+- **Bilan de continuité massique** : erreur < ±5 % exigée par l'US EPA ; mesurée à **−0,166 %** (routage) et **−4,182 %** (ruissellement) sur le réseau de référence (cas d'illustration — chaque projet produit son propre bilan).
 - **Invariant produit** : les bilans de masse restent strictement tracés dans chaque `.rpt` archivé.
 
 ### 1.3 Interopérabilité `.inp`
@@ -161,7 +163,15 @@ La découverte est **générique** : elle ne présuppose aucune convention. Pour
 4. **Ajuste la tolérance de snap** sur la distribution réelle des distances : elle n'augmente (plafond **3,0 m**) que sur cluster statistique net (≥ 8 échantillons, P75 ≤ 2,5 m) ; sinon **0,50 m** est conservé. Le snap n'est jamais arbitraire.
 5. **Persiste le résultat** dans `<fichier>.conventions.json` à côté du GPKG (verrou taille + mtime) — découverte une fois par fichier, partagée par graphe, `.inp` et audit qualité.
 
-### 4.2 Mesures réelles — GPKG Ville
+### 4.2 Mesures réelles — exemple sur le réseau « Ville »
+
+> **Attention — cas d'illustration** : les chiffres ci-dessous proviennent
+> d'**un projet réel précis** (le réseau « Ville », GeoPackage
+> `Assainissement_Ville.gpkg`, ~10 300 canalisations et ~10 500 regards).
+> Ils servent à montrer l'ordre de grandeur et le comportement du
+> résolveur sur un jeu de production exigeant — **ils ne sont pas des
+> valeurs par défaut de la plateforme**. Chaque projet importé produit
+> ses propres mesures via `/api/v1/qualite/analyse`.
 
 | Provenance | Extrémités | Part |
 |---|---|---|
@@ -172,7 +182,7 @@ La découverte est **générique** : elle ne présuppose aucune convention. Pour
 | `absent` | **0** | 0 % |
 | **Total** | **20 590** | **99,85 % résolues** |
 
-La convention de nommage des codes de rejet est redécouverte par le mécanisme (distance mesurée 0,0 m) ; aucune convention supplémentaire ; snap 0,50 m conservé.
+Sur ce même réseau de référence, la convention de nommage des codes de rejet est redécouverte par le mécanisme (distance mesurée 0,0 m) ; aucune convention supplémentaire ; snap 0,50 m conservé. Sur un autre projet, les conventions découvertes et la tolérance de snap sont **propres à son fichier** — conservées dans son propre `<fichier>.conventions.json`.
 
 ---
 
@@ -205,7 +215,7 @@ L'endpoint `GET /api/v1/network/orphelins` (Doc 2 §4.2) expose trois catégorie
 - **Conduites hors graphe** : exclues car une extrémité n'a pas été résolue — `G.graph['conduits_non_graphes']` conserve cle/index, extrémités brutes et résolues, motif (`amont`/`aval` manquant), longueur, diamètre, centroïde.
 - **Arêtes de composantes sans exutoire** : sous-réseaux connexes qui ne drainent vers aucun exutoire officiel.
 
-Mesure sur le projet courant : **242 nœuds isolés + 14 tronçons hors graphe** — chacun localisable en un clic depuis l'onglet Orphelins de `/carte`.
+À titre d'exemple, sur le réseau « Ville » : **242 nœuds isolés + 14 tronçons hors graphe** — chacun localisable en un clic depuis l'onglet Orphelins de `/carte`. Sur un autre projet, l'inventaire affiché est celui de **son** graphe, calculé à la demande.
 
 ### 5.3 Garde-fous topologiques
 
@@ -231,7 +241,7 @@ Mesure sur le projet courant : **242 nœuds isolés + 14 tronçons hors graphe**
 ### 6.2 Refoulements & stations de relevage
 
 - Conduites `FONCTIONMT='Refoulement'` → **1 pompe `[PUMPS]` par tête de chaîne** (`PUMP3`, courbe hauteur-débit), nœud intermédiaire `N_REF_*` en `[JUNCTIONS]`, tronçons aval en `[CONDUITS]` sous pression avec rugosité Manning.
-- **Règle de non-surpompage** : les segments aval d'une même chaîne restent des conduites — pas de pompe en série (corrigé : 5 pompes au lieu de 12 sur le jeu testé).
+- **Règle de non-surpompage** : les segments aval d'une même chaîne restent des conduites — pas de pompe en série (sur le réseau de référence : 5 pompes par tête de chaîne au lieu de 12 pompes naïves).
 - Régulation par niveaux de bâche (marche/arrêt 0,300 / 0,100 m) ; courbes issues des attributs fabricant quand renseignés, sinon **hypothèses tracées**.
 - Cotes des stations = `COORDZ` du GPKG (plus de 101,000 m artificiel) ; `VOLBACH`/`NBRBACHE` → `[STORAGE]` si données complètes, sinon `[JUNCTION]` documentée.
 

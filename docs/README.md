@@ -80,7 +80,7 @@ traçabilité dans `_archive_historique/` (non normatifs).
 1. **Un fait = un endroit** : ne jamais dupliquer un contenu entre les 4 documents ; renvoyer par lien interne (`01_PRODUIT_...md#section`).
 2. **Les ADRs sont immuables** : une nouvelle décision d'architecture crée `adr/XXXX-*.md`, elle ne réécrit jamais un ADR existant.
 3. **Les archives ne font pas foi** : `_archive_historique/` est consultable pour l'historique, jamais comme référence contractuelle ou technique.
-4. **Chiffres mesurés uniquement** : interdit de recopier un pourcentage ou un volume d'ancien document sans le remesurer sur le GPKG courant.
+4. **Chiffres mesurés uniquement** : interdit de recopier un pourcentage ou un volume d'ancien document sans le remesurer sur le jeu de données du projet concerné. Une mesure citée à titre d'exemple doit être explicitement présentée comme telle (projet, fichier, date de mesure) — jamais comme une valeur par défaut de la plateforme.
 
 ## Standard de documentation des formules et équations
 
