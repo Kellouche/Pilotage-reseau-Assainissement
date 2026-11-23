@@ -181,7 +181,7 @@ CRUD regards/conduites/rejets sur le GPKG actif ; données servies en WGS84.
 | `GET` | `/api/v1/network/datasets` | Projets de l'organisation (+ `active_project`) |
 | `POST` | `/api/v1/network/load-dataset/{id}` | Active un dataset comme projet courant |
 | `POST` | `/api/v1/network/load-demo` · `/load-master` · `/reset` | Contextes réseau |
-| `POST` | `/api/v1/network/upload` | Import GeoPackage / shapefile zippé / `.inp` |
+| `POST` | `/api/v1/network/upload` | Import GeoPackage / `.inp` — param `crs` (code EPSG) **exigé** si le fichier ne déclare pas de projection ou si la détection `.inp` est incertaine ; la réponse expose `crs` + `crs_source` (`fichier`/`utilisateur`/heuristique) |
 | `GET` | `/api/v1/network/subcatchments` | Sous-bassins Voronoï en GeoJSON |
 | `GET` | `/api/v1/network/orphelins/geojson` | Regards orphelins persistés (GeoJSON) |
 | **`GET`** | **`/api/v1/network/orphelins`** | **Inventaire orphelins : nœuds isolés (degré 0) + tronçons hors graphe/sans exutoire, coords WGS84 + stats — alimente l'onglet Orphelins de `/carte`** |
@@ -231,7 +231,7 @@ CRUD `/` + `/{id}`, `/revalider`, `/profils`, `/noeuds`, `/a-reconcilier`, `/his
 
 ### 4.8 Couches satellite & altimétrie — `/api/v1/projets/{pid}/aux-layers`
 
-CRUD + `/{id}/geojson`, `/{id}/elevation` (IDW), `/{id}/regards-terrain[/recalculer]`, `/{id}/apercu-inp`, `/{id}/suspects-ecoulement` (revue P1), `/{id}/raccordements-orphelins` (scoring P2).
+CRUD + `/{id}/geojson`, `/{id}/elevation` (IDW), `/{id}/regards-terrain[/recalculer]`, `/{id}/apercu-inp`, `/{id}/suspects-ecoulement` (revue P1), `/{id}/raccordements-orphelins` (scoring P2). L'upload (`POST /aux-layers`) accepte le param `crs` (code EPSG) **exigé** si le fichier ne déclare pas de projection — aucun repli silencieux.
 
 ### 4.9 Extraction pochoir — `/api/v1/projets/{pid}/extraction-pochoir`
 

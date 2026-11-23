@@ -201,6 +201,37 @@
             }
         };
 
+        async function televerserReseauAvecCrs(file, crsSaisi) {
+            const formData = new FormData();
+            formData.append('file', file);
+            if (crsSaisi) formData.append('crs', crsSaisi);
+            const token = localStorage.getItem('swmm_access_token');
+            const headers = {};
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+            const resp = await fetch('/api/v1/network/upload', {
+                method: 'POST',
+                headers,
+                credentials: 'include',
+                body: formData
+            });
+            const data = await resp.json().catch(() => ({}));
+            // Projection absente ou incertaine → on redemande une fois à
+            // l'utilisateur (jamais de repli silencieux sur une projection).
+            if (!resp.ok && resp.status === 400 && !crsSaisi &&
+                /crs|projection/i.test(data.detail || '')) {
+                const saisie = window.prompt(
+                    'Projection (CRS) non déclarée dans ce fichier.\n' +
+                    'Saisissez le code EPSG de la projection source\n' +
+                    '(ex. EPSG:32631 pour l\'UTM 31N Algérie) :',
+                    'EPSG:32631');
+                if (saisie && saisie.trim()) {
+                    return televerserReseauAvecCrs(file, saisie.trim());
+                }
+                throw new Error(data.detail || 'Projection requise.');
+            }
+            return { resp, data };
+        }
+
         window.televerserFichierReseau = async function(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -211,18 +242,7 @@
             }
             montrerChargement(true, `Chargement et analyse du réseau : ${file.name}…`, 15 * 60 * 1000);
             try {
-                const formData = new FormData();
-                formData.append('file', file);
-                const token = localStorage.getItem('swmm_access_token');
-                const headers = {};
-                if (token) headers['Authorization'] = `Bearer ${token}`;
-                const resp = await fetch('/api/v1/network/upload', {
-                    method: 'POST',
-                    headers,
-                    credentials: 'include',
-                    body: formData
-                });
-                const data = await resp.json();
+                const { resp, data } = await televerserReseauAvecCrs(file, null);
                 if (!resp.ok) throw new Error(data.detail || 'Erreur lors du téléversement');
                 sessionStorage.setItem('projet_charge', 'true');
                 montrerModalProjet(false);

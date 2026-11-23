@@ -117,11 +117,25 @@ def _lire_gdf(chemin: Path) -> gpd.GeoDataFrame:
     return gdf
 
 
-def _normaliser_4326(gdf: gpd.GeoDataFrame) -> Tuple[gpd.GeoDataFrame, Optional[str]]:
-    """Reprojette en EPSG:4326 et retourne (gdf, crs_source)."""
+def _normaliser_4326(gdf: gpd.GeoDataFrame, crs_forcee: Optional[str] = None) -> Tuple[gpd.GeoDataFrame, Optional[str]]:
+    """Reprojette en EPSG:4326 et retourne (gdf, crs_source).
+
+    Si le fichier ne déclare aucun CRS, `crs_forcee` (code EPSG saisi par
+    l'utilisateur) est exigé — jamais de repli silencieux sur une projection
+    supposée, sous peine de fausser toutes les mesures spatiales.
+    """
     crs_source = str(gdf.crs) if gdf.crs else None
     if gdf.crs is None:
-        raise ValueError("CRS indéterminé : impossible de garantir la cohérence spatiale.")
+        if not crs_forcee:
+            raise ValueError(
+                "CRS indéterminé : le fichier ne déclare aucune projection "
+                "(shapefile sans .prj, GeoJSON sans CRS…). Renvoyez avec le "
+                "paramètre `crs` renseigné (ex. crs=EPSG:32631) pour garantir "
+                "l'exactitude des mesures spatiales."
+            )
+        from pyproj import CRS
+        gdf = gdf.set_crs(CRS.from_user_input(crs_forcee))
+        crs_source = f"utilisateur:{crs_forcee}"
     if str(gdf.crs) != WGS84:
         gdf = gpd.GeoDataFrame(gdf, geometry=gdf.geometry.to_crs(WGS84), crs=WGS84)
     return gdf, crs_source
@@ -136,6 +150,7 @@ def importer_couche_aux(
     fichier_path: Path,
     fichier_nom: str,
     colonne_z: Optional[str] = None,
+    crs_forcee: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Importe un fichier SIG satellite pour un projet.
@@ -180,7 +195,7 @@ def importer_couche_aux(
             import shutil
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
-    gdf, crs_source = _normaliser_4326(gdf)
+    gdf, crs_source = _normaliser_4326(gdf, crs_forcee=crs_forcee)
 
     # Métadonnées
     minx, miny, maxx, maxy = gdf.total_bounds

@@ -21,6 +21,22 @@ import pyproj
 logger = logging.getLogger(__name__)
 
 
+def detecter_crs_coordonnees_avec_source(min_x: float, min_y: float, max_x: float, max_y: float):
+    """
+    Retourne (crs, source) où source ∈ {"wgs84", "utm", "lambert", "defaut"}.
+    "defaut" signifie qu'aucune signature n'a été reconnue et que le repli
+    EPSG:32631 a été appliqué — le CRS est alors INCERTAIN et doit être
+    confirmé par l'utilisateur.
+    """
+    if -180.0 <= min_x <= 180.0 and -90.0 <= min_y <= 90.0 and max_x <= 180.0 and max_y <= 90.0:
+        return "EPSG:4326", "wgs84"
+    if 100_000 <= min_x <= 900_000 and 3_000_000 <= min_y <= 4_500_000:
+        return "EPSG:32631", "utm"
+    if 100_000 <= min_x <= 1_200_000 and 100_000 <= min_y <= 600_000:
+        return "EPSG:30731", "lambert"
+    return "EPSG:32631", "defaut"
+
+
 def detecter_crs_coordonnees(min_x: float, min_y: float, max_x: float, max_y: float) -> str:
     """
     Détecte automatiquement le système de coordonnées de référence (CRS)
@@ -118,12 +134,16 @@ def convertir_inp_vers_gpkg(
                 continue
 
     # Détection automatique du CRS
+    crs_source = "absent"
     if force_crs:
         crs_code = force_crs
+        crs_source = "utilisateur"
     elif all_x and all_y:
-        crs_code = detecter_crs_coordonnees(min(all_x), min(all_y), max(all_x), max(all_y))
+        crs_code, crs_source = detecter_crs_coordonnees_avec_source(
+            min(all_x), min(all_y), max(all_x), max(all_y))
     else:
         crs_code = "EPSG:32631"
+        crs_source = "defaut"
 
     # 2. Sommets intermédiaires des conduites [VERTICES]
     vertices: Dict[str, List[Tuple[float, float]]] = {}
@@ -341,6 +361,7 @@ def convertir_inp_vers_gpkg(
         "inp_path": str(inp_path.resolve()),
         "gpkg_path": str(gpkg_output_path.resolve()),
         "crs": crs_code,
+        "crs_source": crs_source,
         "conduits_count": len(gdf_conduites),
         "junctions_count": len(gdf_regards),
         "outfalls_count": len(gdf_rejets),

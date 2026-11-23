@@ -9,7 +9,7 @@ Objet : Endpoints de gestion du réseau physique (nœuds, conduites, regards, ex
 """
 
 import logging
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Form, Response
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pathlib import Path
@@ -672,10 +672,17 @@ def reset_project_network(
 @router.post("/upload")
 async def upload_network_gpkg(
     file: UploadFile = File(...),
+    crs: Optional[str] = Form(None),
     tenant_ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db)
 ):
-    """Téléverse un fichier GeoPackage (.gpkg) ou EPA SWMM (.inp) pour le projet actif."""
+    """
+    Téléverse un fichier GeoPackage (.gpkg) ou EPA SWMM (.inp) pour le projet actif.
+
+    Règle CRS : si le fichier ne déclare pas de projection (ou si la détection
+    .inp est incertaine), le paramètre `crs` (code EPSG, ex. "EPSG:32631") est
+    **obligatoire** — sans lui, toutes les mesures spatiales seraient faussées.
+    """
     fname_lower = (file.filename or "").lower()
     if not (fname_lower.endswith(".gpkg") or fname_lower.endswith(".inp")):
         raise HTTPException(
@@ -692,13 +699,37 @@ async def upload_network_gpkg(
         f.write(content)
 
     conv_summary = None
+    crs_resultat = None
+    crs_source_resultat = None
     if fname_lower.endswith(".inp"):
         # Conversion transparente du fichier EPA SWMM .inp vers GeoPackage (.gpkg)
         from src.domain.inp_parser import convertir_inp_vers_gpkg
         gpkg_target_path = raw_target_path.with_suffix(".gpkg")
         try:
-            conv_summary = convertir_inp_vers_gpkg(raw_target_path, gpkg_target_path)
+            conv_summary = convertir_inp_vers_gpkg(
+                raw_target_path, gpkg_target_path, force_crs=crs)
+            crs_resultat = conv_summary.get("crs")
+            crs_source_resultat = conv_summary.get("crs_source")
+            # .inp ne porte jamais de CRS : si l'heursement d'emprise est
+            # tombé sur le repli par défaut ("defaut"/"absent") et que
+            # l'utilisateur n'a rien fourni, on EXIGE la projection.
+            if crs_source_resultat in ("defaut", "absent") and not crs:
+                try:
+                    gpkg_target_path.unlink(missing_ok=True)
+                except Exception:
+                    pass
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "Projection indéterminée pour ce fichier .inp : les coordonnées "
+                        "ne correspondent à aucune signature reconnue (WGS84, UTM, Lambert). "
+                        "Renvoyez le fichier avec le paramètre `crs` renseigné "
+                        "(ex. crs=EPSG:32631) pour garantir l'exactitude des mesures."
+                    ),
+                )
             target_path = gpkg_target_path
+        except HTTPException:
+            raise
         except Exception as e_conv:
             logger.exception("Échec de la conversion du fichier .inp : %s", e_conv)
             raise HTTPException(
@@ -707,6 +738,33 @@ async def upload_network_gpkg(
             )
     else:
         target_path = raw_target_path
+        # Règle CRS : un GeoPackage sans projection déclarée est refusé tant
+        # que l'utilisateur n'a pas renseigné `crs` — sinon toutes les mesures
+        # spatiales (longueurs, surfaces, profils) seraient faussées.
+        from api.services.gpkg_versions import detecter_crs_gpkg, appliquer_crs_gpkg
+        crs_resultat = detecter_crs_gpkg(target_path)
+        if crs_resultat is None:
+            if not crs:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "Ce GeoPackage ne déclare aucune projection (CRS absent). "
+                        "Renvoyez le fichier avec le paramètre `crs` renseigné "
+                        "(ex. crs=EPSG:32631 pour l'Algérie, ou le code EPSG de votre "
+                        "projection source) — sans projection fiable, les mesures "
+                        "hydrauliques et spatiales ne peuvent pas être garanties."
+                    ),
+                )
+            try:
+                crs_resultat = appliquer_crs_gpkg(target_path, crs)
+                crs_source_resultat = "utilisateur"
+            except ValueError as e_crs:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=str(e_crs),
+                )
+        else:
+            crs_source_resultat = "fichier"
 
     # Invalidation des anciens fichiers caches associés à ce fichier
     for ext in [".clusters_cache.json", ".subcatchments_cache.json", ".qualite_cache.json"]:
@@ -777,6 +835,8 @@ async def upload_network_gpkg(
         "status": "ok",
         "message": msg,
         "conversion": conv_summary,
+        "crs": crs_resultat,
+        "crs_source": crs_source_resultat,
         "inventaire": rapport_inventaire,
         "project": {
             "id": project.id,

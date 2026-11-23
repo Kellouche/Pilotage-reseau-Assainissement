@@ -110,6 +110,7 @@ async def upload_aux_layer(
     type: str = Form(...),
     nom: Optional[str] = Form(None),
     colonne_z: Optional[str] = Form(None),
+    crs: Optional[str] = Form(None),
     tenant_ctx: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
 ):
@@ -121,6 +122,8 @@ async def upload_aux_layer(
     - `type` : altimetrie_points | bv_officiel | metrologie | autre
     - `colonne_z` : (altimetrie_points) nom du champ d'altitude si non
       auto-détectable (ex. Field4 pour TOPO CHLEF)
+    - `crs` : code EPSG de la projection source, **exigé** si le fichier ne
+      déclare pas de CRS (ex. shapefile sans .prj) — jamais de repli silencieux
     """
     _projet_org(db, tenant_ctx, project_id)
 
@@ -166,6 +169,7 @@ async def upload_aux_layer(
                 fichier_path=tmp_path,
                 fichier_nom=fichier_nom,
                 colonne_z=colonne_z,
+                crs_forcee=crs,
             )
         except ValueError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
