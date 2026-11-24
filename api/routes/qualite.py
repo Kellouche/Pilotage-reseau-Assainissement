@@ -450,32 +450,56 @@ async def diagnostic_tunnel(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-async def _assurer_rapport(db: Session, ctx: TenantContext) -> Dict[str, Any]:
-    """Retourne le rapport qualité en cache, en le recalculant si besoin."""
+async def _assurer_rapport(db: Session, ctx: TenantContext, force_refresh: bool = False) -> Dict[str, Any]:
+    """Retourne le rapport qualité en cache (mémoire ou disque), en le recalculant si besoin."""
     global _cache_qualite
 
     gpkg_target, project_name = get_active_project_and_gpkg(db, ctx)
-    if gpkg_target and gpkg_target.exists():
-        if (_cache_qualite["rapport"] is None or
-            _cache_qualite.get("gpkg_path") != str(gpkg_target)):
-            contexte_terrain = _construire_contexte_terrain_qualite(db, ctx)
-            rapport = await asyncio.to_thread(
-                analyser_qualite_gpkg, gpkg_target, project_name, contexte_terrain)
-            rapport["_empreinte_aux"] = _empreinte_couches_aux(db, ctx)
-            _sauvegarder_cache_disque(gpkg_target, rapport)
-            _cache_qualite.update({
-                "rapport": rapport,
-                "timestamp": datetime.now().timestamp(),
-                "gpkg_path": str(gpkg_target),
-                "empreinte_aux": rapport["_empreinte_aux"],
-            })
-        _appliquer_statuts_anomalies(_cache_qualite["rapport"], db, ctx)
-        return _cache_qualite["rapport"]
+    if not gpkg_target or not gpkg_target.exists():
+        if _cache_qualite.get("rapport") is not None:
+            return _appliquer_statuts_anomalies(_cache_qualite["rapport"], db, ctx)
+        raise HTTPException(
+            status_code=404,
+            detail="Aucun fichier réseau GeoPackage actif trouvé pour l'organisation."
+        )
 
-    # Repli : cache existant même si le GPKG a disparu
-    if _cache_qualite["rapport"] is not None:
-        return _cache_qualite["rapport"]
-    raise HTTPException(status_code=404, detail="Aucune analyse de qualité disponible.")
+    maintenant = datetime.now().timestamp()
+    empreinte_aux = _empreinte_couches_aux(db, ctx)
+
+    # 1. Cache mémoire (si même GPKG, même empreinte couches aux, et non expiré)
+    if (not force_refresh and
+        _cache_qualite.get("rapport") is not None and
+        _cache_qualite.get("gpkg_path") == str(gpkg_target) and
+        _cache_qualite.get("empreinte_aux") == empreinte_aux and
+        _cache_qualite.get("timestamp") is not None and
+        (maintenant - _cache_qualite["timestamp"]) < _cache_qualite.get("duree_validite", 3600)):
+        return _appliquer_statuts_anomalies(_cache_qualite["rapport"], db, ctx)
+
+    # 2. Cache persistant sur disque (instantané <50ms)
+    if not force_refresh:
+        rapport_disque = _charger_cache_disque(gpkg_target, empreinte_aux)
+        if rapport_disque:
+            _cache_qualite.update({
+                "rapport": rapport_disque,
+                "timestamp": maintenant,
+                "gpkg_path": str(gpkg_target),
+                "empreinte_aux": empreinte_aux,
+            })
+            return _appliquer_statuts_anomalies(rapport_disque, db, ctx)
+
+    # 3. Recalcul complet via moteur V2.1
+    contexte_terrain = _construire_contexte_terrain_qualite(db, ctx)
+    rapport = await asyncio.to_thread(
+        analyser_qualite_gpkg, gpkg_target, project_name, contexte_terrain)
+    rapport["_empreinte_aux"] = empreinte_aux
+    _sauvegarder_cache_disque(gpkg_target, rapport)
+    _cache_qualite.update({
+        "rapport": rapport,
+        "timestamp": maintenant,
+        "gpkg_path": str(gpkg_target),
+        "empreinte_aux": empreinte_aux,
+    })
+    return _appliquer_statuts_anomalies(rapport, db, ctx)
 
 
 @router.get("/anomalies/{type_anomalie}", response_model=Dict[str, Any])
@@ -483,6 +507,7 @@ async def get_anomalies_par_type(
     type_anomalie: str,
     cursor: int = 0,
     limit: int = 500,
+    force_refresh: bool = False,
     db: Session = Depends(get_db),
     ctx: TenantContext = Depends(require_role("viewer"))
 ):
@@ -505,7 +530,7 @@ async def get_anomalies_par_type(
     Pagination : `cursor` (offset, défaut 0) et `limit` (défaut 500,
     max 2000). La réponse inclut `total`, `cursor` et `next_cursor`.
     """
-    rapport = await _assurer_rapport(db, ctx)
+    rapport = await _assurer_rapport(db, ctx, force_refresh=force_refresh)
     anomalies = rapport.get("anomalies", {})
 
     if type_anomalie not in anomalies:
@@ -537,6 +562,7 @@ async def get_anomalies_geojson(
     type: Optional[str] = None,
     severite: Optional[str] = None,
     statut: Optional[str] = None,
+    force_refresh: bool = False,
     db: Session = Depends(get_db),
     ctx: TenantContext = Depends(require_role("viewer"))
 ):
@@ -544,7 +570,7 @@ async def get_anomalies_geojson(
     Couche GeoJSON (WGS84) de toutes les anomalies localisées — alimente la
     carte Leaflet clusterisée. Filtres : type (catégorie), severite, statut.
     """
-    rapport = await _assurer_rapport(db, ctx)
+    rapport = await _assurer_rapport(db, ctx, force_refresh=force_refresh)
     anomalies = rapport.get("anomalies", {})
 
     categories = [type] if type in anomalies else list(anomalies.keys())
@@ -592,6 +618,7 @@ async def get_anomalies_geojson(
 
 @router.get("/synthese", response_model=Dict[str, Any])
 async def get_synthese_qualite(
+    force_refresh: bool = False,
     db: Session = Depends(get_db),
     ctx: TenantContext = Depends(require_role("viewer"))
 ):
@@ -599,7 +626,7 @@ async def get_synthese_qualite(
     Verdict global + couverture altimétrique + top 3 actions correctives
     (spec §7 — bandeau de synthèse du cockpit).
     """
-    rapport = await _assurer_rapport(db, ctx)
+    rapport = await _assurer_rapport(db, ctx, force_refresh=force_refresh)
     anomalies = rapport.get("anomalies", {})
     scores = rapport.get("scores_qualite", {})
     stats = rapport.get("statistiques_globales", {})

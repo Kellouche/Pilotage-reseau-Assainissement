@@ -865,14 +865,22 @@
                 // A. Synthèse
                 const synUrl = `${API_BASE}/synthese${forceRefresh ? '?force_refresh=true' : ''}`;
                 const respSyn = await fetch(synUrl, { headers, credentials: 'include' });
-                if (!respSyn.ok) throw new Error(`Erreur synthèse: HTTP ${respSyn.status}`);
+                if (!respSyn.ok) {
+                    const errPayload = await respSyn.json().catch(() => ({}));
+                    const detail = errPayload.detail || `HTTP ${respSyn.status}`;
+                    throw new Error(`Erreur synthèse (${detail})`);
+                }
                 currentSynthese = await respSyn.json();
                 afficherSynthese(currentSynthese);
 
                 // B. GeoJSON complet
-                const geoUrl = `${API_BASE}/anomalies.geojson`;
+                const geoUrl = `${API_BASE}/anomalies.geojson${forceRefresh ? '?force_refresh=true' : ''}`;
                 const respGeo = await fetch(geoUrl, { headers, credentials: 'include' });
-                if (!respGeo.ok) throw new Error(`Erreur GeoJSON: HTTP ${respGeo.status}`);
+                if (!respGeo.ok) {
+                    const errPayload = await respGeo.json().catch(() => ({}));
+                    const detail = errPayload.detail || `HTTP ${respGeo.status}`;
+                    throw new Error(`Erreur GeoJSON (${detail})`);
+                }
                 currentAnomaliesGeoJSON = await respGeo.json();
 
                 // Filtrage et affichage initial
@@ -880,7 +888,19 @@
 
             } catch (err) {
                 console.error('[QUALITE] Erreur chargement:', err);
-                alert(`Impossible de charger les données qualité: ${err.message}`);
+                const ficheEl = document.getElementById('fiche-container');
+                if (ficheEl) {
+                    ficheEl.innerHTML = `
+                        <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 20px; margin: 15px; text-align: center;">
+                            <div style="font-size: 1.5rem; margin-bottom: 8px;">⚠️</div>
+                            <h4 style="color: #f87171; margin-bottom: 8px; font-size: 1rem;">Impossible de charger les données qualité</h4>
+                            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 15px;">${err.message}</p>
+                            <button onclick="chargerDonneesQualite(true)" class="btn-refresh" style="display: inline-flex; margin: 0 auto;">
+                                <span>↻</span> Réessayer l'analyse
+                            </button>
+                        </div>
+                    `;
+                }
             } finally {
                 afficherLoading(false);
             }
