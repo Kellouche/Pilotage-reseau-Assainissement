@@ -380,6 +380,9 @@
                     tabQualite.style.borderColor = 'rgba(56, 189, 248, 0.3)';
                 }
                 if (workspace) workspace.style.display = 'none';
+                if (typeof montrerModalProjet === 'function') {
+                    montrerModalProjet(false);
+                }
                 if (containerQ) {
                     containerQ.style.display = 'block';
                     if (iframeQ && (!iframeQ.src || iframeQ.src === 'about:blank' || !iframeQ.src.includes('/qualite'))) {

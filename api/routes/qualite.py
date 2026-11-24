@@ -562,6 +562,7 @@ async def get_anomalies_geojson(
     type: Optional[str] = None,
     severite: Optional[str] = None,
     statut: Optional[str] = None,
+    inclure_manquants: bool = False,
     force_refresh: bool = False,
     db: Session = Depends(get_db),
     ctx: TenantContext = Depends(require_role("viewer"))
@@ -569,6 +570,8 @@ async def get_anomalies_geojson(
     """
     Couche GeoJSON (WGS84) de toutes les anomalies localisées — alimente la
     carte Leaflet clusterisée. Filtres : type (catégorie), severite, statut.
+    Par défaut, inclure_manquants=False pour éviter de transférer inutilement
+    les ~9 000 points informatifs N3, réduisant le payload de 5 Mo à ~180 Ko.
     """
     rapport = await _assurer_rapport(db, ctx, force_refresh=force_refresh)
     anomalies = rapport.get("anomalies", {})
@@ -576,6 +579,8 @@ async def get_anomalies_geojson(
     categories = [type] if type in anomalies else list(anomalies.keys())
     features = []
     for categorie in categories:
+        if categorie == "donnees_manquantes" and not inclure_manquants and type != "donnees_manquantes" and severite != "informatif":
+            continue
         for a in anomalies.get(categorie, []):
             if severite and a.get("severite") != severite:
                 continue

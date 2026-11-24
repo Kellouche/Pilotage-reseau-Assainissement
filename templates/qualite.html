@@ -773,11 +773,10 @@
                 zoomControl: true
             });
 
-            // Fond de carte CartoDB Positron élégant
-            const positron = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-                attribution: '&copy; OpenStreetMap &copy; CARTO',
-                subdomains: 'abcd',
-                maxZoom: 20
+            // Fond de carte OpenStreetMap standard (fiable et rapide)
+            const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors',
+                maxZoom: 19
             }).addTo(map);
 
             const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
@@ -786,7 +785,7 @@
             });
 
             L.control.layers({
-                "Plan Clair (Positron)": positron,
+                "Plan Standard (OSM)": osm,
                 "Satellite (Esri)": satellite
             }, null, { position: 'topleft' }).addTo(map);
 
@@ -851,7 +850,14 @@
             });
 
             document.getElementById('chk-toggle-n3').addEventListener('change', () => {
-                filtrerEtMettreAJourCarte();
+                const inclureN3 = document.getElementById('chk-toggle-n3').checked;
+                // Si l'utilisateur active N3 et qu'on n'a pas encore téléchargé les données manquantes, on recharge le GeoJSON complet
+                const aDonneesManquantes = currentAnomaliesGeoJSON?.features?.some(f => f.properties?.categorie === 'donnees_manquantes');
+                if (inclureN3 && !aDonneesManquantes) {
+                    chargerDonneesQualite(false);
+                } else {
+                    filtrerEtMettreAJourCarte();
+                }
             });
         }
 
@@ -862,7 +868,7 @@
                 const token = localStorage.getItem('swmm_access_token');
                 const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
 
-                // A. Synthèse
+                // A. Synthèse immédiate (KPIs affichés sans attendre la cartographie)
                 const synUrl = `${API_BASE}/synthese${forceRefresh ? '?force_refresh=true' : ''}`;
                 const respSyn = await fetch(synUrl, { headers, credentials: 'include' });
                 if (!respSyn.ok) {
@@ -873,8 +879,9 @@
                 currentSynthese = await respSyn.json();
                 afficherSynthese(currentSynthese);
 
-                // B. GeoJSON complet
-                const geoUrl = `${API_BASE}/anomalies.geojson${forceRefresh ? '?force_refresh=true' : ''}`;
+                // B. GeoJSON ciblé (par défaut ~180 Ko au lieu de 5 Mo si N3 désactivé)
+                const inclureN3 = document.getElementById('chk-toggle-n3')?.checked || false;
+                const geoUrl = `${API_BASE}/anomalies.geojson?inclure_manquants=${inclureN3}${forceRefresh ? '&force_refresh=true' : ''}`;
                 const respGeo = await fetch(geoUrl, { headers, credentials: 'include' });
                 if (!respGeo.ok) {
                     const errPayload = await respGeo.json().catch(() => ({}));
@@ -955,6 +962,7 @@
 
             clusterGroup.clearLayers();
             currentQueueList = [];
+            const markersToAdd = [];
 
             const bounds = L.latLngBounds([]);
 
@@ -1016,9 +1024,14 @@
                     }
                 });
 
-                clusterGroup.addLayer(marker);
+                markersToAdd.push(marker);
                 currentQueueList.push({ feature: feat, marker: marker, properties: p });
             });
+
+            // Ajout ultra-rapide par lots via addLayers
+            if (markersToAdd.length > 0) {
+                clusterGroup.addLayers(markersToAdd);
+            }
 
             // Ajuster la vue carte si des points existent
             if (bounds.isValid() && currentQueueList.length > 0) {

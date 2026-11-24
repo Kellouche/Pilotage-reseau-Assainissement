@@ -24,9 +24,11 @@
 
             // 2. Gestion du choix de projet ou chargement direct sur F5
             const urlParams = new URLSearchParams(window.location.search);
-            const flagChoix = sessionStorage.getItem('choisir_projet_apres_login') === 'true' ||
+            const estOngletQualite = urlParams.get('tab') === 'qualite';
+            const flagChoix = !estOngletQualite && (
+                              sessionStorage.getItem('choisir_projet_apres_login') === 'true' ||
                               sessionStorage.getItem('projet_charge') !== 'true' ||
-                              urlParams.get('choix') === '1';
+                              urlParams.get('choix') === '1');
 
             if (flagChoix) {
                 sessionStorage.removeItem('choisir_projet_apres_login');
