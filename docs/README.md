@@ -3,12 +3,15 @@
 Ce dossier contient **4 documents de référence** qui concentrent l'intégralité
 de la documentation produit, technique, scientifique et opérationnelle du
 projet, complétés par le registre immuable des **Architecture Decision
-Records** (`adr/`). Les anciens documents sources sont conservés pour
-traçabilité dans `_archive_historique/` (non normatifs).
+Records** (`adr/`), une **spécification de refonte** (`05_`) et les anciens
+documents sources conservés pour traçabilité dans `_archive_historique/`
+(non normatifs).
 
-> **Règle d'or documentaire** : les 4 documents ci-dessous font foi.
+> **Règle d'or documentaire** : les 4 documents ci-dessus font foi.
 > En cas de divergence avec un fichier archivé, ce sont eux qui décrivent
-> l'état réel du système.
+> l'état réel du système. Le document `05_` est une **spécification de
+> refonte** (cible, pas état livré) : il fait foi pour le module Contrôle
+> Qualité tant que son implémentation n'est pas effective.
 
 ## Les 4 documents et leur cible
 
@@ -18,6 +21,7 @@ traçabilité dans `_archive_historique/` (non normatifs).
 | [02_ARCHITECTURE_SYSTEME_ET_API.md](02_ARCHITECTURE_SYSTEME_ET_API.md) | FastAPI, multi-tenant, ADRs, données, référentiel des endpoints, mobile | Architecte, développeur, DevOps, auditeur sécurité |
 | [03_INGENIERIE_HYDRAULIQUE_ET_SWMM.md](03_INGENIERIE_HYDRAULIQUE_ET_SWMM.md) | Saint-Venant 1D, Voronoï/Horton, pluviométrie Algérie, topologie adaptative, restitution `.inp`, réconciliation 1:1 | Ingénieur hydraulicien, modélisateur, hydrologue, chercheur, BET |
 | [04_EXPLOITATION_OPERATIONS_ET_ROADMAP.md](04_EXPLOITATION_OPERATIONS_ET_ROADMAP.md) | Démarrage, CI/CD, validation MCP, inventaire du dépôt, feuille de route 2026-2029 | Développeur, QA, chef de projet, responsable maintenance |
+| [05_CONTROLE_QUALITE_V2.md](05_CONTROLE_QUALITE_V2.md) | **Spec de refonte** du module Contrôle Qualité : taxonomie, cascade altimétrique 3 niveaux, UI carte, cibles de recette — issue de deux contre-expertises | Ingénieur hydraulicien, BET, développeur reprenant le module |
 
 ## Matrice persona → document → sections utiles
 
