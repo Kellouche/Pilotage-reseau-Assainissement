@@ -312,6 +312,9 @@ window.actualiserDwf = async function() {
     rendreCompteursDwf();
     rendreZoneReconciliationDwf();
     rendreListeDwf();
+    if (typeof window.chargerInfosDwfSimulation === 'function') {
+        window.chargerInfosDwfSimulation();
+    }
     DWF.statut('Données actualisées.', 'ok');
 };
 

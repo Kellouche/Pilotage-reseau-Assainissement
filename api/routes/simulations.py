@@ -833,6 +833,16 @@ def run_native_swmm_simulation(
                     logger.info(
                         "Simulation existante réutilisée (hash %s, sim %s) — aucun recalcul",
                         param_hash, _s.id)
+                    try:
+                        _ident_nom = (_identite_bassin_du_cache(gpkg_path, str(payload.bassin_ref or payload.cluster_id or cluster_id_effectif)) or {}).get("nom")
+                        if _ident_nom and not str(_ident_nom).strip().isdigit():
+                            _meta_c = _data.setdefault("meta", {})
+                            _cur_c = str(_meta_c.get("bassin_nom") or _meta_c.get("cluster_nom") or "").strip()
+                            if not _cur_c or _cur_c.isdigit() or _cur_c == str(exutoire_persiste or "").strip():
+                                _meta_c["bassin_nom"] = _ident_nom
+                                _meta_c["cluster_nom"] = _ident_nom
+                    except Exception:
+                        pass
                     return _construire_reponse_simulation(
                         _data, cached=True, simulation_id=_s.id)
         except Exception as _dedup_err:
@@ -866,6 +876,16 @@ def run_native_swmm_simulation(
         resultat["source_gpkg"] = str(gpkg_path.resolve())
         resultat["project_name"] = project_name or gpkg_path.stem
         resultat["param_hash"] = param_hash
+        try:
+            _ident_nom = (_identite_bassin_du_cache(gpkg_path, str(payload.bassin_ref or payload.cluster_id or cluster_id_effectif)) or {}).get("nom")
+            if _ident_nom and not str(_ident_nom).strip().isdigit():
+                _meta_res = resultat.setdefault("meta", {})
+                _cur_nom_res = str(_meta_res.get("bassin_nom") or _meta_res.get("cluster_nom") or "").strip()
+                if not _cur_nom_res or _cur_nom_res.isdigit() or _cur_nom_res == str(exutoire_persiste or "").strip():
+                    _meta_res["bassin_nom"] = _ident_nom
+                    _meta_res["cluster_nom"] = _ident_nom
+        except Exception:
+            pass
 
         # Étape 3B : traçabilité de la version GPKG capturée + cohérence bassin
         vmeta = contexte.version_meta or {}
@@ -1201,6 +1221,12 @@ def get_bassin_simulation(
         if gpkg_sim is not None and gpkg_sim.exists():
             data["source_gpkg"] = str(gpkg_sim.resolve())
             data["project_name"] = project_name or gpkg_sim.stem
+            if nom_demande and not str(nom_demande).strip().isdigit():
+                _meta = data.setdefault("meta", {})
+                _cur_nom = str(_meta.get("bassin_nom") or _meta.get("cluster_nom") or "").strip()
+                if not _cur_nom or _cur_nom.isdigit() or _cur_nom == str(exutoire_demande or "").strip():
+                    _meta["bassin_nom"] = nom_demande
+                    _meta["cluster_nom"] = nom_demande
             _signaler_mismatch_version_gpkg(data, ctx, proj)
             return _construire_reponse_simulation(
                 data, cached=True,

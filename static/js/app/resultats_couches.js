@@ -539,7 +539,17 @@ window.addEventListener('DOMContentLoaded', initSaaSNavbar);
                     ? ' <span style="color:#f59e0b; font-size:0.72rem; font-weight:700;" title="Cette simulation provient d\'une autre version du GeoPackage que le réseau actuellement affiché">⚠ autre version réseau</span>'
                     : '';
                 if (isTargeted) {
-                    legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> SWMM 5.2 — ${meta.cluster_nom || meta.bassin_nom || ('Bassin ' + meta.cluster_id)}${_warnVersion}`;
+                    const _rawLegNom = String(meta.cluster_nom || meta.bassin_nom || '').trim();
+                    const _metierNom = (typeof window._nomMetierBassin === 'function')
+                        ? String(window._nomMetierBassin(meta.cluster_id, meta) || '').trim()
+                        : '';
+                    const _selNom = String(window._selectedClusterNom || '').trim();
+                    const _legNom = (_rawLegNom && !/^\d+$/.test(_rawLegNom))
+                        ? _rawLegNom
+                        : ((_metierNom && !/^\d+$/.test(_metierNom) && !/^Bassin\s+\d+$/i.test(_metierNom))
+                            ? _metierNom
+                            : ((_selNom && !/^\d+$/.test(_selNom)) ? _selNom : (_rawLegNom || ('Bassin ' + meta.cluster_id))));
+                    legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> SWMM 5.2 — ${_legNom}${_warnVersion}`;
                 } else {
                     legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> Légende SWMM 5.2${_warnVersion}`;
                 }

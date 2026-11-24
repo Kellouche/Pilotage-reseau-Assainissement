@@ -152,6 +152,7 @@
             }
             return cidStr ? `Bassin ${cidStr}` : 'Tous les bassins';
         }
+        window._nomMetierBassin = _nomMetierBassin;
 
         // Identité stable d'un bassin du réseau affiché : exutoire_id et
         // bassin_ref résolus depuis le dropdown (#bassin-select porte
@@ -417,6 +418,7 @@
 
             if (p) {
                 if (p.nom) nom = p.nom;
+                try { window._selectedClusterNom = nom; } catch (_) {}
                 if (p.surface_ha !== undefined && p.surface_ha !== null) surfHa = `${Number(p.surface_ha).toFixed(2)} ha`;
                 if (p.nb_regards !== undefined && p.nb_regards !== null) nbRegards = `${p.nb_regards} reg.`;
                 if (p.nb_conduites !== undefined) nbConduites = `${p.nb_conduites} cond.`;
@@ -473,7 +475,8 @@
             //    (identité stable : cluster_id / exutoire / bassin_ref — jamais le nom)
             if (window._dernierResultatSimulation && _simCorrespondAuBassin(window._dernierResultatSimulation, cidStr)) {
                 const m = window._dernierResultatSimulation.meta || {};
-                const mNom = String(m.bassin_nom || m.cluster_nom || '');
+                const _rawMNom = String(m.bassin_nom || m.cluster_nom || '').trim();
+                const mNom = (_rawMNom && !/^\d+$/.test(_rawMNom)) ? _rawMNom : (nomBassin || _rawMNom);
                 if (leg) {
                     leg.classList.add('active-legend');
                     leg.style.display = 'block';
@@ -523,7 +526,8 @@
                     leg.style.display = 'block';
                 }
                 if (legTitle) {
-                    const dispNom = (cached.meta && (cached.meta.cluster_nom || cached.meta.bassin_nom)) || nomBassin;
+                    const _rawDisp = String((cached.meta && (cached.meta.cluster_nom || cached.meta.bassin_nom)) || '').trim();
+                    const dispNom = (_rawDisp && !/^\d+$/.test(_rawDisp)) ? _rawDisp : (nomBassin || _rawDisp);
                     legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> SWMM 5.2 — ${dispNom}`;
                 }
                 if (typeof window.actualiserLegendeDwf === 'function') {
@@ -560,7 +564,8 @@
                             leg.style.display = 'block';
                         }
                         if (legTitle) {
-                            const dispNom = (d.meta && (d.meta.cluster_nom || d.meta.bassin_nom)) || nomBassin;
+                            const _rawDisp = String((d.meta && (d.meta.cluster_nom || d.meta.bassin_nom)) || '').trim();
+                            const dispNom = (_rawDisp && !/^\d+$/.test(_rawDisp)) ? _rawDisp : (nomBassin || _rawDisp);
                             legTitle.innerHTML = `<i class="fas fa-layer-group me-1"></i> SWMM 5.2 — ${dispNom}`;
                         }
                         if (typeof window.actualiserLegendeDwf === 'function') {

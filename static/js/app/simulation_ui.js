@@ -1038,7 +1038,10 @@ window.dessinerRaccordementsOrphelinsSurCarte = function() {
                         q_genere_m3s: qGenere,
                         taux_derive_pct: tauxDerive,
                         taux_exutoire_pct: tauxExutoire,
-                        nb_ouvrages_raccordes: nbRacc
+                        nb_ouvrages_raccordes: nbRacc,
+                        provenance: data.provenance,
+                        kpis: data.kpis,
+                        meta: data.meta
                     });
                 }
 

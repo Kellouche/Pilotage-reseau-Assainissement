@@ -130,6 +130,8 @@ def extraire_sous_reseau_bassin(
             if cid_int is not None:
                 row_b79 = cur_meta.execute("SELECT nom_exutoire, exutoire_id FROM bassins_versants_79 WHERE id_bassin = ?", (cid_int,)).fetchone()
             else:
+                row_b79 = None
+            if not row_b79:
                 row_b79 = cur_meta.execute("SELECT nom_exutoire, exutoire_id FROM bassins_versants_79 WHERE nom_exutoire = ? OR exutoire_id = ?", (cid_str, cid_str)).fetchone()
             if row_b79:
                 if row_b79[0]:
