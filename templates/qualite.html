@@ -1225,6 +1225,8 @@
 
         let map = null;
         let clusterGroup = null;
+        let fineNetworkGroup = null;
+        let _fineReseauReq = 0;
         let selectedMarker = null;
         let highlightMarker = null;
         let globalBoundsReseau = null;
@@ -1306,6 +1308,11 @@
                 }
             });
             map.addLayer(clusterGroup);
+
+            // « Fine réseau » volatile : contexte local du tronçon suspect
+            // (conduites + nœuds dans un rayon réduit). Ajouté en dernier pour
+            // rester au premier plan ; vidé à chaque changement d'anomalie.
+            fineNetworkGroup = L.layerGroup().addTo(map);
         }
 
         // 2. Gestion des Événements & Raccourcis Clavier
@@ -1538,6 +1545,7 @@
                     map.removeLayer(highlightMarker);
                     highlightMarker = null;
                 }
+                effacerContexteReseau();
                 document.getElementById('fiche-container').innerHTML = `
                     <div style="color:var(--text-muted); text-align:center; padding:40px 10px;">
                         Aucune anomalie ne correspond aux filtres sélectionnés.
@@ -1572,11 +1580,89 @@
             }
         }
 
+        // 6bis. « Fine réseau » volatile — contexte local du tronçon suspect
+        // Rayon adapté à l'échelle : très resserré en zoom fort, plus large
+        // quand la carte est dézoomée pour garder un contexte lisible.
+        function rayonContexteReseau() {
+            const z = map ? map.getZoom() : 16;
+            if (z >= 17) return 20;
+            if (z >= 15) return 40;
+            return 80;
+        }
+
+        function effacerContexteReseau() {
+            _fineReseauReq++;  // invalide tout fetch encore en vol
+            if (fineNetworkGroup) fineNetworkGroup.clearLayers();
+        }
+
+        async function chargerContexteReseauFin(idConduite) {
+            const reqId = ++_fineReseauReq;
+            if (fineNetworkGroup) fineNetworkGroup.clearLayers();
+            if (!idConduite) return;
+            try {
+                const token = localStorage.getItem('swmm_access_token');
+                const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+                const rayon = rayonContexteReseau();
+                const resp = await fetch(`${API_BASE}/conduites/${encodeURIComponent(idConduite)}/contexte-reseau?rayon_m=${rayon}`, { headers, credentials: 'include' });
+                if (!resp.ok) return;
+                const data = await resp.json();
+                if (reqId !== _fineReseauReq) return; // une anomalie plus récente a pris le relais
+                afficherContexteReseau(data);
+            } catch (e) {
+                // Couche volatile : un échec réseau ne doit jamais casser la fiche
+            }
+        }
+
+        function afficherContexteReseau(data) {
+            if (!fineNetworkGroup || !data || !Array.isArray(data.features)) return;
+            const features = data.features;
+
+            // 1. Périmètre de recherche (sous les conduites)
+            features.filter(f => f.properties && f.properties.type_feature === 'zone_recherche').forEach(f => {
+                L.geoJSON(f, {
+                    style: { color: '#94a3b8', weight: 1, dashArray: '4 4', fillOpacity: 0.04, opacity: 0.7 },
+                    interactive: false
+                }).addTo(fineNetworkGroup);
+            });
+
+            // 2. Conduites : suspect en orange épais, voisines en gris
+            features.filter(f => f.properties && f.properties.type_feature === 'conduite').forEach(f => {
+                const p = f.properties;
+                const suspect = !!p.suspect;
+                const style = suspect
+                    ? { color: '#f97316', weight: 5, opacity: 1 }
+                    : { color: '#64748b', weight: 2, opacity: 0.7 };
+                const layer = L.geoJSON(f, { style }).addTo(fineNetworkGroup);
+                const info = suspect
+                    ? `<b>TRONÇON SUSPECT ${p.id_conduite}</b><br>Amont: ${p.id_amont || '?'} · Aval: ${p.id_aval || '?'}<br>Longueur: ${p.longueur_m != null ? p.longueur_m + ' m' : '?'}<br><i>Rayon: ${data.rayon_m} m</i>`
+                    : `Conduite ${p.id_conduite}<br>${p.id_amont || '?'} → ${p.id_aval || '?'}`;
+                layer.eachLayer(l => { if (l.bindPopup) l.bindPopup(`<div style="font-size:12px;">${info}</div>`); });
+            });
+
+            // 3. Nœuds : regards bleus, rejets/exutoires verts
+            features.filter(f => f.properties && f.properties.type_feature === 'noeud').forEach(f => {
+                const p = f.properties;
+                const coords = f.geometry && f.geometry.coordinates;
+                if (!coords || coords.length < 2) return;
+                const col = p.kind_noeud === 'rejet' ? '#22c55e' : '#3b82f6';
+                const label = p.kind_noeud === 'rejet' ? 'Rejet / Exutoire' : 'Regard';
+                L.circleMarker([coords[1], coords[0]], {
+                    radius: 5, fillColor: col, color: '#ffffff', weight: 1.2, fillOpacity: 0.95
+                }).bindPopup(`<div style="font-size:12px;"><b>${label}</b> ${p.id_noeud || ''}</div>`)
+                  .addTo(fineNetworkGroup);
+            });
+        }
+
         // 7. Affichage détaillé de la fiche actionnable (Panneau de Résolution Unifié)
         function afficherFicheAnomalie(item, centrerCarte = false) {
             if (!item) return;
             const p = item.properties;
             const container = document.getElementById('fiche-container');
+
+            // « Fine réseau » : recharger le contexte local du tronçon
+            // (volatile — disparaît dès que l'anomalie change ou n'a pas de
+            // conduite associée).
+            chargerContexteReseauFin(p.id_conduite || null);
 
             // Métriques physiques
             let metricsHtml = '';

@@ -10,7 +10,7 @@ Objet : Endpoints de contrôle qualité topologique et audit de connectivité
 
 import asyncio
 import hashlib
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
 from typing import Dict, Any, Optional, Tuple
 import json
@@ -41,7 +41,12 @@ _cache_topologie = {
     "gpkg_path": None,
     "mtime": None,
     "resolveur": None,
-    "pipes": None
+    "pipes": None,
+    "regards": None,
+    "rejets": None,
+    "pipes_m": None,
+    "regards_m": None,
+    "rejets_m": None
 }
 
 
@@ -334,6 +339,11 @@ def reinitialiser_cache_qualite(gpkg_path: Optional[Path] = None):
     _cache_topologie["mtime"] = None
     _cache_topologie["resolveur"] = None
     _cache_topologie["pipes"] = None
+    _cache_topologie["regards"] = None
+    _cache_topologie["rejets"] = None
+    _cache_topologie["pipes_m"] = None
+    _cache_topologie["regards_m"] = None
+    _cache_topologie["rejets_m"] = None
 
 
 def get_active_project_and_gpkg(db: Session, tenant_ctx: Optional[TenantContext] = None):
@@ -1308,10 +1318,12 @@ async def inverser_sens_conduite(
 
 
 def _obtenir_topologie_cachee(gpkg_file: Path):
-    """Charge ou réutilise le résolveur topologique et la couche conduites du GPKG."""
+    """Charge ou réutilise le résolveur topologique et les couches du GPKG.
+
+    Retourne (resolveur, pipes, regards, rejets)."""
     global _cache_topologie
     import geopandas as gpd
-    from src.analyse_qualite_gpkg import _construire_resolveur
+    from src.analyse_qualite_gpkg import _construire_resolveur, _vers_metres_gdf
 
     try:
         mtime = gpkg_file.stat().st_mtime
@@ -1321,7 +1333,8 @@ def _obtenir_topologie_cachee(gpkg_file: Path):
     if (_cache_topologie["resolveur"] is not None
             and _cache_topologie["gpkg_path"] == str(gpkg_file)
             and _cache_topologie["mtime"] == mtime):
-        return _cache_topologie["resolveur"], _cache_topologie["pipes"]
+        return (_cache_topologie["resolveur"], _cache_topologie["pipes"],
+                _cache_topologie["regards"], _cache_topologie["rejets"])
 
     try:
         layers = gpd.list_layers(str(gpkg_file))["name"].tolist()
@@ -1339,10 +1352,47 @@ def _obtenir_topologie_cachee(gpkg_file: Path):
         _cache_topologie["mtime"] = mtime
         _cache_topologie["resolveur"] = resolveur
         _cache_topologie["pipes"] = pipes
-        return resolveur, pipes
+        _cache_topologie["regards"] = regards
+        _cache_topologie["rejets"] = rejets
+        _cache_topologie["pipes_m"] = _vers_metres_gdf(pipes) if pipes is not None else None
+        _cache_topologie["regards_m"] = _vers_metres_gdf(regards) if regards is not None else None
+        _cache_topologie["rejets_m"] = _vers_metres_gdf(rejets) if rejets is not None else None
+        return resolveur, pipes, regards, rejets
     except Exception as e:
         print(f"[QUALITE] Erreur chargement topologie : {e}")
-        return None, None
+        return None, None, None, None
+
+
+def _obtenir_couches_metriques(gpkg_file: Path):
+    """Garantit le cache chaud et retourne les couches en CRS métrique
+    (pipes_m, regards_m, rejets_m) pour les calculs de distance."""
+    _obtenir_topologie_cachee(gpkg_file)
+    return (_cache_topologie["pipes_m"], _cache_topologie["regards_m"],
+            _cache_topologie["rejets_m"])
+
+
+def _trouver_conduite_par_id(pipes, id_conduite):
+    """Retrouve la ligne GeoDataFrame correspondant à un identifiant de
+    conduite. Retourne (row, position_entiere) — la position alimente le
+    schéma d'identifiants C_{pos+1} utilisé par les anomalies — ou
+    (None, -1)."""
+    import re
+    pos = None
+    m = re.match(r'^c_?(\d+)$', str(id_conduite), re.IGNORECASE)
+    if m:
+        pos = int(m.group(1)) - 1
+    else:
+        try:
+            pos = int(id_conduite) - 1
+        except ValueError:
+            pass
+
+    if pos is not None and 0 <= pos < len(pipes):
+        return pipes.iloc[pos], pos
+    for i, (_, row) in enumerate(pipes.iterrows()):
+        if str(row.get("id")) == str(id_conduite) or str(row.get("fid_1")) == str(id_conduite) or str(row.get("fid")) == str(id_conduite):
+            return row, i
+    return None, -1
 
 
 @router.get("/conduites/{id_conduite}/noeuds-candidats", response_model=Dict[str, Any])
@@ -1356,36 +1406,17 @@ async def obtenir_noeuds_candidats_conduite(
     des extrémités amont et aval d'une conduite pour assister le raccordement topologique.
     """
     from src.analyse_qualite_gpkg import _points_extremite
-    import re
 
     gpkg_path, nom_projet = get_active_project_and_gpkg(db, ctx)
     if not gpkg_path or not Path(gpkg_path).exists():
         raise HTTPException(status_code=404, detail="Fichier GeoPackage du réseau introuvable.")
 
     gpkg_file = Path(gpkg_path)
-    resolv, pipes = _obtenir_topologie_cachee(gpkg_file)
+    resolv, pipes, _regards, _rejets = _obtenir_topologie_cachee(gpkg_file)
     if resolv is None or pipes is None or pipes.empty:
         raise HTTPException(status_code=500, detail="Impossible d'initialiser le résolveur topologique.")
 
-    idx = None
-    m = re.match(r'^c_?(\d+)$', str(id_conduite), re.IGNORECASE)
-    if m:
-        idx = int(m.group(1)) - 1
-    else:
-        try:
-            idx = int(id_conduite) - 1
-        except ValueError:
-            pass
-
-    p = None
-    if idx is not None and 0 <= idx < len(pipes):
-        p = pipes.iloc[idx]
-    else:
-        for i, row in pipes.iterrows():
-            if str(row.get("id")) == str(id_conduite) or str(row.get("fid_1")) == str(id_conduite) or str(row.get("fid")) == str(id_conduite):
-                p = row
-                break
-
+    p, _pos = _trouver_conduite_par_id(pipes, id_conduite)
     if p is None:
         raise HTTPException(status_code=404, detail=f"Conduite {id_conduite} introuvable.")
 
@@ -1404,6 +1435,151 @@ async def obtenir_noeuds_candidats_conduite(
         "amont_proche": {"id": str(res_am[0]), "distance_m": round(float(res_am[1]), 2)} if res_am else None,
         "aval_proche": {"id": str(res_av[0]), "distance_m": round(float(res_av[1]), 2)} if res_av else None,
         "longueur_m": round(float(p.geometry.length), 1) if p.geometry and p.geometry.length else None
+    }
+
+
+@router.get("/conduites/{id_conduite}/contexte-reseau", response_model=Dict[str, Any])
+async def contexte_reseau_local_conduite(
+    id_conduite: str,
+    rayon_m: float = Query(20.0, ge=5.0, le=200.0,
+                           description="Rayon du périmètre local autour du tronçon suspect (m)"),
+    db: Session = Depends(get_db),
+    ctx: TenantContext = Depends(require_role("viewer"))
+):
+    """
+    « Fine réseau » volatile : retourne en GeoJSON (EPSG:4326) le tronçon
+    suspect, les conduites et les nœuds (regards/rejets) situés à moins de
+    `rayon_m` de sa géométrie, plus le périmètre de recherche. Sert à donner
+    le contexte local d'une anomalie (contre-pente, inversion, orphelin…)
+    sans charger le réseau complet. Lecture seule.
+    """
+    from src.analyse_qualite_gpkg import _col_val
+    from shapely.geometry import mapping
+
+    gpkg_path, _nom_projet = get_active_project_and_gpkg(db, ctx)
+    if not gpkg_path or not Path(gpkg_path).exists():
+        raise HTTPException(status_code=404, detail="Fichier GeoPackage du réseau introuvable.")
+
+    gpkg_file = Path(gpkg_path)
+    resolv, pipes, _regards, _rejets = _obtenir_topologie_cachee(gpkg_file)
+    if resolv is None or pipes is None or pipes.empty:
+        raise HTTPException(status_code=500, detail="Impossible d'initialiser le résolveur topologique.")
+
+    p, pos = _trouver_conduite_par_id(pipes, id_conduite)
+    if p is None or pos < 0:
+        raise HTTPException(status_code=404, detail=f"Conduite {id_conduite} introuvable.")
+
+    pipes_m, regards_m, rejets_m = _obtenir_couches_metriques(gpkg_file)
+    if pipes_m is None or pipes_m.empty:
+        raise HTTPException(status_code=500, detail="Couches métriques indisponibles.")
+
+    suspect_geom = pipes_m.geometry.iloc[pos] if pos < len(pipes_m) else None
+    if suspect_geom is None or suspect_geom.is_empty:
+        raise HTTPException(status_code=400, detail="Géométrie de conduite invalide.")
+
+    # Conduites voisines : distance à la géométrie du tronçon suspect ≤ rayon
+    distances = pipes_m.geometry.distance(suspect_geom)
+    masque_voisines = (distances <= rayon_m)
+    masque_voisines.iloc[pos] = False  # le suspect est traité à part
+
+    pos_of_label = {label: i for i, label in enumerate(pipes_m.index)}
+    features = []
+
+    def _props_conduite(row_m, position):
+        row_src = pipes.loc[row_m.name] if row_m.name in pipes.index else None
+        return {
+            "type_feature": "conduite",
+            "suspect": False,
+            "id_conduite": f"C_{position + 1}",
+            "id_amont": str(_col_val(row_src, "ID_AMONT", "id_amont", "amont", "AMONT", "NOEUD_AMONT") or ""),
+            "id_aval": str(_col_val(row_src, "ID_AVAL", "id_aval", "aval", "AVAL", "NOEUD_AVAL") or ""),
+            "longueur_m": round(float(row_m.geometry.length), 1) if row_m.geometry and row_m.geometry.length else None,
+        }
+
+    # Le tronçon suspect (mis en évidence côté client)
+    row_suspect_m = pipes_m.iloc[pos]
+    geom_suspect_wgs = row_suspect_m.geometry
+    crs_src = getattr(pipes_m, "crs", None)
+    if crs_src is not None and str(crs_src) != "EPSG:4326":
+        import geopandas as gpd
+        geom_suspect_wgs = gpd.GeoSeries([row_suspect_m.geometry], crs=crs_src).to_crs("EPSG:4326").iloc[0]
+    features.append({
+        "type": "Feature",
+        "geometry": mapping(geom_suspect_wgs),
+        "properties": {
+            "type_feature": "conduite",
+            "suspect": True,
+            "id_conduite": f"C_{pos + 1}",
+            "id_amont": str(_col_val(p, "ID_AMONT", "id_amont", "amont", "AMONT", "NOEUD_AMONT") or ""),
+            "id_aval": str(_col_val(p, "ID_AVAL", "id_aval", "aval", "AVAL", "NOEUD_AVAL") or ""),
+            "longueur_m": round(float(suspect_geom.length), 1) if suspect_geom.length else None,
+        },
+    })
+
+    # Conduites voisines dans le rayon (transformées en WGS84 par lots)
+    labels_voisines = list(masque_voisines[masque_voisines].index)
+    if labels_voisines:
+        voisines_wgs = pipes_m.loc[labels_voisines].to_crs("EPSG:4326")
+        for _, row_wgs in voisines_wgs.iterrows():
+            geom_w = getattr(row_wgs, "geometry", None)
+            if geom_w is None or geom_w.is_empty:
+                continue
+            features.append({
+                "type": "Feature",
+                "geometry": mapping(geom_w),
+                "properties": _props_conduite(row_wgs, pos_of_label.get(row_wgs.name, -1)),
+            })
+
+    # Nœuds (regards puis rejets) dans le rayon — le centroïde d'un Point
+    # est le point lui-même ; distance calculée en vectorisé puis sous-ensemble.
+    nb_noeuds = 0
+    for gdf_m, kind in ((regards_m, "regard"), (rejets_m, "rejet")):
+        if gdf_m is None or gdf_m.empty:
+            continue
+        try:
+            dists_noeuds = gdf_m.geometry.centroid.distance(suspect_geom)
+            labels_hit = dists_noeuds[dists_noeuds <= rayon_m].index
+            if len(labels_hit) == 0:
+                continue
+            hits_wgs = gdf_m.loc[labels_hit].to_crs("EPSG:4326")
+            for _, row_wgs in hits_wgs.iterrows():
+                nid = _col_val(row_wgs, "Code", "CODE", "id", "ID", "swmm_id", "SWMM_ID", "NOM", "nom", "INTITULE", "intitule")
+                geom = getattr(row_wgs, "geometry", None)
+                if geom is None or geom.is_empty:
+                    continue
+                features.append({
+                    "type": "Feature",
+                    "geometry": mapping(geom),
+                    "properties": {
+                        "type_feature": "noeud",
+                        "kind_noeud": kind,
+                        "id_noeud": str(nid or f"{kind}_{nb_noeuds}"),
+                    },
+                })
+                nb_noeuds += 1
+        except Exception:
+            continue
+
+    # Périmètre de recherche (zone tampon autour du tronçon suspect)
+    try:
+        zone = suspect_geom.buffer(rayon_m)
+        import geopandas as gpd
+        zone_wgs = gpd.GeoSeries([zone], crs=crs_src).to_crs("EPSG:4326").iloc[0]
+        features.append({
+            "type": "Feature",
+            "geometry": mapping(zone_wgs),
+            "properties": {"type_feature": "zone_recherche", "rayon_m": rayon_m},
+        })
+    except Exception:
+        pass
+
+    return {
+        "type": "FeatureCollection",
+        "rayon_m": rayon_m,
+        "id_conduite": f"C_{pos + 1}",
+        "nb_conduites_voisines": len(labels_voisines),
+        "nb_noeuds": nb_noeuds,
+        "features": features,
     }
 
 
