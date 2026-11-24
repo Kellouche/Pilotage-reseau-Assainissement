@@ -10,6 +10,9 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
 
+    <!-- FontAwesome 6 pour iconographie technique vectorielle unifiée -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 
@@ -477,44 +480,210 @@
             border-radius: 6px;
         }
 
-        /* Barre d'actions de correction directe */
-        .correction-action-box {
-            background: rgba(241, 245, 249, 0.7);
+        /* Raccourcis clavier & Tags Monospace */
+        .kbd-badge {
+            display: inline-block;
+            padding: 1px 5px;
+            font-size: 10px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-weight: 700;
+            color: #475569;
+            background: #f1f5f9;
             border: 1px solid #cbd5e1;
-            border-radius: 8px;
-            padding: 12px;
-            margin-bottom: 14px;
+            border-radius: 4px;
+            box-shadow: inset 0 -1px 0 rgba(0,0,0,0.1);
+            line-height: 1.2;
         }
 
-        .btn-action-correct {
-            display: inline-flex;
+        .monospace-tag {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-weight: 700;
+            font-size: 13px;
+            color: #0f172a;
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: 1px solid #e2e8f0;
+        }
+
+        /* Panneau de Résolution Unifié (Lot 4 - Refonte Ingénierie) */
+        .resolution-panel {
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 14px;
+            margin-top: 14px;
+        }
+
+        .resolution-header {
+            font-size: 11px;
+            font-weight: 700;
+            color: #475569;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-bottom: 10px;
+            display: flex;
             align-items: center;
             gap: 6px;
-            padding: 7px 12px;
+        }
+
+        .action-buttons-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .btn-primary-action {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 9px 14px;
             font-size: 12px;
             font-weight: 700;
             border-radius: 6px;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.2s ease;
             border: 1px solid transparent;
+            text-align: center;
+            width: 100%;
         }
 
-        .btn-edit-attr {
+        .btn-primary-action.btn-reverse {
+            background: #b45309;
+            color: white;
+            box-shadow: 0 1px 3px rgba(180, 83, 9, 0.25);
+        }
+        .btn-primary-action.btn-reverse:hover {
+            background: #92400e;
+        }
+
+        .btn-primary-action.btn-edit {
             background: #0284c7;
             color: white;
-            box-shadow: 0 1px 3px rgba(2, 132, 199, 0.3);
+            box-shadow: 0 1px 3px rgba(2, 132, 199, 0.25);
         }
-        .btn-edit-attr:hover {
+        .btn-primary-action.btn-edit:hover {
             background: #0369a1;
         }
 
-        .btn-reverse-flow {
-            background: #d97706;
-            color: white;
-            box-shadow: 0 1px 3px rgba(217, 119, 6, 0.3);
+        .action-help-text {
+            font-size: 11px;
+            color: #64748b;
+            margin-top: 2px;
+            margin-bottom: 6px;
+            line-height: 1.35;
         }
-        .btn-reverse-flow:hover {
-            background: #b45309;
+
+        .derogation-bar {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .btn-derogation {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            background: white;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #475569;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .btn-derogation:hover {
+            background: #f1f5f9;
+            color: #1e293b;
+            border-color: #94a3b8;
+        }
+        .btn-derogation.active {
+            background: #eff6ff;
+            border-color: #3b82f6;
+            color: #1d4ed8;
+        }
+
+        .status-tag {
+            font-size: 11px;
+            font-weight: 700;
+            padding: 4px 8px;
+            border-radius: 4px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .status-tag.status-corrected {
+            background: #dcfce7;
+            color: #15803d;
+            border: 1px solid #bbf7d0;
+        }
+
+        .card-footer-trace {
+            margin-top: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #94a3b8;
+            border-top: 1px dashed #e2e8f0;
+            padding-top: 8px;
+        }
+        .card-footer-trace code {
+            font-size: 10px;
+            background: #f1f5f9;
+            padding: 1px 4px;
+            border-radius: 3px;
+            color: #64748b;
+        }
+
+        .diagnostic-box {
+            margin-bottom: 12px;
+            background: #fdfdfd;
+            border-left: 3px solid #0284c7;
+            padding: 8px 12px;
+            border-radius: 0 6px 6px 0;
+            border: 1px solid #e2e8f0;
+            border-left: 3px solid #0284c7;
+        }
+        .diagnostic-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: #475569;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .diagnostic-desc {
+            font-size: 12px;
+            color: #1e293b;
+            line-height: 1.45;
+        }
+
+        .metrics-list {
+            margin-top: 8px;
+            padding-top: 6px;
+            border-top: 1px solid #f1f5f9;
+            font-size: 11px;
+        }
+        .metrics-list ul {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+        .metrics-list li {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 3px;
+            color: #475569;
         }
 
         /* Modale d'édition intégrée */
@@ -788,16 +957,16 @@
     <!-- En-tête Navigation -->
     <header class="header">
         <div class="header-title-box">
-            <h1>🛡️ Contrôle Qualité Réseau <span class="header-tag">V2.1</span></h1>
+            <h1><i class="fa-solid fa-clipboard-check" style="color:#38bdf8;"></i> Contrôle Qualité Réseau <span class="header-tag">V2.1</span></h1>
             <span id="header-projet-name" class="header-tag" style="background:#0284c7; color:white;">Chargement...</span>
             <span id="header-gpkg-version" class="header-tag">Version: ...</span>
         </div>
         <div class="header-actions">
             <button class="btn btn-outline" id="btn-force-refresh" title="Recalculer sans cache (force_refresh=true)">
-                ⟳ Forcer Recalcul
+                <i class="fa-solid fa-arrows-rotate"></i> Recalculer l'audit
             </button>
             <button class="btn btn-primary" onclick="retournerCockpit(event)" title="Quitter la qualité et revenir à la cartographie DrainPilot">
-                <i class="fas fa-arrow-left"></i> Retour Cockpit
+                <i class="fa-solid fa-arrow-left"></i> Cockpit Carto
             </button>
         </div>
     </header>
@@ -806,7 +975,7 @@
     <div class="kpi-bar">
         <div class="kpi-group">
             <div class="kpi-item">
-                <span class="kpi-label">Verdict SWMM</span>
+                <span class="kpi-label">Verdict Simulation</span>
                 <div class="kpi-value-row">
                     <span id="kpi-verdict" class="kpi-pill pill-neutral">Analyse...</span>
                 </div>
@@ -850,17 +1019,17 @@
             <!-- Actions Rapides de Zoom sur Carte -->
             <div class="map-quick-actions">
                 <button class="btn-map-action" onclick="zoomerSurAnomalieActive()" title="Zoomer directement sur l'anomalie active (Raccourci : touche Z)">
-                    🎯 Zoomer sur l'anomalie
+                    <i class="fa-solid fa-crosshairs"></i> Centrer sélection <span class="kbd-badge">Z</span>
                 </button>
                 <button class="btn-map-action" onclick="zoomerVueGlobale()" title="Recadrer la carte sur l'ensemble du réseau et des anomalies">
-                    🌐 Vue globale réseau
+                    <i class="fa-solid fa-expand"></i> Étendue réseau
                 </button>
             </div>
 
             <!-- Contrôles Flottants Carte -->
             <div class="map-overlay-controls">
                 <div class="map-card-ctrl">
-                    <div style="font-weight:700; margin-bottom:6px;">Légende Sévérité</div>
+                    <div style="font-weight:700; margin-bottom:6px; color:#1e293b;"><i class="fa-solid fa-layer-group"></i> Légende Sévérité</div>
                     <div class="map-legend-item">
                         <span class="legend-dot" style="background:var(--sev-critique)"></span> Bloquant (0)
                     </div>
@@ -896,10 +1065,10 @@
             <!-- Onglets : File Actionnable vs Tableau Récapitulatif -->
             <div class="panel-tabs">
                 <button class="tab-btn active" id="tab-fiche" onclick="basculerVuePanel('fiche')">
-                    📋 File d'Audit Navigable
+                    <i class="fa-solid fa-list-check"></i> File d'inspection
                 </button>
                 <button class="tab-btn" id="tab-table" onclick="basculerVuePanel('table')">
-                    📊 Liste Complète & Filtres
+                    <i class="fa-solid fa-table-list"></i> Inventaire filtré
                 </button>
             </div>
 
@@ -936,8 +1105,8 @@
             <div class="queue-stepper" id="queue-stepper-bar">
                 <span id="queue-counter">Anomalie 0 sur 0</span>
                 <div class="stepper-nav">
-                    <button class="stepper-btn" id="btn-prev" title="Précédente (J)">◀ Précédent</button>
-                    <button class="stepper-btn" id="btn-next" title="Suivante (K)">Suivant ▶</button>
+                    <button class="stepper-btn" id="btn-prev" title="Précédente (J)"><i class="fa-solid fa-chevron-left"></i> Précédent <span class="kbd-badge">J</span></button>
+                    <button class="stepper-btn" id="btn-next" title="Suivante (K)">Suivant <i class="fa-solid fa-chevron-right"></i> <span class="kbd-badge">K</span></button>
                 </div>
             </div>
 
@@ -1337,7 +1506,7 @@
             }
         }
 
-        // 7. Affichage détaillé de la fiche actionnable
+        // 7. Affichage détaillé de la fiche actionnable (Panneau de Résolution Unifié)
         function afficherFicheAnomalie(item, centrerCarte = false) {
             if (!item) return;
             const p = item.properties;
@@ -1346,92 +1515,104 @@
             // Métriques physiques
             let metricsHtml = '';
             if (p.ecart_terrain_m !== undefined && p.ecart_terrain_m !== null) {
-                metricsHtml += `<li><span>Dénivelée terrain :</span> <strong>+${p.ecart_terrain_m} m</strong></li>`;
+                metricsHtml += `<li><span>Dénivelée terrain observée :</span> <strong>+${p.ecart_terrain_m} m</strong></li>`;
             }
             if (p.pente_contre_pct !== undefined && p.pente_contre_pct !== null) {
-                metricsHtml += `<li><span>Pente apparente :</span> <strong style="color:var(--sev-critique)">${p.pente_contre_pct} %</strong></li>`;
+                metricsHtml += `<li><span>Contre-pente mesurée :</span> <strong style="color:var(--sev-critique); font-weight:700;">${p.pente_contre_pct} %</strong></li>`;
             }
             if (p.distance_m !== undefined && p.distance_m !== null) {
-                metricsHtml += `<li><span>Distance amont-aval :</span> <strong>${p.distance_m} m</strong></li>`;
+                metricsHtml += `<li><span>Longueur tronçon :</span> <strong>${p.distance_m} m</strong></li>`;
             }
             if (p.confiance) {
-                metricsHtml += `<li><span>Indice confiance MNT :</span> <strong style="color:var(--accent-purple);">${p.confiance.toUpperCase()}</strong></li>`;
+                metricsHtml += `<li><span>Fiabilité MNT altimétrique :</span> <strong style="color:var(--accent-purple);">${p.confiance.toUpperCase()}</strong></li>`;
             }
+
+            const isContrePente = (p.categorie === 'inversions_sens_ecoulement' || p.categorie === 'sens_ecoulement' || (p.id_amont && p.id_aval && p.pente_contre_pct !== undefined));
+            const sevIcon = (p.severite === 'critique' || p.severite === 'majeure') ? 'fa-triangle-exclamation' : 'fa-circle-info';
 
             container.innerHTML = `
                 <div class="anomalie-card-actionable">
                     <div class="card-header-bar">
                         <div style="display:flex; align-items:center; gap:8px;">
-                            <span class="badge-sev badge-${p.severite}">${p.severite}</span>
+                            <span class="badge-sev badge-${p.severite}"><i class="fa-solid ${sevIcon}"></i> ${p.severite}</span>
                             <span style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">
                                 ${libelleCategorie(p.categorie)}
                             </span>
                         </div>
-                        <button class="btn-zoom-anom" onclick="zoomerSurAnomalieActive()" title="Centrer et zoomer la carte sur cette conduite (Touche Z)">
-                            🎯 Localiser
+                        <button class="btn-zoom-anom" onclick="zoomerSurAnomalieActive()" title="Centrer et zoomer la carte sur cette anomalie (Touche Z)">
+                            <i class="fa-solid fa-crosshairs"></i> Centrer <span class="kbd-badge">Z</span>
                         </button>
                     </div>
 
                     <div class="card-body">
+                        <!-- Identité hydraulique -->
                         <div class="card-meta-grid">
                             <div>
-                                <div class="meta-cell-label">Objet / Conduite</div>
-                                <div class="meta-cell-val">${p.id_conduite || 'N/A'}</div>
+                                <div class="meta-cell-label">Tronçon / Conduite</div>
+                                <div class="meta-cell-val"><span class="monospace-tag">${p.id_conduite || 'N/A'}</span></div>
                             </div>
                             <div>
-                                <div class="meta-cell-label">Amont ➔ Aval</div>
-                                <div class="meta-cell-val">${p.id_amont || '?'} ➔ ${p.id_aval || '?'}</div>
+                                <div class="meta-cell-label">Sens de pose (Amont ➔ Aval)</div>
+                                <div class="meta-cell-val" style="display:flex; align-items:center; gap:4px;">
+                                    <span class="monospace-tag">${p.id_amont || '?'}</span>
+                                    <i class="fa-solid fa-arrow-right-long" style="color:#64748b; font-size:12px;"></i>
+                                    <span class="monospace-tag">${p.id_aval || '?'}</span>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="desc-box">
-                            <strong>Diagnostic :</strong> ${p.description || 'Anomalie détectée sur ce tronçon.'}
+                        <!-- Diagnostic & Constat technique -->
+                        <div class="diagnostic-box">
+                            <div class="diagnostic-title"><i class="fa-solid fa-circle-exclamation"></i> Constat Hydraulique</div>
+                            <div class="diagnostic-desc">${p.description || 'Anomalie détectée sur ce tronçon.'}</div>
+                            ${metricsHtml ? `
+                            <div class="metrics-list">
+                                <ul>${metricsHtml}</ul>
+                            </div>` : ''}
                         </div>
 
-                        ${metricsHtml ? `
-                        <div class="metrics-callout">
-                            <strong>Métriques physiques observées :</strong>
-                            <ul>${metricsHtml}</ul>
-                        </div>` : ''}
+                        <!-- Panneau de Résolution Unifié -->
+                        <div class="resolution-panel">
+                            <div class="resolution-header">
+                                <i class="fa-solid fa-wrench"></i> Résolution & Actions
+                            </div>
 
-                        <div style="font-size:11px; color:var(--text-muted); margin-bottom:12px;">
-                            <strong>Clé d'intégrité :</strong> <code style="font-size:10px; background:#f1f5f9; padding:1px 4px;">${p.cle_anomalie || 'N/A'}</code>
-                        </div>
-                    </div>
+                            <div class="action-buttons-stack">
+                                ${isContrePente ? `
+                                    <button class="btn-primary-action btn-reverse" onclick="inverserSensEcoulement('${p.id_conduite || ''}', '${p.cle_anomalie || ''}', '${p.id_amont || ''}', '${p.id_aval || ''}')">
+                                        <i class="fa-solid fa-arrows-rotate"></i> Inverser le sens de pose (${p.id_aval || 'Aval'} ➔ ${p.id_amont || 'Amont'})
+                                    </button>
+                                    <div class="action-help-text">Rétablit l'écoulement gravitaire amont ➔ aval dans le GeoPackage et résout l'anomalie.</div>
+                                ` : ''}
 
-                    <!-- Actions de correction directe sur le réseau (Lot 4) -->
-                    <div class="correction-action-box">
-                        <div style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:8px;">
-                            🛠️ Actions de correction directe :
-                        </div>
-                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                            <button class="btn-action-correct btn-edit-attr" onclick="ouvrirModalEditionAttributs('${p.id_conduite || ''}', '${p.cle_anomalie || ''}', ${p.diametre || 'null'}, '${p.materiau || ''}', ${p.distance_m || 'null'})" title="Modifier les attributs physiques de cette conduite (diamètre, matériau...)">
-                                ✏️ Modifier les attributs
-                            </button>
-                            ${(p.categorie === 'sens_ecoulement' || (p.id_amont && p.id_aval)) ? `
-                            <button class="btn-action-correct btn-reverse-flow" onclick="inverserSensEcoulement('${p.id_conduite || ''}', '${p.cle_anomalie || ''}', '${p.id_amont || ''}', '${p.id_aval || ''}')" title="Permuter l'amont et l'aval pour rétablir le sens gravitaire">
-                                🔄 Inverser le sens (${p.id_aval || 'Aval'} ➔ ${p.id_amont || 'Amont'})
-                            </button>` : ''}
-                        </div>
-                    </div>
+                                <button class="btn-primary-action btn-edit" onclick="ouvrirModalEditionAttributs('${p.id_conduite || ''}', '${p.cle_anomalie || ''}', ${p.diametre || 'null'}, '${p.materiau || ''}', ${p.distance_m || 'null'})">
+                                    <i class="fa-solid fa-pen-to-square"></i> Modifier les attributs (Diamètre, Matériau...)
+                                </button>
+                            </div>
 
-                    <!-- Actions rapides de statut -->
-                    <div class="statut-action-bar">
-                        <div style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">
-                            Statut de cycle de vie (persistance par version GPKG) :
+                            <!-- Validation comme dérogation terrain ou statut -->
+                            <div class="derogation-bar">
+                                <button class="btn-derogation ${p.statut === 'revu' ? 'active' : ''}" onclick="changerStatutAnomalie('${p.cle_anomalie}', 'revu')" title="Valider cet ouvrage tel quel si la pente ou l'état est conforme sur site (dérogation terrain)">
+                                    <i class="fa-solid fa-clipboard-check"></i> Dérogation terrain
+                                </button>
+                                <div>
+                                    ${p.statut === 'corrige' ? `
+                                        <span class="status-tag status-corrected"><i class="fa-solid fa-check"></i> Résolu / Corrigé</span>
+                                    ` : (p.statut === 'revu' ? `
+                                        <span class="status-tag" style="background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe;"><i class="fa-solid fa-shield-halved"></i> Dérogation terrain</span>
+                                    ` : `
+                                        <span class="status-tag" style="background:#fef2f2; color:#b91c1c; border:1px solid #fecaca;"><i class="fa-solid fa-clock"></i> À traiter</span>
+                                    `)}
+                                </div>
+                            </div>
                         </div>
-                        <div class="statut-btn-group">
-                            <button class="statut-btn ${(p.statut || 'a_traiter') === 'a_traiter' ? 'active-traiter' : ''}" onclick="changerStatutAnomalie('${p.cle_anomalie}', 'a_traiter')">
-                                ⏳ À traiter
-                            </button>
-                            <button class="statut-btn ${p.statut === 'revu' ? 'active-revu' : ''}" onclick="changerStatutAnomalie('${p.cle_anomalie}', 'revu')">
-                                👁️ Marquer Revu
-                            </button>
-                            <button class="statut-btn ${p.statut === 'corrige' ? 'active-corrige' : ''}" onclick="changerStatutAnomalie('${p.cle_anomalie}', 'corrige')">
-                                ✓ Corrigé
-                            </button>
+
+                        <!-- Trace d'intégrité discrète en pied de fiche -->
+                        <div class="card-footer-trace">
+                            <span>Réf. intégrité SHA-1</span>
+                            <code>${p.cle_anomalie || 'N/A'}</code>
                         </div>
-                        <input type="text" id="statut-comment" class="comment-input" placeholder="Commentaire optionnel (justification hydraulique, récolement...)" />
+
                     </div>
                 </div>
             `;
@@ -1626,7 +1807,7 @@
         function ouvrirModalEditionAttributs(idConduite, cleAnomalie, diametreActuel, materiauActuel, distanceM) {
             document.getElementById('edit-id-conduite').value = idConduite || '';
             document.getElementById('edit-cle-anomalie').value = cleAnomalie || '';
-            document.getElementById('modal-edit-title').textContent = `✏️ Modifier la conduite ${idConduite || ''}`;
+            document.getElementById('modal-edit-title').innerHTML = `<i class="fa-solid fa-pen-to-square" style="color:#38bdf8; margin-right:8px;"></i> Modifier la conduite ${idConduite || ''}`;
             document.getElementById('edit-diametre').value = diametreActuel || '';
             document.getElementById('edit-materiau').value = materiauActuel || '';
             document.getElementById('edit-longueur').value = distanceM || '';
@@ -1759,8 +1940,8 @@
     <div id="modal-edit-conduite" class="modal-edit-overlay">
         <div class="modal-edit-card">
             <div class="modal-edit-header">
-                <span id="modal-edit-title" style="font-weight:700; font-size:14px;">✏️ Modifier la canalisation</span>
-                <span style="cursor:pointer; font-size:18px;" onclick="fermerModalEditionAttributs()">×</span>
+                <span id="modal-edit-title" style="font-weight:700; font-size:14px;"><i class="fa-solid fa-pen-to-square" style="color:#38bdf8; margin-right:8px;"></i> Modifier la canalisation</span>
+                <span style="cursor:pointer; font-size:18px;" onclick="fermerModalEditionAttributs()"><i class="fa-solid fa-xmark"></i></span>
             </div>
             <div class="modal-edit-body">
                 <input type="hidden" id="edit-id-conduite" />
@@ -1791,8 +1972,8 @@
                 </div>
             </div>
             <div class="modal-edit-footer">
-                <button class="btn-modal-cancel" onclick="fermerModalEditionAttributs()">Annuler</button>
-                <button class="btn-modal-save" onclick="sauvegarderEditionAttributs()">💾 Enregistrer et marquer corrigé</button>
+                <button class="btn-modal-cancel" onclick="fermerModalEditionAttributs()"><i class="fa-solid fa-xmark"></i> Annuler</button>
+                <button class="btn-modal-save" onclick="sauvegarderEditionAttributs()"><i class="fa-solid fa-check"></i> Enregistrer et valider</button>
             </div>
         </div>
     </div>
