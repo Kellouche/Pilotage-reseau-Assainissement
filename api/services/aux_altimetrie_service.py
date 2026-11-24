@@ -636,6 +636,33 @@ def _mediane(valeurs) -> Optional[float]:
     return vals[n // 2] if n % 2 else (vals[n // 2 - 1] + vals[n // 2]) / 2.0
 
 
+def _sanitiser_profondeur_m(val) -> Optional[float]:
+    """
+    Sanitisation des profondeurs radier (spec CQ V2.1 §4.2) :
+    - 0,30–10,0 m : accepté en mètres ;
+    - 10–12 000 : conversion d'unité suspecte (mm/cm) avec avertissement ;
+    - hors limites ou non numérique : rejeté → None (profondeur médiane
+      injectée en aval → le tronçon bascule en N3, jamais en anomalie).
+    """
+    try:
+        v = float(val)
+    except (TypeError, ValueError):
+        return None
+    if not np.isfinite(v):
+        return None
+    if 0.30 <= v <= 10.0:
+        return v
+    if 10.0 < v <= 12000.0:
+        conv = v / 1000.0 if v > 300.0 else v / 100.0
+        if 0.30 <= conv <= 10.0:
+            _PROFONDEURS_CONVERTIES[0] += 1
+            return conv
+    return None
+
+
+_PROFONDEURS_CONVERTIES = [0]  # compteur thread-safe suffisant (usage synchrone)
+
+
 def calculer_apercu_terrain(regards_gdf, canalisations_gdf, artefact) -> Dict[str, Any]:
     """
     Calcul PUR (sans IO) : pour chaque regard du réseau → z_terrain IDW,
@@ -658,6 +685,7 @@ def calculer_apercu_terrain(regards_gdf, canalisations_gdf, artefact) -> Dict[st
             prof = float(r.get("Profondeur")) if pd.notna(r.get("Profondeur")) else None
         except (TypeError, ValueError):
             prof = None
+        prof = _sanitiser_profondeur_m(prof) if prof is not None else None
         if prof is not None and prof > 0:
             profondeurs.append(prof)
         regards[code] = {"profondeur": prof}
@@ -738,6 +766,7 @@ def calculer_apercu_terrain(regards_gdf, canalisations_gdf, artefact) -> Dict[st
             "nb_reelles": nb_prof_reelle,
             "nb_estimees": nb_prof_estimee,
             "mediane_reseau_m": round(med, 3) if med is not None else None,
+            "nb_unites_converties": _PROFONDEURS_CONVERTIES[0],
         },
         "inversions_amont_aval": {
             "nb": len(inversions),

@@ -201,7 +201,34 @@ def _resoudre_extremite(resolveur: ResoluteurNoeuds, nid_brut: str,
     return res, bool(points)
 
 
-def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -> Dict[str, Any]:
+def _colonnes_cote_ngf(row: Any) -> Optional[float]:
+    """
+    Extrait une cote NGF absolue de radier si le jeu de données en porte
+    une EXPLICITE (spec V2.1 §4.1-N1). Les colonnes de PROFONDEUR
+    (PROFRADI, Profondeur, PROF_FE_*, HFERMSOL…) sont exclues : ce sont des
+    profondeurs, jamais des altitudes — les accepter produisait les
+    1134 faux positifs historiques.
+    """
+    for col in ("cote_radier", "z_radier", "COTRAD", "cote_radier_m", "Z_RADIER"):
+        v = _safe_float(_col_val(row, col))
+        if v is not None:
+            return v
+    return None
+
+
+def _est_refoulement(c: Any) -> bool:
+    """Conduite sous pression / refoulement : jamais de contrôle de pente
+    gravitaire (spec V2.1 §4.4)."""
+    txt = " ".join(str(_col_val(c, *noms) or "") for noms in (
+        ("FONCTIONMT",), ("fonctionmt",), ("Type d'eau",), ("type_eau",),
+        ("Section",), ("TYPEEFFL",),
+    )).lower()
+    return any(k in txt for k in ("refoulement", "refoul", "pression", "rejet"))
+
+
+def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif",
+                          contexte_terrain: Optional[Dict[str, Any]] = None
+                          ) -> Dict[str, Any]:
     """
     Exécute un audit de qualité géométrique, attributaire et topologique
     directement sur le GeoPackage actif du projet.
@@ -260,8 +287,22 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -
         "geometries_invalides": [],
         "pentes_suspectes": [],
         "incoherences_amont_aval": [],
+        "inversions_sens_ecoulement": [],
+        "deconnexions_spatiales": [],
+        "donnees_manquantes": [],
+        "discontinuites_pose": [],
         "capacite_debit": []
     }
+
+    # Contexte altimétrique V2.1 (optionnel) : suspects d'inversion de sens
+    # (signal terrain/azimut) + cotes radier estimées par regard, calculés
+    # en amont par aux_altimetrie_service depuis la couche topo du projet.
+    suspects_map: Dict[tuple, Dict[str, Any]] = {}
+    par_regard_terrain: Dict[str, Any] = {}
+    if contexte_terrain:
+        for s in (contexte_terrain.get("suspects_ecoulement") or []):
+            suspects_map[(s.get("amont"), s.get("aval"))] = s
+        par_regard_terrain = contexte_terrain.get("par_regard") or {}
 
     upstream_connections = set()
     downstream_connections = set()
@@ -303,8 +344,22 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -
         if resolveur_noeuds is not None and not pipes_m.empty and idx < len(pipes_m):
             geom_m = pipes_m.geometry.iloc[idx]
         points = _points_extremite(geom_m)
+        # Longueur fiable en mètres (géométrie éventuellement en degrés)
+        long_m = None
+        if geom_m is not None and geom_m.length > 0:
+            long_m = float(geom_m.length)
+        elif c.geometry is not None and c.geometry.length > 0:
+            try:
+                if c.crs is not None and c.crs.is_geographic:
+                    long_m = None
+                else:
+                    long_m = float(c.geometry.length)
+            except Exception:
+                long_m = None
 
-        def _statut_extremite(nid_brut):
+        _res_holder = {}
+
+        def _statut_extremite(nid_brut, _cle):
             """Retourne (manque: bool, severite: str, detail: str)."""
             stats_conn["extremites_total"] += 1
             if resolveur_noeuds is None:
@@ -312,6 +367,7 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -
                 manque = not nid_brut or nid_brut not in valid_nodes
                 return manque, "majeure", "introuvable (contrôle strict)"
             res, a_point = _resoudre_extremite(resolveur_noeuds, nid_brut, points)
+            _res_holder[_cle] = res
             if res.resolu:
                 stats_conn[res.provenance] = stats_conn.get(res.provenance, 0) + 1
                 return False, "", ""
@@ -321,8 +377,10 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -
             stats_conn["absent"] += 1
             return True, "majeure", "introuvable (ni ID, ni alias, ni snap, ni point)"
 
-        manque_amont, sev_amont, det_amont = _statut_extremite(u)
-        manque_aval, sev_aval, det_aval = _statut_extremite(d)
+        manque_amont, sev_amont, det_amont = _statut_extremite(u, "u")
+        manque_aval, sev_aval, det_aval = _statut_extremite(d, "d")
+        res_u = _res_holder.get("u")
+        res_d = _res_holder.get("d")
 
         if manque_amont or manque_aval:
             desc = []
@@ -392,28 +450,29 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -
                 "longitude": lon
             })
 
-        # E. Pentes suspectes et contre-pentes
+        # E. Altimétrie — cascade V2.1 (docs/05_CONTROLE_QUALITE_V2.md) :
+        #    N1 cotes NGF explicites | N2 sens d'écoulement / radier
+        #    estimé haute confiance | N3 indéterminé → donnees_manquantes.
+        #    Les colonnes PROFRADI/PROF_FE sont des PROFONDEURS : jamais
+        #    comparées entre elles (cause des 1134 faux positifs).
         if u in valid_nodes and d in valid_nodes:
             node_u = valid_nodes[u]
             node_d = valid_nodes[d]
-            # Rechercher cote radier ou TN (COTRAD/COTETN = schéma SIG français courant)
-            z_u = None
-            z_d = None
-            for col in ["COTRAD", "PROFRADI", "COTTN", "COORDZ", "Z", "cote_radier", "COTETN", "TN", "ALTITUDE"]:
-                if z_u is None and col in node_u and pd.notna(node_u[col]):
-                    z_u = _safe_float(node_u[col])
-                if z_d is None and col in node_d and pd.notna(node_d[col]):
-                    z_d = _safe_float(node_d[col])
-
-            if z_u is not None and z_d is not None and c.geometry and c.geometry.length > 0:
-                delta_z = z_u - z_d
-                pente_pct = (delta_z / c.geometry.length) * 100.0
-                if delta_z < -0.05:  # Contre-pente réelle
+            z_ngf_u = _colonnes_cote_ngf(node_u)
+            z_ngf_d = _colonnes_cote_ngf(node_d)
+            if _est_refoulement(c):
+                pass  # refoulement : pas de pente gravitaire
+            elif (z_ngf_u is not None and z_ngf_d is not None and long_m):
+                # N1 — cotes NGF explicites : pente certifiée
+                delta_z = z_ngf_u - z_ngf_d
+                pente_pct = (delta_z / long_m) * 100.0
+                if delta_z < -0.05:
                     anomalies["pentes_suspectes"].append({
                         "id_conduite": cid,
-                        "type": "pente_suspecte",
-                        "severite": "critique",
-                        "description": f"Contre-pente détectée (pente = {pente_pct:.2f}%) : l'eau doit remonter de {abs(delta_z):.2f} m",
+                        "type": "pente_certifiee",
+                        "severite": "majeure",
+                        "provenance": "mesure_ngf",
+                        "description": f"Contre-pente certifiée (pente = {pente_pct:.2f}%) : le radier aval ({z_ngf_d:.2f} m) est plus haut que l'amont ({z_ngf_u:.2f} m)",
                         "latitude": lat,
                         "longitude": lon
                     })
@@ -421,28 +480,128 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -
                         "id_conduite": cid,
                         "type": "incoherence_amont_aval",
                         "severite": "majeure",
-                        "description": f"Inversion de radier entre amont ({z_u:.2f} m) et aval ({z_d:.2f} m)",
+                        "description": f"Inversion de radier NGF entre amont ({z_ngf_u:.2f} m) et aval ({z_ngf_d:.2f} m)",
                         "latitude": lat,
                         "longitude": lon
                     })
                 elif 0 <= pente_pct < 0.1:
                     anomalies["pentes_suspectes"].append({
                         "id_conduite": cid,
-                        "type": "pente_suspecte",
+                        "type": "pente_certifiee",
                         "severite": "mineure",
-                        "description": f"Pente très faible ({pente_pct:.2f}%) inférieure au seuil d'autocurage (0.2%)",
+                        "provenance": "mesure_ngf",
+                        "description": f"Pente très faible certifiée ({pente_pct:.2f}%) inférieure au seuil d'autocurage (0.2%)",
                         "latitude": lat,
                         "longitude": lon
                     })
-                elif pente_pct > 15.0:
-                    anomalies["pentes_suspectes"].append({
+            elif contexte_terrain is not None:
+                # N2/N3 — cascade terrain : signal « sens d'écoulement »
+                # prioritaire (inversion avérée vs gradient de surface),
+                # puis radier estimé haute confiance, sinon N3 honnête.
+                cle = (u, d)
+                if cle in suspects_map:
+                    s = suspects_map[cle]
+                    anomalies["inversions_sens_ecoulement"].append({
                         "id_conduite": cid,
-                        "type": "pente_suspecte",
-                        "severite": "mineure",
-                        "description": f"Pente excessive ({pente_pct:.2f}%) risquant une vitesse d'érosion",
+                        "type": "inversion_sens_ecoulement",
+                        "id_amont": u, "id_aval": d,
+                        "severite": {"fort": "majeure", "moyen": "mineure"}.get(s.get("severite"), "informatif"),
+                        "provenance": "mnt_terrain",
+                        "description": " ; ".join(s.get("motifs") or ["sens d'écoulement suspect vs terrain"]),
+                        "ecart_terrain_m": s.get("ecart_terrain_m"),
+                        "pente_contre_pct": s.get("pente_contre_pct"),
+                        "confiance": s.get("confiance"),
                         "latitude": lat,
                         "longitude": lon
                     })
+                else:
+                    ru = par_regard_terrain.get(u) or {}
+                    rv = par_regard_terrain.get(d) or {}
+                    zr_a, zr_v = ru.get("z_radier_terrain_m"), rv.get("z_radier_terrain_m")
+                    prof_reelle = (not ru.get("profondeur_estimee")) and (not rv.get("profondeur_estimee"))
+                    if (zr_a is not None and zr_v is not None and prof_reelle
+                            and long_m):
+                        dz_terr = zr_v - zr_a  # >0 : le radier estimé monte vers l'aval
+                        if dz_terr > 0.05:
+                            anomalies["pentes_suspectes"].append({
+                                "id_conduite": cid,
+                                "type": "pente_suspecte",
+                                "severite": "mineure",
+                                "provenance": "mnt_haute_confiance",
+                                "description": f"Radier estimé aval plus haut de {dz_terr:.2f} m (terrain IDW − profondeur réelle) — à valider sur le terrain",
+                                "latitude": lat,
+                                "longitude": lon
+                            })
+                    else:
+                        anomalies["donnees_manquantes"].append({
+                            "id_conduite": cid,
+                            "type": "altimetrie_indeterminee",
+                            "severite": "informatif",
+                            "provenance": "indetermine",
+                            "description": "Pente non évaluable : couverture topo insuffisante ou profondeur radier non renseignée",
+                            "latitude": lat,
+                            "longitude": lon
+                        })
+
+        # E-bis. Cohérence géométrique V2.1 (spec §4.2) : l'extrémité résolue
+        # par ID doit être proche du vertex de la conduite (snap ≤ 0,5 m) ;
+        # sinuosité L/corde ≤ 3,0 tolère les tronçons sinueux sans rejeter
+        # les corruptions d'ID massives (> max(50 m, 2×longueur)).
+        if resolveur_noeuds is not None and geom_m is not None and geom_m.length > 0:
+            # Sinuosité : ratio longueur / corde
+            try:
+                coords_g = list(geom_m.coords) if geom_m.geom_type == "LineString" else None
+                if coords_g and len(coords_g) > 1:
+                    corde = ((coords_g[-1][0] - coords_g[0][0]) ** 2
+                             + (coords_g[-1][1] - coords_g[0][1]) ** 2) ** 0.5
+                    if corde > 0 and geom_m.length / corde > 3.0:
+                        anomalies["deconnexions_spatiales"].append({
+                            "id_conduite": cid,
+                            "type": "sinuosite_anormale",
+                            "severite": "mineure",
+                            "description": f"Sinuosité anormale (L/corde = {geom_m.length/corde:.1f} > 3.0) — géométrie à vérifier",
+                            "latitude": lat,
+                            "longitude": lon
+                        })
+            except Exception:
+                pass
+            for res_ext, pt_ext in ((res_u, points[0] if points else None),
+                                    (res_d, points[-1] if points else None)):
+                if res_ext is not None and res_ext.resolu and res_ext.noeud in resolveur_noeuds.noeuds and pt_ext:
+                    nx, ny = resolveur_noeuds.noeuds[res_ext.noeud]
+                    dist_nd = ((nx - pt_ext[0]) ** 2 + (ny - pt_ext[1]) ** 2) ** 0.5
+                    seuil = max(50.0, 2.0 * float(geom_m.length))
+                    if dist_nd > seuil:
+                        anomalies["deconnexions_spatiales"].append({
+                            "id_conduite": cid,
+                            "type": "deconnexion_spatiale_extreme",
+                            "severite": "majeure",
+                            "description": f"Extrémité résolue à {dist_nd:.0f} m du tronçon (longueur {geom_m.length:.1f} m) — identifiant suspect",
+                            "distance_m": round(dist_nd, 1),
+                            "latitude": lat,
+                            "longitude": lon
+                        })
+                        break
+
+        # E-ter. Discontinuité de pose (spec §4.4) : PROF_FE_AM/AV sont des
+        # PROFONDEURS de fil d'eau — jamais de pente, mais une variation
+        # brutale d'enfouissement (>3 m) entre les deux bouts d'un tronçon
+        # signale une rupture de continuité altimétrique du relevé.
+        prof_fe_am = _safe_float(_col_val(c, "PROF_FE_AM", "prof_fe_am", "PROFFEA"))
+        prof_fe_av = _safe_float(_col_val(c, "PROF_FE_AV", "prof_fe_av", "PROFFEAV"))
+        if (prof_fe_am is not None and prof_fe_av is not None
+                and 0.05 <= prof_fe_am <= 10.0 and 0.05 <= prof_fe_av <= 10.0):
+            ecart_pose = abs(prof_fe_av - prof_fe_am)
+            if ecart_pose > 3.0:
+                anomalies["discontinuites_pose"].append({
+                    "id_conduite": cid,
+                    "type": "discontinuite_pose",
+                    "severite": "mineure",
+                    "provenance": "attributs_prof_fe",
+                    "description": f"Discontinuité de pose : profondeur amont {prof_fe_am:.2f} m vs aval {prof_fe_av:.2f} m (écart {ecart_pose:.2f} m > 3 m)",
+                    "latitude": lat,
+                    "longitude": lon
+                })
 
     # Calcul des scores
     total_anomalies_brutes = sum(len(v) for v in anomalies.values())
@@ -509,8 +668,17 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -
             "total_anomalies": len(anomalies["geometries_invalides"])
         },
         "hydraulique": {
-            "score_qualite": round(max(0.0, 100.0 - (len(anomalies["pentes_suspectes"]) / max(1, nb_pipes) * 100.0)), 1),
-            "total_anomalies": len(anomalies["pentes_suspectes"])
+            "score_qualite": round(max(0.0, 100.0 - ((len(anomalies["pentes_suspectes"]) + len(anomalies["inversions_sens_ecoulement"])) / max(1, nb_pipes) * 100.0)), 1),
+            "total_anomalies": len(anomalies["pentes_suspectes"]) + len(anomalies["inversions_sens_ecoulement"])
+        },
+        "altimetrie": {
+            # V2.1 : complétude déclarée, jamais un score flatteur —
+            # le dénominateur est le % de conduites évaluables.
+            "score_qualite": round(100.0 * (
+                1.0 - len(anomalies["donnees_manquantes"]) / max(1, nb_pipes)
+            ), 1) if contexte_terrain is not None else None,
+            "total_anomalies": len(anomalies["donnees_manquantes"]),
+            "couverture_pct": contexte_terrain.get("couverture_pct") if contexte_terrain else None,
         },
         "par_commune": par_commune
     }
@@ -551,6 +719,7 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif") -
     }
 
     rapport = {
+        "moteur": "v2.1",
         "date_analyse": datetime.now().isoformat(),
         "project_name": project_name,
         "statistiques_globales": statistiques_globales,

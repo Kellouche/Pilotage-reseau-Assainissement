@@ -44,10 +44,60 @@ def _charger_cache_disque(gpkg_path: Path) -> Optional[Dict[str, Any]]:
         if cache_file.exists():
             if cache_file.stat().st_mtime >= gpkg_path.stat().st_mtime:
                 with open(cache_file, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                    rapport = json.load(f)
+                # Invalider les rapports produits par un ancien moteur
+                if rapport.get("moteur") == "v2.1":
+                    return rapport
     except Exception as e:
         print(f"[CACHE QUALITE] Erreur lecture cache disque: {e}")
     return None
+
+
+def _construire_contexte_terrain_qualite(db: Session, ctx: TenantContext) -> Optional[Dict[str, Any]]:
+    """
+    Construit le contexte altimétrique V2.1 (spec docs/05_CONTROLE_QUALITE_V2.md)
+    à partir de la première couche `altimetrie_points` opérationnelle du projet :
+    suspects d'inversion de sens d'écoulement + cotes radier estimées par regard.
+    Retourne None si aucune couche topo exploitable n'existe — l'analyse
+    qualité ne doit jamais échouer pour autant.
+    """
+    try:
+        from api.models import Project, ProjectAuxLayer
+        from api.services import aux_altimetrie_service as alt
+
+        project = db.query(Project).filter(
+            Project.org_id == ctx.org_id,
+            Project.is_archived.is_(False),
+        ).first()
+        if project is None:
+            return None
+
+        couche = db.query(ProjectAuxLayer).filter(
+            ProjectAuxLayer.project_id == project.id,
+            ProjectAuxLayer.org_id == ctx.org_id,
+            ProjectAuxLayer.type == "altimetrie_points",
+            ProjectAuxLayer.statut == "ok",
+        ).first()
+        if couche is None:
+            return None
+
+        err, _couche, regards_gdf, canas_gdf, artefact = alt._charger_contexte_altimetrie(
+            db, ctx.org_id, project.id, couche.id)
+        if err is not None:
+            return None
+
+        apercu = alt.calculer_apercu_terrain(regards_gdf, canas_gdf, artefact)
+        eco = alt.analyser_ecoulement_terrain(regards_gdf, canas_gdf, artefact)
+
+        return {
+            "suspects_ecoulement": eco.get("suspects") or [],
+            "par_regard": apercu.get("par_regard") or {},
+            "couverture_pct": (apercu.get("couverture") or {}).get("pct"),
+            "layer_nom": getattr(_couche, "nom", None),
+        }
+    except Exception as e:
+        print(f"[QUALITE] Contexte terrain indisponible : {e}")
+        return None
 
 
 def _sauvegarder_cache_disque(gpkg_path: Path, rapport: Dict[str, Any]):
@@ -147,7 +197,9 @@ async def analyser_qualite_reseau(
             return rapport_disque
 
     try:
-        rapport = await asyncio.to_thread(analyser_qualite_gpkg, gpkg_target, project_name)
+        contexte_terrain = _construire_contexte_terrain_qualite(db, ctx)
+        rapport = await asyncio.to_thread(
+            analyser_qualite_gpkg, gpkg_target, project_name, contexte_terrain)
 
         _sauvegarder_cache_disque(gpkg_target, rapport)
 
