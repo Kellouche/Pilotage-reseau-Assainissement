@@ -1246,6 +1246,24 @@
             return mapLib[cat] || (cat || '').replace('_', ' ');
         }
 
+        // Action recommandée par catégorie d'anomalie — miroir du LIBELLES
+        // de api/routes/qualite.py. Le hint « Action prioritaire » du bandeau
+        // suit l'anomalie affichée au lieu de rester figé sur le top global.
+        const ACTION_PAR_CATEGORIE = {
+            'conduites_sans_regards': 'Raccorder les conduites orphelines à un nœud',
+            'troncons_orphelins': 'Vérifier l\'isolement des tronçons orphelins',
+            'champs_manquants': 'Compléter les attributs manquants (diamètre, matériau, longueur)',
+            'geometries_invalides': 'Réparer les géométries corrompues',
+            'pentes_suspectes': 'Valider les pentes certifiées NGF sur le terrain',
+            'incoherences_amont_aval': 'Corriger les inversions de radier NGF',
+            'inversions_sens_ecoulement': 'Recouper le sens d\'écoulement avec le sens de la pente du terrain',
+            'deconnexions_spatiales': 'Contrôler les identifiants d\'extrémités suspects',
+            'discontinuites_pose': 'Vérifier la continuité de pose (profondeurs PROF_FE)',
+            'capacite_debit': 'Contrôler la capacité de débit des tronçons',
+            'donnees_manquantes': 'Compléter l\'altimétrie (campagne topo / récolement)'
+        };
+        let _topActionGlobalHtml = null;
+
         // Initialisation dès chargement DOM
         document.addEventListener('DOMContentLoaded', () => {
             initLeafletMap();
@@ -1441,10 +1459,16 @@
             document.getElementById('kpi-anom-ouvertes').textContent = ouvertes;
             document.getElementById('kpi-anom-total').textContent = `Total: ${anom.total ?? 0}`;
 
-            // Top action
+            // Top action globale (secours quand aucune anomalie n'est affichée)
             const topActions = syn.top_actions || [];
+            const hintEl = document.getElementById('top-action-hint');
             if (topActions.length > 0) {
-                document.getElementById('top-action-hint').innerHTML = `<strong>Action prioritaire :</strong> ${topActions[0].libelle} (${topActions[0].nb_ouvertes} cas)`;
+                _topActionGlobalHtml = `<strong>Action prioritaire :</strong> ${topActions[0].libelle} (${topActions[0].nb_ouvertes} cas)`;
+            } else {
+                _topActionGlobalHtml = null;
+            }
+            if (hintEl) {
+                hintEl.innerHTML = _topActionGlobalHtml || '';
             }
         }
 
@@ -1546,6 +1570,8 @@
                     highlightMarker = null;
                 }
                 effacerContexteReseau();
+                const hintElVide = document.getElementById('top-action-hint');
+                if (hintElVide) hintElVide.innerHTML = _topActionGlobalHtml || '';
                 document.getElementById('fiche-container').innerHTML = `
                     <div style="color:var(--text-muted); text-align:center; padding:40px 10px;">
                         Aucune anomalie ne correspond aux filtres sélectionnés.
@@ -1663,6 +1689,16 @@
             // (volatile — disparaît dès que l'anomalie change ou n'a pas de
             // conduite associée).
             chargerContexteReseauFin(p.id_conduite || null);
+
+            // Hint contextuel : l'action recommandée suit la catégorie de
+            // l'anomalie affichée (le top global ne doit pas masquer les autres).
+            const hintEl = document.getElementById('top-action-hint');
+            if (hintEl) {
+                const libAction = ACTION_PAR_CATEGORIE[p.categorie];
+                hintEl.innerHTML = libAction
+                    ? `<strong>Action recommandée :</strong> ${libAction}`
+                    : (_topActionGlobalHtml || '');
+            }
 
             // Métriques physiques
             let metricsHtml = '';
