@@ -16,6 +16,7 @@ from typing import Dict, Any, Optional, Tuple
 import json
 import os
 import csv
+import sqlite3
 from pathlib import Path
 from datetime import datetime
 
@@ -1005,6 +1006,291 @@ async def clear_cache(
     """
     reinitialiser_cache_qualite()
     return {"message": "Cache d'analyse qualité vidé"}
+
+
+# ---------------------------------------------------------------------------
+# Endpoints de correction directe des anomalies (Lot 4 - Actions directes)
+# ---------------------------------------------------------------------------
+
+def _connecter_gpkg_rw(gpkg_file: Path) -> sqlite3.Connection:
+    """Ouvre une connexion SQLite RW avec fonctions spatiales factices pour contourner les triggers GPKG sans SpatiaLite."""
+    conn = sqlite3.connect(gpkg_file)
+    conn.create_function("ST_IsEmpty", 1, lambda g: 0)
+    conn.create_function("ST_MinX", 1, lambda g: 0.0)
+    conn.create_function("ST_MaxX", 1, lambda g: 0.0)
+    conn.create_function("ST_MinY", 1, lambda g: 0.0)
+    conn.create_function("ST_MaxY", 1, lambda g: 0.0)
+    return conn
+
+
+def _resoudre_table_canalisations_gpkg(conn: sqlite3.Connection) -> Optional[str]:
+    """Trouve le nom exact de la couche de canalisations dans le GPKG."""
+    cur = conn.cursor()
+    cur.execute("SELECT table_name FROM gpkg_contents WHERE data_type='features'")
+    tables = [r[0] for r in cur.fetchall()]
+    mots_cles = ["canalisat", "conduit", "pipe", "troncon"]
+    for t in tables:
+        t_low = t.lower()
+        if any(m in t_low for m in mots_cles) and not any(e in t_low for e in ["desaffect", "désaffect"]):
+            return t
+    return tables[0] if tables else None
+
+
+def _normaliser_nom_colonne(col_name: str) -> str:
+    """Normalise un nom de colonne pour comparaison robuste."""
+    c = col_name.lower().replace("è", "e").replace("é", "e").replace("-", "_").replace(" ", "_")
+    if c == "longeur":
+        return "longueur"
+    return c
+
+
+def _trouver_rowid_conduite_gpkg(cur: sqlite3.Cursor, table_name: str, id_conduite: str, col_id: str) -> Optional[int]:
+    """Recherche le rowid d'une conduite de façon infaillible (aligné sur l'index C_idx d'analyse_qualite_gpkg)."""
+    # 1. Correspondance par colonne identifiant si renseignée
+    try:
+        cur.execute(f'SELECT rowid FROM "{table_name}" WHERE "{col_id}" = ?', [str(id_conduite)])
+        r = cur.fetchone()
+        if r and r[0]:
+            return r[0]
+    except sqlite3.Error:
+        pass
+
+    # 2. Format canonique C_XX généré par le moteur d'analyse qualité
+    import re
+    m = re.match(r'^c_?(\d+)$', str(id_conduite), re.IGNORECASE)
+    if m:
+        idx = int(m.group(1)) - 1
+        if idx >= 0:
+            cur.execute(f'SELECT rowid FROM "{table_name}" LIMIT 1 OFFSET ?', [idx])
+            r = cur.fetchone()
+            if r and r[0]:
+                return r[0]
+
+    # 3. Entier brut (ex: "1" ou "37")
+    try:
+        idx = int(id_conduite) - 1
+        if idx >= 0:
+            cur.execute(f'SELECT rowid FROM "{table_name}" LIMIT 1 OFFSET ?', [idx])
+            r = cur.fetchone()
+            if r and r[0]:
+                return r[0]
+    except ValueError:
+        pass
+
+    # 4. Fallback fid_1 ou fid
+    for fid_col in ["fid_1", "fid"]:
+        try:
+            cur.execute(f'SELECT rowid FROM "{table_name}" WHERE "{fid_col}" = ?', [id_conduite])
+            r = cur.fetchone()
+            if r and r[0]:
+                return r[0]
+        except sqlite3.Error:
+            pass
+
+    return None
+
+
+@router.patch("/conduites/{id_conduite}", response_model=Dict[str, Any])
+async def modifier_attributs_conduite(
+    id_conduite: str,
+    payload: Dict[str, Any],
+    db: Session = Depends(get_db),
+    ctx: TenantContext = Depends(require_role("engineer"))
+):
+    """
+    Modifie les attributs d'une conduite (diamètre, matériau, longueur, etc.)
+    directement dans le GeoPackage du réseau actif et dans la base si applicable.
+    Marque automatiquement l'anomalie associée comme corrigée et purge le cache.
+    """
+    if not payload:
+        raise HTTPException(status_code=400, detail="Aucune donnée à modifier fournie.")
+
+    gpkg_path, nom_projet = get_active_project_and_gpkg(db, ctx)
+    if not gpkg_path or not Path(gpkg_path).exists():
+        raise HTTPException(status_code=404, detail="Fichier GeoPackage du réseau introuvable.")
+
+    gpkg_file = Path(gpkg_path)
+    champs_modifies = []
+
+    # 1. Mise à jour dans le GeoPackage SQLite
+    try:
+        conn = _connecter_gpkg_rw(gpkg_file)
+        table_name = _resoudre_table_canalisations_gpkg(conn)
+        if not table_name:
+            conn.close()
+            raise HTTPException(status_code=500, detail="Couche canalisations introuvable dans le GeoPackage.")
+
+        cur = conn.cursor()
+        pragma_cols = cur.execute(f'PRAGMA table_info("{table_name}")').fetchall()
+        mapping_cols = {_normaliser_nom_colonne(r[1]): r[1] for r in pragma_cols}
+        noms_bruts = [r[1] for r in pragma_cols]
+
+        col_id = "id" if "id" in mapping_cols else ("ID" if "ID" in noms_bruts else "fid_1")
+
+        rowid = _trouver_rowid_conduite_gpkg(cur, table_name, id_conduite, col_id)
+        if rowid is None:
+            conn.close()
+            raise HTTPException(status_code=404, detail=f"Conduite {id_conduite} introuvable dans le GeoPackage.")
+
+        set_clauses = []
+        valeurs = []
+        for k, v in payload.items():
+            if k in ("cle_anomalie", "commentaire"):
+                continue
+            k_norm = _normaliser_nom_colonne(k)
+            if k_norm in mapping_cols:
+                reel = mapping_cols[k_norm]
+                set_clauses.append(f'"{reel}" = ?')
+                if k_norm in ("diametre", "longueur", "hauteur", "rugosite", "prof_fe_am", "prof_fe_av"):
+                    try:
+                        v = float(v)
+                    except (ValueError, TypeError):
+                        pass
+                valeurs.append(v)
+                champs_modifies.append(f"{reel} = {v}")
+
+        if not set_clauses:
+            conn.close()
+            raise HTTPException(status_code=400, detail="Aucun attribut reconnu correspondant aux colonnes de la couche.")
+
+        sql = f'UPDATE "{table_name}" SET {", ".join(set_clauses)} WHERE rowid = ?'
+        cur.execute(sql, valeurs + [rowid])
+        lignes_affectees = cur.rowcount
+        conn.commit()
+        conn.close()
+
+    except sqlite3.Error as e:
+        raise HTTPException(status_code=500, detail=f"Erreur SQLite lors de la modification : {e}")
+
+    # 2. Mise à jour de la table Canalisation en base si elle existe
+    try:
+        from api.crud import update_canalisation
+        update_canalisation(db, id_conduite, payload, user_id=str(ctx.actor.id), org_id=ctx.org_id)
+    except Exception:
+        pass
+
+    # 3. Traçabilité du statut qualité (marquer comme corrigé)
+    cle_anomalie = payload.get("cle_anomalie")
+    if cle_anomalie:
+        try:
+            await definir_statut_anomalie_par_cle(
+                cle_anomalie=cle_anomalie,
+                request={"statut": "corrige", "commentaire": payload.get("commentaire") or f"Attributs mis à jour ({', '.join(champs_modifies)})"},
+                db=db,
+                ctx=ctx
+            )
+        except Exception as e:
+            print(f"[QUALITE] Erreur mise à jour statut anomalie : {e}")
+
+    # 4. Invalidation du cache pour actualisation des calculs
+    reinitialiser_cache_qualite(gpkg_file)
+
+    return {
+        "status": "success",
+        "message": f"Conduite {id_conduite} modifiée avec succès ({lignes_affectees} ligne affectée).",
+        "id_conduite": id_conduite,
+        "champs_modifies": champs_modifies,
+        "lignes_affectees": lignes_affectees
+    }
+
+
+@router.post("/conduites/{id_conduite}/inverser-sens", response_model=Dict[str, Any])
+async def inverser_sens_conduite(
+    id_conduite: str,
+    request: Optional[Dict[str, Any]] = None,
+    db: Session = Depends(get_db),
+    ctx: TenantContext = Depends(require_role("engineer"))
+):
+    """
+    Inverse le sens d'écoulement de la conduite en permutant ID_AMONT et ID_AVAL
+    dans le GeoPackage du réseau actif.
+    Marque l'anomalie associée comme corrigée et purge le cache.
+    """
+    gpkg_path, nom_projet = get_active_project_and_gpkg(db, ctx)
+    if not gpkg_path or not Path(gpkg_path).exists():
+        raise HTTPException(status_code=404, detail="Fichier GeoPackage du réseau introuvable.")
+
+    gpkg_file = Path(gpkg_path)
+
+    try:
+        conn = _connecter_gpkg_rw(gpkg_file)
+        table_name = _resoudre_table_canalisations_gpkg(conn)
+        if not table_name:
+            conn.close()
+            raise HTTPException(status_code=500, detail="Couche canalisations introuvable dans le GeoPackage.")
+
+        cur = conn.cursor()
+        pragma_cols = cur.execute(f'PRAGMA table_info("{table_name}")').fetchall()
+        noms_bruts = [r[1] for r in pragma_cols]
+        mapping_cols = {_normaliser_nom_colonne(r[1]): r[1] for r in pragma_cols}
+
+        col_amont = mapping_cols.get("id_amont")
+        col_aval = mapping_cols.get("id_aval")
+        if not col_amont or not col_aval:
+            conn.close()
+            raise HTTPException(status_code=500, detail="Colonnes amont/aval introuvables dans la couche.")
+
+        col_id = "id" if "id" in mapping_cols else ("ID" if "ID" in noms_bruts else "fid_1")
+
+        rowid = _trouver_rowid_conduite_gpkg(cur, table_name, id_conduite, col_id)
+        if rowid is None:
+            conn.close()
+            raise HTTPException(status_code=404, detail=f"Conduite {id_conduite} introuvable dans le GeoPackage.")
+
+        # Lire les valeurs actuelles
+        cur.execute(f'SELECT "{col_amont}", "{col_aval}" FROM "{table_name}" WHERE rowid = ?', [rowid])
+        row = cur.fetchone()
+        if not row:
+            conn.close()
+            raise HTTPException(status_code=404, detail=f"Conduite {id_conduite} introuvable dans le GeoPackage.")
+
+        ancien_amont, ancien_aval = str(row[0]), str(row[1])
+        nouvel_amont, nouvel_aval = ancien_aval, ancien_amont
+
+        # Permuter amont et aval
+        cur.execute(
+            f'UPDATE "{table_name}" SET "{col_amont}" = ?, "{col_aval}" = ? WHERE rowid = ?',
+            [nouvel_amont, nouvel_aval, rowid]
+        )
+        conn.commit()
+        conn.close()
+
+    except sqlite3.Error as e:
+        raise HTTPException(status_code=500, detail=f"Erreur SQLite lors de l'inversion : {e}")
+
+    # Mettre à jour la base si présente
+    try:
+        from api.crud import update_canalisation
+        update_canalisation(db, id_conduite, {"id_amont": nouvel_amont, "id_aval": nouvel_aval}, user_id=str(ctx.actor.id), org_id=ctx.org_id)
+    except Exception:
+        pass
+
+    # Traçabilité du statut qualité
+    cle_anomalie = (request or {}).get("cle_anomalie")
+    if cle_anomalie:
+        try:
+            commentaire = (request or {}).get("commentaire") or f"Sens d'écoulement inversé : {ancien_amont}➔{ancien_aval} devenu {nouvel_amont}➔{nouvel_aval}"
+            await definir_statut_anomalie_par_cle(
+                cle_anomalie=cle_anomalie,
+                request={"statut": "corrige", "commentaire": commentaire},
+                db=db,
+                ctx=ctx
+            )
+        except Exception as e:
+            print(f"[QUALITE] Erreur mise à jour statut anomalie : {e}")
+
+    # Invalidation du cache qualité
+    reinitialiser_cache_qualite(gpkg_file)
+
+    return {
+        "status": "success",
+        "message": f"Sens d'écoulement inversé avec succès pour {id_conduite} ({ancien_amont}➔{ancien_aval} inversé en {nouvel_amont}➔{nouvel_aval}).",
+        "id_conduite": id_conduite,
+        "ancien_amont": ancien_amont,
+        "ancien_aval": ancien_aval,
+        "nouvel_amont": nouvel_amont,
+        "nouvel_aval": nouvel_aval
+    }
 
 
 def _calculer_distribution_severite(anomalies: list) -> Dict[str, int]:

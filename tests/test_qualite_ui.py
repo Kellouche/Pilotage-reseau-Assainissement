@@ -52,7 +52,10 @@ def test_qualite_ui_structure_et_contrat():
         assert "/anomalies.geojson" in html
         assert "/statut" in html
 
-        # 4. Fonction de retour cockpit
+        # 4. Fonction de retour cockpit et actions de correction directe
         assert "retournerCockpit" in html
+        assert "modal-edit-conduite" in html
+        assert "btn-edit-attr" in html
+        assert "inverserSensEcoulement" in html
     finally:
         db.close()

@@ -212,3 +212,50 @@ def test_qualite_anomalie_cycle_de_vie(auth_headers):
     assert resp_reset.status_code == 200
     res_reset = resp_reset.json()
     assert res_reset.get("anomalie", {}).get("statut") == "a_traiter" or res_reset.get("statut") in ["ok", "a_traiter"]
+
+
+def test_qualite_modifier_attributs_conduite(auth_headers):
+    """PATCH /conduites/{id_conduite} modifie les attributs dans le GPKG et purge le cache."""
+    client = TestClient(app)
+    resp = client.patch(
+        "/api/v1/qualite/conduites/1",
+        headers=auth_headers,
+        json={"diametre": 800.0, "materiau": "PVC", "commentaire": "Correction test diamètre"}
+    )
+    print("PATCH RESP:", resp.status_code, resp.text)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "success"
+    assert data["id_conduite"] == "1"
+    assert "800.0" in str(data["champs_modifies"])
+    assert "PVC" in str(data["champs_modifies"])
+
+
+def test_qualite_inverser_sens_conduite(auth_headers):
+    """POST /conduites/{id_conduite}/inverser-sens permute ID_AMONT et ID_AVAL."""
+    client = TestClient(app)
+    # 1ère inversion
+    resp1 = client.post(
+        "/api/v1/qualite/conduites/1/inverser-sens",
+        headers=auth_headers,
+        json={"commentaire": "Test inversion sens écoulement"}
+    )
+    assert resp1.status_code == 200
+    d1 = resp1.json()
+    assert d1["status"] == "success"
+    amont1 = d1["nouvel_amont"]
+    aval1 = d1["nouvel_aval"]
+    assert amont1 == d1["ancien_aval"]
+    assert aval1 == d1["ancien_amont"]
+
+    # 2ème inversion pour remettre dans l'état initial
+    resp2 = client.post(
+        "/api/v1/qualite/conduites/1/inverser-sens",
+        headers=auth_headers,
+        json={"commentaire": "Rétablissement état initial"}
+    )
+    assert resp2.status_code == 200
+    d2 = resp2.json()
+    assert d2["nouvel_amont"] == d1["ancien_amont"]
+    assert d2["nouvel_aval"] == d1["ancien_aval"]
+
