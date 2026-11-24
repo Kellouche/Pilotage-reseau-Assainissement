@@ -31,15 +31,43 @@ _cache_qualite = {
     "gpkg_path": None,
     "rapport": None,
     "timestamp": None,
+    "empreinte_aux": None,
     "duree_validite": 3600  # 1 heure en secondes
 }
+
+
+def _empreinte_couches_aux(db: Session, ctx: TenantContext) -> str:
+    """
+    Empreinte des couches auxiliaires du projet (spec §6 : le cache doit
+    être invalidé par le mtime GPKG ET les versions des couches aux).
+    """
+    try:
+        from api.models import Project, ProjectAuxLayer
+
+        project = db.query(Project).filter(
+            Project.org_id == ctx.org_id,
+            Project.is_archived.is_(False),
+        ).first()
+        if project is None:
+            return ""
+        layers = db.query(ProjectAuxLayer).filter(
+            ProjectAuxLayer.project_id == project.id,
+            ProjectAuxLayer.org_id == ctx.org_id,
+        ).order_by(ProjectAuxLayer.id).all()
+        brut = "|".join(
+            f"{l.id}:{l.type}:{l.statut}:{l.storage_key}:{l.nb_features}:{l.gpkg_version_id}"
+            for l in layers
+        )
+        return hashlib.sha1(brut.encode("utf-8")).hexdigest() if brut else ""
+    except Exception:
+        return ""
 
 
 def _get_disk_cache_path(gpkg_path: Path) -> Path:
     return gpkg_path.with_suffix(".qualite_cache.json")
 
 
-def _charger_cache_disque(gpkg_path: Path) -> Optional[Dict[str, Any]]:
+def _charger_cache_disque(gpkg_path: Path, empreinte_aux: str = "") -> Optional[Dict[str, Any]]:
     try:
         cache_file = _get_disk_cache_path(gpkg_path)
         if cache_file.exists():
@@ -47,7 +75,9 @@ def _charger_cache_disque(gpkg_path: Path) -> Optional[Dict[str, Any]]:
                 with open(cache_file, "r", encoding="utf-8") as f:
                     rapport = json.load(f)
                 # Invalider les rapports produits par un ancien moteur
-                if rapport.get("moteur") == "v2.1":
+                # ou par d'autres versions des couches auxiliaires.
+                if (rapport.get("moteur") == "v2.1"
+                        and rapport.get("_empreinte_aux", "") == empreinte_aux):
                     return rapport
     except Exception as e:
         print(f"[CACHE QUALITE] Erreur lecture cache disque: {e}")
@@ -165,6 +195,23 @@ async def definir_statut_anomalie(
     db.commit()
     db.refresh(row)
     return {"statut": "ok", "anomalie": row.to_dict()}
+
+
+@router.post("/anomalies/{cle_anomalie}/statut", response_model=Dict[str, Any])
+async def definir_statut_anomalie_par_cle(
+    cle_anomalie: str,
+    request: Dict[str, Any],
+    db: Session = Depends(get_db),
+    ctx: TenantContext = Depends(require_role("engineer"))
+):
+    """
+    Forme canonique spec §6 : POST /anomalies/{cle_anomalie}/statut.
+    Corps : {"statut": "a_traiter|revu|corrige", "commentaire": str?,
+             "type_anomalie": str?, "id_conduite": str?}
+    """
+    corps = dict(request or {})
+    corps["cle_anomalie"] = cle_anomalie
+    return await definir_statut_anomalie(corps, db, ctx)
 
 
 @router.get("/statuts", response_model=Dict[str, Any])
@@ -322,32 +369,37 @@ async def analyser_qualite_reseau(
         )
 
     maintenant = datetime.now().timestamp()
+    empreinte_aux = _empreinte_couches_aux(db, ctx)
     if (not force_refresh and
         _cache_qualite["rapport"] is not None and
         _cache_qualite["gpkg_path"] == str(gpkg_target) and
+        _cache_qualite.get("empreinte_aux") == empreinte_aux and
         _cache_qualite["timestamp"] is not None and
         (maintenant - _cache_qualite["timestamp"]) < _cache_qualite["duree_validite"]):
         return _appliquer_statuts_anomalies(_cache_qualite["rapport"], db, ctx)
 
     # Tentative de récupération depuis le cache persistant sur disque (instantané <50ms)
     if not force_refresh:
-        rapport_disque = _charger_cache_disque(gpkg_target)
+        rapport_disque = _charger_cache_disque(gpkg_target, empreinte_aux)
         if rapport_disque:
             _cache_qualite["rapport"] = rapport_disque
             _cache_qualite["timestamp"] = maintenant
             _cache_qualite["gpkg_path"] = str(gpkg_target)
+            _cache_qualite["empreinte_aux"] = empreinte_aux
             return _appliquer_statuts_anomalies(rapport_disque, db, ctx)
 
     try:
         contexte_terrain = _construire_contexte_terrain_qualite(db, ctx)
         rapport = await asyncio.to_thread(
             analyser_qualite_gpkg, gpkg_target, project_name, contexte_terrain)
+        rapport["_empreinte_aux"] = empreinte_aux
 
         _sauvegarder_cache_disque(gpkg_target, rapport)
 
         _cache_qualite["rapport"] = rapport
         _cache_qualite["timestamp"] = maintenant
         _cache_qualite["gpkg_path"] = str(gpkg_target)
+        _cache_qualite["empreinte_aux"] = empreinte_aux
 
         return _appliquer_statuts_anomalies(rapport, db, ctx)
 
@@ -398,9 +450,39 @@ async def diagnostic_tunnel(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+async def _assurer_rapport(db: Session, ctx: TenantContext) -> Dict[str, Any]:
+    """Retourne le rapport qualité en cache, en le recalculant si besoin."""
+    global _cache_qualite
+
+    gpkg_target, project_name = get_active_project_and_gpkg(db, ctx)
+    if gpkg_target and gpkg_target.exists():
+        if (_cache_qualite["rapport"] is None or
+            _cache_qualite.get("gpkg_path") != str(gpkg_target)):
+            contexte_terrain = _construire_contexte_terrain_qualite(db, ctx)
+            rapport = await asyncio.to_thread(
+                analyser_qualite_gpkg, gpkg_target, project_name, contexte_terrain)
+            rapport["_empreinte_aux"] = _empreinte_couches_aux(db, ctx)
+            _sauvegarder_cache_disque(gpkg_target, rapport)
+            _cache_qualite.update({
+                "rapport": rapport,
+                "timestamp": datetime.now().timestamp(),
+                "gpkg_path": str(gpkg_target),
+                "empreinte_aux": rapport["_empreinte_aux"],
+            })
+        _appliquer_statuts_anomalies(_cache_qualite["rapport"], db, ctx)
+        return _cache_qualite["rapport"]
+
+    # Repli : cache existant même si le GPKG a disparu
+    if _cache_qualite["rapport"] is not None:
+        return _cache_qualite["rapport"]
+    raise HTTPException(status_code=404, detail="Aucune analyse de qualité disponible.")
+
+
 @router.get("/anomalies/{type_anomalie}", response_model=Dict[str, Any])
 async def get_anomalies_par_type(
     type_anomalie: str,
+    cursor: int = 0,
+    limit: int = 500,
     db: Session = Depends(get_db),
     ctx: TenantContext = Depends(require_role("viewer"))
 ):
@@ -414,25 +496,17 @@ async def get_anomalies_par_type(
     - geometries_invalides
     - pentes_suspectes
     - incoherences_amont_aval
+    - inversions_sens_ecoulement
+    - deconnexions_spatiales
+    - donnees_manquantes
+    - discontinuites_pose
+    - capacite_debit
+
+    Pagination : `cursor` (offset, défaut 0) et `limit` (défaut 500,
+    max 2000). La réponse inclut `total`, `cursor` et `next_cursor`.
     """
-    global _cache_qualite
-
-    gpkg_target, project_name = get_active_project_and_gpkg(db, ctx)
-    if (_cache_qualite["rapport"] is None or
-        (gpkg_target and _cache_qualite.get("gpkg_path") != str(gpkg_target))):
-        if gpkg_target and gpkg_target.exists():
-            rapport = await asyncio.to_thread(analyser_qualite_gpkg, gpkg_target, project_name)
-            _cache_qualite["rapport"] = rapport
-            _cache_qualite["timestamp"] = datetime.now().timestamp()
-            _cache_qualite["gpkg_path"] = str(gpkg_target)
-        else:
-            raise HTTPException(
-                status_code=404,
-                detail="Aucune analyse de qualité disponible."
-            )
-
-    _appliquer_statuts_anomalies(_cache_qualite["rapport"], db, ctx)
-    anomalies = _cache_qualite["rapport"].get("anomalies", {})
+    rapport = await _assurer_rapport(db, ctx)
+    anomalies = rapport.get("anomalies", {})
 
     if type_anomalie not in anomalies:
         raise HTTPException(
@@ -440,11 +514,190 @@ async def get_anomalies_par_type(
             detail=f"Type d'anomalie '{type_anomalie}' non trouvé. Types disponibles: {list(anomalies.keys())}"
         )
 
+    toutes = anomalies[type_anomalie]
+    cursor = max(0, int(cursor or 0))
+    limit = min(2000, max(1, int(limit or 500)))
+    page = toutes[cursor:cursor + limit]
+    next_cursor = cursor + limit if cursor + limit < len(toutes) else None
+
     return {
         "type_anomalie": type_anomalie,
-        "nombre_anomalies": len(anomalies[type_anomalie]),
-        "anomalies": anomalies[type_anomalie],
-        "severite_distribution": _calculer_distribution_severite(anomalies[type_anomalie])
+        "nombre_anomalies": len(toutes),
+        "total": len(toutes),
+        "cursor": cursor,
+        "limit": limit,
+        "next_cursor": next_cursor,
+        "anomalies": page,
+        "severite_distribution": _calculer_distribution_severite(toutes)
+    }
+
+
+@router.get("/anomalies.geojson", response_model=Dict[str, Any])
+async def get_anomalies_geojson(
+    type: Optional[str] = None,
+    severite: Optional[str] = None,
+    statut: Optional[str] = None,
+    db: Session = Depends(get_db),
+    ctx: TenantContext = Depends(require_role("viewer"))
+):
+    """
+    Couche GeoJSON (WGS84) de toutes les anomalies localisées — alimente la
+    carte Leaflet clusterisée. Filtres : type (catégorie), severite, statut.
+    """
+    rapport = await _assurer_rapport(db, ctx)
+    anomalies = rapport.get("anomalies", {})
+
+    categories = [type] if type in anomalies else list(anomalies.keys())
+    features = []
+    for categorie in categories:
+        for a in anomalies.get(categorie, []):
+            if severite and a.get("severite") != severite:
+                continue
+            if statut and a.get("statut", "a_traiter") != statut:
+                continue
+            lat, lon = a.get("latitude"), a.get("longitude")
+            if lat is None or lon is None:
+                continue
+            features.append({
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [float(lon), float(lat)],
+                },
+                "properties": {
+                    "categorie": categorie,
+                    "type": a.get("type"),
+                    "id_conduite": a.get("id_conduite"),
+                    "id_amont": a.get("id_amont"),
+                    "id_aval": a.get("id_aval"),
+                    "severite": a.get("severite"),
+                    "statut": a.get("statut", "a_traiter"),
+                    "cle_anomalie": a.get("cle_anomalie"),
+                    "provenance": a.get("provenance"),
+                    "description": a.get("description"),
+                    "distance_m": a.get("distance_m"),
+                    "ecart_terrain_m": a.get("ecart_terrain_m"),
+                    "pente_contre_pct": a.get("pente_contre_pct"),
+                    "confiance": a.get("confiance"),
+                },
+            })
+
+    return {
+        "type": "FeatureCollection",
+        "features": features,
+        "nb_features": len(features),
+        "filtres": {"type": type, "severite": severite, "statut": statut},
+    }
+
+
+@router.get("/synthese", response_model=Dict[str, Any])
+async def get_synthese_qualite(
+    db: Session = Depends(get_db),
+    ctx: TenantContext = Depends(require_role("viewer"))
+):
+    """
+    Verdict global + couverture altimétrique + top 3 actions correctives
+    (spec §7 — bandeau de synthèse du cockpit).
+    """
+    rapport = await _assurer_rapport(db, ctx)
+    anomalies = rapport.get("anomalies", {})
+    scores = rapport.get("scores_qualite", {})
+    stats = rapport.get("statistiques_globales", {})
+
+    nb_pipes = stats.get("nb_conduites") or 1
+    par_severite = {"critique": 0, "majeure": 0, "mineure": 0, "informatif": 0}
+    par_categorie = {}
+    nb_a_traiter = 0
+    for categorie, items in anomalies.items():
+        par_categorie[categorie] = len(items)
+        for a in items:
+            sev = a.get("severite", "mineure")
+            par_severite[sev] = par_severite.get(sev, 0) + 1
+            if a.get("statut", "a_traiter") == "a_traiter":
+                nb_a_traiter += 1
+
+    topologie = (scores.get("topologie") or {}).get("score_qualite")
+    hydraulique = (scores.get("hydraulique") or {}).get("score_qualite")
+    altimetrie = scores.get("altimetrie") or {}
+    couverture_pct = altimetrie.get("couverture_pct")
+
+    # Verdict : le pire score déterministe pilote le verdict
+    scores_durs = [s for s in (topologie, hydraulique) if s is not None]
+    score_pire = min(scores_durs) if scores_durs else None
+    if score_pire is None:
+        verdict = "indetermine"
+    elif score_pire >= 95:
+        verdict = "conforme"
+    elif score_pire >= 80:
+        verdict = "a_surveiller"
+    else:
+        verdict = "action_requise"
+
+    # Top 3 actions : catégories actives triées par impact (sévérité pondérée)
+    poids_sev = {"critique": 4, "majeure": 3, "mineure": 1, "informatif": 0}
+    actions_cats = []
+    for categorie, items in anomalies.items():
+        if not items:
+            continue
+        impact = sum(poids_sev.get(a.get("severite", "mineure"), 1) for a in items)
+        nb_ouvertes = sum(1 for a in items if a.get("statut", "a_traiter") == "a_traiter")
+        if nb_ouvertes == 0:
+            continue
+        actions_cats.append((categorie, impact, nb_ouvertes))
+    actions_cats.sort(key=lambda x: (-x[1], -x[2]))
+    LIBELLES = {
+        "conduites_sans_regards": "Raccorder les conduites orphelines à un nœud",
+        "troncons_orphelins": "Vérifier l'isolement des tronçons orphelins",
+        "champs_manquants": "Compléter les attributs manquants (diamètre, matériau, longueur)",
+        "geometries_invalides": "Réparer les géométries corrompues",
+        "pentes_suspectes": "Valider les pentes certifiées NGF sur le terrain",
+        "incoherences_amont_aval": "Corriger les inversions de radier NGF",
+        "inversions_sens_ecoulement": "Recouper le sens d'écoulement avec le sens de la pente du terrain",
+        "deconnexions_spatiales": "Contrôler les identifiants d'extrémités suspects",
+        "discontinuites_pose": "Vérifier la continuité de pose (profondeurs PROF_FE)",
+        "capacite_debit": "Contrôler la capacité de débit des tronçons",
+        "donnees_manquantes": "Compléter l'altimétrie (campagne topo / récolement)",
+    }
+    top_actions = [
+        {
+            "categorie": cat,
+            "libelle": LIBELLES.get(cat, cat),
+            "nb_anomalies": n,
+            "nb_ouvertes": ouvertes,
+        }
+        for cat, _impact, ouvertes in actions_cats[:3]
+        for n in [par_categorie.get(cat, 0)]
+    ]
+
+    return {
+        "verdict": verdict,
+        "date_analyse": rapport.get("date_analyse"),
+        "moteur": rapport.get("moteur"),
+        "reseau": {
+            "nb_regards": stats.get("nb_regards"),
+            "nb_conduites": stats.get("nb_conduites"),
+            "nb_rejets": stats.get("nb_rejets"),
+            "longueur_totale_m": stats.get("longueur_totale_m"),
+        },
+        "scores": {
+            "global": (scores.get("global") or {}).get("score_qualite"),
+            "topologie": topologie,
+            "hydraulique": hydraulique,
+            "completude": (scores.get("completude") or {}).get("score_qualite"),
+            "geometrie": (scores.get("geometrie") or {}).get("score_qualite"),
+        },
+        "altimetrie": {
+            "couverture_pct": couverture_pct,
+            "nb_donnees_manquantes": (altimetrie.get("total_anomalies") or 0),
+        },
+        "anomalies": {
+            "total": sum(par_categorie.values()),
+            "nb_a_traiter": nb_a_traiter,
+            "par_severite": par_severite,
+            "par_categorie": par_categorie,
+        },
+        "connectivite": stats.get("connectivite"),
+        "top_actions": top_actions,
     }
 
 
