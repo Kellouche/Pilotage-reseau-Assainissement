@@ -369,6 +369,9 @@
             const iframeQ = document.getElementById('iframe-qualite');
 
             if (vue === 'qualite') {
+                const topbar = document.getElementById('saas-topbar');
+                if (topbar) topbar.style.display = 'none';
+
                 if (tabCarto) {
                     tabCarto.style.color = '#cbd5e1';
                     tabCarto.style.background = 'transparent';
@@ -385,6 +388,7 @@
                 }
                 if (containerQ) {
                     containerQ.style.display = 'block';
+                    containerQ.style.height = '100vh';
                     if (iframeQ && (!iframeQ.src || iframeQ.src === 'about:blank' || !iframeQ.src.includes('/qualite'))) {
                         // L'analyse qualité peut être longue (audit complet du
                         // réseau) : overlay de chargement jusqu'au load de l'iframe.
@@ -401,6 +405,9 @@
                     window.history.pushState({ tab: 'qualite' }, '', '/map?tab=qualite');
                 }
             } else {
+                const topbar = document.getElementById('saas-topbar');
+                if (topbar) topbar.style.display = 'flex';
+
                 if (tabCarto) {
                     tabCarto.style.color = '#38bdf8';
                     tabCarto.style.background = 'rgba(56, 189, 248, 0.15)';
@@ -411,7 +418,10 @@
                     tabQualite.style.background = 'transparent';
                     tabQualite.style.borderColor = 'transparent';
                 }
-                if (containerQ) containerQ.style.display = 'none';
+                if (containerQ) {
+                    containerQ.style.display = 'none';
+                    containerQ.style.height = 'calc(100vh - 52px)';
+                }
                 if (workspace) {
                     workspace.style.display = 'flex';
                     if (typeof carte !== 'undefined' && carte) {

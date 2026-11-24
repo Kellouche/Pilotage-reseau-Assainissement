@@ -525,6 +525,79 @@
         .cluster-mineure { background: rgba(59, 130, 246, 0.9); }
         .cluster-neutre { background: rgba(148, 163, 184, 0.9); }
 
+        /* Halo de surbrillance pour l'anomalie active */
+        .anomalie-pulse-marker {
+            animation: pulse-ring 1.4s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+        }
+
+        @keyframes pulse-ring {
+            0% {
+                transform: scale(0.9);
+                opacity: 0.95;
+            }
+            50% {
+                transform: scale(1.35);
+                opacity: 0.45;
+            }
+            100% {
+                transform: scale(0.9);
+                opacity: 0.95;
+            }
+        }
+
+        /* Boutons de zoom et actions rapides sur carte */
+        .map-quick-actions {
+            position: absolute;
+            top: 12px;
+            left: 60px;
+            z-index: 1000;
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn-map-action {
+            background: white;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .btn-map-action:hover {
+            background: #f8fafc;
+            border-color: var(--accent-blue);
+            color: var(--accent-blue);
+            transform: translateY(-1px);
+        }
+
+        .btn-zoom-anom {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(2, 132, 199, 0.1);
+            border: 1px solid rgba(2, 132, 199, 0.3);
+            color: #0284c7;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .btn-zoom-anom:hover {
+            background: #0284c7;
+            color: white;
+        }
+
         /* Loading Overlay */
         .loading-overlay {
             position: absolute;
@@ -570,8 +643,8 @@
             <button class="btn btn-outline" id="btn-force-refresh" title="Recalculer sans cache (force_refresh=true)">
                 ⟳ Forcer Recalcul
             </button>
-            <button class="btn btn-primary" onclick="retournerCockpit(event)" title="Retour au cockpit cartographique">
-                ✕ Fermer
+            <button class="btn btn-primary" onclick="retournerCockpit(event)" title="Quitter la qualité et revenir à la cartographie DrainPilot">
+                <i class="fas fa-arrow-left"></i> Retour Cockpit
             </button>
         </div>
     </header>
@@ -596,7 +669,7 @@
                 <span class="kpi-label">Complétude Altimétrique</span>
                 <div class="kpi-value-row">
                     <span id="kpi-score-alti" class="kpi-value">-- %</span>
-                    <span id="kpi-alti-detail" class="kpi-pill pill-neutral">N3 manquants: --</span>
+                    <span id="kpi-alti-detail" class="kpi-pill pill-neutral">À compléter: --</span>
                 </div>
             </div>
             <div class="kpi-item">
@@ -621,6 +694,16 @@
         <div class="map-container">
             <div id="map"></div>
 
+            <!-- Actions Rapides de Zoom sur Carte -->
+            <div class="map-quick-actions">
+                <button class="btn-map-action" onclick="zoomerSurAnomalieActive()" title="Zoomer directement sur l'anomalie active (Raccourci : touche Z)">
+                    🎯 Zoomer sur l'anomalie
+                </button>
+                <button class="btn-map-action" onclick="zoomerVueGlobale()" title="Recadrer la carte sur l'ensemble du réseau et des anomalies">
+                    🌐 Vue globale réseau
+                </button>
+            </div>
+
             <!-- Contrôles Flottants Carte -->
             <div class="map-overlay-controls">
                 <div class="map-card-ctrl">
@@ -629,20 +712,20 @@
                         <span class="legend-dot" style="background:var(--sev-critique)"></span> Bloquant (0)
                     </div>
                     <div class="map-legend-item">
-                        <span class="legend-dot" style="background:var(--sev-majeure)"></span> Majeur (Sens/ID)
+                        <span class="legend-dot" style="background:var(--sev-majeure)"></span> Majeur (Contre-pente / ID)
                     </div>
                     <div class="map-legend-item">
-                        <span class="legend-dot" style="background:var(--sev-mineure)"></span> Mineur (Pente/Attr)
+                        <span class="legend-dot" style="background:var(--sev-mineure)"></span> Mineur (Pente / Attributs)
                     </div>
                     <div class="map-legend-item">
-                        <span class="legend-dot" style="background:var(--sev-informatif)"></span> N3 Données manquantes
+                        <span class="legend-dot" style="background:var(--sev-informatif)"></span> Altimétrie incomplète
                     </div>
                 </div>
 
                 <div class="map-card-ctrl">
-                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer;" title="Afficher les tronçons dont la pente ne peut être vérifiée faute de cotes de radier ou de points topo proches">
                         <input type="checkbox" id="chk-toggle-n3" />
-                        <span>Afficher N3 (Manquants)</span>
+                        <span>Afficher tronçons sans altimétrie</span>
                     </label>
                 </div>
             </div>
@@ -671,13 +754,13 @@
             <div class="filter-toolbar">
                 <select id="filter-categorie" class="filter-select">
                     <option value="">Toutes les catégories</option>
-                    <option value="inversions_sens_ecoulement">Inversions de sens (N2)</option>
+                    <option value="inversions_sens_ecoulement">Contre-pentes / Inversions de sens</option>
                     <option value="deconnexions_spatiales">Déconnexions spatiales</option>
                     <option value="pentes_suspectes">Pentes suspectes</option>
-                    <option value="champs_manquants">Attributs manquants</option>
+                    <option value="champs_manquants">Attributs indispensables manquants</option>
                     <option value="conduites_sans_regards">Conduites sans regards</option>
                     <option value="troncons_orphelins">Tronçons orphelins</option>
-                    <option value="donnees_manquantes">N3 Données manquantes</option>
+                    <option value="donnees_manquantes">Altimétrie incomplète (cotes/MNT)</option>
                 </select>
 
                 <select id="filter-severite" class="filter-select">
@@ -685,7 +768,7 @@
                     <option value="critique">Critique (Bloquant)</option>
                     <option value="majeure" selected>Majeure (Action requise)</option>
                     <option value="mineure">Mineure</option>
-                    <option value="informatif">Informatif (N3)</option>
+                    <option value="informatif">Informatif (Sans altimétrie)</option>
                 </select>
 
                 <select id="filter-statut" class="filter-select">
@@ -755,7 +838,23 @@
         let map = null;
         let clusterGroup = null;
         let selectedMarker = null;
+        let highlightMarker = null;
+        let globalBoundsReseau = null;
         let activeGeoJsonLayers = {};
+
+        // Libellés métier explicites (adieu codes techniques N2/N3)
+        function libelleCategorie(cat) {
+            const mapLib = {
+                'inversions_sens_ecoulement': 'Contre-pente / Inversion de sens',
+                'pentes_suspectes': 'Pente suspecte',
+                'deconnexions_spatiales': 'Déconnexion spatiale',
+                'champs_manquants': 'Attributs obligatoires manquants',
+                'conduites_sans_regards': 'Conduite sans regard',
+                'troncons_orphelins': 'Tronçon orphelin',
+                'donnees_manquantes': 'Altimétrie incomplète (cotes/points topo)'
+            };
+            return mapLib[cat] || (cat || '').replace('_', ' ');
+        }
 
         // Initialisation dès chargement DOM
         document.addEventListener('DOMContentLoaded', () => {
@@ -823,7 +922,7 @@
 
         // 2. Gestion des Événements & Raccourcis Clavier
         function initEventHandlers() {
-            // Raccourcis clavier J / K pour la file navigable
+            // Raccourcis clavier J / K (navigation) et Z (zoomer sur anomalie)
             window.addEventListener('keydown', (e) => {
                 if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
                 if (e.key === 'j' || e.key === 'J' || e.key === 'ArrowDown') {
@@ -832,6 +931,9 @@
                 } else if (e.key === 'k' || e.key === 'K' || e.key === 'ArrowUp') {
                     e.preventDefault();
                     naviguerQueue(-1);
+                } else if (e.key === 'z' || e.key === 'Z') {
+                    e.preventDefault();
+                    zoomerSurAnomalieActive();
                 }
             });
 
@@ -936,7 +1038,7 @@
 
             const alti = syn.altimetrie || {};
             document.getElementById('kpi-score-alti').textContent = `${scores.hydraulique ?? '--'}%`;
-            document.getElementById('kpi-alti-detail').textContent = `N3 manquants: ${alti.nb_donnees_manquantes ?? 0}`;
+            document.getElementById('kpi-alti-detail').textContent = `À compléter: ${alti.nb_donnees_manquantes ?? 0}`;
 
             // Anomalies
             const anom = syn.anomalies || {};
@@ -1004,11 +1106,11 @@
 
                 // Popup rapide
                 marker.bindPopup(`
-                    <div style="font-size:12px; min-width:180px;">
-                        <div style="font-weight:700; margin-bottom:4px; color:${color};">${(p.categorie || '').toUpperCase()}</div>
-                        <div><strong>Objet:</strong> ${p.id_conduite || p.cle_anomalie?.substring(0,8)}</div>
+                    <div style="font-size:12px; min-width:200px;">
+                        <div style="font-weight:700; margin-bottom:4px; color:${color};">${libelleCategorie(p.categorie).toUpperCase()}</div>
+                        <div><strong>Tronçon:</strong> ${p.id_conduite || p.cle_anomalie?.substring(0,8)}</div>
                         <div style="margin:4px 0; color:#334155;">${p.description || ''}</div>
-                        <div style="display:flex; justify-content:space-between; margin-top:6px;">
+                        <div style="display:flex; justify-content:space-between; margin-top:6px; align-items:center;">
                             <span class="badge-sev badge-${p.severite}">${p.severite}</span>
                             <span style="font-size:11px; font-weight:600;">Statut: ${p.statut || 'a_traiter'}</span>
                         </div>
@@ -1035,14 +1137,17 @@
 
             // Ajuster la vue carte si des points existent
             if (bounds.isValid() && currentQueueList.length > 0) {
+                globalBoundsReseau = bounds;
                 map.fitBounds(bounds, { padding: [30, 30], maxZoom: 16 });
             }
 
             // Réinitialiser la file navigable
             currentQueueIndex = 0;
             if (currentQueueList.length > 0) {
-                afficherFicheAnomalie(currentQueueList[0], true);
+                afficherFicheAnomalie(currentQueueList[0], false);
+                mettreEnSurbrillance(currentQueueList[0]);
             } else {
+                if (highlightMarker) map.removeLayer(highlightMarker);
                 document.getElementById('fiche-container').innerHTML = `
                     <div style="color:var(--text-muted); text-align:center; padding:40px 10px;">
                         Aucune anomalie ne correspond aux filtres sélectionnés.
@@ -1101,10 +1206,15 @@
             container.innerHTML = `
                 <div class="anomalie-card-actionable">
                     <div class="card-header-bar">
-                        <span class="badge-sev badge-${p.severite}">${p.severite}</span>
-                        <span style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">
-                            ${(p.categorie || '').replace('_', ' ')}
-                        </span>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span class="badge-sev badge-${p.severite}">${p.severite}</span>
+                            <span style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">
+                                ${libelleCategorie(p.categorie)}
+                            </span>
+                        </div>
+                        <button class="btn-zoom-anom" onclick="zoomerSurAnomalieActive()" title="Centrer et zoomer la carte sur cette conduite (Touche Z)">
+                            🎯 Localiser
+                        </button>
                     </div>
 
                     <div class="card-body">
@@ -1155,12 +1265,59 @@
                 </div>
             `;
 
-            // Centrage doux de la carte
-            if (centrerCarte && item.marker) {
-                const latLng = item.marker.getLatLng();
-                map.flyTo(latLng, Math.max(map.getZoom(), 16), { duration: 0.5 });
-                item.marker.openPopup();
+            // Mettre en surbrillance systématiquement sur la carte
+            mettreEnSurbrillance(item);
+
+            if (centrerCarte) {
+                zoomerSurAnomalieActive();
             }
+        }
+
+        // Fonctions de Zoom et Surbrillance Cartographique
+        function zoomerVueGlobale() {
+            if (globalBoundsReseau && globalBoundsReseau.isValid()) {
+                map.fitBounds(globalBoundsReseau, { padding: [30, 30], maxZoom: 16 });
+            }
+        }
+
+        function zoomerSurAnomalieActive() {
+            if (currentQueueList.length === 0 || currentQueueIndex < 0) return;
+            const item = currentQueueList[currentQueueIndex];
+            if (!item) return;
+
+            const coords = item.feature?.geometry?.coordinates;
+            if (!coords || coords.length < 2) return;
+            const latLng = L.latLng(coords[1], coords[0]);
+
+            mettreEnSurbrillance(item);
+
+            if (item.marker && clusterGroup) {
+                clusterGroup.zoomToShowLayer(item.marker, () => {
+                    map.setView(latLng, Math.max(map.getZoom(), 17));
+                    item.marker.openPopup();
+                });
+            } else {
+                map.flyTo(latLng, Math.max(map.getZoom(), 17), { duration: 0.5 });
+            }
+        }
+
+        function mettreEnSurbrillance(item) {
+            if (!item) return;
+            const coords = item.feature?.geometry?.coordinates;
+            if (!coords || coords.length < 2) return;
+            const latLng = L.latLng(coords[1], coords[0]);
+
+            if (highlightMarker) {
+                map.removeLayer(highlightMarker);
+            }
+            highlightMarker = L.circleMarker(latLng, {
+                radius: 16,
+                color: '#ef4444',
+                weight: 3,
+                fillColor: '#f59e0b',
+                fillOpacity: 0.5,
+                className: 'anomalie-pulse-marker'
+            }).addTo(map);
         }
 
         // 8. Envoi de l'action de statut vers l'API
@@ -1225,7 +1382,7 @@
                 html += `
                     <tr onclick="selectionnerLigneTableau(${i})">
                         <td><strong>${p.id_conduite || p.cle_anomalie?.substring(0,6)}</strong></td>
-                        <td>${p.categorie || ''}</td>
+                        <td>${libelleCategorie(p.categorie)}</td>
                         <td><span class="badge-sev badge-${p.severite}">${p.severite}</span></td>
                         <td><span class="badge-sev badge-informatif">${p.statut || 'a_traiter'}</span></td>
                     </tr>
