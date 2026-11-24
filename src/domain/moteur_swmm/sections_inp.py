@@ -11,6 +11,7 @@ Objet : Génération textuelle des blocs et sections de modélisation du fichier
 
 import math
 import logging
+from collections import Counter
 from typing import Dict, Any, Optional, Tuple, List, Set, Union
 import pandas as pd
 import geopandas as gpd
@@ -186,6 +187,44 @@ def generer_lignes_sections_inp(
     else:
         active_i_max = round(float(scen.get("intensite_max_defaut", max_base or 62.0)), 2)
         effective_timeseries = [(t_str, float(val)) for t_str, val in ts_base]
+
+    # Intervalle RAINGAGES : pour le format INTENSITY, SWMM intègre chaque
+    # valeur de la série sur une durée égale à ce champ. Il doit donc
+    # correspondre au pas réel de la série (ex. 0:15 pour un hyétogramme
+    # 15 min), sinon la pluie appliquée est diluée/ concentrée (bug constaté :
+    # 0:05 codé en dur → ~1/3 de la pluie prévue dans le .rpt).
+    interval_raingage = "0:15"
+    try:
+        def _parse_t_min(t_str: str) -> float:
+            parts = t_str.split(":")
+            minutes = float(parts[0]) * 60.0 + float(parts[1])
+            if len(parts) > 2:
+                minutes += float(parts[2]) / 60.0
+            return minutes
+
+        ts_triee = sorted(
+            effective_timeseries, key=lambda tv: _parse_t_min(tv[0])
+        )
+        deltas = [
+            _parse_t_min(ts_triee[i][0]) - _parse_t_min(ts_triee[i - 1][0])
+            for i in range(1, len(ts_triee))
+        ]
+        deltas_pos = [d for d in deltas if d > 0]
+        if deltas_pos:
+            # Pas modal : le pas de sondage dominant de la série. Plus robuste
+            # qu'un min() aux séries irrégulières (ex. queue à 60 min).
+            pas_min = Counter(deltas_pos).most_common(1)[0][0]
+            h_i, m_i = divmod(int(round(pas_min)), 60)
+            interval_raingage = f"{h_i}:{m_i:02d}"
+    except Exception:
+        pass
+    for idx, ln in enumerate(lines):
+        if ln.startswith("RG1"):
+            lines[idx] = (
+                f"RG1              INTENSITY {interval_raingage:<9} 1.0      "
+                "TIMESERIES TS_SCENARIO"
+            )
+            break
 
     hauteur_totale_cumul_mm = 0.0
     try:

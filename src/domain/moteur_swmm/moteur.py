@@ -276,6 +276,28 @@ class MoteurSWMM:
             rpt_text=rpt_text,
             execution_mode=execution_mode,
         )
+        # Vérificateur d'invariants post-simulation : compare la pluie
+        # prescrite (.inp) à la pluie appliquée (.rpt) et contrôle les
+        # lois physiques de base. Ne doit jamais casser la simulation.
+        try:
+            from src.domain.moteur_swmm.verificateur_invariants import (
+                verifier_invariants_simulation,
+                harmoniser_pluie_appliquee,
+            )
+            harmoniser_pluie_appliquee(kpis)
+            kpis["verification_invariants"] = verifier_invariants_simulation(
+                inp_content=inp_content, rpt_text=rpt_text, kpis=kpis
+            )
+            if kpis["verification_invariants"].get("statut") == "incoherent":
+                logger.error(
+                    "Simulation INCOHERENTE (invariants) — scen=%s cluster=%s: %s",
+                    scenario_key, cluster_id,
+                    [c["nom"] for c in kpis["verification_invariants"]["controles"]
+                     if c["statut"] == "incoherent"],
+                )
+        except Exception as e_verif:
+            logger.warning("Vérificateur d'invariants impossible: %s", e_verif)
+            kpis["verification_invariants"] = {"statut": "non_verifiable", "controles": []}
         # LOT P1.3 — traçabilité des apports DWF effectivement injectés
         # (identité, nœud, nature, profil, méthode, paramètres temporels).
         if meta.get("apports_dwf") or meta.get("apports_dwf_ignores"):
