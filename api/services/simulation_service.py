@@ -26,6 +26,12 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger("swmm_platform.services.simulation_service")
 
+# Version du générateur .inp (sections_inp.py & cie) — incrémenter à chaque
+# correctif susceptible de modifier le contenu du .inp afin d'invalider
+# les simulations en cache calculées avec l'ancienne version.
+# v2 : intervalle RAINGAGES dérivé de la série (fix pluie diluée ~1/3).
+MOTEUR_VERSION_INP = "inp-gen-v2-raingage"
+
 
 class ContexteProjetIntrouvable(Exception):
     """Levée quand aucun GeoPackage exploitable ne peut être résolu pour le tenant."""
@@ -236,7 +242,12 @@ def generer_cle_cache_simulation(gpkg_path: Path, payload: Any,
                 orph_ids.append(str(item))
     orph_ids.sort()
 
+    # Version du moteur de génération .inp : entre dans l'empreinte pour
+    # qu'un correctif du générateur (ex. intervalle RAINGAGES) invalide
+    # automatiquement les simulations mises en cache avec l'ancien code.
+    # À incrémenter à chaque changement susceptible d'altérer le .inp.
     params_dict = {
+        "moteur_version": MOTEUR_VERSION_INP,
         "gpkg_sha256": gpkg_sha256,
         "gpkg_size": gpkg_size,
         "cluster_id": str(getattr(payload, "cluster_id", None)),
