@@ -383,6 +383,14 @@
                 if (containerQ) {
                     containerQ.style.display = 'block';
                     if (iframeQ && (!iframeQ.src || iframeQ.src === 'about:blank' || !iframeQ.src.includes('/qualite'))) {
+                        // L'analyse qualité peut être longue (audit complet du
+                        // réseau) : overlay de chargement jusqu'au load de l'iframe.
+                        if (typeof montrerChargement === 'function') {
+                            montrerChargement(true, 'Analyse qualité du réseau en cours…', 15 * 60 * 1000);
+                            iframeQ.onload = function () {
+                                if (typeof montrerChargement === 'function') montrerChargement(false);
+                            };
+                        }
                         iframeQ.src = '/qualite';
                     }
                 }
