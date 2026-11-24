@@ -15,6 +15,13 @@
   - Procédures de test MCP disponibles pour prévenir toute régression.
 - En cas d'échec ou d'erreur lors des tests, bloquer le commit, diagnostiquer la cause et corriger immédiatement.
 
+### 2.0 Conventions de codage — fichiers sources
+
+- Tout fichier `.py`, `.js`, `.html`, `.css` **doit** respecter `docs/CONVENTIONS_CODE.md` :
+  - **en-tête explicite obligatoire** en tête de fichier (Projet / Auteur / Dates / Objet, gabarits par langage fournis dans le document) ;
+  - **taille maximale 600 lignes** — au-delà, découpage modulaire obligatoire (les fichiers historiques au-delà de la limite sont tolérés mais à refactorer progressivement).
+- `Date de modification` de l'en-tête mise à jour à chaque modification substantielle.
+
 ### 2.1 Validation navigateur MCP — Règle impérative à chaque modification
 
 - **Toute modification touchant l'interface, la carte, les couches, les formulaires, les workflows utilisateur ou tout comportement visible DOIT être testée dans le navigateur via MCP (Playwright) avant livraison.**
