@@ -345,6 +345,8 @@ class SimulationRunRequest(BaseModel):
     # opt-in explicite, jamais automatique ; couche optionnelle.
     altimetrie_terrain: Optional[bool] = False
     altimetrie_layer_id: Optional[str] = None
+    # État physique du réseau (Colmatage & Vieillissement)
+    etat_reseau: Optional[Dict[str, Any]] = None
 
 SimulationRunRequest.model_rebuild()
 

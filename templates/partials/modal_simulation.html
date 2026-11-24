@@ -410,6 +410,96 @@ Objet : Modale de paramétrage de pluie, stations ANRH et déclenchement SWMM 5.
                     </div>
                 </div>
 
+                <!-- État physique du réseau (Colmatage & Vieillissement) — Schéma A -->
+                <div id="sim-etat-reseau-card" style="background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 10px; padding: 12px 14px; margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <label style="font-size: 0.82rem; font-weight: 700; color: #cbd5e1; margin: 0;">
+                            <i class="fas fa-water me-1" style="color: #38bdf8;"></i> État du réseau (Colmatage & Vieillissement)
+                        </label>
+                        <span id="sim-etat-badge-resume" style="font-size: 0.72rem; color: #10b981; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); padding: 2px 8px; border-radius: 999px; font-weight: 700;">
+                            Nominal (Curé)
+                        </span>
+                    </div>
+
+                    <!-- Pilules de scénarios en 1 clic -->
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px;">
+                        <button type="button" class="sim-etat-pill active" data-preset="nominal" onclick="selectionnerPresetEtatReseau('nominal')" style="padding: 8px 6px; border-radius: 8px; border: 1.5px solid #38bdf8; background: rgba(56, 189, 248, 0.16); color: #f8fafc; cursor: pointer; text-align: center; transition: all 0.15s;">
+                            <div style="font-size: 0.78rem; font-weight: 700;">Nominal</div>
+                            <div style="font-size: 0.66rem; color: #94a3b8;">Curé (0%)</div>
+                        </button>
+                        <button type="button" class="sim-etat-pill" data-preset="exploite" onclick="selectionnerPresetEtatReseau('exploite')" style="padding: 8px 6px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.14); background: rgba(15, 23, 42, 0.7); color: #cbd5e1; cursor: pointer; text-align: center; transition: all 0.15s;">
+                            <div style="font-size: 0.78rem; font-weight: 700;">Exploité</div>
+                            <div style="font-size: 0.66rem; color: #94a3b8;">Courant (+20% n)</div>
+                        </button>
+                        <button type="button" class="sim-etat-pill" data-preset="critique" onclick="selectionnerPresetEtatReseau('critique')" style="padding: 8px 6px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.14); background: rgba(15, 23, 42, 0.7); color: #cbd5e1; cursor: pointer; text-align: center; transition: all 0.15s;">
+                            <div style="font-size: 0.78rem; font-weight: 700;">Critique</div>
+                            <div style="font-size: 0.66rem; color: #94a3b8;">Vétuste (25%)</div>
+                        </button>
+                        <button type="button" class="sim-etat-pill" data-preset="personnalise" onclick="selectionnerPresetEtatReseau('personnalise', true)" style="padding: 8px 6px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.14); background: rgba(15, 23, 42, 0.7); color: #cbd5e1; cursor: pointer; text-align: center; transition: all 0.15s;">
+                            <div style="font-size: 0.78rem; font-weight: 700;"><i class="fas fa-sliders-h"></i> Créer</div>
+                            <div style="font-size: 0.66rem; color: #94a3b8;">Personnaliser</div>
+                        </button>
+                    </div>
+
+                    <!-- Scénarios enregistrés par l'utilisateur (affiché dynamiquement si non vide) -->
+                    <div id="sim-etat-saved-list" style="display: none; flex-wrap: wrap; gap: 6px; margin-bottom: 10px;"></div>
+
+                    <!-- Option SIG : intégration NIV_DEPOT -->
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.77rem; color: #cbd5e1;">
+                        <input type="checkbox" id="sim-chk-depots-sig" onchange="mettreAJourResumeEtatReseau()" style="width: 15px; height: 15px; accent-color: #38bdf8;">
+                        <span>Appliquer les dépôts relevés sur le terrain (champ SIG <code style="color:#38bdf8; background:rgba(56,189,248,0.12); padding:1px 4px; border-radius:3px;">NIV_DEPOT</code>)</span>
+                    </label>
+
+                    <!-- Tiroir dépliable de personnalisation -->
+                    <div id="sim-etat-drawer" style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px dashed rgba(255,255,255,0.14);">
+                        <!-- Ciblage Généraliser <-> Spécifier -->
+                        <div style="margin-bottom: 10px;">
+                            <div style="font-size: 0.73rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 6px;">1. Cible d'application du colmatage</div>
+                            <div style="display: flex; flex-wrap: wrap; gap: 14px; align-items: center; font-size: 0.78rem; color: #e2e8f0;">
+                                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                    <input type="radio" name="sim-etat-cible" value="tout_reseau" onchange="mettreAJourResumeEtatReseau()" style="accent-color: #38bdf8;">
+                                    <span>Tout le réseau</span>
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                    <input type="radio" name="sim-etat-cible" value="faibles_pentes" checked onchange="mettreAJourResumeEtatReseau()" style="accent-color: #38bdf8;">
+                                    <span>Faibles pentes uniquement &lt;</span>
+                                    <input type="number" id="sim-etat-seuil-pente" value="0.5" min="0.1" max="5.0" step="0.1" onchange="mettreAJourResumeEtatReseau()" style="width: 56px; padding: 3px 6px; background: #0f172a; border: 1px solid rgba(56,189,248,0.4); border-radius: 5px; color: #38bdf8; font-weight: 700; text-align: center;">
+                                    <span>%</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Curseur Colmatage -->
+                        <div style="margin-bottom: 10px;">
+                            <div style="display: flex; justify-content: space-between; font-size: 0.76rem; color: #cbd5e1; margin-bottom: 4px;">
+                                <span>2. Envasement au radier (réduit la section utile)</span>
+                                <strong id="sim-etat-colmatage-val" style="color: #f59e0b;">0 %</strong>
+                            </div>
+                            <input type="range" id="sim-etat-colmatage-range" min="0" max="50" step="5" value="0" oninput="onSliderEtatReseauChange()" style="width: 100%; accent-color: #f59e0b;">
+                        </div>
+
+                        <!-- Curseur Vieillissement -->
+                        <div style="margin-bottom: 10px;">
+                            <div style="display: flex; justify-content: space-between; font-size: 0.76rem; color: #cbd5e1; margin-bottom: 4px;">
+                                <span>3. Vieillissement parois (rugosité Manning)</span>
+                                <strong id="sim-etat-vieillissement-val" style="color: #38bdf8;">×1.00</strong>
+                            </div>
+                            <input type="range" id="sim-etat-vieillissement-range" min="1.0" max="1.6" step="0.05" value="1.0" oninput="onSliderEtatReseauChange()" style="width: 100%; accent-color: #38bdf8;">
+                            <div id="sim-etat-rugosite-exemple" style="font-size: 0.69rem; color: #94a3b8; margin-top: 2px;">
+                                Béton : 0.013 &bull; PVC : 0.011
+                            </div>
+                        </div>
+
+                        <!-- Enregistrer comme préréglage -->
+                        <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px;">
+                            <input type="text" id="sim-etat-nom-custom" placeholder="Nom du scénario (ex: Curage été)" style="flex: 1; padding: 6px 10px; background: #0f172a; border: 1px solid rgba(255,255,255,0.16); border-radius: 6px; color: #f8fafc; font-size: 0.76rem;">
+                            <button type="button" onclick="enregistrerPresetEtatReseau()" style="padding: 6px 12px; background: rgba(56, 189, 248, 0.2); border: 1px solid rgba(56, 189, 248, 0.45); border-radius: 6px; color: #38bdf8; font-size: 0.76rem; font-weight: 700; cursor: pointer; white-space: nowrap;">
+                                <i class="fas fa-save me-1"></i> Enregistrer
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Résumé du modèle -->
                 <div style="background: rgba(2, 132, 199, 0.08); border: 1px solid rgba(2, 132, 199, 0.25); border-radius: 10px; padding: 12px 16px; margin-bottom: 20px; font-size: 0.82rem; color: #94a3b8; line-height: 1.5;">
                     <strong style="color: #38bdf8;">Configuration appliquée :</strong> Résolution complète Saint-Venant 1D (Dynamic Wave) &bull; Découpage surfacique en <b>sous-bassins versants Voronoï</b> &bull; Infiltration d'eau selon <b>Horton</b> (f₀ = 75 mm/h, fc = 10 mm/h) &bull; Unités métriques CMS.

@@ -276,6 +276,14 @@ def generer_cle_cache_simulation(gpkg_path: Path, payload: Any,
     # que lorsqu'elle est fournie — les caches historiques restent valides.
     if getattr(payload, "bassin_ref", None):
         params_dict["bassin_ref"] = str(payload.bassin_ref)
+    # État du réseau (Colmatage & Vieillissement) — n'entre dans l'empreinte
+    # que s'il est non-nominal, préservant les caches nominaux existants.
+    raw_etat = getattr(payload, "etat_reseau", None)
+    if raw_etat:
+        from src.domain.moteur_swmm.etat_reseau import normaliser_etat_reseau, est_etat_nominal
+        etat_norm = normaliser_etat_reseau(raw_etat)
+        if not est_etat_nominal(etat_norm):
+            params_dict["etat_reseau"] = etat_norm
     # LOT P1.3 : l'état des apports DWF entre dans l'empreinte — modifier
     # un apport invalide le cache (sinon collision silencieuse).
     if extra_params:
@@ -746,6 +754,7 @@ def executer_moteur_swmm(
         elevations_terrain=params.get("altimetrie_elevations"),
         altimetrie_meta=params.get("altimetrie_meta"),
         cotes_validations=params.get("cotes_validations"),
+        etat_reseau=params.get("etat_reseau"),
     )
 
     return corriger_pic_depuis_timeseries(resultat)

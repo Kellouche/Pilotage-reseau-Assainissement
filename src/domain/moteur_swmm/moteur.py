@@ -107,6 +107,7 @@ class MoteurSWMM:
         elevations_terrain: Optional[Dict[str, float]] = None,
         altimetrie_meta: Optional[Dict[str, Any]] = None,
         cotes_validations: Optional[Dict[str, float]] = None,
+        etat_reseau: Optional[Dict[str, Any]] = None,
     ) -> Tuple[str, Dict[str, Any]]:
         """
         Génère l'intégralité du contenu textuel conforme au standard EPA SWMM 5.2 .inp.
@@ -135,6 +136,7 @@ class MoteurSWMM:
             elevations_terrain=elevations_terrain,
             altimetrie_meta=altimetrie_meta,
             cotes_validations=cotes_validations,
+            etat_reseau=etat_reseau,
         )
         self._last_regards = regards_used.copy()
         self._last_canalisations = canalisations_used.copy()
@@ -186,6 +188,7 @@ class MoteurSWMM:
         elevations_terrain: Optional[Dict[str, float]] = None,
         altimetrie_meta: Optional[Dict[str, Any]] = None,
         cotes_validations: Optional[Dict[str, float]] = None,
+        etat_reseau: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Exécute la simulation complète avec pyswmm et extrait les KPIs hydrauliques.
@@ -220,6 +223,7 @@ class MoteurSWMM:
             elevations_terrain=elevations_terrain,
             altimetrie_meta=altimetrie_meta,
             cotes_validations=cotes_validations,
+            etat_reseau=etat_reseau,
         )
 
         # Paramétrage garde-fou du projet : propagé dans meta pour que

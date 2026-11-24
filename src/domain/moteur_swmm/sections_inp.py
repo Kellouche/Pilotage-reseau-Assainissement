@@ -92,6 +92,7 @@ def generer_lignes_sections_inp(
     ouvrages_speciaux: Optional[gpd.GeoDataFrame] = None,
     gpkg_counts: Optional[Dict[str, Any]] = None,
     conventions: Optional[Dict[str, Any]] = None,
+    etat_reseau: Optional[Dict[str, Any]] = None,
 ) -> Tuple[List[str], Dict[str, Any]]:
     """
     Génère la liste de lignes de toutes les sections .inp et le dictionnaire meta.
@@ -617,6 +618,16 @@ def generer_lignes_sections_inp(
     sections_rectangulaires = []
     exclusions_conduits: List[Dict[str, Any]] = []
 
+    from src.domain.moteur_swmm.etat_reseau import (
+        normaliser_etat_reseau,
+        est_etat_nominal,
+        appliquer_etat_conduite,
+    )
+    _etat_norm = normaliser_etat_reseau(etat_reseau)
+    _etat_nominal = est_etat_nominal(_etat_norm)
+    _nb_conduits_colmates = 0
+    _nb_depots_sig = 0
+
     # Une pompe par tête de chaîne de refoulement : un tronçon "Refoulement"
     # dont le nœud amont est lui-même l'exutoire d'un autre tronçon de
     # refoulement est un segment de refoulement (conduite sous pression),
@@ -656,6 +667,33 @@ def generer_lignes_sections_inp(
         if shape == "RECTANGULAR":
             sections_rectangulaires.append({"cid": cid, "hauteur_m": geom1, "largeur_m": geom2})
 
+        # État physique du réseau (Colmatage & Vieillissement)
+        rough_eff = rough
+        xsec_shape_eff = "RECT_CLOSED" if shape == "RECTANGULAR" else "CIRCULAR"
+        geom1_eff, geom2_eff = geom1, geom2
+        if not _etat_nominal:
+            _zu = node_elevs.get(u_node)
+            _zd = node_elevs.get(d_node)
+            if _zu is not None and _zd is not None and length > 0:
+                _pente_c = ((_zu - _zd) / length) * 100.0
+            else:
+                _p_attr = c.get("PENTE")
+                _pente_c = float(_p_attr) if (_p_attr is not None and pd.notna(_p_attr)) else pente_moyenne_pct
+            xsec_shape_eff, geom1_eff, geom2_eff, _sed_m, rough_eff, _info_etat = appliquer_etat_conduite(
+                row=c,
+                diam_m=diam_m,
+                shape=shape,
+                geom1=geom1,
+                geom2=geom2,
+                rough_base=rough,
+                pente_conduite_pct=_pente_c,
+                etat_norm=_etat_norm,
+            )
+            if _info_etat.get("colmate"):
+                _nb_conduits_colmates += 1
+                if _info_etat.get("source_depot") == "sig_niv_depot":
+                    _nb_depots_sig += 1
+
         # Détection de refoulement (Chantier 1.1)
         fct = str(c.get("FONCTIONMT") or c.get("fonctionmt") or "").strip().lower()
         is_refoulement = ("refoul" in fct or "pompage" in fct)
@@ -688,11 +726,13 @@ def generer_lignes_sections_inp(
             curve_lines.append(f"{curve_id:<16}            {q_nom:<10.4f} 25.00")
             curve_lines.append(f"{curve_id:<16}            {round(q_nom * 1.5, 4):<10.4f} 10.00")
 
-            conduit_lines.append(f"{cid:<16} {n_ref_node:<16} {d_node:<16} {length:<10.2f} {rough:<10.4f} 0.000      0.000      0.000      0.000")
-            if shape == "RECTANGULAR":
-                xsec_lines.append(f"{cid:<16} RECT_CLOSED   {geom1:<16.3f} {geom2:<10.3f} 0.000      0.000      {barrels}")
+            conduit_lines.append(f"{cid:<16} {n_ref_node:<16} {d_node:<16} {length:<10.2f} {rough_eff:<10.4f} 0.000      0.000      0.000      0.000")
+            if xsec_shape_eff == "RECT_CLOSED":
+                xsec_lines.append(f"{cid:<16} RECT_CLOSED   {geom1_eff:<16.3f} {geom2_eff:<10.3f} 0.000      0.000      {barrels}")
+            elif xsec_shape_eff == "FILLED_CIRCULAR":
+                xsec_lines.append(f"{cid:<16} FILLED_CIRCULAR {geom1_eff:<16.3f} {geom2_eff:<10.3f} 0.000      0.000      {barrels}")
             else:
-                xsec_lines.append(f"{cid:<16} CIRCULAR     {geom1:<16.3f} 0.000      0.000      0.000      {barrels}")
+                xsec_lines.append(f"{cid:<16} CIRCULAR     {geom1_eff:<16.3f} 0.000      0.000      0.000      {barrels}")
 
             conduit_endpoints[cid] = {
                 "u": n_ref_node,
@@ -717,11 +757,13 @@ def generer_lignes_sections_inp(
         else:
             # Segment aval d'une chaîne de refoulement : conduite sous pression
             # alimentée par la pompe de tête (pas de pompe supplémentaire).
-            conduit_lines.append(f"{cid:<16} {u_node:<16} {d_node:<16} {length:<10.2f} {rough:<10.4f} 0.000      0.000      0.000      0.000")
-            if shape == "RECTANGULAR":
-                xsec_lines.append(f"{cid:<16} RECT_CLOSED   {geom1:<16.3f} {geom2:<10.3f} 0.000      0.000      {barrels}")
+            conduit_lines.append(f"{cid:<16} {u_node:<16} {d_node:<16} {length:<10.2f} {rough_eff:<10.4f} 0.000      0.000      0.000      0.000")
+            if xsec_shape_eff == "RECT_CLOSED":
+                xsec_lines.append(f"{cid:<16} RECT_CLOSED   {geom1_eff:<16.3f} {geom2_eff:<10.3f} 0.000      0.000      {barrels}")
+            elif xsec_shape_eff == "FILLED_CIRCULAR":
+                xsec_lines.append(f"{cid:<16} FILLED_CIRCULAR {geom1_eff:<16.3f} {geom2_eff:<10.3f} 0.000      0.000      {barrels}")
             else:
-                xsec_lines.append(f"{cid:<16} CIRCULAR     {geom1:<16.3f} 0.000      0.000      0.000      {barrels}")
+                xsec_lines.append(f"{cid:<16} CIRCULAR     {geom1_eff:<16.3f} 0.000      0.000      0.000      {barrels}")
 
             conduit_endpoints[cid] = {
                 "u": u_node,
@@ -1037,6 +1079,12 @@ def generer_lignes_sections_inp(
         "raccordements_spatiaux": raccordements_spatiaux,
         "sections_rectangulaires": sections_rectangulaires,
         "deversoirs_traites": deversoirs_traites,
+        "etat_reseau": {
+            **_etat_norm,
+            "est_nominal": _etat_nominal,
+            "nb_conduits_colmates": _nb_conduits_colmates,
+            "nb_depots_sig_appliques": _nb_depots_sig,
+        },
     }
 
     try:

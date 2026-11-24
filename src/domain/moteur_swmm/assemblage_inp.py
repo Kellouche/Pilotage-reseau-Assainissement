@@ -51,6 +51,7 @@ def assembler_modele_inp_impl(
     elevations_terrain: Optional[Dict[str, float]] = None,
     altimetrie_meta: Optional[Dict[str, Any]] = None,
     cotes_validations: Optional[Dict[str, float]] = None,
+    etat_reseau: Optional[Dict[str, Any]] = None,
 ) -> Tuple[str, Dict[str, Any], gpd.GeoDataFrame, gpd.GeoDataFrame]:
     """
     Génère l'intégralité du contenu textuel conforme au standard EPA SWMM 5.2 .inp.
@@ -248,6 +249,7 @@ def assembler_modele_inp_impl(
         ouvrages_speciaux=ouvrages_speciaux,
         gpkg_counts=gpkg_counts,
         conventions=conventions_inp,
+        etat_reseau=etat_reseau,
     )
 
     contenu_inp = "\n".join(lines)

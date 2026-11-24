@@ -379,6 +379,20 @@
             const statutBadge = s.status === 'completed'
                 ? '<span style="font-size:0.68rem;background:rgba(52,211,153,0.15);color:#34d399;border:1px solid rgba(52,211,153,0.4);padding:1px 7px;border-radius:9999px;font-weight:700;">terminée</span>'
                 : `<span style="font-size:0.68rem;background:rgba(148,163,184,0.15);color:#94a3b8;border:1px solid rgba(148,163,184,0.4);padding:1px 7px;border-radius:9999px;font-weight:700;">${_esc(s.status)}</span>`;
+
+            // Badge État du Réseau (Colmatage & Vieillissement)
+            const etatMeta = (rs.metadata && rs.metadata.etat_reseau) || params.etat_reseau || null;
+            let etatBadge = '';
+            if (etatMeta && !etatMeta.est_nominal && (etatMeta.colmatage_pct > 0 || (etatMeta.facteur_vieillissement && etatMeta.facteur_vieillissement > 1.0) || etatMeta.appliquer_depots_sig)) {
+                const parts = [];
+                if (etatMeta.colmatage_pct > 0) parts.push(`${etatMeta.colmatage_pct}% dépôt${etatMeta.cible_colmatage === 'faibles_pentes' ? ' (<' + (etatMeta.seuil_pente_pct || 0.5) + '%)' : ''}`);
+                if (etatMeta.facteur_vieillissement > 1.0) parts.push(`n ×${Number(etatMeta.facteur_vieillissement).toFixed(2)}`);
+                if (etatMeta.appliquer_depots_sig) parts.push('+SIG');
+                const txtEtat = parts.join(' • ') || _esc(etatMeta.scenario_nom || 'Dégradé');
+                etatBadge = `<span title="Scénario d'état du réseau appliqué (${_esc(etatMeta.scenario_nom || 'personnalisé')})" style="font-size:0.68rem;background:rgba(245,158,11,0.18);color:#fbbf24;border:1px solid rgba(245,158,11,0.45);padding:1px 7px;border-radius:9999px;font-weight:700;"><i class="fas fa-water me-1"></i>${txtEtat}</span>`;
+            } else {
+                etatBadge = `<span title="État nominal du réseau (curé, 0% colmatage)" style="font-size:0.68rem;background:rgba(16,185,129,0.12);color:#34d399;border:1px solid rgba(16,185,129,0.3);padding:1px 7px;border-radius:9999px;">État Nominal</span>`;
+            }
             const fiabBadge = fiab
                 ? `<span title="Fiabilité du modèle : ${_esc(verdict)}" style="font-size:0.68rem;background:${fiab.bg};color:${fiab.color};border:1px solid ${fiab.border};padding:1px 7px;border-radius:9999px;font-weight:700;">${fiab.icon} ${fiab.label}</span>`
                 : '';
@@ -413,7 +427,7 @@
                         </div>
                     </div>
                     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-                        ${activeBadge}${dwfBadge}${fiabBadge}${statutBadge}
+                        ${activeBadge}${etatBadge}${dwfBadge}${fiabBadge}${statutBadge}
                     </div>
                 </div>
                 ${actions ? `<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">${actions}</div>` : ''}
