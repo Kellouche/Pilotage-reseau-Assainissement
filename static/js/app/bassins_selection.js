@@ -112,9 +112,18 @@
         // des métadonnées de simulation (ex. « Chorfa ») plutôt que
         // l'identifiant positionnel cluster_id (« Bassin 0 »).
         function _nomMetierBassin(cidStr, meta) {
+            // Un identifiant nu (« 459 », « Bassin 459 ») n'est pas un nom
+            // métier : meta.bassin_nom peut contenir le cluster_id brut.
+            const _ressembleAId = (n) => {
+                const s = String(n || '').trim();
+                if (!s) return true;
+                if (/^\d+$/.test(s) || /^Bassin\s+\d+$/i.test(s)) return true;
+                return !!(cidStr && (s === String(cidStr) || s.toLowerCase() === String(cidStr).toLowerCase()));
+            };
             const _depuis = (m) => {
                 if (!m) return '';
-                return String(m.bassin_nom || m.cluster_nom || '').trim();
+                const n = String(m.bassin_nom || m.cluster_nom || '').trim();
+                return _ressembleAId(n) ? '' : n;
             };
             const direct = _depuis(meta);
             if (direct) return direct;

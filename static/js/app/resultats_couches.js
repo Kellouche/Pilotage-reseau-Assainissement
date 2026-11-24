@@ -381,7 +381,16 @@ window.addEventListener('DOMContentLoaded', initSaaSNavbar);
             const miniStatsEl = document.getElementById('mini-stats');
             if (miniStatsEl) {
                 if (isTargeted) {
-                    miniStatsEl.innerHTML = `<span style="color: #38bdf8; font-weight: 700;">Zone : ${meta.cluster_nom || meta.bassin_nom || ('Bassin ' + meta.cluster_id)}</span> | Conduites: <b>${meta.conduits_count}</b> | Regards: <b>${meta.junctions_count + 1}</b>`;
+                    // meta.bassin_nom peut contenir l'identifiant brut
+                    // (« 459 ») : on ne retient qu'un vrai nom métier.
+                    const _cidM = String(meta.cluster_id !== undefined && meta.cluster_id !== null ? meta.cluster_id : '');
+                    const _nomMeta = [meta.cluster_nom, meta.bassin_nom]
+                        .map(v => String(v || '').trim())
+                        .find(v => v && !/^\d+$/.test(v) && !/^Bassin\s+\d+$/i.test(v) && v !== _cidM);
+                    const _nomBassin = _nomMeta
+                        || (window._bassinNoms && window._bassinNoms[_cidM])
+                        || `Bassin ${_cidM}`;
+                    miniStatsEl.innerHTML = `<span style="color: #38bdf8; font-weight: 700;">Bassin : ${_nomBassin}</span> | Conduites: <b>${meta.conduits_count}</b> | Regards: <b>${meta.junctions_count + 1}</b>`;
                     miniStatsEl.style.background = 'rgba(56, 189, 248, 0.15)';
                     miniStatsEl.style.border = '1px solid rgba(56, 189, 248, 0.3)';
                     miniStatsEl.style.color = '#f8fafc';

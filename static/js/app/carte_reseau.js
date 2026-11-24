@@ -117,7 +117,7 @@ function chargerDonneesInitiales() {
                     document.getElementById('stat-total').textContent = d.compteurs.conduites || 0;
                     const pName = d.project_name || 'Réseau Actif';
                     document.getElementById('mini-stats').innerHTML =
-                        `<span style="color: #38bdf8; font-weight: 700;">Zone : ${pName}</span> | ` +
+                        `<span style="color: #38bdf8; font-weight: 700;">Réseau : ${pName}</span> | ` +
                         'Conduites: <b>' + (d.compteurs.conduites || 0) + '</b>' +
                         ' | Regards: <b>' + (d.compteurs.regards || 0) + '</b>';
 

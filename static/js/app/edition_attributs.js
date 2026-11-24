@@ -140,7 +140,7 @@
                 if (miniStatsEl && window._rawNetworkData && window._rawNetworkData.compteurs) {
                     const c = window._rawNetworkData.compteurs;
                     const pName = window._rawNetworkData.project_name || 'Réseau Actif';
-                    miniStatsEl.innerHTML = `<span style="color: #38bdf8; font-weight: 700;">Zone : ${pName}</span> | Conduites: <b>${c.conduites || 0}</b> | Regards: <b>${c.regards || 0}</b>`;
+                    miniStatsEl.innerHTML = `<span style="color: #38bdf8; font-weight: 700;">Réseau : ${pName}</span> | Conduites: <b>${c.conduites || 0}</b> | Regards: <b>${c.regards || 0}</b>`;
                     miniStatsEl.style.background = 'rgba(255, 255, 255, 0.06)';
                     miniStatsEl.style.border = 'none';
                     miniStatsEl.style.color = '#94a3b8';
@@ -191,7 +191,7 @@
             // Mise à jour synchrone du bandeau haut latéral avec la zone sélectionnée
             const miniStatsEl = document.getElementById('mini-stats');
             if (miniStatsEl) {
-                miniStatsEl.innerHTML = `<span style="color: #38bdf8; font-weight: 700;">Zone : ${nom}</span> | Conduites: <b>${nb}</b> | Regards: <b>${nbReg}</b>`;
+                miniStatsEl.innerHTML = `<span style="color: #38bdf8; font-weight: 700;">Bassin : ${nom}</span> | Conduites: <b>${nb}</b> | Regards: <b>${nbReg}</b>`;
                 miniStatsEl.style.background = 'rgba(56, 189, 248, 0.15)';
                 miniStatsEl.style.border = '1px solid rgba(56, 189, 248, 0.3)';
                 miniStatsEl.style.color = '#f8fafc';

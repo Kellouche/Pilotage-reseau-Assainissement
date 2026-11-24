@@ -141,7 +141,7 @@ window.reinitialiserAffichageSimulation = function() {
                 const pName = window._rawNetworkData.project_name || 'Réseau Actif';
                 const miniStatsEl = document.getElementById('mini-stats');
                 if (miniStatsEl) {
-                    miniStatsEl.innerHTML = `<span style="color: #38bdf8; font-weight: 700;">Zone : ${pName}</span> | Conduites: <b>${c.conduites || 0}</b> | Regards: <b>${c.regards || 0}</b>`;
+                    miniStatsEl.innerHTML = `<span style="color: #38bdf8; font-weight: 700;">Réseau : ${pName}</span> | Conduites: <b>${c.conduites || 0}</b> | Regards: <b>${c.regards || 0}</b>`;
                     miniStatsEl.style.background = 'rgba(255,255,255,0.06)';
                     miniStatsEl.style.border = 'none';
                     miniStatsEl.style.color = '#94a3b8';
