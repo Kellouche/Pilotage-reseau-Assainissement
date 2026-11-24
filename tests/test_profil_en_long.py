@@ -20,7 +20,7 @@ from fastapi import HTTPException
 os.environ["TESTING"] = "true"
 from api.database import SessionLocal
 from api.models import Organization, Project
-from api.routes.simulations import get_profil_en_long
+from api.routes.simulations_profil import get_profil_en_long
 
 GPKG_PROFIL = Path("uploads/a66e32ad-f32b-4529-acc3-7a6026eb5a8a/network_Assainissement_Ville.gpkg")
 
@@ -292,7 +292,7 @@ def test_cache_topologie_profil_partage_et_surete():
     """Le cache topo sert le même index et des copies de graphe indépendantes."""
     if not GPKG_PROFIL.exists():
         pytest.skip("GeoPackage de référence absent")
-    from api.routes.simulations import _charger_topo_pour_profil
+    from api.services.profil_topo_service import _charger_topo_pour_profil
 
     a = _charger_topo_pour_profil(GPKG_PROFIL.resolve())
     b = _charger_topo_pour_profil(GPKG_PROFIL.resolve())

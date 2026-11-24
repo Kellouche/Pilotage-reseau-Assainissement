@@ -33,7 +33,7 @@ from api.models import Project
 from api import schemas, crud
 from api.core.security import require_role, TenantContext
 
-from api.routes import network, simulations, sync, clusters, qualite, corrections, terrain, mnt, audit, auth, jobs, artifacts, licensing, admin, organization, apports, garde_fou, aux_layers, extractions
+from api.routes import network, simulations, simulations_profil, sync, clusters, qualite, corrections, terrain, mnt, audit, auth, jobs, artifacts, licensing, admin, organization, apports, garde_fou, aux_layers, extractions
 
 # ============================================================
 # LIFESPAN (démarrage/arrêt)
@@ -753,6 +753,7 @@ async def aide_doc_render(doc_path: str, request: Request, db=Depends(get_db)):
 app.include_router(auth.router, prefix="/api/v1", tags=["Authentification & Multi-Tenant"])
 app.include_router(network.router, prefix="/api/v1", tags=["Réseau"])
 app.include_router(simulations.router, prefix="/api/v1", tags=["Simulations"])
+app.include_router(simulations_profil.router, prefix="/api/v1", tags=["Simulations"])
 app.include_router(sync.router, prefix="/api/v1", tags=["Synchronisation"])
 app.include_router(clusters.router, prefix="/api/v1", tags=["Clusters"])
 app.include_router(qualite.router, prefix="/api/v1", tags=["Qualité réseau"])

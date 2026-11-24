@@ -39,7 +39,7 @@ def synchroniser_cotes_suspectes_projet(db: Session, project: Project) -> List[N
     et les consigne dans la table node_cote_validations (statut 'a_valider') sans modifier le GPKG.
     Préserve strictement les validations existantes déjà effectuées par l'utilisateur.
     """
-    from api.routes.simulations import _charger_topo_pour_profil
+    from api.services.profil_topo_service import _charger_topo_pour_profil
     from pathlib import Path
 
     if not project or not project.source_gpkg_key:

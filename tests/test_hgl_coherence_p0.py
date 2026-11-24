@@ -28,7 +28,7 @@ os.environ["TESTING"] = "true"
 
 from api.database import SessionLocal
 from api.models import Organization, Project, Simulation
-from api.routes.simulations import get_profil_en_long
+from api.routes.simulations_profil import get_profil_en_long
 from src.domain.moteur_swmm.analyse_rapport import (
     analyser_rapport_swmm_impl,
     enrichir_hydraulique_noeuds,

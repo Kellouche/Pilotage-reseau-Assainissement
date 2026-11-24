@@ -16,7 +16,7 @@ os.environ["TESTING"] = "true"
 from api.main import app
 from api.database import SessionLocal
 from api.models import Organization, Project, User, Membership, NodeCoteValidation
-from api.routes.simulations import get_profil_en_long
+from api.routes.simulations_profil import get_profil_en_long
 from api.core.auth import create_access_token
 
 

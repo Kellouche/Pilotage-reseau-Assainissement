@@ -607,7 +607,7 @@ def test_terrain_aux_pour_profil(db, org_projet):
     """P3 — l'artefact regards_terrain n'est servi au profil que si son
     estampillage gpkg_sha256 correspond au GPKG actif (jamais périmé)."""
     import json as _json
-    from api.routes.simulations import _terrain_aux_pour_profil
+    from api.routes.simulations_profil import _terrain_aux_pour_profil
     from api.services.aux_layers_service import cle_couche_aux, _store
     from api.models import ProjectAuxLayer
 

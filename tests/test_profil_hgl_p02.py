@@ -26,7 +26,7 @@ os.environ["TESTING"] = "true"
 
 from api.database import SessionLocal
 from api.models import Organization, Project, Simulation
-from api.routes.simulations import get_profil_en_long
+from api.routes.simulations_profil import get_profil_en_long
 from src.domain.moteur_swmm.execution_solver import executer_solver_swmm
 from src.domain.moteur_swmm.timeseries_extractor import (
     extraire_series_temporelles,
