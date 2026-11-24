@@ -134,32 +134,146 @@ def _noeuds_connectes_gpkg(gpkg_path: Path) -> Set[str]:
 
 
 def _noeuds_cluster_gpkg(gpkg_path: Path, cluster_id: str) -> Set[str]:
-    """Résout l'ensemble des nœuds amont drainant vers l'exutoire d'un cluster."""
+    """
+    Résout l'ensemble EXACT des nœuds amont drainant vers l'exutoire d'un cluster
+    (cohérence stricte avec extraire_sous_reseau_bassin du moteur SWMM).
+    """
     if not cluster_id or not str(cluster_id).strip():
         return set()
     cid = str(cluster_id).strip()
     try:
+        import sqlite3
         from api.routes.clusters import _get_graph
-        import networkx as nx
+        from src.domain.moteur_swmm.constants import _clean_node_id
+        from src.domain.moteur_swmm.filtrage_bassin import _EXUTOIRES_MAP_CACHE
+        from src.domain.detecteur_clusters import trouver_exutoires_physiques
+
         G = _get_graph(str(gpkg_path))
+        cache_key = str(gpkg_path)
+        exutoires_map = _EXUTOIRES_MAP_CACHE.get(cache_key)
+        if not exutoires_map:
+            exutoires_map = trouver_exutoires_physiques(G, inclure_exutoires_implicites=True)
+            _EXUTOIRES_MAP_CACHE[cache_key] = exutoires_map
+
         target = None
-        if cid in G:
-            target = cid
-        elif cid.startswith("OUT_") and cid[4:] in G:
-            target = cid[4:]
-        elif f"OUT_{cid}" in G:
-            target = f"OUT_{cid}"
-        else:
-            for n in G.nodes():
-                if str(n) == cid or f"OUT_{n}" == cid or n == f"OUT_{cid}":
-                    target = n
-                    break
-        if target and target in G:
-            ancestors = nx.ancestors(G, target)
-            return {str(a) for a in ancestors} | {str(target)}
-        for comp in nx.weakly_connected_components(G):
-            if any(cid in str(n) or str(n) in cid for n in comp):
-                return {str(n) for n in comp}
+        cid_int = None
+        try:
+            cid_int = int(cid)
+        except ValueError:
+            pass
+
+        # 1. Résolution via .clusters_cache.json (source canonique des cluster_id UI)
+        cache_file = Path(gpkg_path).with_suffix(".clusters_cache.json")
+        if cache_file.exists():
+            try:
+                import json
+                with open(cache_file, "r", encoding="utf-8") as fc:
+                    cdata = json.load(fc)
+                feats = cdata.get("bassins_geojson", {}).get("features", [])
+                matched_fp = None
+                for f in feats:
+                    fp = f.get("properties", {})
+                    fnom = str(fp.get("nom", "")).strip()
+                    fcid = fp.get("cluster_id")
+                    if fnom.lower() == cid.lower() or (cid_int is not None and fcid == cid_int) or fnom.lower().startswith(f"{cid.lower()}_"):
+                        matched_fp = fp
+                        break
+                if matched_fp:
+                    for cand in (matched_fp.get("exutoire_id"), matched_fp.get("regard_proche_id"), matched_fp.get("nom_exutoire"), matched_fp.get("nom")):
+                        if not cand:
+                            continue
+                        cand_str = str(cand).strip()
+                        if cand_str in exutoires_map or G.has_node(cand_str):
+                            target = cand_str
+                            break
+                        if cand_str.endswith(".0") and G.has_node(cand_str[:-2]):
+                            target = cand_str[:-2]
+                            break
+                        if G.has_node(f"{cand_str}.0"):
+                            target = f"{cand_str}.0"
+                            break
+            except Exception:
+                pass
+
+        # 1bis. Résolution via la table de métadonnées bassins_versants_79 du GPKG
+        if not target:
+            try:
+                con_meta = sqlite3.connect(str(gpkg_path))
+                cur_meta = con_meta.cursor()
+                cur_meta.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='bassins_versants_79'")
+                if cur_meta.fetchone():
+                    row_b = None
+                    if cid_int is not None:
+                        cur_meta.execute("SELECT exutoire_id FROM bassins_versants_79 WHERE id_bassin = ? LIMIT 1", (cid_int,))
+                        row_b = cur_meta.fetchone()
+                    if not row_b:
+                        cur_meta.execute("SELECT exutoire_id FROM bassins_versants_79 WHERE LOWER(nom_exutoire) = LOWER(?) OR exutoire_id = ? LIMIT 1", (cid, cid))
+                        row_b = cur_meta.fetchone()
+                    if row_b and row_b[0]:
+                        cand = str(row_b[0]).strip()
+                        if G.has_node(cand):
+                            target = cand
+                        elif cand.endswith(".0") and G.has_node(cand[:-2]):
+                            target = cand[:-2]
+                        elif G.has_node(f"{cand}.0"):
+                            target = f"{cand}.0"
+                con_meta.close()
+            except Exception:
+                pass
+
+        # 2. Résolution via exutoires_map (exacte ou index positionnel 1-based)
+        if not target:
+            if cid in exutoires_map:
+                target = cid
+            else:
+                for ex_k, ex_v in exutoires_map.items():
+                    if str(ex_v.get("nom", "")).strip().lower() == cid.lower() or str(ex_k).strip().lower() == cid.lower():
+                        target = ex_k
+                        break
+        ex_list = list(exutoires_map.items())
+        if not target and cid_int is not None and 1 <= cid_int <= len(ex_list):
+            target = ex_list[cid_int - 1][0]
+
+        # 3. Fallback si cid est directement un ID de nœud dans G
+        if not target:
+            if G.has_node(cid):
+                target = cid
+            elif cid.startswith("OUT_") and G.has_node(cid[4:]):
+                target = cid[4:]
+            elif G.has_node(f"OUT_{cid}"):
+                target = f"OUT_{cid}"
+
+        if not target or not G.has_node(target):
+            return set()
+
+        # 4. Parcours amont borné aux frontières d'exutoires (identique à filtrage_bassin.py)
+        ex_set = set(exutoires_map.keys())
+        ex_set_frontiere = {
+            e for e in ex_set
+            if not (G.has_node(e) and G.in_degree(e) == 0 and G.out_degree(e) > 0)
+        }
+        ex_info = exutoires_map.get(target, {})
+        regard_proche = ex_info.get("regard_proche_id")
+        est_deporte = bool(ex_info.get("est_deporte", False))
+
+        target_nodes = {target}
+        queue = [target]
+        if regard_proche and G.has_node(regard_proche) and (est_deporte or G.in_degree(target) == 0):
+            target_nodes.add(regard_proche)
+            queue.append(regard_proche)
+
+        while queue:
+            curr = queue.pop(0)
+            for pred in G.predecessors(curr):
+                if pred not in ex_set_frontiere and pred not in target_nodes:
+                    target_nodes.add(pred)
+                    queue.append(pred)
+
+        clean_nodes = {_clean_node_id(x) for x in target_nodes}
+        clean_nodes.add(_clean_node_id(target))
+        if est_deporte and regard_proche:
+            clean_nodes.add(_clean_node_id(regard_proche))
+        return clean_nodes
     except Exception as e:
         logger.warning("Résolution des nœuds du cluster %s impossible: %s", cluster_id, e)
     return set()
