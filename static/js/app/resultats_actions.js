@@ -432,10 +432,12 @@ window.reinitialiserAffichageSimulation = function() {
                     }
                 }
                 m.style.display = 'flex';
-                // LOT P1.5.3 — évaluer les apports DWF du projet à chaque
+                // LOT P1.5.3 — évaluer les apports DWF du bassin actif à chaque
                 // ouverture (compteurs + défaut de l'interrupteur).
                 if (typeof window.chargerInfosDwfSimulation === 'function') {
-                    window.chargerInfosDwfSimulation();
+                    const _selB = document.getElementById('sim-select-bassin');
+                    const _cidDwf = (_selB && _selB.value) ? _selB.value : (window._selectedClusterId || '');
+                    window.chargerInfosDwfSimulation(_cidDwf);
                 }
             }
         };

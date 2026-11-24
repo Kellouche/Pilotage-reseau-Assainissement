@@ -1173,6 +1173,34 @@
                 const tRetour = kp.pluvio_periode_retour || m.pluvio_periode_retour || 'T = 2 ans (Biennale)';
                 const scenNom = kp.pluvio_scenario_nom || m.pluvio_scenario_nom || m.scenario || 'Pluie de projet';
                 const duree = m.duree_heures || kp.duree_heures || 2;
+
+                const etatMeta = m.etat_reseau || (simActive.parameters && simActive.parameters.etat_reseau) || null;
+                let etatLineHtml = '';
+                const estDegrade = etatMeta && !etatMeta.est_nominal && (
+                    (etatMeta.colmatage_pct && etatMeta.colmatage_pct > 0)
+                    || (etatMeta.facteur_vieillissement && etatMeta.facteur_vieillissement > 1.0)
+                    || etatMeta.appliquer_depots_sig
+                );
+                if (estDegrade) {
+                    const ep = [];
+                    ep.push(`${etatMeta.colmatage_pct || 0}% dépôt${etatMeta.cible_colmatage === 'faibles_pentes' ? ' (<' + (etatMeta.seuil_pente_pct || 0.5) + '%)' : ''}`);
+                    if (etatMeta.facteur_vieillissement > 1.0) ep.push(`n ×${Number(etatMeta.facteur_vieillissement).toFixed(2)}`);
+                    if (etatMeta.appliquer_depots_sig) ep.push(`+SIG`);
+                    const sevCol = (etatMeta.colmatage_pct >= 20 || etatMeta.facteur_vieillissement >= 1.4) ? '#fca5a5' : '#fbbf24';
+                    const nomE = etatMeta.scenario_nom && etatMeta.scenario_nom !== 'nominal' ? etatMeta.scenario_nom : 'personnalisé';
+                    etatLineHtml = `
+                        <div style="font-size: 11px; color: ${sevCol}; margin-top: 4px; padding-left: 18px; font-weight: 700; display: flex; align-items: center; gap: 5px;">
+                            <i class="fas fa-water" style="font-size: 10px;"></i>
+                            <span>État ${_esc(nomE)} : ${_esc(ep.join(' • '))}</span>
+                        </div>`;
+                } else {
+                    etatLineHtml = `
+                        <div style="font-size: 11px; color: #34d399; margin-top: 4px; padding-left: 18px; display: flex; align-items: center; gap: 5px;">
+                            <i class="fas fa-check-circle" style="font-size: 10px;"></i>
+                            <span>État : Nominal (Curé)</span>
+                        </div>`;
+                }
+
                 simBlock = `
                     <div style="margin-bottom: 8px;">
                         <div style="font-size: 12px; font-weight: 700; color: #38bdf8; display: flex; align-items: center; gap: 7px;">
@@ -1181,6 +1209,7 @@
                         <div style="font-size: 11px; color: #94a3b8; margin-top: 2px; padding-left: 18px;">
                             ${_esc(scenNom)} (${duree} h)
                         </div>
+                        ${etatLineHtml}
                     </div>
                 `;
             } else {

@@ -147,9 +147,10 @@ window.mettreAJourIndicateursEtKpisSimulation = function(data) {
             if (resultsCard) {
                 const bassinTitle = document.getElementById('sim-results-bassin-title');
                 if (bassinTitle) {
-                    if (data.meta && data.meta.cluster_nom) {
+                    const nomResolu = _resoudreNomMetierBassinResultats(data.meta);
+                    if (data.meta && (data.meta.cluster_nom || data.meta.cluster_id !== undefined)) {
                         const typoInfo = data.meta.typologie_nom ? ` &bull; 🏷️ ${data.meta.typologie_nom}` : '';
-                        bassinTitle.innerHTML = `<i class="fas fa-sitemap me-1"></i> Périmètre simulé : <b>${data.meta.cluster_nom}</b> (Bassin ${data.meta.cluster_id}) &bull; ${data.meta.junctions_count + 1} regards, ${data.meta.conduits_count} conduites (${data.meta.total_area_ha} ha)${typoInfo}`;
+                        bassinTitle.innerHTML = `<i class="fas fa-sitemap me-1"></i> Périmètre simulé : <b>${nomResolu}</b> (Exutoire ${data.meta.cluster_id}) &bull; ${data.meta.junctions_count + 1} regards, ${data.meta.conduits_count} conduites (${data.meta.total_area_ha} ha)${typoInfo}`;
                         bassinTitle.style.display = 'block';
                     } else {
                         const typoInfo = data.meta && data.meta.typologie_nom ? ` &bull; 🏷️ ${data.meta.typologie_nom}` : '';
@@ -582,6 +583,39 @@ window.filtrerTableauDetailsOuvrages = function() {
     });
 };
 
+function _resoudreNomMetierBassinResultats(meta) {
+    if (!meta) return 'Réseau Complet';
+    const cid = (meta.cluster_id !== undefined && meta.cluster_id !== null) ? String(meta.cluster_id).trim() : '';
+    const _estIdBrut = (v) => {
+        const s = String(v || '').trim();
+        if (!s) return true;
+        if (/^\d+(\.0)?$/.test(s) || /^Bassin\s+\d+$/i.test(s)) return true;
+        return !!(cid && s.toLowerCase() === cid.toLowerCase());
+    };
+    const candMeta = String(meta.cluster_nom || meta.bassin_nom || '').trim();
+    if (!_estIdBrut(candMeta)) return candMeta;
+    if (cid && window._bassinNoms && window._bassinNoms[cid] && !_estIdBrut(window._bassinNoms[cid])) {
+        return window._bassinNoms[cid];
+    }
+    const bp = (cid && window._bassinProperties && window._bassinProperties[cid]) ? window._bassinProperties[cid] : null;
+    if (bp) {
+        const nomGeo = String(bp.nom_affiche || bp.nom || bp.nom_exutoire || bp.bassin_nom || '').trim();
+        if (!_estIdBrut(nomGeo)) return nomGeo;
+    }
+    if (window._clustersData && Array.isArray(window._clustersData.features) && cid) {
+        const feat = window._clustersData.features.find(f => f && f.properties && (
+            String(f.properties.cluster_id) === cid
+            || String(f.properties.exutoire_id) === cid
+            || String(f.properties.bassin_ref) === cid
+        ));
+        if (feat && feat.properties) {
+            const fn = String(feat.properties.nom_affiche || feat.properties.nom || feat.properties.nom_exutoire || '').trim();
+            if (!_estIdBrut(fn)) return fn;
+        }
+    }
+    return candMeta || (cid ? `Bassin ${cid}` : 'Réseau Complet');
+}
+
 window.remplirModalResultatsSimulation = function(data) {
     if (!data) return;
     const k = data.kpis || {};
@@ -592,7 +626,10 @@ window.remplirModalResultatsSimulation = function(data) {
     // 1. En-tête : Badge bassin, Badge État du Réseau & Sous-titre
     const badgeBassin = document.getElementById('res-modal-badge-bassin');
     if (badgeBassin) {
-        badgeBassin.textContent = meta.cluster_nom || meta.bassin_nom || (meta.cluster_id ? ('Bassin ' + meta.cluster_id) : 'Réseau Complet');
+        badgeBassin.textContent = _resoudreNomMetierBassinResultats(meta);
+        if (meta.cluster_id !== undefined && meta.cluster_id !== null) {
+            badgeBassin.title = `Exutoire / Cluster : ${meta.cluster_id}`;
+        }
     }
 
     const etat = meta.etat_reseau || (data.parameters && data.parameters.etat_reseau) || null;

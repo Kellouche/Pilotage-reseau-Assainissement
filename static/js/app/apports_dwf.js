@@ -114,6 +114,22 @@ window.ouvrirModalApportsDwf = async function() {
     DWF.recherche = '';
     const inp = document.getElementById('dwf-recherche');
     if (inp) inp.value = '';
+    const wrapB = document.getElementById('dwf-wrap-bassin-seul');
+    const chkB = document.getElementById('dwf-chk-bassin-seul');
+    const lblB = document.getElementById('dwf-label-bassin-seul');
+    const activeCid = window._selectedClusterId
+        || (window._dernierResultatSimulation && window._dernierResultatSimulation.meta ? window._dernierResultatSimulation.meta.cluster_id : null);
+    if (wrapB && chkB) {
+        if (activeCid && String(activeCid).trim().toLowerCase() !== 'tous') {
+            wrapB.style.display = 'inline-flex';
+            chkB.checked = true;
+            const nomB = (window._bassinNoms && window._bassinNoms[String(activeCid)]) || `Bassin ${activeCid}`;
+            if (lblB) lblB.textContent = `Bassin : ${nomB}`;
+        } else {
+            wrapB.style.display = 'none';
+            chkB.checked = false;
+        }
+    }
     definirFiltreDwf('courant');
     montrerVueDwf('liste');
     await initialiserDwf();
@@ -210,17 +226,41 @@ function appliquerPermissionsDwf() {
 // ---------------------------------------------------------------------------
 // Chargement des données
 // ---------------------------------------------------------------------------
+function _dwfClusterActif() {
+    const chk = document.getElementById('dwf-chk-bassin-seul');
+    if (chk && !chk.checked) return null;
+    const cid = window._selectedClusterId
+        || (window._dernierResultatSimulation && window._dernierResultatSimulation.meta ? window._dernierResultatSimulation.meta.cluster_id : null);
+    if (!cid || String(cid).trim().toLowerCase() === 'tous') return null;
+    return String(cid).trim();
+}
+
+window.onToggleDwfBassinSeul = async function() {
+    await Promise.all([chargerApportsDwf(), chargerIncompatiblesDwf()]);
+    rendreCompteursDwf();
+    rendreZoneReconciliationDwf();
+    rendreListeDwf();
+};
+
 async function chargerApportsDwf() {
-    const pid = DWF.projectId ? `?project_id=${encodeURIComponent(DWF.projectId)}` : '';
-    var _urlApports = `/api/v1/apports${pid}`;
+    const cid = _dwfClusterActif();
+    const params = [];
+    if (DWF.projectId) params.push(`project_id=${encodeURIComponent(DWF.projectId)}`);
+    if (cid) params.push(`cluster_id=${encodeURIComponent(cid)}`);
+    const qs = params.length ? `?${params.join('&')}` : '';
+    var _urlApports = `/api/v1/apports${qs}`;
     if (typeof window._urlAvecSnapshot === 'function') _urlApports = window._urlAvecSnapshot(_urlApports);
     DWF.apports = await dwfFetch(_urlApports);
     if (!Array.isArray(DWF.apports)) DWF.apports = [];
 }
 
 async function chargerIncompatiblesDwf() {
-    const pid = DWF.projectId ? `?project_id=${encodeURIComponent(DWF.projectId)}` : '';
-    const res = await dwfFetch(`/api/v1/apports/a-reconcilier${pid}`);
+    const cid = _dwfClusterActif();
+    const params = [];
+    if (DWF.projectId) params.push(`project_id=${encodeURIComponent(DWF.projectId)}`);
+    if (cid) params.push(`cluster_id=${encodeURIComponent(cid)}`);
+    const qs = params.length ? `?${params.join('&')}` : '';
+    const res = await dwfFetch(`/api/v1/apports/a-reconcilier${qs}`);
     DWF.incompatibles = (res && Array.isArray(res.incompatibles)) ? res.incompatibles : [];
     DWF.reseauCourant = (res && res.reseau_courant) || null;
     DWF.erreurReseau = (res && res.erreur) || null;

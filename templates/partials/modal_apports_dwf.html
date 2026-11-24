@@ -66,7 +66,13 @@ Objet : LOT P1.5.2 — Modale de gestion des apports de temps sec (DWF)
                             <button class="dwf-filtre-btn" data-filtre="inactifs" onclick="definirFiltreDwf('inactifs')" style="padding: 5px 12px; border-radius: 6px; font-size: 0.76rem; font-weight: 700; border: 1px solid rgba(255,255,255,0.12); background: transparent; color: #94a3b8; cursor: pointer;">Inactifs</button>
                             <button class="dwf-filtre-btn" data-filtre="reconcilier" onclick="definirFiltreDwf('reconcilier')" style="padding: 5px 12px; border-radius: 6px; font-size: 0.76rem; font-weight: 700; border: 1px solid rgba(255,255,255,0.12); background: transparent; color: #94a3b8; cursor: pointer;">À réconcilier</button>
                         </div>
-                        <input type="text" id="dwf-recherche" oninput="DWF.recherche = this.value; rendreListeDwf();" placeholder="Rechercher un regard (ex. REG_12)…" style="padding: 7px 12px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #f8fafc; font-size: 0.8rem; width: 260px;">
+                        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                            <label id="dwf-wrap-bassin-seul" style="display: none; align-items: center; gap: 6px; font-size: 0.76rem; color: #38bdf8; font-weight: 700; cursor: pointer; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.35); padding: 4px 10px; border-radius: 6px;">
+                                <input type="checkbox" id="dwf-chk-bassin-seul" checked onchange="onToggleDwfBassinSeul()" style="accent-color: #38bdf8; cursor: pointer;">
+                                <span id="dwf-label-bassin-seul">Bassin actif uniquement</span>
+                            </label>
+                            <input type="text" id="dwf-recherche" oninput="DWF.recherche = this.value; rendreListeDwf();" placeholder="Rechercher un regard (ex. REG_12)…" style="padding: 7px 12px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #f8fafc; font-size: 0.8rem; width: 240px;">
+                        </div>
                     </div>
 
                     <!-- Liste des apports -->
