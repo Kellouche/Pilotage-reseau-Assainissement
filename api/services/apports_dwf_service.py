@@ -227,6 +227,7 @@ def preparer_apports_pour_simulation(
     gpkg_path: Any = None,
     dwf_compatibles_seulement: bool = False,
     user_id: Optional[str] = None,
+    cluster_id: Optional[Any] = None,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """
     Résout les apports à injecter pour une simulation.
@@ -263,6 +264,20 @@ def preparer_apports_pour_simulation(
         }
 
     apports = resoudre_apports_dwf(db, proj)
+    if apports and cluster_id is not None and str(cluster_id).strip().lower() not in ("", "tous", "all", "null", "undefined") and gpkg_path:
+        try:
+            from api.routes.apports import _noeuds_cluster_gpkg
+            c_nodes = _noeuds_cluster_gpkg(Path(gpkg_path), str(cluster_id))
+            if c_nodes:
+                apports = [
+                    a for a in apports
+                    if str(a.get("node_id") or "").strip() in c_nodes
+                    or str(a.get("node_id") or "").strip().removesuffix(".0") in c_nodes
+                ]
+            else:
+                apports = []
+        except Exception as _ex_cl:
+            logger.warning("Filtrage DWF par cluster_id=%s ignoré: %s", cluster_id, _ex_cl)
     apports_retenus = apports
     apports_ignores: List[Dict[str, Any]] = []
 

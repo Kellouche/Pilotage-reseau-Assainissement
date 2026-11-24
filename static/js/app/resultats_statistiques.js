@@ -589,15 +589,54 @@ window.remplirModalResultatsSimulation = function(data) {
     const cRes = data.conduit_results || {};
     const nRes = data.node_results || {};
 
-    // 1. En-tête : Badge bassin & Sous-titre
+    // 1. En-tête : Badge bassin, Badge État du Réseau & Sous-titre
     const badgeBassin = document.getElementById('res-modal-badge-bassin');
     if (badgeBassin) {
         badgeBassin.textContent = meta.cluster_nom || meta.bassin_nom || (meta.cluster_id ? ('Bassin ' + meta.cluster_id) : 'Réseau Complet');
     }
+
+    const etat = meta.etat_reseau || (data.parameters && data.parameters.etat_reseau) || null;
+    const badgeEtat = document.getElementById('res-modal-badge-etat');
+    let etatLabelSub = 'État : Nominal (Curé)';
+    const estDegrade = etat && !etat.est_nominal && (
+        (etat.colmatage_pct && etat.colmatage_pct > 0)
+        || (etat.facteur_vieillissement && etat.facteur_vieillissement > 1.0)
+        || etat.appliquer_depots_sig
+    );
+
+    if (estDegrade) {
+        const parts = [];
+        if (etat.colmatage_pct > 0) {
+            parts.push(`${etat.colmatage_pct}% dépôt${etat.cible_colmatage === 'faibles_pentes' ? ' (<' + (etat.seuil_pente_pct || 0.5) + '%)' : ''}`);
+        }
+        if (etat.facteur_vieillissement > 1.0) {
+            parts.push(`n ×${Number(etat.facteur_vieillissement).toFixed(2)}`);
+        }
+        if (etat.appliquer_depots_sig) {
+            parts.push(`+SIG (${etat.nb_depots_sig_appliques || 0})`);
+        }
+        const nbCol = etat.nb_conduits_colmates > 0 ? ` • ${etat.nb_conduits_colmates} cond.` : '';
+        const scenEtat = etat.scenario_nom && etat.scenario_nom !== 'nominal' ? etat.scenario_nom : 'Personnalisé';
+        etatLabelSub = `État ${scenEtat} : ${parts.join(' • ')}${nbCol}`;
+
+        if (badgeEtat) {
+            const sev = (etat.colmatage_pct >= 20 || etat.facteur_vieillissement >= 1.4);
+            badgeEtat.innerHTML = `<i class="fas fa-water me-1"></i>${etatLabelSub}`;
+            badgeEtat.style.color = sev ? '#fca5a5' : '#fbbf24';
+            badgeEtat.style.background = sev ? 'rgba(239, 68, 68, 0.18)' : 'rgba(245, 158, 11, 0.18)';
+            badgeEtat.style.borderColor = sev ? 'rgba(239, 68, 68, 0.45)' : 'rgba(245, 158, 11, 0.45)';
+        }
+    } else if (badgeEtat) {
+        badgeEtat.innerHTML = `<i class="fas fa-check-circle me-1"></i>État : Nominal (Curé)`;
+        badgeEtat.style.color = '#34d399';
+        badgeEtat.style.background = 'rgba(16, 185, 129, 0.15)';
+        badgeEtat.style.borderColor = 'rgba(16, 185, 129, 0.35)';
+    }
+
     const subTitle = document.getElementById('res-modal-subtitle');
     if (subTitle) {
         const scenNom = (meta.scenario_nom || meta.scenario || (k.pluvio_periode_retour ? ('Pluie ' + k.pluvio_periode_retour) : 'SWMM 5.2 Dynamic Wave'));
-        subTitle.textContent = `Scénario : ${scenNom} • Résolution 1D Saint-Venant (EPA Dynamic Wave)`;
+        subTitle.textContent = `Scénario : ${scenNom} • ${etatLabelSub} • Résolution 1D Saint-Venant`;
     }
 
     // 2. Détection de criticité globale & Verdict Banner

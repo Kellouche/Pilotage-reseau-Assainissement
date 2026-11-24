@@ -733,7 +733,8 @@ def run_native_swmm_simulation(
             db, proj, dwf_actif=payload.dwf_actif,
             version_meta=contexte.version_meta, gpkg_path=gpkg_path,
             dwf_compatibles_seulement=bool(payload.dwf_compatibles_seulement),
-            user_id=getattr(getattr(tenant, "actor", None), "id", None))
+            user_id=getattr(getattr(tenant, "actor", None), "id", None),
+            cluster_id=payload.cluster_id)
     except ApportsDwfIncompatiblesError as e:
         raise HTTPException(status_code=422, detail={
             "message": str(e),

@@ -253,6 +253,7 @@ def lister_profils_dwf(tenant: TenantContext = Depends(get_tenant_context)):
 def lister_apports(
     project_id: Optional[str] = Query(None),
     node_id: Optional[str] = Query(None),
+    cluster_id: Optional[str] = Query(None),
     actif_seulement: bool = Query(False),
     snapshot: Optional[str] = Query(None),
     reseau_courant_seulement: bool = Query(False),
@@ -261,11 +262,8 @@ def lister_apports(
 ):
     """
     Liste les apports DWF du projet (bornés à l'organisation du tenant).
-    `snapshot` (optionnel) : n'affiche que les apports estampillés pour ce
-    snapshot GPKG — un apport d'une autre version réseau n'est jamais
-    restitué dans une vue d'archive (pas de mélange d'espaces d'IDs).
-    `reseau_courant_seulement` (optionnel) : si True, filtre sur la version
-    GPKG active du projet.
+    `cluster_id` (optionnel) : ne retourne que les apports situés sur les
+    nœuds appartenant au bassin versant sélectionné.
     """
     proj = _resoudre_projet(db, tenant, project_id)
     snap_vid, snap_sha = _filtre_snapshot_apports(db, proj, snapshot)
@@ -287,7 +285,21 @@ def lister_apports(
         q = q.filter(ApportDwf.node_id == _clean_node_id(node_id))
     if actif_seulement:
         q = q.filter(ApportDwf.actif.is_(True))
-    return [a.to_dict() for a in q.order_by(ApportDwf.created_at).all()]
+
+    rows = [a.to_dict() for a in q.order_by(ApportDwf.created_at).all()]
+    if cluster_id and str(cluster_id).strip().lower() not in ("", "tous", "all", "null", "undefined"):
+        gpkg_path, _ = resoudre_gpkg_effectif_pour_projet_avec_meta(db, proj)
+        if gpkg_path and Path(gpkg_path).exists():
+            c_nodes = _noeuds_cluster_gpkg(Path(gpkg_path), str(cluster_id))
+            if c_nodes:
+                rows = [
+                    r for r in rows
+                    if str(r.get("node_id") or "").strip() in c_nodes
+                    or str(r.get("node_id") or "").strip().removesuffix(".0") in c_nodes
+                ]
+            else:
+                rows = []
+    return rows
 
 
 @router.get("/noeuds")
@@ -362,6 +374,7 @@ def lister_noeuds_disponibles(
 @router.get("/a-reconcilier")
 def lister_apports_a_reconcilier(
     project_id: Optional[str] = Query(None),
+    cluster_id: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     tenant: TenantContext = Depends(get_tenant_context),
 ):
@@ -400,6 +413,17 @@ def lister_apports_a_reconcilier(
     gpkg_path = Path(gpkg_path) if gpkg_path else None
     reseau_disponible = (
         gpkg_path is not None and gpkg_path.exists())
+
+    if reseau_disponible and cluster_id and str(cluster_id).strip().lower() not in ("", "tous", "all", "null", "undefined"):
+        c_nodes = _noeuds_cluster_gpkg(gpkg_path, str(cluster_id))
+        if c_nodes:
+            apports = [
+                a for a in apports
+                if str(a.get("node_id") or "").strip() in c_nodes
+                or str(a.get("node_id") or "").strip().removesuffix(".0") in c_nodes
+            ]
+        else:
+            apports = []
 
     incompatibles: list = []
     if not apports:

@@ -370,7 +370,7 @@ window.dessinerRaccordementsOrphelinsSurCarte = function() {
         // de compatibilité n'est dupliquée côté client.
         window._dwfSimulationInfo = { charge: false, actifs: 0, compatibles: 0, incompatibles: 0, projetId: null };
 
-        window.chargerInfosDwfSimulation = async function() {
+        window.chargerInfosDwfSimulation = async function(clusterIdParam) {
             const section = document.getElementById('sim-dwf-section');
             const stats = document.getElementById('sim-dwf-stats');
             const chk = document.getElementById('sim-chk-dwf-actif');
@@ -379,6 +379,13 @@ window.dessinerRaccordementsOrphelinsSurCarte = function() {
             const info = window._dwfSimulationInfo;
             info.charge = false;
             if (!section || !stats) return;
+
+            const simBassinEl = document.getElementById('sim-select-bassin');
+            const cidRaw = (clusterIdParam !== undefined && clusterIdParam !== null)
+                ? clusterIdParam
+                : (simBassinEl ? simBassinEl.value : (window._selectedClusterId || ''));
+            const cidClean = String(cidRaw || '').trim();
+            const cidQuery = (cidClean && cidClean.toLowerCase() !== 'tous') ? `&cluster_id=${encodeURIComponent(cidClean)}` : '';
 
             const token = localStorage.getItem('swmm_access_token');
             const headers = {};
@@ -398,8 +405,8 @@ window.dessinerRaccordementsOrphelinsSurCarte = function() {
                 info.projetId = ap.id;
                 const pid = `project_id=${encodeURIComponent(ap.id)}`;
                 const [apports, recon] = await Promise.all([
-                    fetch((typeof window._urlAvecSnapshot === 'function' ? window._urlAvecSnapshot(`/api/v1/apports?${pid}&actif_seulement=true`) : `/api/v1/apports?${pid}&actif_seulement=true`), j).then(r => r.ok ? r.json() : []),
-                    fetch(`/api/v1/apports/a-reconcilier?${pid}`, j).then(r => r.ok ? r.json() : null),
+                    fetch((typeof window._urlAvecSnapshot === 'function' ? window._urlAvecSnapshot(`/api/v1/apports?${pid}&actif_seulement=true${cidQuery}`) : `/api/v1/apports?${pid}&actif_seulement=true${cidQuery}`), j).then(r => r.ok ? r.json() : []),
+                    fetch(`/api/v1/apports/a-reconcilier?${pid}${cidQuery}`, j).then(r => r.ok ? r.json() : null),
                 ]);
                 const actifs = Array.isArray(apports) ? apports : [];
                 const incompatibles = (recon && Array.isArray(recon.incompatibles)) ? recon.incompatibles : [];
@@ -412,20 +419,16 @@ window.dessinerRaccordementsOrphelinsSurCarte = function() {
                 section.style.display = 'block';
                 if (chk) chk.disabled = false;
 
+                const scopeLib = cidQuery ? 'sur ce bassin' : 'pour ce projet';
                 if (actifs.length === 0) {
-                    stats.innerHTML = '<i class="fas fa-info-circle me-1" style="color:#6ee7b7;"></i> <b>0 apport DWF actif</b> pour ce projet — comportement historique inchangé.';
+                    stats.innerHTML = `<i class="fas fa-info-circle me-1" style="color:#6ee7b7;"></i> <b>0 apport DWF actif</b> ${scopeLib} — comportement historique inchangé.`;
                     if (chk) chk.checked = false;
                 } else {
                     stats.innerHTML =
-                        `<b style="color:#34d399;">${actifs.length} apport(s) actif(s)</b> — ` +
+                        `<b style="color:#34d399;">${actifs.length} apport(s) actif(s)</b> ${scopeLib} — ` +
                         `<b style="color:#6ee7b7;">${info.compatibles} compatible(s)</b> avec le réseau courant — ` +
                         `<b style="color:${nIncompat > 0 ? '#fbbf24' : '#6ee7b7'};">${nIncompat} incompatible(s)</b>.` +
                         (nIncompat > 0 ? ' La simulation sera refusée tant que les apports incompatibles ne sont pas réconciliés.' : '');
-                    // Défaut : DWF proposé dès qu'il existe des apports
-                    // actifs. La compatibilité est affichée à côté ; si des
-                    // apports sont incompatibles, le lancement retournera
-                    // le 422 structuré avec accès à la réconciliation —
-                    // jamais de désactivation silencieuse des apports.
                     if (chk) chk.checked = (info.compatibles > 0 || nIncompat === 0);
                 }
 
@@ -1280,7 +1283,23 @@ window.dessinerRaccordementsOrphelinsSurCarte = function() {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => {
                 if (typeof window.rendrePresetsEtatCustom === 'function') window.rendrePresetsEtatCustom();
+                const selB = document.getElementById('sim-select-bassin');
+                if (selB) {
+                    selB.addEventListener('change', () => {
+                        if (typeof window.chargerInfosDwfSimulation === 'function') {
+                            window.chargerInfosDwfSimulation(selB.value);
+                        }
+                    });
+                }
             });
         } else {
             window.rendrePresetsEtatCustom();
+            const selB = document.getElementById('sim-select-bassin');
+            if (selB) {
+                selB.addEventListener('change', () => {
+                    if (typeof window.chargerInfosDwfSimulation === 'function') {
+                        window.chargerInfosDwfSimulation(selB.value);
+                    }
+                });
+            }
         }

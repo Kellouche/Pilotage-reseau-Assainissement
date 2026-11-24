@@ -602,6 +602,33 @@
             if (chkAlt) chkAlt.checked = !!p.altimetrie_terrain;
         }
 
+        // État physique du réseau (Colmatage & Vieillissement)
+        const etatSim = p.etat_reseau || (sim.result_summary && sim.result_summary.metadata && sim.result_summary.metadata.etat_reseau) || null;
+        if (etatSim && typeof window.selectionnerPresetEtatReseau === 'function') {
+            const nomE = etatSim.scenario_nom || 'personnalise';
+            if (nomE === 'nominal' || nomE === 'exploite' || nomE === 'critique') {
+                window.selectionnerPresetEtatReseau(nomE);
+            } else {
+                window.selectionnerPresetEtatReseau('personnalise');
+            }
+            const rngCol = document.getElementById('sim-etat-colmatage-range');
+            const rngVie = document.getElementById('sim-etat-vieillissement-range');
+            const inpSeuil = document.getElementById('sim-etat-seuil-pente');
+            const chkSig = document.getElementById('sim-chk-depots-sig');
+            if (rngCol && etatSim.colmatage_pct !== undefined) rngCol.value = etatSim.colmatage_pct;
+            if (rngVie && etatSim.facteur_vieillissement !== undefined) rngVie.value = etatSim.facteur_vieillissement;
+            if (inpSeuil && etatSim.seuil_pente_pct !== undefined) inpSeuil.value = etatSim.seuil_pente_pct;
+            if (chkSig && etatSim.appliquer_depots_sig !== undefined) chkSig.checked = !!etatSim.appliquer_depots_sig;
+            if (etatSim.cible_colmatage) {
+                document.querySelectorAll('input[name="sim-etat-cible"]').forEach(r => {
+                    r.checked = (r.value === etatSim.cible_colmatage);
+                });
+            }
+            if (typeof window.mettreAJourResumeEtatReseau === 'function') window.mettreAJourResumeEtatReseau();
+        } else if (typeof window.selectionnerPresetEtatReseau === 'function') {
+            window.selectionnerPresetEtatReseau('nominal');
+        }
+
         window.fermerModalSimulationsBassin();
         if (typeof window.ouvrirModalSimulation === 'function') {
             window.ouvrirModalSimulation(true);
