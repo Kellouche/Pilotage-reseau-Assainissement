@@ -67,8 +67,23 @@
                 // Filtrer par le bassin affiché (sinon séries d'un autre bassin)
                 const _bSel = document.getElementById('bassin-select');
                 const _cidBassin = (_bSel && _bSel.value) ? _bSel.value : '';
-                const _qs = _cidBassin ? `cluster_id=${encodeURIComponent(_cidBassin)}&` : '';
-                const resp = await fetch(`/api/v1/simulations/timeseries?${_qs}_t=${Date.now()}`);
+                const _optBassin = (_bSel && _bSel.selectedOptions && _bSel.selectedOptions[0]) || null;
+                // Même identité métier que chargerDonneesTimeSlider : sans
+                // exutoire_noeud/bassin_ref/simulation_id, l'API peut servir
+                // les séries d'une AUTRE simulation → couleurs de scrub
+                // incohérentes avec l'animation.
+                const _exutoire = _optBassin && _optBassin.dataset ? (_optBassin.dataset.exutoireId || '') : '';
+                const _bassinRef = _optBassin && _optBassin.dataset ? (_optBassin.dataset.bassinRef || '') : '';
+                const _simAff = (window._dernierResultatSimulation && window._dernierResultatSimulation.simulation_id)
+                    || (window._dernierResultatSimulation && window._dernierResultatSimulation.meta && window._dernierResultatSimulation.meta.simulation_id)
+                    || '';
+                const _qsParams = [];
+                if (_cidBassin) _qsParams.push(`cluster_id=${encodeURIComponent(_cidBassin)}`);
+                if (_exutoire) _qsParams.push(`exutoire_noeud=${encodeURIComponent(_exutoire)}`);
+                if (_bassinRef) _qsParams.push(`bassin_ref=${encodeURIComponent(_bassinRef)}`);
+                if (_simAff) _qsParams.push(`simulation_id=${encodeURIComponent(_simAff)}`);
+                const _qs = _qsParams.length ? `?${_qsParams.join('&')}` : '';
+                const resp = await fetch(`/api/v1/simulations/timeseries${_qs}&_t=${Date.now()}`);
                 if (resp.ok) {
                     const json = await resp.json();
                     if (json && json.steps && json.steps.length > 0) {
@@ -573,6 +588,9 @@
     const _originalTimeSliderSeek = window.timeSliderSeek;
     if (typeof _originalTimeSliderSeek === 'function') {
         window.timeSliderSeek = function(stepIndex) {
+            // La synchro du dataset (hyetoHydroState.data fait foi tant que
+            // le panneau est ouvert) est assurée dans timeSliderSeek
+            // lui-même — couvre aussi les appels internes du time slider.
             _originalTimeSliderSeek(stepIndex);
             // Rafraîchir le curseur vertical du panneau Hyétogramme s'il est ouvert
             if (window.hyetoHydroState.visible && window.hyetoHydroState.chartInstance) {

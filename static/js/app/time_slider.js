@@ -423,6 +423,14 @@ function _initMiniHydrograph() {
  */
 function timeSliderSeek(stepIndex) {
     const state = window.timeSliderState;
+    // Tant que le panneau hyétogramme-débit est ouvert, sa dataset fait
+    // foi : l'animation et le scrub (slider, mini-hydrogramme, clic
+    // graphique) doivent colorier la carte avec les MÊMES séries, sinon
+    // state.data peut être périmé ou provenir d'une autre simulation.
+    if (state && window.hyetoHydroState && window.hyetoHydroState.visible
+        && window.hyetoHydroState.data && window.hyetoHydroState.data.steps) {
+        state.data = window.hyetoHydroState.data;
+    }
     if (!state.data || !state.data.steps) return;
 
     const idx = parseInt(stepIndex, 10);
