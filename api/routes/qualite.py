@@ -730,6 +730,7 @@ async def get_synthese_qualite(
         "verdict": verdict,
         "date_analyse": rapport.get("date_analyse"),
         "moteur": rapport.get("moteur"),
+        "nom_projet": rapport.get("nom_projet") or rapport.get("project_name"),
         "reseau": {
             "nb_regards": stats.get("nb_regards"),
             "nb_conduites": stats.get("nb_conduites"),

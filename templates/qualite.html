@@ -1432,8 +1432,15 @@
         function afficherSynthese(syn) {
             if (!syn) return;
 
-            document.getElementById('header-projet-name').textContent = syn.reseau ? `Projet : ${syn.reseau.nb_conduites} conduites` : 'Projet Actif';
-            document.getElementById('header-gpkg-version').textContent = syn.moteur ? `Moteur : ${syn.moteur}` : 'V2.1';
+            // En-tête : nom du projet + effectifs du réseau (la version du
+            // moteur n'apporte rien à l'utilisateur — badge masqué).
+            const _r = syn.reseau || {};
+            const _fmt = (n) => (n === null || n === undefined) ? '—' : Number(n).toLocaleString('fr-FR');
+            const _nomProjet = syn.nom_projet || 'Projet Actif';
+            document.getElementById('header-projet-name').textContent =
+                `${_nomProjet} — ${_fmt(_r.nb_conduites)} conduites · ${_fmt(_r.nb_regards)} regards`;
+            const _vEl = document.getElementById('header-gpkg-version');
+            if (_vEl) _vEl.style.display = 'none';
 
             // Verdict
             const elVerdict = document.getElementById('kpi-verdict');
