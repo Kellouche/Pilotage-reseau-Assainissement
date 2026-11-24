@@ -259,3 +259,50 @@ def test_qualite_inverser_sens_conduite(auth_headers):
     assert d2["nouvel_amont"] == d1["ancien_amont"]
     assert d2["nouvel_aval"] == d1["ancien_aval"]
 
+
+def test_qualite_noeuds_candidats_conduite(auth_headers):
+    """GET /conduites/{id_conduite}/noeuds-candidats détecte les regards les plus proches par analyse spatiale."""
+    client = TestClient(app)
+    resp = client.get("/api/v1/qualite/conduites/C_1/noeuds-candidats", headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "success"
+    assert data["id_conduite"] == "C_1"
+    assert "amont_proche" in data
+    assert "aval_proche" in data
+    if data["amont_proche"]:
+        assert "id" in data["amont_proche"]
+        assert "distance_m" in data["amont_proche"]
+        assert isinstance(data["amont_proche"]["distance_m"], (int, float))
+
+
+def test_qualite_raccordement_topologique_patch(auth_headers):
+    """PATCH /conduites/{id_conduite} permet de mettre à jour id_amont et id_aval pour résoudre une déconnexion."""
+    client = TestClient(app)
+    # Raccordement topologique
+    resp = client.patch(
+        "/api/v1/qualite/conduites/C_1",
+        headers=auth_headers,
+        json={"id_amont": "R_TEST_AM", "id_aval": "R_TEST_AV", "commentaire": "Raccordement topologique test"}
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "success"
+    assert any("id_amont" in c.lower() for c in data["champs_modifies"])
+    assert any("id_aval" in c.lower() for c in data["champs_modifies"])
+
+
+def test_qualite_cotes_fil_d_eau_patch(auth_headers):
+    """PATCH /conduites/{id_conduite} permet d'ajuster prof_fe_am et prof_fe_av pour corriger la pente."""
+    client = TestClient(app)
+    resp = client.patch(
+        "/api/v1/qualite/conduites/C_1",
+        headers=auth_headers,
+        json={"prof_fe_am": 1.75, "prof_fe_av": 2.25, "commentaire": "Ajustement cotes fil d'eau"}
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "success"
+    assert any("prof_fe_am" in c.lower() for c in data["champs_modifies"])
+    assert any("prof_fe_av" in c.lower() for c in data["champs_modifies"])
+

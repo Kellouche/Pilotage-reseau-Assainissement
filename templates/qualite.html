@@ -567,6 +567,72 @@
             background: #0369a1;
         }
 
+        .btn-primary-action.btn-connect {
+            background: #4f46e5;
+            color: white;
+            box-shadow: 0 1px 3px rgba(79, 70, 229, 0.25);
+        }
+        .btn-primary-action.btn-connect:hover {
+            background: #4338ca;
+        }
+
+        .btn-primary-action.btn-edit-cotes {
+            background: #0d9488;
+            color: white;
+            box-shadow: 0 1px 3px rgba(13, 148, 136, 0.25);
+        }
+        .btn-primary-action.btn-edit-cotes:hover {
+            background: #0f766e;
+        }
+
+        .btn-secondary-action {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 7px 12px;
+            font-size: 11px;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            background: white;
+            color: #334155;
+            border: 1px solid #cbd5e1;
+            width: 100%;
+            transition: all 0.15s;
+        }
+        .btn-secondary-action:hover {
+            background: #f1f5f9;
+            color: #0f172a;
+            border-color: #94a3b8;
+        }
+
+        .suggestion-box {
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 6px;
+            padding: 7px 10px;
+            margin-top: 5px;
+            font-size: 11px;
+            color: #1e3a8a;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .btn-apply-suggestion {
+            background: #2563eb;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 3px 8px;
+            font-size: 10px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .btn-apply-suggestion:hover {
+            background: #1d4ed8;
+        }
+
         .action-help-text {
             font-size: 11px;
             color: #64748b;
@@ -1528,7 +1594,64 @@
             }
 
             const isContrePente = (p.categorie === 'inversions_sens_ecoulement' || p.categorie === 'sens_ecoulement' || (p.id_amont && p.id_aval && p.pente_contre_pct !== undefined));
+            const isDeconnexion = (p.categorie === 'deconnexions_spatiales' || p.categorie === 'conduites_sans_regards' || p.categorie === 'troncons_orphelins');
+            const isAttributsManquants = (p.categorie === 'champs_manquants');
+            const isPenteOuAlti = (p.categorie === 'pentes_suspectes' || p.categorie === 'donnees_manquantes');
             const sevIcon = (p.severite === 'critique' || p.severite === 'majeure') ? 'fa-triangle-exclamation' : 'fa-circle-info';
+
+            let titreResolution = 'Résolution & Actions';
+            let actionsButtonsHtml = '';
+            let derogationLabel = 'Dérogation terrain';
+
+            if (isDeconnexion) {
+                titreResolution = 'Raccordement Topologique (Nœuds Extrémités)';
+                derogationLabel = 'Dérogation terrain (Rejet libre / Antenne)';
+                actionsButtonsHtml = `
+                    <button class="btn-primary-action btn-connect" onclick="ouvrirModalRaccordementNoeuds('${p.id_conduite || ''}', '${p.cle_anomalie || ''}', '${p.id_amont || ''}', '${p.id_aval || ''}')">
+                        <i class="fa-solid fa-link"></i> Raccorder les nœuds (Amont / Aval)
+                    </button>
+                    <div class="action-help-text">Assigne les identifiants de regards amont/aval ou snappe sur les nœuds détectés les plus proches.</div>
+                `;
+            } else if (isContrePente) {
+                titreResolution = 'Résolution Hydraulique (Sens d\'Écoulement)';
+                derogationLabel = 'Dérogation terrain (Refoulement / Siphon)';
+                actionsButtonsHtml = `
+                    <button class="btn-primary-action btn-reverse" onclick="inverserSensEcoulement('${p.id_conduite || ''}', '${p.cle_anomalie || ''}', '${p.id_amont || ''}', '${p.id_aval || ''}')">
+                        <i class="fa-solid fa-arrows-rotate"></i> Inverser le sens de pose (${p.id_aval || 'Aval'} ➔ ${p.id_amont || 'Amont'})
+                    </button>
+                    <div class="action-help-text">Rétablit l'écoulement gravitaire amont ➔ aval dans le GeoPackage et résout l'anomalie.</div>
+                    <button class="btn-secondary-action" onclick="ouvrirModalCotesAlti('${p.id_conduite || ''}', '${p.cle_anomalie || ''}', ${p.prof_fe_am || 'null'}, ${p.prof_fe_av || 'null'})" style="margin-top:4px;">
+                        <i class="fa-solid fa-ruler-vertical"></i> Corriger les profondeurs de fil d'eau (si sens physique correct)
+                    </button>
+                `;
+            } else if (isAttributsManquants) {
+                titreResolution = 'Complétude des Attributs Physiques SWMM';
+                derogationLabel = 'Dérogation terrain (Ouvrage particulier)';
+                actionsButtonsHtml = `
+                    <button class="btn-primary-action btn-edit btn-edit-attr" onclick="ouvrirModalEditionAttributs('${p.id_conduite || ''}', '${p.cle_anomalie || ''}', ${p.diametre || 'null'}, '${p.materiau || ''}', ${p.distance_m || 'null'})">
+                        <i class="fa-solid fa-pen-to-square"></i> Renseigner les attributs de section (Diamètre, Matériau)
+                    </button>
+                    <div class="action-help-text">Définit la section hydraulique et la rugosité de Manning indispensables à SWMM.</div>
+                `;
+            } else if (isPenteOuAlti) {
+                titreResolution = 'Rectification Altimétrique & Pente';
+                derogationLabel = 'Dérogation terrain (Pente conforme au site)';
+                actionsButtonsHtml = `
+                    <button class="btn-primary-action btn-edit-cotes" onclick="ouvrirModalCotesAlti('${p.id_conduite || ''}', '${p.cle_anomalie || ''}', ${p.prof_fe_am || 'null'}, ${p.prof_fe_av || 'null'})">
+                        <i class="fa-solid fa-ruler-vertical"></i> Ajuster les profondeurs de fil d'eau / cotes radier
+                    </button>
+                    <div class="action-help-text">Modifie les profondeurs d'enfouissement amont/aval pour recalculer la pente hydraulique.</div>
+                `;
+            } else {
+                actionsButtonsHtml = `
+                    <button class="btn-primary-action btn-connect" onclick="ouvrirModalRaccordementNoeuds('${p.id_conduite || ''}', '${p.cle_anomalie || ''}', '${p.id_amont || ''}', '${p.id_aval || ''}')">
+                        <i class="fa-solid fa-link"></i> Vérifier le raccordement topologique
+                    </button>
+                    <button class="btn-secondary-action" onclick="ouvrirModalEditionAttributs('${p.id_conduite || ''}', '${p.cle_anomalie || ''}', ${p.diametre || 'null'}, '${p.materiau || ''}', ${p.distance_m || 'null'})" style="margin-top:6px;">
+                        <i class="fa-solid fa-pen-to-square"></i> Modifier les attributs physiques
+                    </button>
+                `;
+            }
 
             container.innerHTML = `
                 <div class="anomalie-card-actionable">
@@ -1571,35 +1694,26 @@
                             </div>` : ''}
                         </div>
 
-                        <!-- Panneau de Résolution Unifié -->
+                        <!-- Panneau de Résolution Unifié Métier -->
                         <div class="resolution-panel">
                             <div class="resolution-header">
-                                <i class="fa-solid fa-wrench"></i> Résolution & Actions
+                                <i class="fa-solid fa-wrench"></i> ${titreResolution}
                             </div>
 
                             <div class="action-buttons-stack">
-                                ${isContrePente ? `
-                                    <button class="btn-primary-action btn-reverse" onclick="inverserSensEcoulement('${p.id_conduite || ''}', '${p.cle_anomalie || ''}', '${p.id_amont || ''}', '${p.id_aval || ''}')">
-                                        <i class="fa-solid fa-arrows-rotate"></i> Inverser le sens de pose (${p.id_aval || 'Aval'} ➔ ${p.id_amont || 'Amont'})
-                                    </button>
-                                    <div class="action-help-text">Rétablit l'écoulement gravitaire amont ➔ aval dans le GeoPackage et résout l'anomalie.</div>
-                                ` : ''}
-
-                                <button class="btn-primary-action btn-edit" onclick="ouvrirModalEditionAttributs('${p.id_conduite || ''}', '${p.cle_anomalie || ''}', ${p.diametre || 'null'}, '${p.materiau || ''}', ${p.distance_m || 'null'})">
-                                    <i class="fa-solid fa-pen-to-square"></i> Modifier les attributs (Diamètre, Matériau...)
-                                </button>
+                                ${actionsButtonsHtml}
                             </div>
 
                             <!-- Validation comme dérogation terrain ou statut -->
                             <div class="derogation-bar">
-                                <button class="btn-derogation ${p.statut === 'revu' ? 'active' : ''}" onclick="changerStatutAnomalie('${p.cle_anomalie}', 'revu')" title="Valider cet ouvrage tel quel si la pente ou l'état est conforme sur site (dérogation terrain)">
-                                    <i class="fa-solid fa-clipboard-check"></i> Dérogation terrain
+                                <button class="btn-derogation ${p.statut === 'revu' ? 'active' : ''}" onclick="changerStatutAnomalie('${p.cle_anomalie}', 'revu')" title="Valider cet ouvrage tel quel si conforme sur site (dérogation terrain)">
+                                    <i class="fa-solid fa-clipboard-check"></i> ${derogationLabel}
                                 </button>
                                 <div>
                                     ${p.statut === 'corrige' ? `
                                         <span class="status-tag status-corrected"><i class="fa-solid fa-check"></i> Résolu / Corrigé</span>
                                     ` : (p.statut === 'revu' ? `
-                                        <span class="status-tag" style="background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe;"><i class="fa-solid fa-shield-halved"></i> Dérogation terrain</span>
+                                        <span class="status-tag" style="background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe;"><i class="fa-solid fa-shield-halved"></i> Dérogation active</span>
                                     ` : `
                                         <span class="status-tag" style="background:#fef2f2; color:#b91c1c; border:1px solid #fecaca;"><i class="fa-solid fa-clock"></i> À traiter</span>
                                     `)}
@@ -1934,9 +2048,215 @@
                 alert(`Erreur lors de l'inversion : ${err.message}`);
             }
         }
+
+        // ============================================================
+        // 12. Actions de Raccordement Topologique (Nœuds Amont / Aval)
+        // ============================================================
+        let suggestionsNoeudsActuelles = { amont: null, aval: null };
+
+        async function ouvrirModalRaccordementNoeuds(idConduite, cleAnomalie, amontActuel, avalActuel) {
+            document.getElementById('raccord-id-conduite').value = idConduite || '';
+            document.getElementById('raccord-cle-anomalie').value = cleAnomalie || '';
+            document.getElementById('modal-raccord-title').innerHTML = `<i class="fa-solid fa-link" style="color:#818cf8; margin-right:8px;"></i> Raccordement topologique — Tronçon ${idConduite || ''}`;
+            document.getElementById('raccord-amont').value = amontActuel || '';
+            document.getElementById('raccord-aval').value = avalActuel || '';
+            document.getElementById('raccord-justification').value = '';
+
+            const sAm = document.getElementById('raccord-suggestion-amont');
+            const sAv = document.getElementById('raccord-suggestion-aval');
+            if (sAm) sAm.style.display = 'none';
+            if (sAv) sAv.style.display = 'none';
+            suggestionsNoeudsActuelles = { amont: null, aval: null };
+
+            const modal = document.getElementById('modal-raccordement-noeuds');
+            if (modal) modal.style.display = 'flex';
+
+            // Appel API pour chercher par analyse spatiale les nœuds les plus proches
+            try {
+                const token = localStorage.getItem('swmm_access_token');
+                const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+                const resp = await fetch(`${API_BASE}/conduites/${encodeURIComponent(idConduite)}/noeuds-candidats`, {
+                    headers: headers,
+                    credentials: 'include'
+                });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    if (data.amont_proche && data.amont_proche.id) {
+                        suggestionsNoeudsActuelles.amont = data.amont_proche.id;
+                        if (sAm) {
+                            sAm.style.display = 'flex';
+                            document.getElementById('raccord-text-amont').innerHTML = `<i class="fa-solid fa-crosshairs"></i> Nœud le plus proche : <strong>${data.amont_proche.id}</strong> (${data.amont_proche.distance_m} m)`;
+                        }
+                    }
+                    if (data.aval_proche && data.aval_proche.id) {
+                        suggestionsNoeudsActuelles.aval = data.aval_proche.id;
+                        if (sAv) {
+                            sAv.style.display = 'flex';
+                            document.getElementById('raccord-text-aval').innerHTML = `<i class="fa-solid fa-crosshairs"></i> Nœud le plus proche : <strong>${data.aval_proche.id}</strong> (${data.aval_proche.distance_m} m)`;
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn('Impossible de charger les suggestions de nœuds:', err);
+            }
+        }
+
+        function fermerModalRaccordementNoeuds() {
+            const modal = document.getElementById('modal-raccordement-noeuds');
+            if (modal) modal.style.display = 'none';
+        }
+
+        function appliquerSuggestionNoeud(type) {
+            if (type === 'amont' && suggestionsNoeudsActuelles.amont) {
+                document.getElementById('raccord-amont').value = suggestionsNoeudsActuelles.amont;
+            } else if (type === 'aval' && suggestionsNoeudsActuelles.aval) {
+                document.getElementById('raccord-aval').value = suggestionsNoeudsActuelles.aval;
+            }
+        }
+
+        async function sauvegarderRaccordementNoeuds() {
+            const idConduite = document.getElementById('raccord-id-conduite').value;
+            const cleAnomalie = document.getElementById('raccord-cle-anomalie').value;
+            const nouvelAmont = document.getElementById('raccord-amont').value.trim();
+            const nouvelAval = document.getElementById('raccord-aval').value.trim();
+            const justification = document.getElementById('raccord-justification').value.trim();
+
+            if (!idConduite) {
+                alert('Identifiant de conduite manquant.');
+                return;
+            }
+            if (!nouvelAmont || !nouvelAval) {
+                alert('Veuillez renseigner à la fois le nœud amont et le nœud aval.');
+                return;
+            }
+
+            fermerModalRaccordementNoeuds();
+            afficherLoading(true, `Mise à jour du raccordement pour ${idConduite}...`);
+
+            try {
+                const token = localStorage.getItem('swmm_access_token');
+                const headers = {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                };
+
+                const payload = {
+                    id_amont: nouvelAmont,
+                    id_aval: nouvelAval,
+                    cle_anomalie: cleAnomalie,
+                    commentaire: justification || `Raccordement topologique mis à jour (${nouvelAmont} ➔ ${nouvelAval})`
+                };
+
+                const resp = await fetch(`${API_BASE}/conduites/${encodeURIComponent(idConduite)}`, {
+                    method: 'PATCH',
+                    headers: headers,
+                    credentials: 'include',
+                    body: JSON.stringify(payload)
+                });
+
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    throw new Error(err.detail || `HTTP ${resp.status}`);
+                }
+
+                // Succès : mise à jour locale
+                const item = currentQueueList.find(x => x.properties.cle_anomalie === cleAnomalie || x.properties.id_conduite === idConduite);
+                if (item) {
+                    item.properties.id_amont = nouvelAmont;
+                    item.properties.id_aval = nouvelAval;
+                    item.properties.statut = 'corrige';
+                    item.properties.description = `✓ Raccordement rétabli : ${nouvelAmont} ➔ ${nouvelAval}`;
+                    afficherFicheAnomalie(item, false);
+                }
+
+                afficherLoading(false);
+                alert(`✓ Raccordement topologique mis à jour avec succès pour ${idConduite} !\nAmont: ${nouvelAmont} | Aval: ${nouvelAval}\nStatut marqué comme corrigé.`);
+            } catch (err) {
+                afficherLoading(false);
+                console.error('Erreur raccordement topologique:', err);
+                alert(`Erreur lors du raccordement : ${err.message}`);
+            }
+        }
+
+        // ============================================================
+        // 13. Actions d'Ajustement Altimétrique & Fil d'Eau
+        // ============================================================
+        function ouvrirModalCotesAlti(idConduite, cleAnomalie, profAmActuel, profAvActuel) {
+            document.getElementById('alti-id-conduite').value = idConduite || '';
+            document.getElementById('alti-cle-anomalie').value = cleAnomalie || '';
+            document.getElementById('modal-alti-title').innerHTML = `<i class="fa-solid fa-ruler-vertical" style="color:#2dd4bf; margin-right:8px;"></i> Cotes de fil d'eau — Tronçon ${idConduite || ''}`;
+            document.getElementById('alti-prof-am').value = profAmActuel || '';
+            document.getElementById('alti-prof-av').value = profAvActuel || '';
+            document.getElementById('alti-justification').value = '';
+
+            const modal = document.getElementById('modal-cotes-alti');
+            if (modal) modal.style.display = 'flex';
+        }
+
+        function fermerModalCotesAlti() {
+            const modal = document.getElementById('modal-cotes-alti');
+            if (modal) modal.style.display = 'none';
+        }
+
+        async function sauvegarderCotesAlti() {
+            const idConduite = document.getElementById('alti-id-conduite').value;
+            const cleAnomalie = document.getElementById('alti-cle-anomalie').value;
+            const profAm = document.getElementById('alti-prof-am').value;
+            const profAv = document.getElementById('alti-prof-av').value;
+            const justification = document.getElementById('alti-justification').value.trim();
+
+            if (!idConduite) {
+                alert('Identifiant de conduite manquant.');
+                return;
+            }
+
+            fermerModalCotesAlti();
+            afficherLoading(true, `Enregistrement des cotes pour ${idConduite}...`);
+
+            try {
+                const token = localStorage.getItem('swmm_access_token');
+                const headers = {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                };
+
+                const payload = {
+                    cle_anomalie: cleAnomalie,
+                    commentaire: justification || 'Profondeurs de fil d\'eau ajustées'
+                };
+                if (profAm && !isNaN(parseFloat(profAm))) payload.prof_fe_am = parseFloat(profAm);
+                if (profAv && !isNaN(parseFloat(profAv))) payload.prof_fe_av = parseFloat(profAv);
+
+                const resp = await fetch(`${API_BASE}/conduites/${encodeURIComponent(idConduite)}`, {
+                    method: 'PATCH',
+                    headers: headers,
+                    credentials: 'include',
+                    body: JSON.stringify(payload)
+                });
+
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    throw new Error(err.detail || `HTTP ${resp.status}`);
+                }
+
+                const item = currentQueueList.find(x => x.properties.cle_anomalie === cleAnomalie || x.properties.id_conduite === idConduite);
+                if (item) {
+                    item.properties.statut = 'corrige';
+                    item.properties.description = `✓ Cotes fil d'eau mises à jour (Amont: ${profAm || '?'} m, Aval: ${profAv || '?'} m)`;
+                    afficherFicheAnomalie(item, false);
+                }
+
+                afficherLoading(false);
+                alert(`✓ Cotes de fil d'eau mises à jour avec succès pour ${idConduite}.\nStatut marqué comme corrigé.`);
+            } catch (err) {
+                afficherLoading(false);
+                console.error('Erreur cotes fil d\'eau:', err);
+                alert(`Erreur lors de l'enregistrement des cotes : ${err.message}`);
+            }
+        }
     </script>
 
-    <!-- Modale d'édition directe des attributs de conduite -->
+    <!-- Modale d'édition directe des attributs de conduite (Section & Matériau) -->
     <div id="modal-edit-conduite" class="modal-edit-overlay">
         <div class="modal-edit-card">
             <div class="modal-edit-header">
@@ -1974,6 +2294,88 @@
             <div class="modal-edit-footer">
                 <button class="btn-modal-cancel" onclick="fermerModalEditionAttributs()"><i class="fa-solid fa-xmark"></i> Annuler</button>
                 <button class="btn-modal-save" onclick="sauvegarderEditionAttributs()"><i class="fa-solid fa-check"></i> Enregistrer et valider</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modale de raccordement topologique (Déconnexions spatiales, Conduites sans regards) -->
+    <div id="modal-raccordement-noeuds" class="modal-edit-overlay">
+        <div class="modal-edit-card" style="max-width:500px;">
+            <div class="modal-edit-header" style="background:#1e1b4b;">
+                <span id="modal-raccord-title" style="font-weight:700; font-size:14px;"><i class="fa-solid fa-link" style="color:#818cf8; margin-right:8px;"></i> Raccordement topologique</span>
+                <span style="cursor:pointer; font-size:18px;" onclick="fermerModalRaccordementNoeuds()"><i class="fa-solid fa-xmark"></i></span>
+            </div>
+            <div class="modal-edit-body">
+                <input type="hidden" id="raccord-id-conduite" />
+                <input type="hidden" id="raccord-cle-anomalie" />
+
+                <div style="font-size:12px; color:#475569; margin-bottom:14px; background:#f8fafc; padding:10px; border-radius:6px; border-left:3px solid #6366f1;">
+                    Définissez les identifiants réels des regards ou exutoires connectés à ce tronçon pour rétablir la continuité du réseau SWMM.
+                </div>
+
+                <div class="modal-edit-form-group">
+                    <label>Nœud Amont (ID_AMONT)</label>
+                    <input type="text" id="raccord-amont" placeholder="Identifiant regard amont" />
+                    <div id="raccord-suggestion-amont" class="suggestion-box" style="display:none;">
+                        <span id="raccord-text-amont"><i class="fa-solid fa-crosshairs"></i> Nœud proche détecté</span>
+                        <button type="button" class="btn-apply-suggestion" onclick="appliquerSuggestionNoeud('amont')">Appliquer</button>
+                    </div>
+                </div>
+
+                <div class="modal-edit-form-group" style="margin-top:10px;">
+                    <label>Nœud Aval (ID_AVAL)</label>
+                    <input type="text" id="raccord-aval" placeholder="Identifiant regard aval" />
+                    <div id="raccord-suggestion-aval" class="suggestion-box" style="display:none;">
+                        <span id="raccord-text-aval"><i class="fa-solid fa-crosshairs"></i> Nœud proche détecté</span>
+                        <button type="button" class="btn-apply-suggestion" onclick="appliquerSuggestionNoeud('aval')">Appliquer</button>
+                    </div>
+                </div>
+
+                <div class="modal-edit-form-group" style="margin-top:10px;">
+                    <label>Commentaire de justification / Récolement</label>
+                    <input type="text" id="raccord-justification" placeholder="ex: Rattachement au regard conforme au récolement SIG" />
+                </div>
+            </div>
+            <div class="modal-edit-footer">
+                <button class="btn-modal-cancel" onclick="fermerModalRaccordementNoeuds()"><i class="fa-solid fa-xmark"></i> Annuler</button>
+                <button class="btn-modal-save" style="background:#4f46e5;" onclick="sauvegarderRaccordementNoeuds()"><i class="fa-solid fa-check"></i> Enregistrer le raccordement</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modale de correction altimétrique (Pentes suspectes, Profondeurs de fil d'eau) -->
+    <div id="modal-cotes-alti" class="modal-edit-overlay">
+        <div class="modal-edit-card" style="max-width:480px;">
+            <div class="modal-edit-header" style="background:#134e4a;">
+                <span id="modal-alti-title" style="font-weight:700; font-size:14px;"><i class="fa-solid fa-ruler-vertical" style="color:#2dd4bf; margin-right:8px;"></i> Ajustement Altimétrique & Fil d'Eau</span>
+                <span style="cursor:pointer; font-size:18px;" onclick="fermerModalCotesAlti()"><i class="fa-solid fa-xmark"></i></span>
+            </div>
+            <div class="modal-edit-body">
+                <input type="hidden" id="alti-id-conduite" />
+                <input type="hidden" id="alti-cle-anomalie" />
+
+                <div style="font-size:12px; color:#475569; margin-bottom:14px; background:#f8fafc; padding:10px; border-radius:6px; border-left:3px solid #0d9488;">
+                    Ajustez les profondeurs de fil d'eau par rapport au terrain naturel (m) pour rétablir une pente d'écoulement conforme.
+                </div>
+
+                <div class="modal-edit-form-group">
+                    <label>Profondeur fil d'eau Amont — PROF_FE_AM (m)</label>
+                    <input type="number" id="alti-prof-am" step="0.05" min="0.1" max="20" placeholder="ex: 1.80" />
+                </div>
+
+                <div class="modal-edit-form-group">
+                    <label>Profondeur fil d'eau Aval — PROF_FE_AV (m)</label>
+                    <input type="number" id="alti-prof-av" step="0.05" min="0.1" max="20" placeholder="ex: 2.10" />
+                </div>
+
+                <div class="modal-edit-form-group">
+                    <label>Commentaire de justification / Nivellement</label>
+                    <input type="text" id="alti-justification" placeholder="ex: Nivellement de précision dossier technique" />
+                </div>
+            </div>
+            <div class="modal-edit-footer">
+                <button class="btn-modal-cancel" onclick="fermerModalCotesAlti()"><i class="fa-solid fa-xmark"></i> Annuler</button>
+                <button class="btn-modal-save" style="background:#0d9488;" onclick="sauvegarderCotesAlti()"><i class="fa-solid fa-check"></i> Enregistrer les cotes</button>
             </div>
         </div>
     </div>

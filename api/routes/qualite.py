@@ -36,6 +36,14 @@ _cache_qualite = {
     "duree_validite": 3600  # 1 heure en secondes
 }
 
+# Cache topologique pour requêtes rapides de snapping et raccordement
+_cache_topologie = {
+    "gpkg_path": None,
+    "mtime": None,
+    "resolveur": None,
+    "pipes": None
+}
+
 
 def _empreinte_couches_aux(db: Session, ctx: TenantContext) -> str:
     """
@@ -320,6 +328,12 @@ def reinitialiser_cache_qualite(gpkg_path: Optional[Path] = None):
     _cache_qualite["rapport"] = None
     _cache_qualite["timestamp"] = None
     _cache_qualite["gpkg_path"] = None
+
+    global _cache_topologie
+    _cache_topologie["gpkg_path"] = None
+    _cache_topologie["mtime"] = None
+    _cache_topologie["resolveur"] = None
+    _cache_topologie["pipes"] = None
 
 
 def get_active_project_and_gpkg(db: Session, tenant_ctx: Optional[TenantContext] = None):
@@ -1290,6 +1304,106 @@ async def inverser_sens_conduite(
         "ancien_aval": ancien_aval,
         "nouvel_amont": nouvel_amont,
         "nouvel_aval": nouvel_aval
+    }
+
+
+def _obtenir_topologie_cachee(gpkg_file: Path):
+    """Charge ou réutilise le résolveur topologique et la couche conduites du GPKG."""
+    global _cache_topologie
+    import geopandas as gpd
+    from src.analyse_qualite_gpkg import _construire_resolveur
+
+    try:
+        mtime = gpkg_file.stat().st_mtime
+    except Exception:
+        mtime = 0
+
+    if (_cache_topologie["resolveur"] is not None
+            and _cache_topologie["gpkg_path"] == str(gpkg_file)
+            and _cache_topologie["mtime"] == mtime):
+        return _cache_topologie["resolveur"], _cache_topologie["pipes"]
+
+    try:
+        layers = gpd.list_layers(str(gpkg_file))["name"].tolist()
+        pipe_layer = next((l for l in layers if any(k in l.lower() for k in ["canalisat", "conduit", "pipe", "troncon"]) and "désaffect" not in l.lower() and "desaffect" not in l.lower()), None)
+        regard_layer = next((l for l in layers if "regard" in l.lower()), None)
+        rejet_layer = next((l for l in layers if any(k in l.lower() for k in ["rejet", "exutoire", "outfall"])), None)
+
+        pipes = gpd.read_file(str(gpkg_file), layer=pipe_layer) if pipe_layer else None
+        regards = gpd.read_file(str(gpkg_file), layer=regard_layer) if regard_layer else gpd.GeoDataFrame()
+        rejets = gpd.read_file(str(gpkg_file), layer=rejet_layer) if rejet_layer else gpd.GeoDataFrame()
+
+        resolveur = _construire_resolveur(regards, rejets, gpkg_file, layers)
+
+        _cache_topologie["gpkg_path"] = str(gpkg_file)
+        _cache_topologie["mtime"] = mtime
+        _cache_topologie["resolveur"] = resolveur
+        _cache_topologie["pipes"] = pipes
+        return resolveur, pipes
+    except Exception as e:
+        print(f"[QUALITE] Erreur chargement topologie : {e}")
+        return None, None
+
+
+@router.get("/conduites/{id_conduite}/noeuds-candidats", response_model=Dict[str, Any])
+async def obtenir_noeuds_candidats_conduite(
+    id_conduite: str,
+    db: Session = Depends(get_db),
+    ctx: TenantContext = Depends(require_role("viewer"))
+):
+    """
+    Détecte par analyse spatiale les nœuds les plus proches (Regards, Rejets)
+    des extrémités amont et aval d'une conduite pour assister le raccordement topologique.
+    """
+    from src.analyse_qualite_gpkg import _points_extremite
+    import re
+
+    gpkg_path, nom_projet = get_active_project_and_gpkg(db, ctx)
+    if not gpkg_path or not Path(gpkg_path).exists():
+        raise HTTPException(status_code=404, detail="Fichier GeoPackage du réseau introuvable.")
+
+    gpkg_file = Path(gpkg_path)
+    resolv, pipes = _obtenir_topologie_cachee(gpkg_file)
+    if resolv is None or pipes is None or pipes.empty:
+        raise HTTPException(status_code=500, detail="Impossible d'initialiser le résolveur topologique.")
+
+    idx = None
+    m = re.match(r'^c_?(\d+)$', str(id_conduite), re.IGNORECASE)
+    if m:
+        idx = int(m.group(1)) - 1
+    else:
+        try:
+            idx = int(id_conduite) - 1
+        except ValueError:
+            pass
+
+    p = None
+    if idx is not None and 0 <= idx < len(pipes):
+        p = pipes.iloc[idx]
+    else:
+        for i, row in pipes.iterrows():
+            if str(row.get("id")) == str(id_conduite) or str(row.get("fid_1")) == str(id_conduite) or str(row.get("fid")) == str(id_conduite):
+                p = row
+                break
+
+    if p is None:
+        raise HTTPException(status_code=404, detail=f"Conduite {id_conduite} introuvable.")
+
+    pts = _points_extremite(p.geometry)
+    if not pts:
+        raise HTTPException(status_code=400, detail="Géométrie de conduite invalide.")
+
+    res_am = resolv.plus_proche(pts[0])
+    res_av = resolv.plus_proche(pts[1])
+
+    return {
+        "status": "success",
+        "id_conduite": id_conduite,
+        "amont_actuel": str(p.get("ID_AMONT") or p.get("id_amont") or ""),
+        "aval_actuel": str(p.get("ID_AVAL") or p.get("id_aval") or ""),
+        "amont_proche": {"id": str(res_am[0]), "distance_m": round(float(res_am[1]), 2)} if res_am else None,
+        "aval_proche": {"id": str(res_av[0]), "distance_m": round(float(res_av[1]), 2)} if res_av else None,
+        "longueur_m": round(float(p.geometry.length), 1) if p.geometry and p.geometry.length else None
     }
 
 
