@@ -11,13 +11,20 @@ Cibles chiffrées sur le jeu Assainissement_Ville :
 """
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 os.environ.setdefault("TESTING", "true")
 
 from src.analyse_qualite_gpkg import analyser_qualite_gpkg
 from api.services.aux_altimetrie_service import _sanitiser_profondeur_m
+from api.database import Base
+from api.models import Organization, Project, QualiteAnomalieStatut
+from api.routes.qualite import _cle_anomalie, _appliquer_statuts_anomalies
 
 
 def _trouver_gpkg_ville() -> Path:
@@ -116,3 +123,60 @@ def test_v2_1_deconnexion_spatiale_categorie():
     # Cible recette : 10-25 raccordements spatiaux extrêmes (avec contexte
     # réel la borne haute peut légèrement varier)
     assert len(anomalies["deconnexions_spatiales"]) <= 100
+
+
+# ---------------------------------------------------------------------------
+# Cycle de vie des anomalies — qualite_anomalie_statuts (spec §5)
+# ---------------------------------------------------------------------------
+
+def test_cle_anomalie_stable_et_versionnee():
+    a = {"id_conduite": "C_1", "id_amont": "20150", "id_aval": "3824"}
+    k1 = _cle_anomalie("inversions_sens_ecoulement", a, "version-A")
+    k2 = _cle_anomalie("inversions_sens_ecoulement", a, "version-A")
+    k3 = _cle_anomalie("inversions_sens_ecoulement", a, "version-B")
+    assert k1 == k2
+    assert k1 != k3  # nouvelle version GPKG -> nouvelle clé (pas de fusion)
+    assert len(k1) == 40
+
+
+def test_statuts_anomalies_cycle_de_vie():
+    """Le statut persisté est injecté dans le rapport à chaque service."""
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    db = Session()
+    try:
+        org = Organization(name="Org CQ", slug="org-cq-qualite")
+        db.add(org)
+        db.flush()
+        project = Project(org_id=org.id, name="Projet CQ", slug="proj-cq-qualite")
+        db.add(project)
+        db.commit()
+
+        ctx = SimpleNamespace(org_id=org.id, user=None)
+        rapport = {"anomalies": {
+            "pentes_suspectes": [{"id_conduite": "C_1", "id_amont": "1", "id_aval": "2"}]
+        }}
+
+        _appliquer_statuts_anomalies(rapport, db, ctx)
+        a = rapport["anomalies"]["pentes_suspectes"][0]
+        assert a["statut"] == "a_traiter"
+        assert len(a["cle_anomalie"]) == 40
+
+        db.add(QualiteAnomalieStatut(
+            org_id=org.id, project_id=project.id,
+            cle_anomalie=a["cle_anomalie"],
+            type_anomalie="pentes_suspectes", id_conduite="C_1",
+            statut="revu", commentaire="vérifié terrain",
+        ))
+        db.commit()
+
+        _appliquer_statuts_anomalies(rapport, db, ctx)
+        assert rapport["anomalies"]["pentes_suspectes"][0]["statut"] == "revu"
+    finally:
+        db.close()
+        engine.dispose()

@@ -9,9 +9,10 @@ Objet : Endpoints de contrôle qualité topologique et audit de connectivité
 """
 
 import asyncio
+import hashlib
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends
 from sqlalchemy.orm import Session
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 import json
 import os
 import csv
@@ -51,6 +52,147 @@ def _charger_cache_disque(gpkg_path: Path) -> Optional[Dict[str, Any]]:
     except Exception as e:
         print(f"[CACHE QUALITE] Erreur lecture cache disque: {e}")
     return None
+
+
+# ---------------------------------------------------------------------------
+# Cycle de vie des anomalies (spec V2.1 §5) — table qualite_anomalie_statuts
+# ---------------------------------------------------------------------------
+
+STATUTS_ANOMALIE_VALIDES = {"a_traiter", "revu", "corrige"}
+
+
+def _projet_et_version(db: Session, ctx: TenantContext) -> Tuple[Optional[Any], str]:
+    """Retourne (project, gpkg_version_id) du projet actif du tenant."""
+    from api.models import Project
+    from api.services.simulation_service import resoudre_gpkg_effectif_pour_projet_avec_meta
+
+    project = db.query(Project).filter(
+        Project.org_id == ctx.org_id,
+        Project.is_archived.is_(False),
+    ).first()
+    if project is None:
+        return None, ""
+    _chemin, meta = resoudre_gpkg_effectif_pour_projet_avec_meta(db, project)
+    return project, (meta or {}).get("version_id") or ""
+
+
+def _cle_anomalie(categorie: str, anomalie: Dict[str, Any], version_id: str) -> str:
+    """Clé stable SHA-1(type | objet | version GPKG) — spec §5."""
+    objet = "|".join(str(anomalie.get(k) or "") for k in (
+        "id_conduite", "id_amont", "id_aval", "fid", "id_regard", "node_id"))
+    brut = f"{categorie}|{objet}|{version_id or 'sans_version'}"
+    return hashlib.sha1(brut.encode("utf-8")).hexdigest()
+
+
+def _appliquer_statuts_anomalies(rapport: Dict[str, Any], db: Session,
+                                 ctx: TenantContext) -> Dict[str, Any]:
+    """Enrichit chaque anomalie du rapport avec cle_anomalie + statut courant."""
+    try:
+        from api.models import QualiteAnomalieStatut
+
+        project, version_id = _projet_et_version(db, ctx)
+        if project is None:
+            return rapport
+        rows = db.query(QualiteAnomalieStatut).filter(
+            QualiteAnomalieStatut.project_id == project.id,
+            QualiteAnomalieStatut.org_id == ctx.org_id,
+        ).all()
+        statuts = {r.cle_anomalie: r.statut for r in rows}
+        for categorie, items in (rapport.get("anomalies") or {}).items():
+            for a in items:
+                cle = _cle_anomalie(categorie, a, version_id)
+                a["cle_anomalie"] = cle
+                a["statut"] = statuts.get(cle, "a_traiter")
+    except Exception as e:
+        print(f"[QUALITE] Statuts anomalies indisponibles : {e}")
+    return rapport
+
+
+@router.post("/anomalies/statut", response_model=Dict[str, Any])
+async def definir_statut_anomalie(
+    request: Dict[str, Any],
+    db: Session = Depends(get_db),
+    ctx: TenantContext = Depends(require_role("engineer"))
+):
+    """
+    Définit le statut d'une anomalie de qualité (a_traiter / revu / corrige).
+    Corps : {"cle_anomalie": str, "type_anomalie": str, "statut": str,
+             "commentaire": str?, "id_conduite": str?}
+    """
+    from api.models import QualiteAnomalieStatut
+
+    cle = str(request.get("cle_anomalie") or "").strip()
+    type_anomalie = str(request.get("type_anomalie") or "").strip()
+    statut = str(request.get("statut") or "").strip()
+    if not cle or len(cle) != 40:
+        raise HTTPException(status_code=400, detail="cle_anomalie invalide (SHA-1 attendu)")
+    if statut not in STATUTS_ANOMALIE_VALIDES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"statut invalide — valeurs acceptées : {sorted(STATUTS_ANOMALIE_VALIDES)}")
+
+    project, version_id = _projet_et_version(db, ctx)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Projet introuvable.")
+
+    row = db.query(QualiteAnomalieStatut).filter(
+        QualiteAnomalieStatut.project_id == project.id,
+        QualiteAnomalieStatut.cle_anomalie == cle,
+    ).first()
+    if row is None:
+        row = QualiteAnomalieStatut(
+            org_id=ctx.org_id,
+            project_id=project.id,
+            gpkg_version_id=version_id or None,
+            cle_anomalie=cle,
+            type_anomalie=type_anomalie or "inconnu",
+            id_conduite=request.get("id_conduite"),
+            statut=statut,
+            commentaire=request.get("commentaire"),
+            updated_by_id=ctx.user.id if ctx.user else None,
+        )
+        db.add(row)
+    else:
+        row.statut = statut
+        if request.get("commentaire") is not None:
+            row.commentaire = request.get("commentaire")
+        if request.get("type_anomalie"):
+            row.type_anomalie = type_anomalie
+        if request.get("id_conduite") is not None:
+            row.id_conduite = request.get("id_conduite")
+        row.updated_by_id = ctx.user.id if ctx.user else None
+
+    db.commit()
+    db.refresh(row)
+    return {"statut": "ok", "anomalie": row.to_dict()}
+
+
+@router.get("/statuts", response_model=Dict[str, Any])
+async def lister_statuts_anomalies(
+    db: Session = Depends(get_db),
+    ctx: TenantContext = Depends(require_role("viewer"))
+):
+    """Liste les statuts de cycle de vie des anomalies du projet actif."""
+    from api.models import QualiteAnomalieStatut
+
+    project, version_id = _projet_et_version(db, ctx)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Projet introuvable.")
+
+    rows = db.query(QualiteAnomalieStatut).filter(
+        QualiteAnomalieStatut.project_id == project.id,
+        QualiteAnomalieStatut.org_id == ctx.org_id,
+    ).all()
+    distribution = {"a_traiter": 0, "revu": 0, "corrige": 0}
+    for r in rows:
+        distribution[r.statut] = distribution.get(r.statut, 0) + 1
+
+    return {
+        "gpkg_version_id": version_id or None,
+        "nb_statuts": len(rows),
+        "distribution": distribution,
+        "statuts": [r.to_dict() for r in rows],
+    }
 
 
 def _construire_contexte_terrain_qualite(db: Session, ctx: TenantContext) -> Optional[Dict[str, Any]]:
@@ -185,7 +327,7 @@ async def analyser_qualite_reseau(
         _cache_qualite["gpkg_path"] == str(gpkg_target) and
         _cache_qualite["timestamp"] is not None and
         (maintenant - _cache_qualite["timestamp"]) < _cache_qualite["duree_validite"]):
-        return _cache_qualite["rapport"]
+        return _appliquer_statuts_anomalies(_cache_qualite["rapport"], db, ctx)
 
     # Tentative de récupération depuis le cache persistant sur disque (instantané <50ms)
     if not force_refresh:
@@ -194,7 +336,7 @@ async def analyser_qualite_reseau(
             _cache_qualite["rapport"] = rapport_disque
             _cache_qualite["timestamp"] = maintenant
             _cache_qualite["gpkg_path"] = str(gpkg_target)
-            return rapport_disque
+            return _appliquer_statuts_anomalies(rapport_disque, db, ctx)
 
     try:
         contexte_terrain = _construire_contexte_terrain_qualite(db, ctx)
@@ -207,7 +349,7 @@ async def analyser_qualite_reseau(
         _cache_qualite["timestamp"] = maintenant
         _cache_qualite["gpkg_path"] = str(gpkg_target)
 
-        return rapport
+        return _appliquer_statuts_anomalies(rapport, db, ctx)
 
     except Exception as e:
         print(f"Erreur lors de l'analyse qualité: {e}")
@@ -289,6 +431,7 @@ async def get_anomalies_par_type(
                 detail="Aucune analyse de qualité disponible."
             )
 
+    _appliquer_statuts_anomalies(_cache_qualite["rapport"], db, ctx)
     anomalies = _cache_qualite["rapport"].get("anomalies", {})
 
     if type_anomalie not in anomalies:

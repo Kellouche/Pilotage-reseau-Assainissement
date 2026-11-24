@@ -956,3 +956,51 @@ class NodeCoteValidation(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
+
+class QualiteAnomalieStatut(Base):
+    """
+    Cycle de vie des anomalies du module Contrôle Qualité (spec V2.1 §5).
+
+    Une ligne par anomalie détectée, identifiée par `cle_anomalie` =
+    SHA-1(type_anomalie | objet | gpkg_version_id). Le statut survit aux
+    ré-analyses tant que la version du réseau est inchangée ; une nouvelle
+    gpkg_version rend les anciennes clés obsolètes (jamais fusionnées).
+    """
+    __tablename__ = "qualite_anomalie_statuts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_gen_uuid)
+    org_id: Mapped[str] = mapped_column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), index=True, nullable=False)
+    project_id: Mapped[str] = mapped_column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), index=True, nullable=False)
+    gpkg_version_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    cle_anomalie: Mapped[str] = mapped_column(String(40), nullable=False)
+    type_anomalie: Mapped[str] = mapped_column(String(60), nullable=False)
+    id_conduite: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
+    statut: Mapped[str] = mapped_column(String(20), default="a_traiter", nullable=False)  # a_traiter, revu, corrige
+    commentaire: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    updated_by_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, onupdate=_utc_now, nullable=False)
+
+    organization: Mapped["Organization"] = relationship("Organization")
+    project: Mapped["Project"] = relationship("Project")
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "cle_anomalie", name="uq_qualite_statut_cle"),
+        Index("ix_qualite_statuts_proj_type", "project_id", "type_anomalie"),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "project_id": self.project_id,
+            "gpkg_version_id": self.gpkg_version_id,
+            "cle_anomalie": self.cle_anomalie,
+            "type_anomalie": self.type_anomalie,
+            "id_conduite": self.id_conduite,
+            "statut": self.statut,
+            "commentaire": self.commentaire,
+            "updated_by_id": self.updated_by_id,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
