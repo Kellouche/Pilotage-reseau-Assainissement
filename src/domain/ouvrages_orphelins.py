@@ -3,25 +3,37 @@
 Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
 Auteur : Dr Abdelhakim KELLOUCHE
 Date de création : 2026-04-20
-Date de modification : 2026-11-08
+Date de modification : 2026-11-25 (cache mémoire + STRtree : ~1,3 s → ~50 ms/appel)
 Objet : Détection, isolement et traitement des tronçons et ouvrages orphelins
 ================================================================================
 """
 
 import json
 import logging
+from collections import OrderedDict
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple, Union
 
 import geopandas as gpd
+import numpy as np
 import pyproj
-from shapely.geometry import Point, shape, LineString
+from shapely.geometry import Point, shape, LineString, box
 from shapely.ops import transform, unary_union
 
 logger = logging.getLogger(__name__)
 
 # Prix unitaire estimé pour le raccordement en tranchée courte DN 600 mm (ONA / BTPH Algérie)
 PRIX_UNITAIRE_RACCORDEMENT_DZD_ML = 45000.0
+
+# Cache mémoire des artefacts coûteux de la détection : JSON clusters (~13 Mo)
+# + couches GPKG lues (regards ~10k lignes) + topo par cluster. Sans cache,
+# chaque appel payait ~1,3 s de lecture/parse ; avec, ~50 ms.
+# Invalidé par (mtime, taille) du clusters_cache.json — régénéré à chaque
+# partitionnement, donc une nouvelle version du réseau invalide tout.
+# LRU borné à 4 réseaux pour ne pas gonfler la mémoire (chaque entrée
+# peut retenir plusieurs dizaines de Mo de GeoDataFrames).
+_DETECTION_CACHE: "OrderedDict[str, Dict[str, Any]]" = OrderedDict()
+_DETECTION_CACHE_MAX = 4
 
 
 def _obtenir_reprojecteurs(src_crs: str = "EPSG:32631", dst_crs: str = "EPSG:4326"):
@@ -70,12 +82,31 @@ def detecter_ouvrages_orphelins_proches(
         else:
             return {"cluster_id": cluster_id, "nb_ouvrages_trouves": 0, "ouvrages": []}
 
+    # Entrée de cache pour ce réseau (invalidée si le cache disque change)
     try:
-        with open(cache_path, "r", encoding="utf-8") as f:
-            cdata = json.load(f)
-    except Exception as e:
-        logger.error("Erreur lecture clusters_cache: %s", e)
-        return {"cluster_id": cluster_id, "nb_ouvrages_trouves": 0, "ouvrages": []}
+        _st = cache_path.stat()
+        _sig = (_st.st_mtime, _st.st_size)
+    except OSError:
+        _sig = None
+    _cle = str(cache_path)
+    entree = _DETECTION_CACHE.get(_cle)
+    if entree is None or entree.get("sig") != _sig:
+        entree = {"sig": _sig, "cdata": None, "gdf_r": None, "layers": None,
+                  "to_wgs": None, "to_utm": None, "spec": {}, "topos": {}}
+        _DETECTION_CACHE[_cle] = entree
+        _DETECTION_CACHE.move_to_end(_cle)
+        while len(_DETECTION_CACHE) > _DETECTION_CACHE_MAX:
+            _DETECTION_CACHE.popitem(last=False)
+
+    cdata = entree.get("cdata")
+    if cdata is None:
+        try:
+            with open(cache_path, "r", encoding="utf-8") as f:
+                cdata = json.load(f)
+        except Exception as e:
+            logger.error("Erreur lecture clusters_cache: %s", e)
+            return {"cluster_id": cluster_id, "nb_ouvrages_trouves": 0, "ouvrages": []}
+        entree["cdata"] = cdata
 
     # 1. Trouver le cluster cible (par id numérique, id texte, nom de cluster ou nom d'exutoire)
     target_c = None
@@ -97,49 +128,65 @@ def detecter_ouvrages_orphelins_proches(
     if not target_c:
         return {"cluster_id": cluster_id, "nb_ouvrages_trouves": 0, "ouvrages": []}
 
-    to_wgs, to_utm = _obtenir_reprojecteurs("EPSG:32631", "EPSG:4326")
-    if not to_utm or not to_wgs:
-        return {"cluster_id": cluster_id, "nb_ouvrages_trouves": 0, "ouvrages": []}
+    to_wgs, to_utm = entree.get("to_wgs"), entree.get("to_utm")
+    if to_wgs is None or to_utm is None:
+        to_wgs, to_utm = _obtenir_reprojecteurs("EPSG:32631", "EPSG:4326")
+        if not to_utm or not to_wgs:
+            return {"cluster_id": cluster_id, "nb_ouvrages_trouves": 0, "ouvrages": []}
+        entree["to_wgs"], entree["to_utm"] = to_wgs, to_utm
 
-    # 2. Obtenir les couches du GeoPackage
+    # 2. Obtenir les couches du GeoPackage (couche regards lue une seule fois)
     import pyogrio
-    try:
-        available_layers = [l[0] for l in pyogrio.list_layers(gpkg_p)]
-    except Exception as e:
-        logger.error("Erreur list_layers: %s", e)
-        return {"cluster_id": cluster_id, "nb_ouvrages_trouves": 0, "ouvrages": []}
+    if entree.get("layers") is None:
+        try:
+            entree["layers"] = [l[0] for l in pyogrio.list_layers(gpkg_p)]
+        except Exception as e:
+            logger.error("Erreur list_layers: %s", e)
+            return {"cluster_id": cluster_id, "nb_ouvrages_trouves": 0, "ouvrages": []}
+    available_layers = entree["layers"]
 
     r_layers = [l for l in available_layers if "regard" in l.lower()]
     if not r_layers:
         return {"cluster_id": cluster_id, "nb_ouvrages_trouves": 0, "ouvrages": []}
 
-    try:
-        gdf_r = gpd.read_file(gpkg_p, layer=r_layers[0])
-    except Exception as e:
-        logger.error("Erreur lecture regards: %s", e)
-        return {"cluster_id": cluster_id, "nb_ouvrages_trouves": 0, "ouvrages": []}
-
-    # 3. Filtrer précisément les regards du cluster par les conduites réelles du sous-bassin
-    line_feats = [f for f in target_c.get("geojson", {}).get("features", []) if f.get("geometry", {}).get("type") in ("LineString", "MultiLineString")]
-    gdf_r_cluster = None
-    network_geom = None
-    if line_feats:
+    if entree.get("gdf_r") is None:
         try:
-            line_geoms = [transform(to_utm, shape(f["geometry"])) for f in line_feats]
-            network_geom = unary_union(line_geoms)
-            gdf_r_cluster = gdf_r[gdf_r.geometry.distance(network_geom) <= 2.5]
-        except Exception as e_tr:
-            logger.warning("Erreur filtrage regards par conduites: %s", e_tr)
+            entree["gdf_r"] = gpd.read_file(gpkg_p, layer=r_layers[0])
+        except Exception as e:
+            logger.error("Erreur lecture regards: %s", e)
+            return {"cluster_id": cluster_id, "nb_ouvrages_trouves": 0, "ouvrages": []}
+    gdf_r = entree["gdf_r"]
 
-    if gdf_r_cluster is None or gdf_r_cluster.empty:
-        poly_feats = [f for f in target_c.get("geojson", {}).get("features", []) if f.get("geometry", {}).get("type") == "Polygon"]
-        if poly_feats:
+    # 3. Filtrer précisément les regards du cluster par les conduites réelles du
+    # sous-bassin — résultat mis en cache par cluster (union + filtrage ~0,1-0,5 s)
+    _topo_key = str(cluster_id)
+    _topo = entree["topos"].get(_topo_key, "absent")
+    if _topo == "absent":
+        gdf_r_cluster = None
+        network_geom = None
+        line_feats = [f for f in target_c.get("geojson", {}).get("features", []) if f.get("geometry", {}).get("type") in ("LineString", "MultiLineString")]
+        if line_feats:
             try:
-                poly_wgs = shape(poly_feats[0]["geometry"])
-                poly_utm = transform(to_utm, poly_wgs)
-                gdf_r_cluster = gdf_r[gdf_r.geometry.within(poly_utm.buffer(2.0))]
-            except Exception:
-                gdf_r_cluster = None
+                line_geoms = [transform(to_utm, shape(f["geometry"])) for f in line_feats]
+                network_geom = unary_union(line_geoms)
+                gdf_r_cluster = gdf_r[gdf_r.geometry.distance(network_geom) <= 2.5]
+            except Exception as e_tr:
+                logger.warning("Erreur filtrage regards par conduites: %s", e_tr)
+
+        if gdf_r_cluster is None or gdf_r_cluster.empty:
+            poly_feats = [f for f in target_c.get("geojson", {}).get("features", []) if f.get("geometry", {}).get("type") == "Polygon"]
+            if poly_feats:
+                try:
+                    poly_wgs = shape(poly_feats[0]["geometry"])
+                    poly_utm = transform(to_utm, poly_wgs)
+                    gdf_r_cluster = gdf_r[gdf_r.geometry.within(poly_utm.buffer(2.0))]
+                except Exception:
+                    gdf_r_cluster = None
+
+        # None = cluster sans regard rattaché (mis en cache pour ne pas recalculer)
+        entree["topos"][_topo_key] = (gdf_r_cluster if (gdf_r_cluster is not None and not gdf_r_cluster.empty) else None, network_geom)
+        _topo = entree["topos"][_topo_key]
+    gdf_r_cluster, network_geom = _topo if _topo[0] is not None else (None, _topo[1])
 
     # Si aucun regard n'est rattaché à ce cluster, ne JAMAIS fallback sur tous les regards de la ville !
     if gdf_r_cluster is None or gdf_r_cluster.empty:
@@ -156,17 +203,41 @@ def detecter_ouvrages_orphelins_proches(
     seen_coords = set()
     seen_ouv_ids = set()
 
+    # Enveloppe de recherche : bounds des regards du cluster élargies du rayon.
+    # Tout ouvrage à moins de rayon_max_m d'un regard du cluster est forcément
+    # dans cette boîte — le STRtree ne retient que ces candidats réels.
+    _rb = gdf_r_cluster.total_bounds
+    _search_geom = box(_rb[0] - rayon_max_m, _rb[1] - rayon_max_m,
+                       _rb[2] + rayon_max_m, _rb[3] + rayon_max_m)
+
     for cat_key, default_label, badge_color, lyr_candidates in special_layer_defs:
         if not lyr_candidates:
             continue
         lyr_name = lyr_candidates[0]
-        try:
-            gdf_spec = gpd.read_file(gpkg_p, layer=lyr_name)
-        except Exception as e_read:
-            logger.warning("Impossible de lire %s: %s", lyr_name, e_read)
+        if cat_key not in entree["spec"]:
+            try:
+                entree["spec"][cat_key] = gpd.read_file(gpkg_p, layer=lyr_name)
+            except Exception as e_read:
+                logger.warning("Impossible de lire %s: %s", lyr_name, e_read)
+                entree["spec"][cat_key] = None
+        gdf_spec = entree["spec"][cat_key]
+        if gdf_spec is None:
             continue
 
-        for idx, row in gdf_spec.iterrows():
+        # Index spatial de la couche (construit une seule fois par réseau)
+        _tree_key = f"_tree_{cat_key}"
+        if _tree_key not in entree["spec"]:
+            try:
+                from shapely import STRtree
+                entree["spec"][_tree_key] = STRtree(np.asarray(gdf_spec.geometry))
+            except Exception:
+                entree["spec"][_tree_key] = None
+        _tree = entree["spec"].get(_tree_key)
+        _positions = _tree.query(_search_geom) if _tree is not None else range(len(gdf_spec))
+
+        for _pos in _positions:
+            row = gdf_spec.iloc[_pos]
+            idx = row.name
             pt = row.geometry
             if pt is None or pt.is_empty:
                 continue
