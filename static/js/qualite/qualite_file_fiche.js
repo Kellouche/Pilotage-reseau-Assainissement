@@ -3,7 +3,7 @@
  * Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
  * Auteur : Dr Abdelhakim KELLOUCHE
  * Date de création : 2026-11-24
- * Date de modification : 2026-11-24
+ * Date de modification : 2026-11-25 (KPI anomalies synchronisé avec la file filtrée)
  * Objet : File de navigation, contexte réseau fin, fiche anomalie, zoom, changement de statut — extrait de templates/qualite.html (découpage 600 lignes)
  * ================================================================================
  */
@@ -28,6 +28,17 @@ function mettreAJourCompteurQueue() {
         el.textContent = `Anomalie ${currentQueueIndex + 1} sur ${currentQueueList.length}`;
         btnPrev.disabled = (currentQueueIndex === 0);
         btnNext.disabled = (currentQueueIndex === currentQueueList.length - 1);
+    }
+
+    // KPI cohérent avec la file filtrée : la valeur suit les filtres actifs
+    // (avant : totaux bruts de la synthèse, source de confusion avec le
+    // compteur « Anomalie X sur Y »). La pastille garde le contexte global.
+    const kpiOuvertes = document.getElementById('kpi-anom-ouvertes');
+    const kpiTotal = document.getElementById('kpi-anom-total');
+    if (kpiOuvertes) kpiOuvertes.textContent = currentQueueList.length;
+    if (kpiTotal && currentSynthese) {
+        const anom = currentSynthese.anomalies || {};
+        kpiTotal.textContent = `Total: ${anom.total ?? 0} · À traiter: ${anom.nb_a_traiter ?? 0}`;
     }
 }
 

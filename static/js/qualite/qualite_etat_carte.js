@@ -3,7 +3,7 @@
  * Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
  * Auteur : Dr Abdelhakim KELLOUCHE
  * Date de création : 2026-11-24
- * Date de modification : 2026-11-24
+ * Date de modification : 2026-11-25 (KPI anomalies : nb_a_traiter + contexte global)
  * Objet : État global, initialisation carte Leaflet, chargement données et synthèse — extrait de templates/qualite.html (découpage 600 lignes)
  * ================================================================================
  */
@@ -252,11 +252,13 @@ function afficherSynthese(syn) {
     document.getElementById('kpi-score-alti').textContent = `${scores.hydraulique ?? '--'}%`;
     document.getElementById('kpi-alti-detail').textContent = `À compléter: ${alti.nb_donnees_manquantes ?? 0}`;
 
-    // Anomalies
+    // Anomalies — nb_a_traiter (statut) est le vrai compteur « actives » ;
+    // la somme par sévérité incluait les anomalies revues/corrigées.
     const anom = syn.anomalies || {};
-    const ouvertes = (anom.par_severite?.critique || 0) + (anom.par_severite?.majeure || 0) + (anom.par_severite?.mineure || 0);
+    const ouvertes = anom.nb_a_traiter ??
+        ((anom.par_severite?.critique || 0) + (anom.par_severite?.majeure || 0) + (anom.par_severite?.mineure || 0));
     document.getElementById('kpi-anom-ouvertes').textContent = ouvertes;
-    document.getElementById('kpi-anom-total').textContent = `Total: ${anom.total ?? 0}`;
+    document.getElementById('kpi-anom-total').textContent = `Total: ${anom.total ?? 0} · À traiter: ${anom.nb_a_traiter ?? 0}`;
 
     // Top action globale (secours quand aucune anomalie n'est affichée)
     const topActions = syn.top_actions || [];

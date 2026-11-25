@@ -257,7 +257,20 @@ def recalculate_all_clusters(
     if not chemin_gpkg:
         raise HTTPException(status_code=404, detail="Ressource introuvable")
 
-    return _calculate_clusters_sync(db, persist=persist, chemin_gpkg=chemin_gpkg)
+    result = _calculate_clusters_sync(db, persist=persist, chemin_gpkg=chemin_gpkg)
+
+    # Préchauffage : la détection d'ouvrages proches relit ~13 Mo de cache
+    # clusters + les couches GPKG à chaque nouveau réseau. On la lance en
+    # arrière-plan pour que le premier choix de bassin soit quasi instantané.
+    try:
+        _premier_cluster = ((result.get("resultats") or [{}])[0]
+                            .get("cluster", {}) or {}).get("id")
+        if _premier_cluster is not None:
+            background_tasks.add_task(
+                _prechauffer_ouvrages_proches, chemin_gpkg, str(_premier_cluster))
+    except Exception:
+        pass
+    return result
 
 
 # Helpers
@@ -271,6 +284,15 @@ def _calculate_clusters_sync(db: Session, persist: bool = True, chemin_gpkg: Opt
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur calcul clusters: {str(e)}")
+
+
+def _prechauffer_ouvrages_proches(chemin_gpkg: str, cluster_id: str) -> None:
+    """Réchauffe le cache de detecter_ouvrages_orphelins_proches (threadpool FastAPI)."""
+    try:
+        from src.domain.ouvrages_orphelins import detecter_ouvrages_orphelins_proches
+        detecter_ouvrages_orphelins_proches(chemin_gpkg, cluster_id, rayon_max_m=45.0)
+    except Exception as e:
+        _log_cluster(f"[clusters] Prechauffe ouvrages-proches ignore: {e}", flush=True)
 
 
 def _warm_graph_cache(chemin_gpkg: Optional[str] = None):
