@@ -1,0 +1,273 @@
+/**
+ * ================================================================================
+ * Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+ * Auteur : Dr Abdelhakim KELLOUCHE
+ * Date de création : 2026-11-24
+ * Objet : Modale édition, tableau récapitulatif, clusters, halo, zoom, loading — extrait de templates/qualite.html (découpage 600 lignes)
+ * ================================================================================
+ */
+
+/* Modale d'édition intégrée */
+.modal-edit-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(15, 23, 42, 0.65);
+    backdrop-filter: blur(4px);
+    z-index: 9999;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.2s ease-out;
+}
+
+.modal-edit-card {
+    background: white;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 480px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
+    border: 1px solid #cbd5e1;
+    overflow: hidden;
+}
+
+.modal-edit-header {
+    background: #0f172a;
+    color: white;
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.modal-edit-body {
+    padding: 18px;
+}
+
+.modal-edit-form-group {
+    margin-bottom: 12px;
+}
+
+.modal-edit-form-group label {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    color: #475569;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+
+.modal-edit-form-group input,
+.modal-edit-form-group select {
+    width: 100%;
+    padding: 8px 10px;
+    font-size: 13px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    outline: none;
+}
+
+.modal-edit-form-group input:focus,
+.modal-edit-form-group select:focus {
+    border-color: #0284c7;
+    box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.2);
+}
+
+.modal-edit-footer {
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+    padding: 12px 18px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.btn-modal-cancel {
+    padding: 8px 14px;
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.btn-modal-save {
+    padding: 8px 16px;
+    background: #059669;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(5, 150, 105, 0.3);
+}
+.btn-modal-save:hover {
+    background: #047857;
+}
+
+/* Tableau récapitulatif / Liste */
+.anomalies-table-container {
+    overflow-x: auto;
+}
+
+.anom-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.anom-table th {
+    background: #f8fafc;
+    padding: 8px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.anom-table td {
+    padding: 8px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.anom-table tr:hover {
+    background: #f1f5f9;
+    cursor: pointer;
+}
+
+/* Clusters personnalisés */
+.cluster-marker-custom {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    color: white;
+    font-weight: 700;
+    font-size: 12px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.3);
+    border: 2px solid white;
+}
+
+.cluster-critique { background: rgba(239, 68, 68, 0.9); }
+.cluster-majeure { background: rgba(245, 158, 11, 0.9); }
+.cluster-mineure { background: rgba(59, 130, 246, 0.9); }
+.cluster-neutre { background: rgba(148, 163, 184, 0.9); }
+
+/* Halo de surbrillance pour l'anomalie active (pulsation 3 secondes puis fixe) */
+.anomalie-pulse-container {
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.anomalie-pulse-circle {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: rgba(245, 158, 11, 0.35);
+    border: 3px solid #ef4444;
+    box-shadow: 0 0 14px rgba(239, 68, 68, 0.85);
+    animation: pulse-ring 1s cubic-bezier(0.215, 0.61, 0.355, 1) 3 forwards;
+}
+
+@keyframes pulse-ring {
+    0% {
+        transform: scale(0.85);
+        opacity: 0.95;
+    }
+    50% {
+        transform: scale(1.45);
+        opacity: 0.35;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 0.9;
+    }
+}
+
+/* Boutons de zoom et actions rapides sur carte */
+.map-quick-actions {
+    position: absolute;
+    top: 12px;
+    left: 60px;
+    z-index: 1000;
+    display: flex;
+    gap: 8px;
+}
+
+.btn-map-action {
+    background: white;
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+}
+
+.btn-map-action:hover {
+    background: #f8fafc;
+    border-color: var(--accent-blue);
+    color: var(--accent-blue);
+    transform: translateY(-1px);
+}
+
+.btn-zoom-anom {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(2, 132, 199, 0.1);
+    border: 1px solid rgba(2, 132, 199, 0.3);
+    color: #0284c7;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.btn-zoom-anom:hover {
+    background: #0284c7;
+    color: white;
+}
+
+/* Loading Overlay */
+.loading-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(3px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.spinner {
+    width: 36px;
+    height: 36px;
+    border: 3px solid #e2e8f0;
+    border-top: 3px solid var(--accent-blue);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-bottom: 12px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}

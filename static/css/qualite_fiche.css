@@ -1,0 +1,423 @@
+/**
+ * ================================================================================
+ * Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+ * Auteur : Dr Abdelhakim KELLOUCHE
+ * Date de création : 2026-11-24
+ * Objet : Fiche anomalie, barre de statut, panneau de résolution unifié — extrait de templates/qualite.html (découpage 600 lignes)
+ * ================================================================================
+ */
+
+/* Fiche Anomalie Actionnable */
+.anomalie-card-actionable {
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    margin-bottom: 16px;
+    transition: all 0.2s;
+}
+
+.card-header-bar {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.card-body {
+    padding: 14px;
+}
+
+.card-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 14px;
+    background: #f8fafc;
+    padding: 10px;
+    border-radius: 6px;
+}
+
+.meta-cell-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    font-weight: 600;
+}
+
+.meta-cell-val {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.badge-sev {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.badge-critique { background: #fee2e2; color: #b91c1c; }
+.badge-majeure { background: #fef3c7; color: #b45309; }
+.badge-mineure { background: #dbeafe; color: #1d4ed8; }
+.badge-informatif { background: #f1f5f9; color: #475569; }
+
+.desc-box {
+    font-size: 13px;
+    line-height: 1.5;
+    color: #1e293b;
+    margin-bottom: 14px;
+    background: #fdfdfd;
+    border-left: 3px solid var(--accent-blue);
+    padding: 8px 12px;
+}
+
+.metrics-callout {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 14px;
+    font-size: 12px;
+}
+
+.metrics-callout ul {
+    list-style: none;
+    margin-top: 4px;
+}
+
+.metrics-callout li {
+    margin-bottom: 4px;
+    display: flex;
+    justify-content: space-between;
+}
+
+/* Barre d'action rapide de statut */
+.statut-action-bar {
+    padding: 12px 14px;
+    background: #f8fafc;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.statut-btn-group {
+    display: flex;
+    gap: 8px;
+}
+
+.statut-btn {
+    flex: 1;
+    padding: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: white;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+}
+
+.statut-btn.active-traiter {
+    background: var(--statut-traiter);
+    color: white;
+    border-color: var(--statut-traiter);
+}
+
+.statut-btn.active-revu {
+    background: var(--statut-revu);
+    color: white;
+    border-color: var(--statut-revu);
+}
+
+.statut-btn.active-corrige {
+    background: var(--statut-corrige);
+    color: white;
+    border-color: var(--statut-corrige);
+}
+
+.comment-input {
+    width: 100%;
+    padding: 6px 10px;
+    font-size: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+}
+
+/* Raccourcis clavier & Tags Monospace */
+.kbd-badge {
+    display: inline-block;
+    padding: 1px 5px;
+    font-size: 10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-weight: 700;
+    color: #475569;
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    box-shadow: inset 0 -1px 0 rgba(0,0,0,0.1);
+    line-height: 1.2;
+}
+
+.monospace-tag {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-weight: 700;
+    font-size: 13px;
+    color: #0f172a;
+    background: #f1f5f9;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid #e2e8f0;
+}
+
+/* Panneau de Résolution Unifié (Lot 4 - Refonte Ingénierie) */
+.resolution-panel {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 14px;
+    margin-top: 14px;
+}
+
+.resolution-header {
+    font-size: 11px;
+    font-weight: 700;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.action-buttons-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.btn-primary-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 9px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+    text-align: center;
+    width: 100%;
+}
+
+.btn-primary-action.btn-reverse {
+    background: #b45309;
+    color: white;
+    box-shadow: 0 1px 3px rgba(180, 83, 9, 0.25);
+}
+.btn-primary-action.btn-reverse:hover {
+    background: #92400e;
+}
+
+.btn-primary-action.btn-edit {
+    background: #0284c7;
+    color: white;
+    box-shadow: 0 1px 3px rgba(2, 132, 199, 0.25);
+}
+.btn-primary-action.btn-edit:hover {
+    background: #0369a1;
+}
+
+.btn-primary-action.btn-connect {
+    background: #4f46e5;
+    color: white;
+    box-shadow: 0 1px 3px rgba(79, 70, 229, 0.25);
+}
+.btn-primary-action.btn-connect:hover {
+    background: #4338ca;
+}
+
+.btn-primary-action.btn-edit-cotes {
+    background: #0d9488;
+    color: white;
+    box-shadow: 0 1px 3px rgba(13, 148, 136, 0.25);
+}
+.btn-primary-action.btn-edit-cotes:hover {
+    background: #0f766e;
+}
+
+.btn-secondary-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 7px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 6px;
+    cursor: pointer;
+    background: white;
+    color: #334155;
+    border: 1px solid #cbd5e1;
+    width: 100%;
+    transition: all 0.15s;
+}
+.btn-secondary-action:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+    border-color: #94a3b8;
+}
+
+.suggestion-box {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 6px;
+    padding: 7px 10px;
+    margin-top: 5px;
+    font-size: 11px;
+    color: #1e3a8a;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.btn-apply-suggestion {
+    background: #2563eb;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+}
+.btn-apply-suggestion:hover {
+    background: #1d4ed8;
+}
+
+.action-help-text {
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 2px;
+    margin-bottom: 6px;
+    line-height: 1.35;
+}
+
+.derogation-bar {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.btn-derogation {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: white;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #475569;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.btn-derogation:hover {
+    background: #f1f5f9;
+    color: #1e293b;
+    border-color: #94a3b8;
+}
+.btn-derogation.active {
+    background: #eff6ff;
+    border-color: #3b82f6;
+    color: #1d4ed8;
+}
+
+.status-tag {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 8px;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+.status-tag.status-corrected {
+    background: #dcfce7;
+    color: #15803d;
+    border: 1px solid #bbf7d0;
+}
+
+.card-footer-trace {
+    margin-top: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 11px;
+    color: #94a3b8;
+    border-top: 1px dashed #e2e8f0;
+    padding-top: 8px;
+}
+.card-footer-trace code {
+    font-size: 10px;
+    background: #f1f5f9;
+    padding: 1px 4px;
+    border-radius: 3px;
+    color: #64748b;
+}
+
+.diagnostic-box {
+    margin-bottom: 12px;
+    background: #fdfdfd;
+    border-left: 3px solid #0284c7;
+    padding: 8px 12px;
+    border-radius: 0 6px 6px 0;
+    border: 1px solid #e2e8f0;
+    border-left: 3px solid #0284c7;
+}
+.diagnostic-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: #475569;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.diagnostic-desc {
+    font-size: 12px;
+    color: #1e293b;
+    line-height: 1.45;
+}
+
+.metrics-list {
+    margin-top: 8px;
+    padding-top: 6px;
+    border-top: 1px solid #f1f5f9;
+    font-size: 11px;
+}
+.metrics-list ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.metrics-list li {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 3px;
+    color: #475569;
+}

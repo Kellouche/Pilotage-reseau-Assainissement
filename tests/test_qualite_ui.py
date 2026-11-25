@@ -32,6 +32,21 @@ def test_qualite_ui_structure_et_contrat():
         assert resp.status_code == 200
         html = resp.text
 
+        # Le JS est externalisé (docs/CONVENTIONS_CODE.md — découpage 600
+        # lignes) : les contrats d'API et fonctions vivent dans les modules
+        # statiques, plus dans le HTML. On concatène pour le contrat.
+        js_qualite = ""
+        for _src in (
+            "/static/js/qualite/qualite_etat_carte.js",
+            "/static/js/qualite/qualite_file_fiche.js",
+            "/static/js/qualite/qualite_table_modals.js",
+        ):
+            assert _src in html, f"script {_src} non référencé"
+            _r = client.get(_src)
+            assert _r.status_code == 200, f"{_src} -> {_r.status_code}"
+            js_qualite += _r.text
+        html += js_qualite
+
         # 1. Bibliothèques cartographiques
         assert "leaflet.js" in html.lower()
         assert "leaflet.markercluster" in html.lower()
