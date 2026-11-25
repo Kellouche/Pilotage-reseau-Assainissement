@@ -371,7 +371,11 @@ def test_profil_en_long_jalons_contre_pente_synthetique():
 
 def test_profil_en_long_frontend_jalons_anomalies():
     """Le frontend déclare le dataset de jalons et la tooltip dédiée."""
-    js = Path("static/js/app/profil_long.js").read_text(encoding="utf-8")
+    # Module externalisé en 3 fichiers (docs/CONVENTIONS_CODE.md — 600 lignes)
+    js = "".join(
+        Path(f"static/js/app/{n}").read_text(encoding="utf-8")
+        for n in ("profil_long.js", "profil_long_rendu.js", "profil_long_anomalies.js")
+    )
     assert "Anomalies du profil (jalons)" in js
     assert "s.anomalies" in js
     assert "pointStyle: 'rectRot'" in js
