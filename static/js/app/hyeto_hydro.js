@@ -3,7 +3,7 @@
  * Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
  * Auteur : Dr Abdelhakim KELLOUCHE
  * Date de création : 2026-11-09
- * Date de modification : 2026-11-24
+ * Date de modification : 2026-11-24 (vitesses de lecture accélérées, alignées Time Slider)
  * Objet : Graphique d'analyse couplée Hyétogramme (Pluie) ↔ Hydrogramme (Débit)
  *         Format A : Double-Axe superposé / inversé avec synchronisation temporelle
  * ================================================================================
@@ -21,7 +21,7 @@
         playing: false,
         currentStep: 0,
         intervalId: null,
-        baseIntervalMs: 500,
+        baseIntervalMs: 200,
         speedMultiplier: 1
     };
 
@@ -769,7 +769,7 @@
         state.playing = true;
         _syncHyetoPlayButton();
 
-        const interval = Math.max(100, Math.round(state.baseIntervalMs / (state.speedMultiplier || 1)));
+        const interval = Math.max(40, Math.round(state.baseIntervalMs / (state.speedMultiplier || 1)));
 
         state.intervalId = setInterval(() => {
             let nextIdx = state.currentStep + 1;

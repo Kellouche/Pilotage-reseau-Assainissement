@@ -3,7 +3,7 @@
  * Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
  * Auteur : Dr Abdelhakim KELLOUCHE
  * Date de création : 2026-04-20
- * Date de modification : 2026-11-24 (légende conservée visible à l'ouverture)
+ * Date de modification : 2026-11-24 (légende conservée visible ; vitesses accélérées)
  * Objet : Animation temporelle de l'onde de crue (Time Slider - Phase 6.B)
  * ================================================================================
  */
@@ -13,7 +13,7 @@ window.timeSliderState = {
     playing: false,
     currentStep: 0,
     speedMultiplier: 1,
-    baseIntervalMs: 500,
+    baseIntervalMs: 200,
     intervalId: null,
     data: null,
     chartInstance: null,
@@ -631,7 +631,7 @@ function timeSliderPlay() {
         badge.className = "badge-ts badge-play";
     }
 
-    const interval = Math.max(100, Math.round(state.baseIntervalMs / (state.speedMultiplier || 1)));
+    const interval = Math.max(40, Math.round(state.baseIntervalMs / (state.speedMultiplier || 1)));
 
     state.intervalId = setInterval(() => {
         let nextIdx = state.currentStep + 1;
