@@ -3,7 +3,7 @@
 Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
 Auteur : Dr Abdelhakim KELLOUCHE
 Date de création : 2026-04-20
-Date de modification : 2026-11-08
+Date de modification : 2026-11-25 (déduplication des rafales force_refresh : un seul audit pour /synthese + /anomalies.geojson)
 Objet : Endpoints de contrôle qualité topologique et audit de connectivité
 ================================================================================
 """
@@ -395,12 +395,17 @@ async def analyser_qualite_reseau(
 
     maintenant = datetime.now().timestamp()
     empreinte_aux = _empreinte_couches_aux(db, ctx)
-    if (not force_refresh and
-        _cache_qualite["rapport"] is not None and
-        _cache_qualite["gpkg_path"] == str(gpkg_target) and
+
+    # Déduplication des rafales : le frontend « Recalculer l'audit » appelle
+    # /synthese puis /anomalies.geojson à la suite avec force_refresh=true ;
+    # sans cette fenêtre, chaque endpoint relançait un audit complet (~30 s).
+    # Un recalcul il y a <120 s sur le même GPKG + mêmes couches auxiliaires
+    # est réutilisé ; passé ce délai ou si l'empreinte change, on recalcule.
+    if (_cache_qualite.get("rapport") is not None and
+        _cache_qualite.get("gpkg_path") == str(gpkg_target) and
         _cache_qualite.get("empreinte_aux") == empreinte_aux and
-        _cache_qualite["timestamp"] is not None and
-        (maintenant - _cache_qualite["timestamp"]) < _cache_qualite["duree_validite"]):
+        _cache_qualite.get("timestamp") is not None and
+        (maintenant - _cache_qualite["timestamp"]) < 120):
         return _appliquer_statuts_anomalies(_cache_qualite["rapport"], db, ctx)
 
     # Tentative de récupération depuis le cache persistant sur disque (instantané <50ms)
@@ -490,6 +495,15 @@ async def _assurer_rapport(db: Session, ctx: TenantContext, force_refresh: bool 
 
     maintenant = datetime.now().timestamp()
     empreinte_aux = _empreinte_couches_aux(db, ctx)
+
+    # Déduplication des rafales force_refresh (même justification que
+    # _assurer_rapport : /synthese + /anomalies.geojson appelés à la suite).
+    if (_cache_qualite.get("rapport") is not None and
+        _cache_qualite.get("gpkg_path") == str(gpkg_target) and
+        _cache_qualite.get("empreinte_aux") == empreinte_aux and
+        _cache_qualite.get("timestamp") is not None and
+        (maintenant - _cache_qualite["timestamp"]) < 120):
+        return _appliquer_statuts_anomalies(_cache_qualite["rapport"], db, ctx)
 
     # 1. Cache mémoire (si même GPKG, même empreinte couches aux, et non expiré)
     if (not force_refresh and
