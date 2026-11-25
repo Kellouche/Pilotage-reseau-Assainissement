@@ -3,7 +3,7 @@
  * Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
  * Auteur : Dr Abdelhakim KELLOUCHE
  * Date de création : 2026-04-20
- * Date de modification : 2026-11-24
+ * Date de modification : 2026-11-24 (légende conservée visible à l'ouverture)
  * Objet : Animation temporelle de l'onde de crue (Time Slider - Phase 6.B)
  * ================================================================================
  */
@@ -17,8 +17,7 @@ window.timeSliderState = {
     intervalId: null,
     data: null,
     chartInstance: null,
-    radarGroup: null,
-    legendWasVisible: false
+    radarGroup: null
 };
 
 /**
@@ -101,13 +100,6 @@ function toggleTimeSlider(forceState) {
             badgeInstant.classList.add('hidden');
         }
 
-        // Restaurer la légende flottante à son état précédent
-        const leg = document.getElementById('sim-floating-legend');
-        if (leg) {
-            leg.style.display = 'block';
-            leg.classList.add('active-legend');
-        }
-
         // Déplier la toolbar d'édition si elle était repliée
         const toolbar = document.getElementById('main-edit-toolbar');
         if (toolbar && toolbar.classList.contains('collapsed')) {
@@ -155,14 +147,6 @@ function toggleTimeSlider(forceState) {
             _positionnerTimeSliderCentrer();
         }
 
-        // Sauvegarder l'état de la légende avant de la cacher
-        const leg = document.getElementById('sim-floating-legend');
-        if (leg) {
-            state.legendWasVisible = leg.classList.contains('active-legend') && leg.style.display !== 'none';
-            leg.style.display = 'none';
-            leg.classList.remove('active-legend');
-        }
-
         // Initialiser le déplacement du panneau (comme hyeto-hydro)
         _initTimeSliderDraggable();
 
@@ -185,11 +169,6 @@ function toggleTimeSlider(forceState) {
             if (!window.couches || !window.couches.res_conduites || window.couches.res_conduites.getLayers().length === 0) {
                 try {
                     afficherResultatsSimulation(window._dernierResultatSimulation);
-                    // Re-cacher la légende après afficherResultatsSimulation (qui force l'affichage)
-                    if (leg) {
-                        leg.style.display = 'none';
-                        leg.classList.remove('active-legend');
-                    }
                 } catch (e_aff) {
                     console.warn("Affichage préalable simulation:", e_aff);
                 }
