@@ -3,6 +3,7 @@
  * Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
  * Auteur : Dr Abdelhakim KELLOUCHE
  * Date de création : 2026-11-24
+ * Date de modification : 2026-11-24
  * Objet : Anomalies sur carte : marqueurs, badges zoom, menu contextuel, export et panneau draggable — extrait de profil_long.js (découpage 600 lignes)
  * ================================================================================
  */

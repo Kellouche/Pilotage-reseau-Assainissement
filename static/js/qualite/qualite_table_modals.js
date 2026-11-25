@@ -3,6 +3,7 @@
  * Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
  * Auteur : Dr Abdelhakim KELLOUCHE
  * Date de création : 2026-11-24
+ * Date de modification : 2026-11-24
  * Objet : Tableau récapitulatif, bascule de vues, modales édition/raccordement/cotes — extrait de templates/qualite.html (découpage 600 lignes)
  * ================================================================================
  */
