@@ -4,7 +4,7 @@
 Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
 Auteur : Dr Abdelhakim KELLOUCHE
 Date de création : 2026-04-20
-Date de modification : 2026-11-08
+Date de modification : 2026-11-27
 Objet : Outil d'analyse qualité et de validation des couches GeoPackage
 ================================================================================
 """
@@ -51,11 +51,51 @@ def _safe_float(val: Any) -> Optional[float]:
         return None
 
 
-def _col_val(row: Any, *names: str) -> Any:
+def _index_colonnes_bas(colonnes: Any) -> Dict[str, Any]:
+    """
+    Construit UNE fois la table {nom_colonne_minuscule: nom_reel} d'un jeu
+    de colonnes. `_col_val` était appelée ~270 000 fois en reconstruisant
+    cette table à chaque appel (profilage : ~75 s cumulées sur 10k tronçons).
+    """
+    lower_map: Dict[str, Any] = {}
+    try:
+        for col in colonnes:
+            try:
+                lower_map.setdefault(str(col).strip().lower(), col)
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return lower_map
+
+
+def _resoudre_colonne(
+    map_bas: Dict[str, Any],
+    colonnes: Any,
+    *names: str,
+) -> Optional[str]:
+    """
+    Résout le nom RÉEL d'une colonne candidate dans un DataFrame, avec la
+    même sémantique que `_col_val` (match exact prioritaire, puis
+    insensible casse/espaces) — mais calculé UNE fois pour toute la table
+    au lieu de chaque ligne. Retourne None si aucune candidate ne matche.
+    """
+    for name in names:
+        if name in colonnes:
+            return name
+        key = str(name).strip().lower()
+        if key in map_bas:
+            return map_bas[key]
+    return None
+
+
+def _col_val(row: Any, *names: str, _lower_map: Optional[Dict[str, Any]] = None) -> Any:
     """
     Retourne la valeur de la première colonne correspondante dans une ligne
     (Series pandas ou dict), de façon insensible à la casse et aux accents
     courants des exports SIG (ex. 'LONGUEUR' ↔ 'longueur' ↔ 'Longeur').
+    `_lower_map` permet de passer la table pré-calculée par `_index_colonnes_bas`
+    (obligatoire dans les boucles chaudes sur DataFrame).
     """
     if row is None:
         return None
@@ -63,18 +103,14 @@ def _col_val(row: Any, *names: str) -> Any:
         index = row.index if hasattr(row, "index") else row.keys()
     except Exception:
         return None
-    lower_map = {}
-    for col in index:
-        try:
-            lower_map.setdefault(str(col).strip().lower(), col)
-        except Exception:
-            continue
+    if _lower_map is None:
+        _lower_map = _index_colonnes_bas(index)
     for name in names:
         if name in row:
             return row[name]
         key = str(name).strip().lower()
-        if key in lower_map:
-            return row[lower_map[key]]
+        if key in _lower_map:
+            return row[_lower_map[key]]
     return None
 
 
@@ -143,13 +179,18 @@ def _construire_resolveur(regards: Any, rejets: Any, gpkg_path: Path,
         gg = _vers_metres_gdf(gdf)
         if gg is None or gg.empty:
             return
-        for _, r in gg.iterrows():
-            nid = _clean_node_id(_col_val(
-                r, "Code", "CODE", "id", "ID", "swmm_id", "SWMM_ID",
-                "NOM", "nom", "INTITULE", "intitule"))
+        map_couche = _index_colonnes_bas(gg.columns)
+        col_nid = _resoudre_colonne(
+            map_couche, gg.columns,
+            "Code", "CODE", "id", "ID", "swmm_id", "SWMM_ID",
+            "NOM", "nom", "INTITULE", "intitule")
+        vals = gg[col_nid].tolist() if col_nid is not None else [None] * len(gg)
+        geoms = list(gg.geometry.values) if len(gg) else []
+        for i, v in enumerate(vals):
+            nid = _clean_node_id(v)
             if not nid or nid in noeuds:
                 continue
-            pt = _point_geom(getattr(r, "geometry", None))
+            pt = _point_geom(geoms[i] if i < len(geoms) else None)
             if pt is not None:
                 noeuds[nid] = pt
 
@@ -201,31 +242,6 @@ def _resoudre_extremite(resolveur: ResoluteurNoeuds, nid_brut: str,
     return res, bool(points)
 
 
-def _colonnes_cote_ngf(row: Any) -> Optional[float]:
-    """
-    Extrait une cote NGF absolue de radier si le jeu de données en porte
-    une EXPLICITE (spec V2.1 §4.1-N1). Les colonnes de PROFONDEUR
-    (PROFRADI, Profondeur, PROF_FE_*, HFERMSOL…) sont exclues : ce sont des
-    profondeurs, jamais des altitudes — les accepter produisait les
-    1134 faux positifs historiques.
-    """
-    for col in ("cote_radier", "z_radier", "COTRAD", "cote_radier_m", "Z_RADIER"):
-        v = _safe_float(_col_val(row, col))
-        if v is not None:
-            return v
-    return None
-
-
-def _est_refoulement(c: Any) -> bool:
-    """Conduite sous pression / refoulement : jamais de contrôle de pente
-    gravitaire (spec V2.1 §4.4)."""
-    txt = " ".join(str(_col_val(c, *noms) or "") for noms in (
-        ("FONCTIONMT",), ("fonctionmt",), ("Type d'eau",), ("type_eau",),
-        ("Section",), ("TYPEEFFL",),
-    )).lower()
-    return any(k in txt for k in ("refoulement", "refoul", "pression", "rejet"))
-
-
 def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif",
                           contexte_terrain: Optional[Dict[str, Any]] = None
                           ) -> Dict[str, Any]:
@@ -250,17 +266,47 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif",
     nb_rejets = len(rejets)
     total_elements = nb_regards + nb_pipes + nb_rejets
 
-    # Référentiel des identifiants de nœuds valides (contrôle topologique brut)
-    valid_nodes: Dict[str, Any] = {}
-    if not regards.empty:
-        for idx, r in regards.iterrows():
-            nid = _clean_id(_col_val(r, "Code", "CODE", "id", "ID", "swmm_id", "SWMM_ID", "NOM", "nom")) or str(idx)
-            valid_nodes[nid] = r
+    # Tables de résolution de colonnes pré-calculées (insensible casse/espaces)
+    # — évite de reconstruire la table à chaque _col_val dans les boucles.
+    map_pipes = _index_colonnes_bas(pipes.columns)
+    map_regards = _index_colonnes_bas(regards.columns)
+    map_rejets = _index_colonnes_bas(rejets.columns)
 
+    # Référentiel des identifiants de nœuds valides (contrôle topologique brut)
+    # Vectorisé : colonnes résolues une fois par table, cotes NGF des nœuds
+    # pré-calculées (spec V2.1 §4.1-N1) — plus de Series pandas par ligne.
+    valid_nodes: Dict[str, bool] = {}
+    cotes_ngf: Dict[str, float] = {}
+
+    def _indexer_noeuds(gdf: Any, map_: Dict[str, Any], noms_code: tuple,
+                        fallback_id) -> None:
+        if gdf is None or gdf.empty:
+            return
+        col_code = _resoudre_colonne(map_, gdf.columns, *noms_code)
+        vals = gdf[col_code].tolist() if col_code is not None else [None] * len(gdf)
+        cols_cote = []
+        for cn in ("cote_radier", "z_radier", "COTRAD", "cote_radier_m", "Z_RADIER"):
+            cc = _resoudre_colonne(map_, gdf.columns, cn)
+            cols_cote.append(gdf[cc].tolist() if cc is not None else [None] * len(gdf))
+        for i, v in enumerate(vals):
+            nid = _clean_id(v) or fallback_id(i)
+            valid_nodes[nid] = True
+            for arr in cols_cote:
+                fv = _safe_float(arr[i])
+                if fv is not None:
+                    cotes_ngf[nid] = fv
+                    break
+
+    if not regards.empty:
+        _indexer_noeuds(
+            regards, map_regards,
+            ("Code", "CODE", "id", "ID", "swmm_id", "SWMM_ID", "NOM", "nom"),
+            lambda i: str(regards.index[i]))
     if not rejets.empty:
-        for idx, rj in rejets.iterrows():
-            r_id = _clean_id(_col_val(rj, "Code", "CODE", "id", "ID", "NOM", "nom")) or f"REJ_{idx+1}"
-            valid_nodes[r_id] = rj
+        _indexer_noeuds(
+            rejets, map_rejets,
+            ("Code", "CODE", "id", "ID", "NOM", "nom"),
+            lambda i: f"REJ_{rejets.index[i] + 1}")
 
     # Conventions auto-découvertes du GPKG (partagées avec graphe et .inp)
     conventions_gpkg = None
@@ -304,8 +350,71 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif",
             suspects_map[(s.get("amont"), s.get("aval"))] = s
         par_regard_terrain = contexte_terrain.get("par_regard") or {}
 
+    # ── Pré-extraction vectorisée des tronçons ──────────────────────────
+    # Les colonnes candidates sont résolues UNE fois (_resoudre_colonne) puis
+    # lues en listes nues : fini les ~10 itérations pandas/ligne (iterrows +
+    # _col_val) qui dominaient le temps d'audit (~90 % du coût mesuré).
+    n_pipes = len(pipes)
+    cols_pipes = pipes.columns
+
+    def _vals_col(*names):
+        cn = _resoudre_colonne(map_pipes, cols_pipes, *names)
+        return pipes[cn].tolist() if cn is not None else [None] * n_pipes
+
+    u_l = [_clean_id(v) for v in _vals_col("ID_AMONT", "id_amont", "amont", "AMONT", "NOEUD_AMONT")]
+    d_l = [_clean_id(v) for v in _vals_col("ID_AVAL", "id_aval", "aval", "AVAL", "NOEUD_AVAL")]
+    diam_l = _vals_col("DIAMETRE", "diametre", "Diamètre", "DIAMETER", "diameter")
+    mat_l = _vals_col("MATERIAU", "materiau", "Matériau", "MATERIAL", "material")
+    long_attrib_l = _vals_col("LONGUEUR", "Longeur", "longueur", "Length", "length")
+    prof_am_l = _vals_col("PROF_FE_AM", "prof_fe_am", "PROFFEA")
+    prof_av_l = _vals_col("PROF_FE_AV", "prof_fe_av", "PROFFEAV")
+
+    # Refoulement (spec V2.1 §4.4) : même jointure de textes que _est_refoulement
+    _GROUPES_REF = (("FONCTIONMT",), ("fonctionmt",), ("Type d'eau",), ("type_eau",),
+                    ("Section",), ("TYPEEFFL",))
+    ref_cols_vals = [_vals_col(*grp) for grp in _GROUPES_REF]
+    refoulement_l = [
+        any(k in " ".join(str(ref_cols_vals[g][i] or "") for g in range(len(_GROUPES_REF))).lower()
+            for k in ("refoulement", "refoul", "pression", "rejet"))
+        for i in range(n_pipes)
+    ]
+
+    # Géométries en listes nues + longueurs métriques fiables
+    geoms_orig = list(pipes.geometry.values) if n_pipes else []
+    geoms_m = (list(pipes_m.geometry.values)
+               if (resolveur_noeuds is not None and not pipes_m.empty) else [])
+    long_m_l = []
+    for i in range(n_pipes):
+        gm = geoms_m[i] if i < len(geoms_m) else None
+        if gm is not None and gm.length > 0:
+            long_m_l.append(float(gm.length))
+            continue
+        # Repli historique : aboutissait toujours à None (c.crs inaccessible
+        # sur une Series → AttributeError → except) — comportement conservé.
+        long_m_l.append(None)
+
+    # Centroïdes WGS84 vectorisés pour le centrage carte
+    lat_l = [None] * n_pipes
+    lon_l = [None] * n_pipes
+    if not wgs_pipes.empty:
+        try:
+            _cent = wgs_pipes.geometry.centroid
+            _xs = list(_cent.x)
+            _ys = list(_cent.y)
+            for i in range(min(n_pipes, len(_xs))):
+                if pd.notna(_xs[i]) and pd.notna(_ys[i]):
+                    lat_l[i] = round(float(_ys[i]), 6)
+                    lon_l[i] = round(float(_xs[i]), 6)
+        except Exception:
+            pass
+
     upstream_connections = set()
     downstream_connections = set()
+    for _u, _d in zip(u_l, d_l):
+        if _u:
+            upstream_connections.add(_u)
+        if _d:
+            downstream_connections.add(_d)
 
     # Statistiques de connectivité par provenance de résolution
     stats_conn = {
@@ -314,48 +423,21 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif",
         "spatial": 0, "absent": 0,
     }
 
-    for idx, c in pipes.iterrows():
-        u = _clean_id(_col_val(c, "ID_AMONT", "id_amont", "amont", "AMONT", "NOEUD_AMONT"))
-        d = _clean_id(_col_val(c, "ID_AVAL", "id_aval", "aval", "AVAL", "NOEUD_AVAL"))
-        if u:
-            upstream_connections.add(u)
-        if d:
-            downstream_connections.add(d)
-
     # 1. Analyse des canalisations
-    for idx, c in pipes.iterrows():
+    for pos, idx in enumerate(pipes.index):
         cid = f"C_{idx+1}"
-        u = _clean_id(_col_val(c, "ID_AMONT", "id_amont", "amont", "AMONT", "NOEUD_AMONT"))
-        d = _clean_id(_col_val(c, "ID_AVAL", "id_aval", "aval", "AVAL", "NOEUD_AVAL"))
-
-        # Coordonnées pour centrage carte
-        lat, lon = None, None
-        if not wgs_pipes.empty and idx < len(wgs_pipes):
-            geom = wgs_pipes.geometry.iloc[idx]
-            if geom and not geom.is_empty:
-                centroid = geom.centroid
-                lat, lon = round(centroid.y, 6), round(centroid.x, 6)
+        u = u_l[pos]
+        d = d_l[pos]
+        lat, lon = lat_l[pos], lon_l[pos]
 
         # A. Extrémités non résolues — résolveur canonique (ID -> alias -> snap)
         #    Une extrémité avec point de snap disponible mais sans nœud déclaré
         #    est classée 'spatiale' (nœud créé par la simulation, à vérifier,
         #    sévérité mineure) ; sans aucun point elle est 'absente' (majeure).
-        geom_m = None
-        if resolveur_noeuds is not None and not pipes_m.empty and idx < len(pipes_m):
-            geom_m = pipes_m.geometry.iloc[idx]
+        geom_m = geoms_m[pos] if pos < len(geoms_m) else None
         points = _points_extremite(geom_m)
         # Longueur fiable en mètres (géométrie éventuellement en degrés)
-        long_m = None
-        if geom_m is not None and geom_m.length > 0:
-            long_m = float(geom_m.length)
-        elif c.geometry is not None and c.geometry.length > 0:
-            try:
-                if c.crs is not None and c.crs.is_geographic:
-                    long_m = None
-                else:
-                    long_m = float(c.geometry.length)
-            except Exception:
-                long_m = None
+        long_m = long_m_l[pos]
 
         _res_holder = {}
 
@@ -414,9 +496,9 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif",
             })
 
         # C. Champs manquants (Diamètre, Longueur, Matériau)
-        diam = _col_val(c, "DIAMETRE", "diametre", "Diamètre", "DIAMETER", "diameter")
-        mat = _col_val(c, "MATERIAU", "materiau", "Matériau", "MATERIAL", "material")
-        longueur = _col_val(c, "LONGUEUR", "Longeur", "longueur", "Length", "length")
+        diam = diam_l[pos]
+        mat = mat_l[pos]
+        longueur = long_attrib_l[pos]
 
         diam_val = _safe_float(diam)
         long_val = _safe_float(longueur)
@@ -426,7 +508,8 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif",
             champs_absents.append("Diamètre")
         if not mat or pd.isna(mat) or str(mat).strip() == "":
             champs_absents.append("Matériau")
-        if (long_val is None or long_val <= 0) and (not c.geometry or c.geometry.length <= 0):
+        _g_orig = geoms_orig[pos] if pos < len(geoms_orig) else None
+        if (long_val is None or long_val <= 0) and (_g_orig is None or _g_orig.length <= 0):
             champs_absents.append("Longueur")
 
         if champs_absents:
@@ -440,7 +523,7 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif",
             })
 
         # D. Géométries invalides
-        if not c.geometry or c.geometry.is_empty or c.geometry.length < 0.1:
+        if _g_orig is None or _g_orig.is_empty or _g_orig.length < 0.1:
             anomalies["geometries_invalides"].append({
                 "id_conduite": cid,
                 "type": "geometrie_invalide",
@@ -456,11 +539,9 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif",
         #    Les colonnes PROFRADI/PROF_FE sont des PROFONDEURS : jamais
         #    comparées entre elles (cause des 1134 faux positifs).
         if u in valid_nodes and d in valid_nodes:
-            node_u = valid_nodes[u]
-            node_d = valid_nodes[d]
-            z_ngf_u = _colonnes_cote_ngf(node_u)
-            z_ngf_d = _colonnes_cote_ngf(node_d)
-            if _est_refoulement(c):
+            z_ngf_u = cotes_ngf.get(u)
+            z_ngf_d = cotes_ngf.get(d)
+            if refoulement_l[pos]:
                 pass  # refoulement : pas de pente gravitaire
             elif (z_ngf_u is not None and z_ngf_d is not None and long_m):
                 # N1 — cotes NGF explicites : pente certifiée
@@ -587,8 +668,8 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif",
         # PROFONDEURS de fil d'eau — jamais de pente, mais une variation
         # brutale d'enfouissement (>3 m) entre les deux bouts d'un tronçon
         # signale une rupture de continuité altimétrique du relevé.
-        prof_fe_am = _safe_float(_col_val(c, "PROF_FE_AM", "prof_fe_am", "PROFFEA"))
-        prof_fe_av = _safe_float(_col_val(c, "PROF_FE_AV", "prof_fe_av", "PROFFEAV"))
+        prof_fe_am = _safe_float(prof_am_l[pos])
+        prof_fe_av = _safe_float(prof_av_l[pos])
         if (prof_fe_am is not None and prof_fe_av is not None
                 and 0.05 <= prof_fe_am <= 10.0 and 0.05 <= prof_fe_av <= 10.0):
             ecart_pose = abs(prof_fe_av - prof_fe_am)
