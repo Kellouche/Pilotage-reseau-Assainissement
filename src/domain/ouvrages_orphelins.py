@@ -3,7 +3,7 @@
 Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
 Auteur : Dr Abdelhakim KELLOUCHE
 Date de création : 2026-04-20
-Date de modification : 2026-11-25 (cache mémoire + STRtree : ~1,3 s → ~50 ms/appel)
+Date de modification : 2026-11-27 (suppression du repli glob inter-réseaux : résolution du cache clusters restreinte au sidecar du gpkg et à sa version immuable SHA-256)
 Objet : Détection, isolement et traitement des tronçons et ouvrages orphelins
 ================================================================================
 """
@@ -73,14 +73,23 @@ def detecter_ouvrages_orphelins_proches(
         except Exception:
             pass
     if not cache_path.exists():
-        # Recherche fallback dans uploads/ si le fichier gpkg provient de la racine ou d'un projet uploadé
-        cands = list(Path("uploads").glob(f"**/*{gpkg_p.stem}*.clusters_cache.json"))
-        if not cands:
-            cands = list(Path("uploads").glob("**/*clusters_cache.json"))
-        if cands:
-            cache_path = cands[0]
-        else:
-            return {"cluster_id": cluster_id, "nb_ouvrages_trouves": 0, "ouvrages": []}
+        # AUCUN repli inter-réseaux : charger le cache d'un AUTRE GeoPackage
+        # (premier glob venu) reviendrait à détecter des ouvrages sur un réseau
+        # étranger — confusion de données inacceptable entre réseaux/projets.
+        # Le cluster est résolu uniquement depuis le sidecar du gpkg ou sa
+        # version immuable (empreinte SHA-256). Sinon : retour explicite.
+        logger.warning(
+            "detecter_ouvrages_orphelins_proches: clusters_cache introuvable pour %s "
+            "(ni sidecar « %s », ni version immuable SHA-256) — retour 0 ouvrage explicite.",
+            gpkg_p,
+            gpkg_p.with_suffix(".clusters_cache.json").name,
+        )
+        return {
+            "cluster_id": cluster_id,
+            "nb_ouvrages_trouves": 0,
+            "ouvrages": [],
+            "status": "cache_clusters_absent",
+        }
 
     # Entrée de cache pour ce réseau (invalidée si le cache disque change)
     try:
