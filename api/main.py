@@ -33,7 +33,7 @@ from api.models import Project
 from api import schemas, crud
 from api.core.security import require_role, TenantContext
 
-from api.routes import network, layers, aide, simulations, simulations_profil, simulations_contexte, simulations_scenarios, simulations_exports, simulations_consultation, sync, clusters, auth_profile, network_datasets, network_geo, qualite, qualite_scores, qualite_conduites, corrections, terrain, mnt, audit, auth, jobs, artifacts, licensing, admin, organization, apports, apports_read, apports_write, corrections_suggestions, garde_fou, aux_layers, extractions
+from api.routes import network, layers, aide, simulations, simulations_run, simulations_bassin, simulations_profil, simulations_contexte, simulations_scenarios, simulations_exports, simulations_consultation, sync, clusters, auth_profile, network_datasets, network_geo, qualite, qualite_scores, qualite_conduites, corrections, terrain, mnt, audit, auth, jobs, artifacts, licensing, admin, organization, apports, apports_read, apports_write, corrections_suggestions, garde_fou, aux_layers, extractions
 
 # ============================================================
 # LIFESPAN (démarrage/arrêt)
@@ -409,6 +409,8 @@ app.include_router(network_datasets.router, prefix="/api/v1", tags=["Réseau —
 app.include_router(network_geo.router, prefix="/api/v1", tags=["Réseau — geo"])
 app.include_router(network.router, prefix="/api/v1", tags=["Réseau"])
 app.include_router(simulations.router, prefix="/api/v1", tags=["Simulations"])
+app.include_router(simulations_run.router, prefix="/api/v1", tags=["Simulations"])
+app.include_router(simulations_bassin.router, prefix="/api/v1", tags=["Simulations"])
 app.include_router(simulations_profil.router, prefix="/api/v1", tags=["Simulations"])
 app.include_router(simulations_scenarios.router, prefix="/api/v1", tags=["Simulations"])
 app.include_router(simulations_exports.router, prefix="/api/v1", tags=["Simulations"])

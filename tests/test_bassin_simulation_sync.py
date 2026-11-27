@@ -13,6 +13,14 @@ import uuid
 import pytest
 from types import SimpleNamespace
 from api.routes.simulations import get_bassin_simulation, download_latest_inp
+
+def _lire_modules_js(nom_base: str) -> str:
+    """Lit le module JS et ses extraits (regle 600 lignes) concatene."""
+    dossier = Path("static/js/app")
+    fichiers = sorted(dossier.glob(nom_base + "*.js"))
+    return chr(10).join(f.read_text(encoding="utf-8") for f in fichiers)
+
+
 from api.database import SessionLocal
 from api.models import Organization, Project
 
@@ -91,7 +99,7 @@ def test_endpoint_simulation_par_bassin(ctx_bassin):
 
 def test_fermeture_automatique_modale_et_zoom_grande_echelle():
     """Vérifie que la modale se ferme automatiquement post-simulation et que le zoom cible la grande échelle."""
-    sim_ui_js = Path("static/js/app/simulation_ui.js").read_text(encoding="utf-8")
+    sim_ui_js = _lire_modules_js("simulation_ui")
     resultats_couches_js = Path("static/js/app/resultats_couches.js").read_text(encoding="utf-8")
     resultats_affichage_js = Path("static/js/app/resultats_affichage.js").read_text(encoding="utf-8")
 
@@ -119,7 +127,7 @@ def test_anti_cache_et_cache_busting():
 
 def test_bassin_non_simule_mention_et_masquage_legende():
     """Vérifie que pour un bassin non simulé, l'indicateur affiche '(non simulé)' et la légende est masquée."""
-    bassins_js = Path("static/js/app/bassins_selection.js").read_text(encoding="utf-8")
+    bassins_js = _lire_modules_js("bassins_selection")
     assert "(non simulé)" in bassins_js
     assert "legNonSim.style.display = 'none'" in bassins_js
 
@@ -128,7 +136,7 @@ def test_persistance_cochage_rejets_et_step():
     """Vérifie que les couches physiques sont désactivées lors de l'affichage des résultats de simulation (règle d'allègement)."""
     res_aff = Path("static/js/app/resultats_affichage.js").read_text(encoding="utf-8")
     res_act = Path("static/js/app/resultats_actions.js").read_text(encoding="utf-8")
-    bassin_sel = Path("static/js/app/bassins_selection.js").read_text(encoding="utf-8")
+    bassin_sel = _lire_modules_js("bassins_selection")
 
     assert "'f-rejets'" in res_aff
     assert "'f-step'" in res_aff
@@ -151,7 +159,7 @@ def test_zone_simulee_survol_garde_bleu_ciel():
     """Vérifie que le survol et la sortie de la zone simulée conservent le bleu ciel et évitent le marron."""
     couches_js = Path("static/js/app/resultats_couches.js").read_text(encoding="utf-8")
     det_js = Path("static/js/app/bassins_detection.js").read_text(encoding="utf-8")
-    sel_js = Path("static/js/app/bassins_selection.js").read_text(encoding="utf-8")
+    sel_js = _lire_modules_js("bassins_selection")
 
     # resultats_couches.js — handlers simples référencés (_simBassinHandlers)
     # car les écouteurs namespacés Leaflet ne se déclenchent pas sur les

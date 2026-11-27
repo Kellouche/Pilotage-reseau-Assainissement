@@ -16,7 +16,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 MODAL_HTML = (ROOT / "templates" / "partials" / "modal_simulation.html").read_text(encoding="utf-8")
-SIM_UI_JS = (ROOT / "static" / "js" / "app" / "simulation_ui.js").read_text(encoding="utf-8")
+SIM_UI_JS = chr(10).join(
+    f.read_text(encoding="utf-8")
+    for f in sorted((ROOT / "static" / "js" / "app").glob("simulation_ui*.js"))
+)
 RES_ACTIONS_JS = (ROOT / "static" / "js" / "app" / "resultats_actions.js").read_text(encoding="utf-8")
 RES_AFFICHAGE_JS = (ROOT / "static" / "js" / "app" / "resultats_affichage.js").read_text(encoding="utf-8")
 COMMON_JS = (ROOT / "static" / "js" / "app" / "common.js").read_text(encoding="utf-8")
@@ -24,7 +27,10 @@ ROUTES_APPORTS = "".join(
     (ROOT / "api" / "routes" / name).read_text(encoding="utf-8")
     for name in ("apports.py", "apports_read.py", "apports_write.py")
 )
-ROUTES_SIMS = (ROOT / "api" / "routes" / "simulations.py").read_text(encoding="utf-8")
+ROUTES_SIMS = chr(10).join(
+    f.read_text(encoding="utf-8")
+    for f in sorted((ROOT / "api" / "routes").glob("simulations*.py"))
+)
 
 
 # ---------------------------------------------------------------------------
