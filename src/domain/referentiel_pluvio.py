@@ -3,7 +3,7 @@
 Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
 Auteur : Dr Abdelhakim KELLOUCHE
 Date de création : 2026-04-20
-Date de modification : 2026-11-08
+Date de modification : 2026-11-26
 Objet : Référentiel pluviométrique (Montana, courbes IDF et pluies de projet)
 ================================================================================
 """
@@ -119,6 +119,44 @@ def calculer_intensite_montana(
     return round(i_mmh, 2)
 
 
+def _minutes_hhmm(temps: str) -> float:
+    """Convertit un horodatage 'HH:MM' (ou 'HH:MM:SS') en minutes."""
+    parts = str(temps).split(":")
+    minutes = float(parts[0]) * 60.0 + float(parts[1])
+    if len(parts) > 2:
+        minutes += float(parts[2]) / 60.0
+    return minutes
+
+
+def _integrale_hyetogramme_mm(hyeto: List[Tuple[str, float]]) -> float:
+    """Intégrale trapézoïdale de l'hyétogramme (mm) sur ses pas de temps."""
+    total = 0.0
+    for i in range(1, len(hyeto)):
+        dt_h = (_minutes_hhmm(hyeto[i][0]) - _minutes_hhmm(hyeto[i - 1][0])) / 60.0
+        if dt_h > 0:
+            total += (hyeto[i - 1][1] + hyeto[i][1]) / 2.0 * dt_h
+    return total
+
+
+def _normaliser_hyetogramme(
+    hyeto: List[Tuple[str, float]],
+    cible_mm: float,
+) -> List[Tuple[str, float]]:
+    """
+    Recale linéairement les intensités pour que l'intégrale de l'hyétogramme
+    vaille exactement ``cible_mm`` (hauteur cumulée de projet du référentiel).
+    La forme et le positionnement du pic sont conservés ; aucun effet si la
+    cible est nulle ou si l'aire brute est nulle.
+    """
+    if cible_mm <= 0:
+        return hyeto
+    aire = _integrale_hyetogramme_mm(hyeto)
+    if aire <= 0:
+        return hyeto
+    k = float(cible_mm) / aire
+    return [(t, round(v * k, 2)) for t, v in hyeto]
+
+
 def generer_hyetogramme_chicago(
     station_id: str,
     periode_retour: str = "T_10ans",
@@ -127,27 +165,36 @@ def generer_hyetogramme_chicago(
     r: float = 0.40
 ) -> List[Tuple[str, float]]:
     """
-    Génère un hyétogramme de projet synthétique Chicago centré conforme à la formule de Montana.
+    Génère un hyétogramme de projet synthétique Chicago centré.
+    Le pic est calé sur l'intensité de durée 60 min (i_60min_mmh du référentiel,
+    plus représentative d'une averse de projet que le i_max 15 min qui surestime
+    la hauteur cumulée) et l'ensemble est normalisé pour intégrer exactement la
+    hauteur cumulée de projet p_cumul_4h_mm du référentiel.
     r : coefficient d'asymétrie du pic (généralement 0.35 à 0.45 pour les averses orageuses en Algérie).
     """
     st = obtenir_station(station_id)
     if not st:
         st = obtenir_station("chlef_anrh_siege")
 
-    # Si la station possède déjà un profil explicite pré-calé pour T=10ans
-    if periode_retour == "T_10ans" and st and "hyetogrammes_chicago" in st:
-        pre_profil = st["hyetogrammes_chicago"].get("profil_10ans")
-        if pre_profil:
-            return [(item["temps"], float(item["intensite_mmh"])) for item in pre_profil]
-
-    # Génération analytique Chicago à partir des coefficients a et b
     cfg = st.get("coefficients_montana_uhbc_anrh", {}).get("parametres", {}) if st else {}
     params = cfg.get(periode_retour, {"a": 9.334, "b": 0.745})
     a = float(params.get("a", 9.334))
     b = float(params.get("b", 0.745))
+    # Hauteur cumulée de projet déclarée par le référentiel (p. ex. 42.8 mm T=10).
+    p_cible_mm = float(params.get("p_cumul_4h_mm") or 0.0)
 
-    # Intensité de pointe cible à tc = 15 min
-    i_max_cible = round(60.0 * a * (15.0 ** (-b)), 1)
+    # Si la station possède déjà un profil explicite pré-calé pour T=10ans
+    if periode_retour == "T_10ans" and st and "hyetogrammes_chicago" in st:
+        pre_profil = st["hyetogrammes_chicago"].get("profil_10ans")
+        if pre_profil:
+            hyeto = [(item["temps"], float(item["intensite_mmh"])) for item in pre_profil]
+            return _normaliser_hyetogramme(hyeto, p_cible_mm)
+
+    # Pic calé sur l'intensité 60 min : i_60min_mmh déclaré, sinon Montana à 60 min.
+    i_pic = float(params.get("i_60min_mmh") or 0.0)
+    if i_pic <= 0:
+        i_pic = 60.0 * a * (60.0 ** (-b))
+    i_max_cible = round(i_pic, 1)
 
     steps_count = int((duree_heures * 60) / pas_minutes)
     tp_min = duree_heures * 60.0 * r  # Temps d'occurrence du pic (ex: 96 min pour 4h à r=0.4)
@@ -167,7 +214,7 @@ def generer_hyetogramme_chicago(
 
         hyeto.append((h_str, val))
 
-    return hyeto
+    return _normaliser_hyetogramme(hyeto, p_cible_mm)
 
 
 def generer_scenarios_swmm_pour_station(station_id: str) -> Dict[str, Any]:
@@ -189,104 +236,110 @@ def generer_scenarios_swmm_pour_station(station_id: str) -> Dict[str, Any]:
     # Scénario 1 : Pluie Décennale T=10 ans (Standard Réglementaire ONA)
     p10 = cfg_montana.get("T_10ans", {"a": 9.334, "b": 0.745, "i_max_15min_mmh": 74.9, "p_cumul_4h_mm": 42.8})
     ts10 = generer_hyetogramme_chicago(station_id, "T_10ans", duree_heures=4.0, pas_minutes=15)
+    pic10 = round(max(v for _, v in ts10), 2)
     scenarios["pluie_decennale"] = {
         "nom": f"{st_nom} — Pluie Décennale (T = 10 ans) [Standard ONA]",
         "station": f"{st_nom} (Réf. ANRH {code_anrh})",
         "station_id": station_id,
         "periode_retour": "T = 10 ans (Décennale réglementaire)",
-        "intensite_max_defaut": float(p10.get("i_max_15min_mmh", 74.9)),
+        "intensite_max_defaut": pic10,
         "duree_heures": 4.0,
         "formule_montana": f"I(t) = {p10.get('a', 9.334)} · t^(-{p10.get('b', 0.745)}) (UHBC/ANRH, durée critique tc = 15 min)",
         "coefficients_montana": {"a": p10.get("a", 9.334), "b": p10.get("b", 0.745)},
         "hauteur_p24_mm": float(st.get("pluie_journaliere_gumbel_mm", {}).get("T_10ans", 56.0)),
         "hauteur_totale_mm": float(p10.get("p_cumul_4h_mm", 42.8)),
         "source": f"ANRH Antenne Chlef / UHBC Laboratoire Eau & Environnement (Code {code_anrh})",
-        "description": f"Pluie d'orage décennale réglementaire ONA selon les séries validées de la station {st_nom} (P24 = {st.get('pluie_journaliere_gumbel_mm', {}).get('T_10ans', 56.0)} mm, Imax = {p10.get('i_max_15min_mmh', 74.9)} mm/h).",
+        "description": f"Pluie d'orage décennale réglementaire ONA selon les séries validées de la station {st_nom} (P24 = {st.get('pluie_journaliere_gumbel_mm', {}).get('T_10ans', 56.0)} mm, Imax IDF-15min = {p10.get('i_max_15min_mmh', 74.9)} mm/h, pic hyétogramme = {pic10} mm/h).",
         "timeseries": ts10
     }
 
     # Scénario 2 : Pluie Cinquantennale T=50 ans (Crise Majeure / Inondations de surface)
     p50 = cfg_montana.get("T_50ans", {"a": 15.795, "b": 0.760, "i_max_15min_mmh": 120.0, "p_cumul_4h_mm": 67.5})
     ts50 = generer_hyetogramme_chicago(station_id, "T_50ans", duree_heures=4.0, pas_minutes=15)
+    pic50 = round(max(v for _, v in ts50), 2)
     scenarios["pluie_cinquantennale"] = {
         "nom": f"{st_nom} — Pluie Cinquantennale (T = 50 ans) [Crise Majeure]",
         "station": f"{st_nom} (Réf. ANRH {code_anrh})",
         "station_id": station_id,
         "periode_retour": "T = 50 ans (Cinquantennale)",
-        "intensite_max_defaut": float(p50.get("i_max_15min_mmh", 120.0)),
+        "intensite_max_defaut": pic50,
         "duree_heures": 4.0,
         "formule_montana": f"I(t) = {p50.get('a', 15.795)} · t^(-{p50.get('b', 0.760)})",
         "coefficients_montana": {"a": p50.get("a", 15.795), "b": p50.get("b", 0.760)},
         "hauteur_p24_mm": float(st.get("pluie_journaliere_gumbel_mm", {}).get("T_50ans", 81.0)),
         "hauteur_totale_mm": float(p50.get("p_cumul_4h_mm", 67.5)),
         "source": f"ANRH Chlef / Gumbel Extrêmes (Code {code_anrh})",
-        "description": f"Événement pluvieux exceptionnel cinquantennal simulant une crise d'inondation majeure (P24 = {st.get('pluie_journaliere_gumbel_mm', {}).get('T_50ans', 81.0)} mm, Imax = {p50.get('i_max_15min_mmh', 120.0)} mm/h).",
+        "description": f"Événement pluvieux exceptionnel cinquantennal simulant une crise d'inondation majeure (P24 = {st.get('pluie_journaliere_gumbel_mm', {}).get('T_50ans', 81.0)} mm, Imax IDF-15min = {p50.get('i_max_15min_mmh', 120.0)} mm/h, pic hyétogramme = {pic50} mm/h).",
         "timeseries": ts50
     }
 
     # Scénario 3 : Pluie Centennale T=100 ans (Crue Historique)
     p100 = cfg_montana.get("T_100ans", {"a": 19.338, "b": 0.764, "i_max_15min_mmh": 144.5, "p_cumul_4h_mm": 81.0})
     ts100 = generer_hyetogramme_chicago(station_id, "T_100ans", duree_heures=4.0, pas_minutes=15)
+    pic100 = round(max(v for _, v in ts100), 2)
     scenarios["pluie_centennale"] = {
         "nom": f"{st_nom} — Pluie Centennale (T = 100 ans) [Crue Historique]",
         "station": f"{st_nom} (Réf. ANRH {code_anrh})",
         "station_id": station_id,
         "periode_retour": "T = 100 ans (Centennale)",
-        "intensite_max_defaut": float(p100.get("i_max_15min_mmh", 144.5)),
+        "intensite_max_defaut": pic100,
         "duree_heures": 4.0,
         "formule_montana": f"I(t) = {p100.get('a', 19.338)} · t^(-{p100.get('b', 0.764)})",
         "coefficients_montana": {"a": p100.get("a", 19.338), "b": p100.get("b", 0.764)},
         "hauteur_p24_mm": float(st.get("pluie_journaliere_gumbel_mm", {}).get("T_100ans", 94.0)),
         "hauteur_totale_mm": float(p100.get("p_cumul_4h_mm", 81.0)),
         "source": f"ANRH Chlef / Gumbel-GEV Extrêmes (Code {code_anrh})",
-        "description": f"Pluie centennale de submersion totale (P24 = {st.get('pluie_journaliere_gumbel_mm', {}).get('T_100ans', 94.0)} mm, Imax = {p100.get('i_max_15min_mmh', 144.5)} mm/h).",
+        "description": f"Pluie centennale de submersion totale (P24 = {st.get('pluie_journaliere_gumbel_mm', {}).get('T_100ans', 94.0)} mm, Imax IDF-15min = {p100.get('i_max_15min_mmh', 144.5)} mm/h, pic hyétogramme = {pic100} mm/h).",
         "timeseries": ts100
     }
 
     # Scénario 4 : Pluie Biennale T=2 ans (Pluie Courante)
     p2 = cfg_montana.get("T_2ans", {"a": 5.250, "b": 0.720, "i_max_15min_mmh": 45.0, "p_cumul_4h_mm": 26.0})
     ts2 = generer_hyetogramme_chicago(station_id, "T_2ans", duree_heures=4.0, pas_minutes=15)
+    pic2 = round(max(v for _, v in ts2), 2)
     scenarios["pluie_biennale"] = {
         "nom": f"{st_nom} — Pluie Biennale (T = 2 ans) [Pluie Courante]",
         "station": f"{st_nom} (Réf. ANRH {code_anrh})",
         "station_id": station_id,
         "periode_retour": "T = 2 ans (Biennale)",
-        "intensite_max_defaut": float(p2.get("i_max_15min_mmh", 45.0)),
+        "intensite_max_defaut": pic2,
         "duree_heures": 4.0,
         "formule_montana": f"I(t) = {p2.get('a', 5.250)} · t^(-{p2.get('b', 0.720)})",
         "coefficients_montana": {"a": p2.get("a", 5.250), "b": p2.get("b", 0.720)},
         "hauteur_p24_mm": float(st.get("pluie_journaliere_gumbel_mm", {}).get("T_2ans", 34.0)),
         "hauteur_totale_mm": float(p2.get("p_cumul_4h_mm", 26.0)),
         "source": f"ANRH Chlef / Fréquentiel (Code {code_anrh})",
-        "description": f"Pluie biennale d'exploitation normale (P24 = {st.get('pluie_journaliere_gumbel_mm', {}).get('T_2ans', 34.0)} mm, Imax = {p2.get('i_max_15min_mmh', 45.0)} mm/h).",
+        "description": f"Pluie biennale d'exploitation normale (P24 = {st.get('pluie_journaliere_gumbel_mm', {}).get('T_2ans', 34.0)} mm, Imax IDF-15min = {p2.get('i_max_15min_mmh', 45.0)} mm/h, pic hyétogramme = {pic2} mm/h).",
         "timeseries": ts2
     }
 
     # Scénario 5 : Orage estival brutal méditerranéen (2h)
     p20 = cfg_montana.get("T_20ans", {"a": 11.823, "b": 0.752, "i_max_15min_mmh": 92.5, "p_cumul_4h_mm": 52.0})
+    ts_orage = _normaliser_hyetogramme([
+        ("00:00", 0.0),
+        ("00:10", 12.0),
+        ("00:20", 38.0),
+        ("00:30", float(p20.get("i_max_15min_mmh", 92.5))),
+        ("00:40", 55.0),
+        ("00:50", 18.0),
+        ("01:00", 4.0),
+        ("02:00", 0.0)
+    ], 45.0)
+    pic20 = round(max(v for _, v in ts_orage), 2)
     scenarios["pluie_orage_2h"] = {
-        "nom": f"{st_nom} — Orage d'Été Brutal Méditerranéen (2h — Imax = 92.5 mm/h)",
+        "nom": f"{st_nom} — Orage d'Été Brutal Méditerranéen (2h — Imax = {pic20} mm/h)",
         "station": f"{st_nom} (Réf. ANRH {code_anrh})",
         "station_id": station_id,
         "periode_retour": "T = 20 ans (Orage Convectif)",
-        "intensite_max_defaut": float(p20.get("i_max_15min_mmh", 92.5)),
+        "intensite_max_defaut": pic20,
         "duree_heures": 2.0,
         "formule_montana": f"Averse orageuse convective concentrée (a={p20.get('a', 11.823)}, b={p20.get('b', 0.752)})",
         "coefficients_montana": {"a": p20.get("a", 11.823), "b": p20.get("b", 0.752)},
         "hauteur_p24_mm": float(st.get("pluie_journaliere_gumbel_mm", {}).get("T_20ans", 66.5)),
         "hauteur_totale_mm": 45.0,
         "source": f"Données orages convectifs estivaux Chélif / ANRH (Code {code_anrh})",
-        "description": "Averse estivale brève et intense concentrée sur 60 minutes avec pic de crête à 92.5 mm/h.",
-        "timeseries": [
-            ("00:00", 0.0),
-            ("00:10", 12.0),
-            ("00:20", 38.0),
-            ("00:30", float(p20.get("i_max_15min_mmh", 92.5))),
-            ("00:40", 55.0),
-            ("00:50", 18.0),
-            ("01:00", 4.0),
-            ("02:00", 0.0)
-        ]
+        "description": f"Averse estivale brève et intense concentrée sur 60 minutes (Imax IDF-15min = {p20.get('i_max_15min_mmh', 92.5)} mm/h, pic hyétogramme = {pic20} mm/h, cumul = 45 mm).",
+        "timeseries": ts_orage
     }
 
     # Scénario 6 : Temps Sec Pur
@@ -312,7 +365,7 @@ def generer_scenarios_swmm_pour_station(station_id: str) -> Dict[str, Any]:
         "station": f"{st_nom} (Profil Personnalisé)",
         "station_id": station_id,
         "periode_retour": "Saisie Manuelle",
-        "intensite_max_defaut": float(p10.get("i_max_15min_mmh", 74.9)),
+        "intensite_max_defaut": pic10,
         "duree_heures": 4.0,
         "formule_montana": "Hyétogramme Chicago proportionnel à l'intensité de pointe spécifiée",
         "coefficients_montana": {"a": p10.get("a", 9.334), "b": p10.get("b", 0.745)},
