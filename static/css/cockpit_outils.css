@@ -1,0 +1,249 @@
+/**
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-11-27
+Date de modification : 2026-11-27
+Objet : Barre outils édition, contrôles Leaflet, infobulle, overlay chargement (extrait de static/css/cockpit.css)
+================================================================================
+*/
+
+/* En-tête de la barre d'outils et contrôle de repli */
+.toolbar-header-drag {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px 4px;
+    background: rgba(15, 23, 42, 0.6);
+    border-radius: 4px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    margin-bottom: 2px;
+}
+
+.toolbar-collapse-btn {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 0.72rem;
+    padding: 1px 4px;
+    border-radius: 3px;
+    transition: all 0.15s;
+}
+
+.toolbar-collapse-btn:hover {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.toolbar-buttons-container {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    transition: all 0.2s ease;
+}
+
+.edit-toolbar.collapsed .toolbar-buttons-container {
+    display: none;
+}
+
+.edit-toolbar.collapsed {
+    padding: 4px;
+}
+
+.edit-toolbar.collapsed .toolbar-header-drag {
+    margin-bottom: 0;
+    border-bottom: none;
+}
+
+.tool-btn {
+    width: 38px;
+    height: 38px;
+    background: #0f3460;
+    border: none;
+    border-radius: 6px;
+    color: #eee;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    font-size: 1.15em;
+}
+
+.tool-btn:hover {
+    background: #e94560;
+    transform: scale(1.05);
+}
+
+.tool-btn.active {
+    background: #e94560;
+    box-shadow: 0 0 10px #e94560;
+}
+
+.tool-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.tool-tip {
+    position: relative;
+}
+
+.tool-tip:hover::after {
+    content: attr(data-tip);
+    position: absolute;
+    right: calc(100% + 12px);
+    left: auto;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(15, 23, 42, 0.96);
+    color: #f8fafc;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    z-index: 3000;
+    border: 1px solid rgba(56, 189, 248, 0.5);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+}
+
+.tool-tip:hover::before {
+    content: '';
+    position: absolute;
+    right: calc(100% + 6px);
+    left: auto;
+    top: 50%;
+    transform: translateY(-50%);
+    border-width: 5px 0 5px 6px;
+    border-style: solid;
+    border-color: transparent transparent transparent rgba(56, 189, 248, 0.5);
+    z-index: 3001;
+    pointer-events: none;
+}
+
+#bassin-section {
+    display: none;
+    margin-top: 16px;
+}
+
+#bassin-section label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #aab;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: block;
+    margin-bottom: 6px;
+}
+
+#bassin-select {
+    width: 100%;
+    padding: 8px 10px;
+    background: #0f3460;
+    color: #eee;
+    border: 1px solid #2980b9;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+#bassin-select:hover, #bassin-select:focus {
+    border-color: #3498db;
+}
+
+#bassin-select optgroup, #sim-select-bassin optgroup {
+    background: #0f172a;
+    color: #38bdf8;
+    font-weight: 700;
+    font-size: 0.78rem;
+    padding: 4px 6px;
+}
+
+#bassin-select option, #sim-select-bassin option {
+    background: #16213e;
+    color: #f8fafc;
+    padding: 4px 6px;
+}
+
+#bassin-info {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #95a5a6;
+    line-height: 1.5;
+}
+
+/* Infobulle de survol pour la zone d'étude simulée */
+.sim-bassin-tooltip {
+    background: rgba(15, 23, 42, 0.96) !important;
+    border: 1px solid rgba(56, 189, 248, 0.5) !important;
+    border-radius: 8px !important;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.4) !important;
+    padding: 8px 12px !important;
+    color: #f8fafc !important;
+    pointer-events: none !important;
+    z-index: 1000 !important;
+}
+.sim-bassin-tooltip::before {
+    border-top-color: rgba(15, 23, 42, 0.96) !important;
+}
+.leaflet-tooltip, .sim-bassin-tooltip, .leaflet-tooltip * {
+    pointer-events: none !important;
+    user-select: none !important;
+}
+.leaflet-tooltip {
+    z-index: 1000 !important;
+}
+.leaflet-tooltip-pane {
+    z-index: 1000 !important;
+}
+.leaflet-popup-pane {
+    z-index: 1100 !important;
+}
+
+/* Overlay de chargement */
+#loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(4px);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 99999;
+    font-size: 1.1rem;
+    color: #fff;
+    cursor: wait;
+    user-select: none;
+    pointer-events: all;
+}
+
+.loading-content {
+    text-align: center;
+    background: rgba(30, 33, 62, 0.9);
+    padding: 30px;
+    border-radius: 10px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.5);
+}
+
+.spinner {
+    border: 4px solid rgba(255, 255, 255, 0.3);
+    border-top: 4px solid #3498db;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 20px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}

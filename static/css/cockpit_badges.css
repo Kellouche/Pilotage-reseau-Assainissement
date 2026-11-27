@@ -1,0 +1,139 @@
+/**
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-11-27
+Date de modification : 2026-11-27
+Objet : Badge instant T et modale garde-fou hydraulicien (extrait de static/css/cockpit.css)
+================================================================================
+*/
+
+/* ==========================================================================
+   BADGE D'INFORMATION : ÉTAT À L'INSTANT T DANS LE TIME SLIDER
+   ========================================================================== */
+
+/* Badge Player - État hydraulique à l'instant T */
+.player-instant-badge {
+    background: rgba(56, 189, 248, 0.15);
+    border: 1px solid #38bdf8;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-family: 'Inter', 'Plus Jakarta Sans', sans-serif;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #0369a1;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    user-select: none;
+    margin-right: 12px;
+}
+
+.player-instant-badge .badge-icon {
+    font-size: 0.9rem;
+    line-height: 1;
+}
+
+/* Cache le badge par défaut */
+.player-instant-badge.hidden {
+    display: none !important;
+}
+
+
+
+
+/* ==========================================================================
+   Modale Paramétrage Garde-fou hydraulicien (Agent 0)
+   ========================================================================== */
+.gf-section-titre {
+    font-weight: 700;
+    font-size: 0.78rem;
+    color: #cbd5e1;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.gf-section-titre i { color: #a78bfa; font-size: 0.72rem; }
+
+.gf-choix {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    padding: 10px 14px;
+    text-align: left;
+    cursor: pointer;
+    color: #e2e8f0;
+    transition: all 0.18s ease;
+    font-family: inherit;
+}
+.gf-choix:hover { background: rgba(167, 139, 250, 0.12); border-color: rgba(167, 139, 250, 0.45); }
+.gf-choix.actif {
+    background: rgba(124, 58, 237, 0.18);
+    border-color: #a78bfa;
+    box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.35), 0 4px 14px rgba(124, 58, 237, 0.2);
+}
+.gf-choix-titre { font-weight: 700; font-size: 0.84rem; margin-bottom: 3px; }
+.gf-choix-desc { font-size: 0.72rem; color: #94a3b8; line-height: 1.35; }
+.gf-choix.actif .gf-choix-desc { color: #c4b5fd; }
+
+.gf-check {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 0.8rem;
+    color: #e2e8f0;
+    cursor: pointer;
+    padding: 5px 8px;
+    border-radius: 7px;
+    transition: background 0.15s;
+}
+.gf-check:hover { background: rgba(255, 255, 255, 0.05); }
+.gf-check input[type="checkbox"] {
+    accent-color: #a78bfa;
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.gf-seuil-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 8px 4px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.gf-seuil-row:last-child { border-bottom: none; }
+.gf-seuil-info { flex: 1; min-width: 0; }
+.gf-seuil-label { font-size: 0.82rem; font-weight: 600; color: #e2e8f0; cursor: help; }
+.gf-seuil-justif { font-size: 0.7rem; color: #64748b; }
+.gf-seuil-input {
+    width: 110px;
+    flex-shrink: 0;
+    background: rgba(15, 23, 42, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 7px;
+    color: #f8fafc;
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 6px 10px;
+    text-align: right;
+}
+.gf-seuil-input:focus {
+    outline: none;
+    border-color: #a78bfa;
+    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.2);
+}
+.gf-seuil-input::-webkit-outer-spin-button,
+.gf-seuil-input::-webkit-inner-spin-button { opacity: 0.4; }
+
+#gf-btn-enregistrer:disabled,
+#gf-btn-reaudit:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    box-shadow: none;
+}
