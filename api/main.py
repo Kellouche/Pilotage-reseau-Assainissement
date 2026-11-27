@@ -33,7 +33,7 @@ from api.models import Project
 from api import schemas, crud
 from api.core.security import require_role, TenantContext
 
-from api.routes import network, simulations, simulations_profil, simulations_contexte, simulations_scenarios, simulations_exports, simulations_consultation, sync, clusters, qualite, qualite_scores, qualite_conduites, corrections, terrain, mnt, audit, auth, jobs, artifacts, licensing, admin, organization, apports, garde_fou, aux_layers, extractions
+from api.routes import network, simulations, simulations_profil, simulations_contexte, simulations_scenarios, simulations_exports, simulations_consultation, sync, clusters, network_datasets, network_geo, qualite, qualite_scores, qualite_conduites, corrections, terrain, mnt, audit, auth, jobs, artifacts, licensing, admin, organization, apports, garde_fou, aux_layers, extractions
 
 # ============================================================
 # LIFESPAN (démarrage/arrêt)
@@ -751,6 +751,8 @@ async def aide_doc_render(doc_path: str, request: Request, db=Depends(get_db)):
 # ============================================================
 
 app.include_router(auth.router, prefix="/api/v1", tags=["Authentification & Multi-Tenant"])
+app.include_router(network_datasets.router, prefix="/api/v1", tags=["Réseau — datasets"])
+app.include_router(network_geo.router, prefix="/api/v1", tags=["Réseau — geo"])
 app.include_router(network.router, prefix="/api/v1", tags=["Réseau"])
 app.include_router(simulations.router, prefix="/api/v1", tags=["Simulations"])
 app.include_router(simulations_profil.router, prefix="/api/v1", tags=["Simulations"])
