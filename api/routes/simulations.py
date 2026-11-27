@@ -243,4 +243,9 @@ from api.routes.simulations_bassin import (  # noqa: F401
 from api.services.simulation_service import (  # noqa: F401
     construire_reponse_simulation as _construire_reponse_simulation,
     executer_moteur_swmm as _executer_moteur_swmm,
+    generer_cle_cache_simulation as _generer_cle_cache_simulation,
+    get_cache_simulation_file as _get_cache_simulation_file,
+    charger_cache_simulation as _charger_cache_simulation,
+    sauvegarder_simulation as _sauvegarder_simulation,
+    charger_derniere_simulation_disque_ou_db as _charger_derniere_simulation_disque_ou_db,
 )
