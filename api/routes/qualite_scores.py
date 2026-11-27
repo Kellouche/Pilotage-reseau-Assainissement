@@ -1,0 +1,340 @@
+# -*- coding: utf-8 -*-
+"""
+================================================================================
+Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
+Auteur : Dr Abdelhakim KELLOUCHE
+Date de création : 2026-11-27
+Date de modification : 2026-11-27
+Objet : Endpoints scores/statistiques qualite, validation incrementale, export CSV et etat du cache (extraits de routes/qualite.py).
+================================================================================
+"""
+
+import csv
+import json
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, Optional
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session
+
+from api import crud
+from api.core.security import require_role, TenantContext
+from api.database import get_db
+from api.services.qualite_cache_service import (
+    _cache_qualite,
+    get_active_project_and_gpkg,
+    reinitialiser_cache_qualite,
+)
+from src.analyse_qualite_gpkg import analyser_qualite_gpkg
+
+router = APIRouter(prefix="/qualite", tags=["Qualité réseau — Scores & exports"])
+
+
+@router.get("/scores", response_model=Dict[str, Any])
+async def get_scores_qualite(
+    db: Session = Depends(get_db),
+    ctx: TenantContext = Depends(require_role("viewer"))
+):
+    """
+    Récupère les scores de qualité calculés.
+    """
+    global _cache_qualite
+
+    gpkg_target, project_name = get_active_project_and_gpkg(db, ctx)
+    if (_cache_qualite["rapport"] is None or
+        (gpkg_target and _cache_qualite.get("gpkg_path") != str(gpkg_target))):
+        if gpkg_target and gpkg_target.exists():
+            rapport = await asyncio.to_thread(analyser_qualite_gpkg, gpkg_target, project_name)
+            _cache_qualite["rapport"] = rapport
+            _cache_qualite["timestamp"] = datetime.now().timestamp()
+            _cache_qualite["gpkg_path"] = str(gpkg_target)
+        else:
+            raise HTTPException(
+                status_code=404,
+                detail="Aucun score de qualité disponible."
+            )
+
+    return _cache_qualite["rapport"]["scores_qualite"]
+
+
+@router.get("/statistiques", response_model=Dict[str, Any])
+async def get_statistiques_reseau(
+    db: Session = Depends(get_db),
+    ctx: TenantContext = Depends(require_role("viewer"))
+):
+    """
+    Récupère les statistiques globales du réseau.
+    """
+    global _cache_qualite
+
+    gpkg_target, project_name = get_active_project_and_gpkg(db, ctx)
+    if (_cache_qualite["rapport"] is None or
+        (gpkg_target and _cache_qualite.get("gpkg_path") != str(gpkg_target))):
+        if gpkg_target and gpkg_target.exists():
+            rapport = await asyncio.to_thread(analyser_qualite_gpkg, gpkg_target, project_name)
+            _cache_qualite["rapport"] = rapport
+            _cache_qualite["timestamp"] = datetime.now().timestamp()
+            _cache_qualite["gpkg_path"] = str(gpkg_target)
+        else:
+            raise HTTPException(
+                status_code=404,
+                detail="Aucune statistique disponible."
+            )
+
+    return _cache_qualite["rapport"]["statistiques_globales"]
+
+
+@router.post("/valider-incremental", response_model=Dict[str, Any])
+async def valider_incremental(
+    request: Dict[str, Any],
+    ctx: TenantContext = Depends(require_role("engineer"))
+):
+    """Validation incrémentale sur un sous-ensemble de conduites.
+
+    Corps attendu: {"ids_conduites": [1, 2, 3]}
+    """
+    ids = request.get("ids_conduites")
+    if not ids or not isinstance(ids, list):
+        raise HTTPException(status_code=400, detail="ids_conduites requis (liste d'entiers)")
+
+    try:
+        from src.qualite_reseau import QualiteReseau
+        analyseur = QualiteReseau()
+        try:
+            result = analyseur.valider_incremental([int(i) for i in ids])
+            return result
+        finally:
+            analyseur.fermer_connexion()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur validation incrémentale: {str(e)}")
+
+
+@router.get("/scores-bassins", response_model=Dict[str, Any])
+async def get_scores_qualite_par_bassin(
+    db: Session = Depends(get_db),
+    ctx: TenantContext = Depends(require_role("viewer"))
+):
+    """
+    Calcule les scores de qualité par bassin (cluster).
+    Agrège les anomalies par cluster et calcule un score par bassin.
+    """
+    global _cache_qualite
+
+    if (_cache_qualite["rapport"] is None or
+        "anomalies" not in _cache_qualite["rapport"]):
+        raise HTTPException(
+            status_code=404,
+            detail="Aucune analyse de qualité disponible. Lancez d'abord /qualite/analyse"
+        )
+
+    try:
+        from api import crud
+        from sqlalchemy import text
+
+        try:
+            # Récupérer tous les clusters avec leurs stats (filtré par organisation)
+            clusters = db.query(crud.Cluster).filter(crud.Cluster.org_id == ctx.org_id).all()
+
+            # Récupérer toutes les anomalies
+            anomalies = _cache_qualite["rapport"]["anomalies"]
+
+            # Aplatir toutes les anomalies avec leurs coordonnées
+            toutes_anomalies = []
+            for categorie, liste in anomalies.items():
+                for a in liste:
+                    a["categorie"] = categorie
+                    toutes_anomalies.append(a)
+
+            # Pour chaque cluster, compter les anomalies dans sa zone
+            scores_bassins = []
+            for cluster in clusters:
+                nb_anomalies = 0
+                nb_anomalies_par_categorie = {}
+                severite_counts = {"mineure": 0, "majeure": 0, "critique": 0}
+
+                # Compter les anomalies dont les coordonnées sont dans le cluster
+                # Pour l'instant, on utilise une approximation basée sur les IDs
+                # Une version plus précise utiliserait un point-in-polygon spatial
+                cluster_conduites = set()
+                if cluster.exutoire_noeud:
+                    try:
+                        import ast
+                        noeud = ast.literal_eval(cluster.exutoire_noeud)
+                        # Récupérer les conduites du cluster depuis le graphe
+                        from src.domain.graphe_reseau import _get_graph
+                        G = _get_graph()
+                        if noeud in G.nodes():
+                            # BFS depuis l'exutoire pour trouver toutes les conduites
+                            from collections import deque
+                            visites = set()
+                            file = deque([noeud])
+                            while file:
+                                n = file.popleft()
+                                if n in visites:
+                                    continue
+                                visites.add(n)
+                                for pred in G.predecessors(n):
+                                    if pred not in visites:
+                                        file.append(pred)
+                            # Récupérer les edge IDs
+                            for u, v, d in G.edges(visites, data=True):
+                                cid = d.get("conduit_id")
+                                if cid:
+                                    cluster_conduites.add(cid)
+                    except Exception:
+                        pass
+
+                # Compter les anomalies liées aux conduites de ce cluster
+                for a in toutes_anomalies:
+                    a_cid = a.get("id_conduite") or a.get("fid") or a.get("id_conduite1") or a.get("id_conduite2")
+                    if a_cid and str(a_cid) in cluster_conduites:
+                        nb_anomalies += 1
+                        cat = a.get("categorie", "inconnue")
+                        nb_anomalies_par_categorie[cat] = nb_anomalies_par_categorie.get(cat, 0) + 1
+                        sev = a.get("severite", "mineure")
+                        if sev in severite_counts:
+                            severite_counts[sev] += 1
+
+                # Calculer le score de qualité pour ce bassin
+                nb_conduites = cluster.nb_conduites or 1
+                score_bassin = max(0, 100 - (nb_anomalies / nb_conduites) * 100) if nb_conduites > 0 else 100
+
+                scores_bassins.append({
+                    "cluster_id": cluster.id,
+                    "nom_bassin": cluster.nom,
+                    "score_qualite": round(score_bassin, 1),
+                    "nb_conduites": nb_conduites,
+                    "nb_anomalies": nb_anomalies,
+                    "anomalies_par_categorie": nb_anomalies_par_categorie,
+                    "distribution_severite": severite_counts,
+                    "exutoire_type": cluster.exutoire_noeud
+                })
+
+            # Trier par score croissant (pires d'abord)
+            scores_bassins.sort(key=lambda x: x["score_qualite"])
+
+            return {
+                "date_analyse": _cache_qualite["rapport"]["date_analyse"],
+                "nb_bassins": len(scores_bassins),
+                "score_moyen": round(sum(b["score_qualite"] for b in scores_bassins) / len(scores_bassins), 1) if scores_bassins else 0,
+                "bassins": scores_bassins
+            }
+
+        finally:
+            db.close()
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erreur calcul scores par bassin: {str(e)}"
+        )
+
+
+@router.post("/export-csv")
+async def exporter_anomalies_csv(
+    background_tasks: BackgroundTasks,
+    ctx: TenantContext = Depends(require_role("viewer"))
+):
+    """
+    Exporte les anomalies détectées au format CSV.
+    L'export se fait en arrière-plan.
+    """
+    try:
+        # Créer le répertoire d'export s'il n'existe pas
+        export_dir = "exports"
+        os.makedirs(export_dir, exist_ok=True)
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        fichier_export = f"{export_dir}/anomalies_qualite_{timestamp}.csv"
+
+        # Lancer l'export en arrière-plan
+        background_tasks.add_task(_export_async, fichier_export)
+
+        return {
+            "message": "Export CSV lancé en arrière-plan",
+            "fichier_destination": fichier_export,
+            "status": "en_cours"
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erreur lors du lancement de l'export: {str(e)}"
+        )
+
+
+@router.get("/cache/status")
+async def get_cache_status(
+    ctx: TenantContext = Depends(require_role("viewer"))
+):
+    """
+    Vérifie l'état du cache d'analyse qualité.
+    """
+    global _cache_qualite
+
+    maintenant = datetime.now().timestamp()
+
+    if _cache_qualite["timestamp"] is None:
+        status_cache = "vide"
+        age_secondes = None
+    else:
+        age_secondes = maintenant - _cache_qualite["timestamp"]
+        if age_secondes < _cache_qualite["duree_validite"]:
+            status_cache = "valide"
+        else:
+            status_cache = "expire"
+
+    return {
+        "status_cache": status_cache,
+        "age_cache_secondes": age_secondes,
+        "duree_validite_secondes": _cache_qualite["duree_validite"],
+        "derniere_mise_a_jour": datetime.fromtimestamp(_cache_qualite["timestamp"]).isoformat() if _cache_qualite["timestamp"] else None,
+        "analyse_disponible": _cache_qualite["rapport"] is not None
+    }
+
+
+@router.delete("/cache")
+async def clear_cache(
+    ctx: TenantContext = Depends(require_role("admin"))
+):
+    """
+    Vide le cache d'analyse qualité.
+    """
+    reinitialiser_cache_qualite()
+    return {"message": "Cache d'analyse qualité vidé"}
+
+
+# ---------------------------------------------------------------------------
+# Endpoints de correction directe des anomalies (Lot 4 - Actions directes)
+# ---------------------------------------------------------------------------
+
+
+async def _export_async(fichier_destination: str):
+    """Fonction d'export asynchrone au format CSV."""
+    try:
+        global _cache_qualite
+
+        if _cache_qualite["rapport"] is None:
+            print("Aucun rapport disponible pour l'export")
+            return
+
+        rapport = _cache_qualite["rapport"]
+        with open(fichier_destination, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["categorie", "id_conduite", "severite", "description", "latitude", "longitude"])
+            for cat, items in rapport.get("anomalies", {}).items():
+                for item in items:
+                    writer.writerow([
+                        cat,
+                        item.get("id_conduite", ""),
+                        item.get("severite", ""),
+                        item.get("description", ""),
+                        item.get("latitude", ""),
+                        item.get("longitude", "")
+                    ])
+
+        print(f"Export CSV termine: {fichier_destination}")
+
+    except Exception as e:
+        print(f"Erreur lors de l'export CSV: {e}")
