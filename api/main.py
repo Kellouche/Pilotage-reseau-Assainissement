@@ -33,7 +33,7 @@ from api.models import Project
 from api import schemas, crud
 from api.core.security import require_role, TenantContext
 
-from api.routes import network, simulations, simulations_profil, simulations_contexte, simulations_scenarios, simulations_exports, simulations_consultation, sync, clusters, network_datasets, network_geo, qualite, qualite_scores, qualite_conduites, corrections, terrain, mnt, audit, auth, jobs, artifacts, licensing, admin, organization, apports, garde_fou, aux_layers, extractions
+from api.routes import network, simulations, simulations_profil, simulations_contexte, simulations_scenarios, simulations_exports, simulations_consultation, sync, clusters, network_datasets, network_geo, qualite, qualite_scores, qualite_conduites, corrections, terrain, mnt, audit, auth, jobs, artifacts, licensing, admin, organization, apports, apports_read, apports_write, garde_fou, aux_layers, extractions
 
 # ============================================================
 # LIFESPAN (démarrage/arrêt)
@@ -774,6 +774,8 @@ app.include_router(licensing.router, prefix="/api/v1", tags=["Licences & Factura
 app.include_router(admin.router, prefix="/api/v1", tags=["Console Opérateur SuperAdmin"])
 app.include_router(organization.router, prefix="/api/v1", tags=["Gestion d'Organisation & Équipe"])
 app.include_router(apports.router, prefix="/api/v1", tags=["Apports de temps sec (DWF)"])
+app.include_router(apports_read.router, prefix="/api/v1", tags=["Apports DWF — lecture"])
+app.include_router(apports_write.router, prefix="/api/v1", tags=["Apports DWF — écriture"])
 app.include_router(garde_fou.router, prefix="/api/v1", tags=["Garde-fou hydraulicien"])
 app.include_router(aux_layers.router, prefix="/api/v1", tags=["Couches SIG satellite"])
 app.include_router(extractions.router, prefix="/api/v1", tags=["Extraction par pochoir"])
