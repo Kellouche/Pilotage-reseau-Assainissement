@@ -3,7 +3,7 @@
 Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
 Auteur : Dr Abdelhakim KELLOUCHE
 Date de création : 2026-04-20
-Date de modification : 2026-11-08
+Date de modification : 2026-11-27 (alignement test survol zone simulée sur le découpage resultats_couches.js → resultats_couches_zone.js)
 Objet : Tests automatisés de synchronisation de la simulation par bassin et non-duplication des bandeaux
 ================================================================================
 """
@@ -157,7 +157,9 @@ def test_allegement_panneau_lateral_sans_pave_bassin_info():
 
 def test_zone_simulee_survol_garde_bleu_ciel():
     """Vérifie que le survol et la sortie de la zone simulée conservent le bleu ciel et évitent le marron."""
-    couches_js = Path("static/js/app/resultats_couches.js").read_text(encoding="utf-8")
+    # Après découpage 600 lignes (bbb4d98), les handlers de survol vivent dans
+    # resultats_couches_zone.js : lecture concaténée des deux modules frères.
+    couches_js = _lire_modules_js("resultats_couches")
     det_js = Path("static/js/app/bassins_detection.js").read_text(encoding="utf-8")
     sel_js = _lire_modules_js("bassins_selection")
 
