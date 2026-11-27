@@ -149,5 +149,5 @@ def test_async_pas_routage_sec_defaut_quand_absent():
     # Bug trouvé en validation réelle Celery : params.get("pas_routage_sec")
     # renvoyait None → crash f"{None:02d}" dans sections_inp. Le défaut
     # moteur (5 s) doit s'appliquer quand le paramètre est absent.
-    service = (ROOT / "api" / "services" / "simulation_service.py").read_text(encoding="utf-8")
+    service = (ROOT / "api" / "services" / "simulation_execution_service.py").read_text(encoding="utf-8")
     assert 'params.get("pas_routage_sec")\n                         if params.get("pas_routage_sec") is not None else 5' in service
