@@ -449,3 +449,15 @@ def logout(response: Response):
     return {"status": "ok", "message": "Déconnexion réussie."}
 
 
+
+# ── Façade de compatibilité : endpoints profil & clés API déplacés ──────────
+# dans api/routes/auth_profile.py (découpage règle des 600 lignes). Les tests
+# et imports historiques depuis api.routes.auth continuent de fonctionner.
+from api.routes.auth_profile import (  # noqa: E402,F401
+    update_user_profile,
+    change_user_password,
+    get_current_user_profile,
+    list_api_keys,
+    create_new_api_key,
+    revoke_api_key,
+)

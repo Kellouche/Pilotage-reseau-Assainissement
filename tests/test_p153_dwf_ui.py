@@ -20,7 +20,10 @@ SIM_UI_JS = (ROOT / "static" / "js" / "app" / "simulation_ui.js").read_text(enco
 RES_ACTIONS_JS = (ROOT / "static" / "js" / "app" / "resultats_actions.js").read_text(encoding="utf-8")
 RES_AFFICHAGE_JS = (ROOT / "static" / "js" / "app" / "resultats_affichage.js").read_text(encoding="utf-8")
 COMMON_JS = (ROOT / "static" / "js" / "app" / "common.js").read_text(encoding="utf-8")
-ROUTES_APPORTS = (ROOT / "api" / "routes" / "apports.py").read_text(encoding="utf-8")
+ROUTES_APPORTS = "".join(
+    (ROOT / "api" / "routes" / name).read_text(encoding="utf-8")
+    for name in ("apports.py", "apports_read.py", "apports_write.py")
+)
 ROUTES_SIMS = (ROOT / "api" / "routes" / "simulations.py").read_text(encoding="utf-8")
 
 
