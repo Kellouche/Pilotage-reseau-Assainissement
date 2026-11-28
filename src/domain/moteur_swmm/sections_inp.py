@@ -4,7 +4,7 @@
 Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
 Auteur : Dr Abdelhakim KELLOUCHE
 Date de création : 2026-04-20
-Date de modification : 2026-11-08
+Date de modification : 2026-11-27
 Objet : Génération textuelle des blocs et sections de modélisation du fichier .INP
 ================================================================================
 """
@@ -18,6 +18,15 @@ import geopandas as gpd
 
 from src.domain.moteur_swmm.constants import _clean_node_id
 from src.domain.moteur_swmm.assainissement_topologique import _resoudre_altimetrie_noeuds
+from src.domain.moteur_swmm.sections_inp_etapes import (
+    _ecrire_ouvrages_speciaux, _ecrire_raccordements_orphelins,
+    _generer_lignes_conduits, _resoudre_conduits_topologiques,
+)
+from src.domain.moteur_swmm.sections_inp_etapes_suite import (
+    _appliquer_intensite_max, _calculer_pas_raingage, _construire_meta_inp,
+    _ecrire_apports_dwf, _ecrire_conduits_frontieres, _ecrire_coordinates,
+    _ecrire_polygones_et_report, _finaliser_meta_inp, _lignes_entete_inp,
+)
 
 logger = logging.getLogger("swmm_platform.moteur_swmm.sections_inp")
 
@@ -102,58 +111,14 @@ def generer_lignes_sections_inp(
     end_time_str = f"{h_end:02d}:{m_end:02d}:00"
     routing_step_str = f"00:00:{pas_routage_sec:02d}"
 
-    lines = [
-        "[TITLE]",
-        ";; SWMM Platform SaaS - Simulation Hydrodynamique Native 5.2",
-        f";; Scénario : {scen['nom']}",
-        f";; Durée : {duree_sim} heures | Pas de routage : {pas_routage_sec}s",
-        *([f";; Altimétrie : terrain IDW — couche {altimetrie_meta.get('layer_nom') or altimetrie_meta.get('layer_id')}, "
-           f"résolution {altimetrie_meta.get('resolution_m')} m, "
-           f"artefact sha {str(altimetrie_meta.get('gpkg_sha256') or '')[:8]}… "
-           f"(cotes estimées — ≠ mesures radier)"
-          ] if altimetrie_meta else []),
-        "",
-        "[OPTIONS]",
-        "FLOW_UNITS          CMS",
-        "INFILTRATION        HORTON",
-        "FLOW_ROUTING        DYNWAVE",
-        "START_DATE          01/01/2026",
-        "START_TIME          00:00:00",
-        "REPORT_START_DATE   01/01/2026",
-        "REPORT_START_TIME   00:00:00",
-        f"END_DATE            01/01/2026",
-        f"END_TIME            {end_time_str}",
-        "REPORT_STEP         00:01:00",
-        "WET_STEP            00:05:00",
-        "DRY_STEP            01:00:00",
-        f"ROUTING_STEP        {routing_step_str}",
-        "ALLOW_PONDING       NO",
-        "INERTIAL_DAMPING    PARTIAL",
-        "VARIABLE_STEP       0.75",
-        "LENGTHENING_STEP    0",
-        "MIN_SURFAREA        1.167",
-        "NORMAL_FLOW_LIMITED BOTH",
-        "FORCE_MAIN_EQUATION H-W",
-        "LINK_OFFSETS        DEPTH",
-        "MIN_SLOPE           0",
-        "MAX_TRIALS          8",
-        "HEAD_TOLERANCE      0.0015",
-        "SYS_FLOW_TOL        5",
-        "LAT_FLOW_TOL        5",
-        "MINIMUM_STEP        0.5",
-        "THREADS             1",
-        "",
-        "[EVAPORATION]",
-        "CONSTANT 0.0",
-        "DRY_ONLY NO",
-        "",
-        "[RAINGAGES]",
-        ";;Name           Format    Interval SCF      Source",
-        "RG1              INTENSITY 0:05     1.0      TIMESERIES TS_SCENARIO",
-        "",
-        "[TIMESERIES]",
-        ";;Name           Date       Time       Value",
-    ]
+    lines = _lignes_entete_inp({
+        "altimetrie_meta": altimetrie_meta,
+        "duree_sim": duree_sim,
+        "end_time_str": end_time_str,
+        "pas_routage_sec": pas_routage_sec,
+        "routing_step_str": routing_step_str,
+        "scen": scen,
+    })
 
     ts_base = scen.get("timeseries", [("00:00", 0.0), ("04:00", 0.0)])
     max_base = max((v for _, v in ts_base), default=scen.get("intensite_max_defaut", 62.0))
@@ -163,31 +128,13 @@ def generer_lignes_sections_inp(
     # Ne PAS le rescaler — utiliser tel quel.
     is_bms = bool(scen.get("bms_metadata", {}).get("is_bms"))
 
-    if intensite_max_mmh is not None and intensite_max_mmh >= 0.0 and not is_bms:
-        active_i_max = round(float(intensite_max_mmh), 2)
-        if max_base > 0:
-            scale_factor = active_i_max / max_base
-            effective_timeseries = [(t_str, round(val * scale_factor, 2)) for t_str, val in ts_base]
-        else:
-            if active_i_max > 0:
-                effective_timeseries = [
-                    ("00:00", 0.0),
-                    ("00:15", round(active_i_max * 0.10, 2)),
-                    ("00:30", round(active_i_max * 0.25, 2)),
-                    ("00:45", round(active_i_max * 0.60, 2)),
-                    ("01:00", round(active_i_max, 2)),
-                    ("01:15", round(active_i_max * 0.50, 2)),
-                    ("01:30", round(active_i_max * 0.22, 2)),
-                    ("01:45", round(active_i_max * 0.10, 2)),
-                    ("02:00", round(active_i_max * 0.03, 2)),
-                    ("03:00", 0.0),
-                    ("04:00", 0.0),
-                ]
-            else:
-                effective_timeseries = [("00:00", 0.0), ("04:00", 0.0)]
-    else:
-        active_i_max = round(float(scen.get("intensite_max_defaut", max_base or 62.0)), 2)
-        effective_timeseries = [(t_str, float(val)) for t_str, val in ts_base]
+    effective_timeseries, active_i_max = _appliquer_intensite_max({
+        "intensite_max_mmh": intensite_max_mmh,
+        "is_bms": is_bms,
+        "max_base": max_base,
+        "scen": scen,
+        "ts_base": ts_base,
+    })
 
     # Intervalle RAINGAGES : pour le format INTENSITY, SWMM intègre chaque
     # valeur de la série sur une durée égale à ce champ. Il doit donc
@@ -195,30 +142,10 @@ def generer_lignes_sections_inp(
     # 15 min), sinon la pluie appliquée est diluée/ concentrée (bug constaté :
     # 0:05 codé en dur → ~1/3 de la pluie prévue dans le .rpt).
     interval_raingage = "0:15"
-    try:
-        def _parse_t_min(t_str: str) -> float:
-            parts = t_str.split(":")
-            minutes = float(parts[0]) * 60.0 + float(parts[1])
-            if len(parts) > 2:
-                minutes += float(parts[2]) / 60.0
-            return minutes
-
-        ts_triee = sorted(
-            effective_timeseries, key=lambda tv: _parse_t_min(tv[0])
-        )
-        deltas = [
-            _parse_t_min(ts_triee[i][0]) - _parse_t_min(ts_triee[i - 1][0])
-            for i in range(1, len(ts_triee))
-        ]
-        deltas_pos = [d for d in deltas if d > 0]
-        if deltas_pos:
-            # Pas modal : le pas de sondage dominant de la série. Plus robuste
-            # qu'un min() aux séries irrégulières (ex. queue à 60 min).
-            pas_min = Counter(deltas_pos).most_common(1)[0][0]
-            h_i, m_i = divmod(int(round(pas_min)), 60)
-            interval_raingage = f"{h_i}:{m_i:02d}"
-    except Exception:
-        pass
+    interval_raingage = _calculer_pas_raingage({
+        "effective_timeseries": effective_timeseries,
+        "lines": lines,
+    })
     for idx, ln in enumerate(lines):
         if ln.startswith("RG1"):
             lines[idx] = (
@@ -322,80 +249,17 @@ def generer_lignes_sections_inp(
     downstream_nodes = set()
     conduits_resolus: List[Dict[str, Any]] = []
 
-    for idx, c in canalisations.iterrows():
-        cid = f"C_{idx+1}"
-
-        pt_start, pt_end = None, None
-        geom = c.geometry if hasattr(c, "geometry") else None
-        if geom is not None and not geom.is_empty:
-            try:
-                if geom.geom_type == "LineString":
-                    coords = list(geom.coords)
-                    pt_start = (float(coords[0][0]), float(coords[0][1]))
-                    pt_end = (float(coords[-1][0]), float(coords[-1][1]))
-                elif geom.geom_type == "MultiLineString" and len(geom.geoms) > 0:
-                    c_first = list(geom.geoms[0].coords)
-                    c_last = list(geom.geoms[-1].coords)
-                    pt_start = (float(c_first[0][0]), float(c_first[0][1]))
-                    pt_end = (float(c_last[-1][0]), float(c_last[-1][1]))
-            except Exception:
-                pass
-
-        # Résolution canonique : ID -> alias (RJ<n>) -> snap <= 0.50 m.
-        # Le snap n'est jamais tenté quand l'ID est présent et valide.
-        res_u = resolveur.resoudre(c.get("ID_AMONT"), pt_start)
-        res_d = resolveur.resoudre(c.get("ID_AVAL"), pt_end)
-
-        for ext, res in (("amont", res_u), ("aval", res_d)):
-            if res.provenance == PROV_SNAP and res.noeud:
-                raccordements_spatiaux.append({
-                    "cid": cid, "extremite": ext, "noeud": res.noeud,
-                    "distance_m": round(res.distance_m, 3), "provenance": "snap"})
-            elif res.provenance == PROV_ALIAS and res.noeud:
-                raccordements_spatiaux.append({
-                    "cid": cid, "extremite": ext, "noeud": res.noeud,
-                    "distance_m": 0.0, "provenance": "alias"})
-            elif res.provenance == PROV_ALIAS_AUTO and res.noeud:
-                raccordements_spatiaux.append({
-                    "cid": cid, "extremite": ext, "noeud": res.noeud,
-                    "distance_m": round(res.distance_m, 3),
-                    "provenance": "alias_auto"})
-
-        # Filet de sécurité : nœud spatial à la coordonnée réelle
-        # (uniquement si ni ID/alias ni snap n'ont résolu l'extrémité).
-        u_node = res_u.noeud
-        if not u_node and pt_start:
-            u_node = f"N_{cid}_U"
-            coord_noeuds[u_node] = pt_start
-            noeuds_spatiaux_crees[u_node] = pt_start
-
-        d_node = res_d.noeud
-        if not d_node and pt_end:
-            d_node = f"N_{cid}_D"
-            coord_noeuds[d_node] = pt_end
-            noeuds_spatiaux_crees[d_node] = pt_end
-
-        if u_node and d_node and u_node == d_node:
-            d_node = f"N_{cid}_D"
-            if pt_end:
-                coord_noeuds[d_node] = pt_end
-                noeuds_spatiaux_crees[d_node] = pt_end
-
-        if u_node and d_node:
-            conduit_nodes.add(u_node)
-            upstream_nodes.add(u_node)
-            conduit_nodes.add(d_node)
-            downstream_nodes.add(d_node)
-
-        conduits_resolus.append({
-            "idx": idx,
-            "cid": cid,
-            "u_node": u_node,
-            "d_node": d_node,
-            "row": c,
-            "pt_start": pt_start,
-            "pt_end": pt_end,
-        })
+    _resoudre_conduits_topologiques({
+        "canalisations": canalisations,
+        "conduit_nodes": conduit_nodes,
+        "conduits_resolus": conduits_resolus,
+        "coord_noeuds": coord_noeuds,
+        "downstream_nodes": downstream_nodes,
+        "noeuds_spatiaux_crees": noeuds_spatiaux_crees,
+        "raccordements_spatiaux": raccordements_spatiaux,
+        "resolveur": resolveur,
+        "upstream_nodes": upstream_nodes,
+    })
 
     outfall_demande = outfall_code
     noeuds_conduits = upstream_nodes | downstream_nodes
@@ -485,123 +349,34 @@ def generer_lignes_sections_inp(
 
     racc_orph_valides = []
     seen_outfall_names = {actual_outfall_name}
-    if raccordements_orphelins:
-        for ro_idx, ro in enumerate(raccordements_orphelins):
-            raw_reg_id = _clean_node_id(ro.get("regard_proche_id"))
-            ouv_id = _clean_node_id(ro.get("ouvrage_id") or ro.get("id") or f"orph_{ro_idx+1}") or f"orph_{ro_idx+1}"
-            reg_id = raw_reg_id
-            regard_valide = False
-
-            if reg_id and reg_id in clean_target_nodes and reg_id not in seen_outfall_names:
-                regard_valide = True
-            elif len(regards) > 0:
-                o_pt = ro.get("ouvrage_coord_wgs84") or ro.get("regard_coord_wgs84")
-                if o_pt and len(o_pt) == 2:
-                    try:
-                        from shapely.geometry import Point
-                        import pyproj
-                        proj_to_utm = pyproj.Transformer.from_crs("EPSG:4326", "EPSG:32631", always_xy=True).transform
-                        pt_m = Point(proj_to_utm(float(o_pt[1]), float(o_pt[0])))
-                        regards_bassin = regards[regards["Code"].apply(_clean_node_id).isin(clean_target_nodes)]
-                        if not regards_bassin.empty:
-                            dists_r = regards_bassin.geometry.distance(pt_m)
-                            min_dist = float(dists_r.min())
-                            if min_dist <= 45.0:
-                                min_idx = dists_r.idxmin()
-                                cand_reg = _clean_node_id(regards_bassin.loc[min_idx].get("Code"), fallback=raw_reg_id)
-                                if cand_reg and cand_reg in clean_target_nodes and cand_reg not in seen_outfall_names:
-                                    reg_id = cand_reg
-                                    regard_valide = True
-                                    logger.info(f"Ouvrage orphelin {ouv_id} réassocié au regard {reg_id} ({min_dist:.1f} m)")
-                    except Exception as e_remap:
-                        logger.warning(f"Contrôle proximité {ouv_id}: {e_remap}")
-
-            if not regard_valide or not reg_id or reg_id in seen_outfall_names:
-                continue
-
-            cand_out_name = f"OUT_{ouv_id}"
-            if cand_out_name in seen_outfall_names:
-                cand_out_name = f"OUT_{ouv_id}_{ro_idx+1}"
-            out_orph_name = cand_out_name
-            seen_outfall_names.add(out_orph_name)
-
-            z_reg = node_elevs.get(reg_id, 100.0)
-            z_out_orph = round(z_reg - 0.20, 3)
-            lines.append(f"{out_orph_name:<16} {z_out_orph:<10.3f} FREE                        NO")
-            racc_orph_valides.append((ro, out_orph_name, reg_id, z_out_orph, ouv_id, ro_idx + 1))
-
-    # Exutoires frontières : chaque sink résiduel du sous-réseau tronqué
-    # déverse librement vers un exutoire dédié — sinon ce nœud, privé de
-    # toute issue, produit une inondation artificielle garantie.
-    reg_ids_orphelins = {item[2] for item in racc_orph_valides}
-    exutoires_frontiere_info = []
-    for _sink in sinks_frontiere:
-        if _sink in reg_ids_orphelins:
-            continue
-        _z_sink = node_elevs.get(_sink, 100.0)
-        _out_bnd = f"OUT_BND_{_sink}"
-        if _out_bnd in seen_outfall_names:
-            _out_bnd = f"OUT_BND_{_sink}_{len(exutoires_frontiere_info) + 1}"
-        seen_outfall_names.add(_out_bnd)
-        _z_out_bnd = round(_z_sink - 0.05, 3)
-        lines.append(f"{_out_bnd:<16} {_z_out_bnd:<10.3f} FREE                        NO")
-        _inlets_sink = [c for _, c in canalisations.iterrows()
-                        if _clean_node_id(c.get("ID_AVAL")) == _sink]
-        _d_sink_mm = max([float(c.get("DIAMETRE", 600)) for c in _inlets_sink] or [600.0])
-        exutoires_frontiere_info.append({
-            "node": _sink, "outfall": _out_bnd,
-            "elev_node": _z_sink, "diam_mm": _d_sink_mm,
-        })
+    exutoires_frontiere_info = _ecrire_raccordements_orphelins({
+        "canalisations": canalisations,
+        "clean_target_nodes": clean_target_nodes,
+        "lines": lines,
+        "node_elevs": node_elevs,
+        "racc_orph_valides": racc_orph_valides,
+        "raccordements_orphelins": raccordements_orphelins,
+        "regards": regards,
+        "seen_outfall_names": seen_outfall_names,
+        "sinks_frontiere": sinks_frontiere,
+    })
     # Déversoirs d'orage (DVO) issus d'Ouvrages_Speciaux (Chantier 1.5)
     weir_lines = []
     weir_xsec_lines: List[str] = []
     deversoirs_traites = []
-    if ouvrages_speciaux is not None and not ouvrages_speciaux.empty:
-        import unicodedata
-        for o_idx, ouv in ouvrages_speciaux.iterrows():
-            raw_t = str(ouv.get("TYPEOUVR") or ouv.get("Type") or "")
-            norm_t = "".join(ch for ch in unicodedata.normalize("NFD", raw_t) if unicodedata.category(ch) != "Mn").lower()
-            if "deversoir" in norm_t or "dvo" in norm_t:
-                wid = f"W_{_clean_node_id(ouv.get('Code'), fallback=f'DVO_{o_idx+1}')}"
-                o_pt = None
-                if hasattr(ouv, "geometry") and ouv.geometry is not None and not ouv.geometry.is_empty:
-                    o_pt = (float(ouv.geometry.x), float(ouv.geometry.y))
-
-                u_weir = None
-                if o_pt and tree_noeuds is not None:
-                    d_w, i_w = tree_noeuds.query(o_pt)
-                    if d_w <= 45.0:
-                        u_weir = noeuds_connus_ids[i_w]
-
-                if u_weir and u_weir in conduit_nodes:
-                    w_out = f"OUT_{wid}"
-                    if w_out in seen_outfall_names:
-                        w_out = f"OUT_{wid}_{o_idx+1}"
-                    seen_outfall_names.add(w_out)
-                    z_reg = node_elevs.get(u_weir, 100.0)
-                    z_w_out = round(z_reg - 0.20, 3)
-                    lines.append(f"{w_out:<16} {z_w_out:<10.3f} FREE                        NO")
-                    h_seuil_raw = ouv.get("H_de_Seuil") or ouv.get("loSeuil")
-                    h_seuil_defaut = True
-                    try:
-                        h_seuil = float(h_seuil_raw) if pd.notna(h_seuil_raw) and float(h_seuil_raw) > 0 else 0.50
-                        h_seuil_defaut = not (pd.notna(h_seuil_raw) and float(h_seuil_raw) > 0)
-                    except Exception:
-                        h_seuil = 0.50
-                    # Largeur de seuil : LaSeuil/loSeuil si renseigné, sinon 1.00 m (hypothèse)
-                    la_seuil_raw = ouv.get("LaSeuil") or ouv.get("loSeuil")
-                    largeur_defaut = True
-                    try:
-                        largeur_seuil = float(la_seuil_raw) if pd.notna(la_seuil_raw) and float(la_seuil_raw) > 0 else 1.00
-                        largeur_defaut = not (pd.notna(la_seuil_raw) and float(la_seuil_raw) > 0)
-                    except Exception:
-                        largeur_seuil = 1.00
-                    weir_lines.append(f"{wid:<16} {u_weir:<16} {w_out:<16} TRANSVERSE   {h_seuil:<10.3f} 1.800      NO       0        0.000    NO")
-                    # Section [XSECTIONS] obligatoire pour tout lien [WEIRS] :
-                    # Geom1 = hauteur de l'ouverture (2.00 m, hypothèse), Geom2 = largeur du seuil.
-                    weir_xsec_lines.append(f"{wid:<16} RECT_OPEN     {2.0:<16.3f} {largeur_seuil:<10.3f} 0.000      0.000      1")
-                    coord_noeuds[w_out] = (o_pt[0] + 5.0, o_pt[1] + 5.0) if o_pt else (100.0, 100.0)
-                    deversoirs_traites.append({"wid": wid, "u_node": u_weir, "outfall": w_out, "h_seuil": h_seuil, "h_seuil_defaut": h_seuil_defaut, "largeur_seuil_m": largeur_seuil, "largeur_defaut": largeur_defaut})
+    _ecrire_ouvrages_speciaux({
+        "conduit_nodes": conduit_nodes,
+        "coord_noeuds": coord_noeuds,
+        "deversoirs_traites": deversoirs_traites,
+        "lines": lines,
+        "node_elevs": node_elevs,
+        "noeuds_connus_ids": noeuds_connus_ids,
+        "ouvrages_speciaux": ouvrages_speciaux,
+        "seen_outfall_names": seen_outfall_names,
+        "tree_noeuds": tree_noeuds,
+        "weir_lines": weir_lines,
+        "weir_xsec_lines": weir_xsec_lines,
+    })
 
     lines.append("")
 
@@ -639,152 +414,26 @@ def generer_lignes_sections_inp(
         if ("refoul" in _f0 or "pompage" in _f0) and cr0["d_node"]:
             refoulement_aval.add(cr0["d_node"])
 
-    for cr in conduits_resolus:
-        cid = cr["cid"]
-        u_node = cr["u_node"]
-        d_node = cr["d_node"]
-        c = cr["row"]
-        if not u_node or not d_node or u_node == d_node:
-            exclusions_conduits.append({
-                "cid": cid,
-                "id_amont": str(c.get("ID_AMONT", "")),
-                "id_aval": str(c.get("ID_AVAL", "")),
-                "u_node": u_node,
-                "d_node": d_node,
-            })
-            continue
-        length = float(c["Longeur"]) if ("Longeur" in c and pd.notna(c["Longeur"]) and c["Longeur"] > 0) else float(c.geometry.length)
-        length = max(1.0, round(length, 2))
-        
-        # Rugosité dynamique par matériau réel (Chantier 1.4)
-        rough = _determiner_rugosite(c.get("MATERIAU"))
-        
-        diam_mm = float(c["DIAMETRE"]) if ("DIAMETRE" in c and pd.notna(c["DIAMETRE"]) and c["DIAMETRE"] > 0) else 600.0
-        diam_m = max(0.2, diam_mm / 1000.0)
-
-        # Forme géométrique transversale (Chantier 1.3)
-        shape, geom1, geom2, barrels = _determiner_forme_section(c, diam_m)
-        if shape == "RECTANGULAR":
-            sections_rectangulaires.append({"cid": cid, "hauteur_m": geom1, "largeur_m": geom2})
-
-        # État physique du réseau (Colmatage & Vieillissement)
-        rough_eff = rough
-        xsec_shape_eff = "RECT_CLOSED" if shape == "RECTANGULAR" else "CIRCULAR"
-        geom1_eff, geom2_eff = geom1, geom2
-        if not _etat_nominal:
-            _zu = node_elevs.get(u_node)
-            _zd = node_elevs.get(d_node)
-            if _zu is not None and _zd is not None and length > 0:
-                _pente_c = ((_zu - _zd) / length) * 100.0
-            else:
-                _p_attr = c.get("PENTE")
-                _pente_c = float(_p_attr) if (_p_attr is not None and pd.notna(_p_attr)) else pente_moyenne_pct
-            xsec_shape_eff, geom1_eff, geom2_eff, _sed_m, rough_eff, _info_etat = appliquer_etat_conduite(
-                row=c,
-                diam_m=diam_m,
-                shape=shape,
-                geom1=geom1,
-                geom2=geom2,
-                rough_base=rough,
-                pente_conduite_pct=_pente_c,
-                etat_norm=_etat_norm,
-            )
-            if _info_etat.get("colmate"):
-                _nb_conduits_colmates += 1
-                if _info_etat.get("source_depot") == "sig_niv_depot":
-                    _nb_depots_sig += 1
-
-        # Détection de refoulement (Chantier 1.1)
-        fct = str(c.get("FONCTIONMT") or c.get("fonctionmt") or "").strip().lower()
-        is_refoulement = ("refoul" in fct or "pompage" in fct)
-
-        nom_v = str(c.get("NOM-VOIE") or c.get("NOMVOIE") or c.get("nom_voie") or "").strip()
-        if nom_v.lower() in ("nan", "none", "null", ""):
-            nom_v = ""
-
-        is_tete_refoulement = is_refoulement and u_node not in refoulement_aval
-        if is_tete_refoulement:
-            # Modélisation physique SWMM 5.2 : [PUMPS] alimentée par courbe [CURVES] Type 3 + conduite en charge aval
-            n_ref_node = f"N_REF_{cid}"
-            coord_u = coord_noeuds.get(u_node, (100.0, 100.0))
-            coord_noeuds[n_ref_node] = (coord_u[0] + 1.0, coord_u[1] + 1.0)
-            noeuds_spatiaux_crees[n_ref_node] = coord_noeuds[n_ref_node]
-            conduit_nodes.add(n_ref_node)
-            z_nref = node_elevs.get(d_node, node_elevs.get(u_node, 100.0))
-            nref_junction_lines.append(f"{n_ref_node:<16} {z_nref:<10.3f} 2.000      0.000      0.000      0.000")
-
-            pump_id = f"PMP_{cid}"
-            curve_id = f"CURV_PMP_{cid}"
-            # Contrôle intrinsèque SWMM : démarrage à 0.30 m de calage au nœud
-            # d'aspiration, arrêt à 0.10 m (hypothèse documentée — les attributs
-            # de commande réels des stations ne sont pas renseignés dans le SIG).
-            pump_lines.append(f"{pump_id:<16} {u_node:<16} {n_ref_node:<16} {curve_id:<16} ON       0.300      0.100")
-
-            # Courbe de pompe caractéristique Type 3 (débit/hauteur) selon diamètre nominal
-            q_nom = round(math.pi * (diam_m / 2.0)**2 * 1.5, 4)
-            curve_lines.append(f"{curve_id:<16} PUMP3      0.000      35.00")
-            curve_lines.append(f"{curve_id:<16}            {q_nom:<10.4f} 25.00")
-            curve_lines.append(f"{curve_id:<16}            {round(q_nom * 1.5, 4):<10.4f} 10.00")
-
-            conduit_lines.append(f"{cid:<16} {n_ref_node:<16} {d_node:<16} {length:<10.2f} {rough_eff:<10.4f} 0.000      0.000      0.000      0.000")
-            if xsec_shape_eff == "RECT_CLOSED":
-                xsec_lines.append(f"{cid:<16} RECT_CLOSED   {geom1_eff:<16.3f} {geom2_eff:<10.3f} 0.000      0.000      {barrels}")
-            elif xsec_shape_eff == "FILLED_CIRCULAR":
-                xsec_lines.append(f"{cid:<16} FILLED_CIRCULAR {geom1_eff:<16.3f} {geom2_eff:<10.3f} 0.000      0.000      {barrels}")
-            else:
-                xsec_lines.append(f"{cid:<16} CIRCULAR     {geom1_eff:<16.3f} 0.000      0.000      0.000      {barrels}")
-
-            conduit_endpoints[cid] = {
-                "u": n_ref_node,
-                "d": d_node,
-                "length": length,
-                "diam_mm": diam_mm,
-                "material": str(c.get("MATERIAU", "PEHD")),
-                "nom_voie": nom_v,
-                "fonction": "refoulement",
-                "pompe": pump_id
-            }
-            refoulements_traites.append({
-                "cid": cid,
-                "pompe": pump_id,
-                "station_amont": u_node,
-                "exutoire_aval": d_node,
-                "diametre_mm": diam_mm,
-                "longueur_m": length,
-                "debit_nominal_m3s": q_nom,
-                "tete_refoulement": True
-            })
-        else:
-            # Segment aval d'une chaîne de refoulement : conduite sous pression
-            # alimentée par la pompe de tête (pas de pompe supplémentaire).
-            conduit_lines.append(f"{cid:<16} {u_node:<16} {d_node:<16} {length:<10.2f} {rough_eff:<10.4f} 0.000      0.000      0.000      0.000")
-            if xsec_shape_eff == "RECT_CLOSED":
-                xsec_lines.append(f"{cid:<16} RECT_CLOSED   {geom1_eff:<16.3f} {geom2_eff:<10.3f} 0.000      0.000      {barrels}")
-            elif xsec_shape_eff == "FILLED_CIRCULAR":
-                xsec_lines.append(f"{cid:<16} FILLED_CIRCULAR {geom1_eff:<16.3f} {geom2_eff:<10.3f} 0.000      0.000      {barrels}")
-            else:
-                xsec_lines.append(f"{cid:<16} CIRCULAR     {geom1_eff:<16.3f} 0.000      0.000      0.000      {barrels}")
-
-            conduit_endpoints[cid] = {
-                "u": u_node,
-                "d": d_node,
-                "length": length,
-                "diam_mm": diam_mm,
-                "material": str(c.get("MATERIAU", "Béton")),
-                "nom_voie": nom_v,
-                "fonction": "refoulement" if is_refoulement else "gravitaire"
-            }
-            if is_refoulement:
-                refoulements_traites.append({
-                    "cid": cid,
-                    "pompe": None,
-                    "station_amont": u_node,
-                    "exutoire_aval": d_node,
-                    "diametre_mm": diam_mm,
-                    "longueur_m": length,
-                    "debit_nominal_m3s": None,
-                    "tete_refoulement": False
-                })
+    _generer_lignes_conduits({
+        "_etat_nominal": _etat_nominal,
+        "_etat_norm": _etat_norm,
+        "conduit_endpoints": conduit_endpoints,
+        "conduit_lines": conduit_lines,
+        "conduit_nodes": conduit_nodes,
+        "conduits_resolus": conduits_resolus,
+        "coord_noeuds": coord_noeuds,
+        "curve_lines": curve_lines,
+        "exclusions_conduits": exclusions_conduits,
+        "node_elevs": node_elevs,
+        "noeuds_spatiaux_crees": noeuds_spatiaux_crees,
+        "nref_junction_lines": nref_junction_lines,
+        "pente_moyenne_pct": pente_moyenne_pct,
+        "pump_lines": pump_lines,
+        "refoulement_aval": refoulement_aval,
+        "refoulements_traites": refoulements_traites,
+        "sections_rectangulaires": sections_rectangulaires,
+        "xsec_lines": xsec_lines,
+    })
 
     if creer_exutoire_dedie:
         cid_out = f"C_OUT_{outfall_code}"
@@ -793,37 +442,13 @@ def generer_lignes_sections_inp(
         conduit_lines.append(f"{cid_out:<16} {outfall_code:<16} {actual_outfall_name:<16} 5.00       0.0130     0.000      0.000      0.000      0.000")
         xsec_lines.append(f"{cid_out:<16} CIRCULAR     {diam_out_m:<16.3f} 0.000      0.000      0.000      1")
 
-    for item in racc_orph_valides:
-        ro, out_orph_name, reg_id, _, ouv_id, r_seq = item
-        cid_orph = f"C_RACC_{ouv_id}_{r_seq}"
-        dist_orph = max(1.0, float(ro.get("distance_m", 15.0)))
-        dn_orph_mm = float(ro.get("diametre_recommande_mm", 600.0))
-        dn_orph_m = max(0.3, dn_orph_mm / 1000.0)
-        nom_o = ro.get("nom", "Ouvrage spécial")
-        conduit_lines.append(f"{cid_orph:<16} {reg_id:<16} {out_orph_name:<16} {dist_orph:<10.2f} 0.0130     0.000      0.000      0.000      0.000")
-        xsec_lines.append(f"{cid_orph:<16} CIRCULAR     {dn_orph_m:<16.3f} 0.000      0.000      0.000      1")
-        conduit_endpoints[cid_orph] = {
-            "u": reg_id,
-            "d": out_orph_name,
-            "length": dist_orph,
-            "diam_mm": dn_orph_mm,
-            "material": "Béton armé 135A",
-            "nom_voie": f"Raccordement opportuniste ({nom_o})"
-        }
-
-    for _bnd in exutoires_frontiere_info:
-        _cid_bnd = f"C_BND_{_bnd['node']}"
-        _d_bnd_m = max(0.3, _bnd["diam_mm"] / 1000.0)
-        conduit_lines.append(f"{_cid_bnd:<16} {_bnd['node']:<16} {_bnd['outfall']:<16} 5.00       0.0130     0.000      0.000      0.000      0.000")
-        xsec_lines.append(f"{_cid_bnd:<16} CIRCULAR     {_d_bnd_m:<16.3f} 0.000      0.000      0.000      1")
-        conduit_endpoints[_cid_bnd] = {
-            "u": _bnd["node"],
-            "d": _bnd["outfall"],
-            "length": 5.0,
-            "diam_mm": _bnd["diam_mm"],
-            "material": "Frontière de sous-réseau",
-            "nom_voie": "Exutoire frontière (tronçon coupé)"
-        }
+    _ecrire_conduits_frontieres({
+        "conduit_endpoints": conduit_endpoints,
+        "conduit_lines": conduit_lines,
+        "exutoires_frontiere_info": exutoires_frontiere_info,
+        "racc_orph_valides": racc_orph_valides,
+        "xsec_lines": xsec_lines,
+    })
 
     if nref_junction_lines:
         _idx_outfalls = lines.index("[OUTFALLS]")
@@ -863,276 +488,92 @@ def generer_lignes_sections_inp(
     # ------------------------------------------------------------------
     apports_meta: List[Dict[str, Any]] = []
     apports_ignores: List[Dict[str, Any]] = []
-    if apports_dwf:
-        from src.domain.moteur_swmm.dwf_injection import construire_injection_dwf
-        from datetime import datetime as _dt, timedelta as _td
-        # Nœuds injectables = JUNCTIONS réellement émises (regards +
-        # nœuds topologiques + exutoire), jamais l'OUTFALL dédié.
-        noeuds_injectables = set(noeuds_traites) | set(conduit_nodes) | {outfall_code}
-        noeuds_injectables.discard(actual_outfall_name)
-        noeuds_injectables.discard("")
-        # Fenêtre absolue = START_DATE/START_TIME → END_DATE/END_TIME du .inp
-        _debut = _dt(2026, 1, 1, 0, 0, 0)
-        _fin = _debut + _td(hours=int(duree_sim), minutes=int((duree_sim - int(duree_sim)) * 60))
-        _inj = construire_injection_dwf(apports_dwf, noeuds_injectables, _debut, _fin)
-        apports_meta = _inj["apports_meta"]
-        apports_ignores = _inj["ignores"]
-        if _inj["timeseries_lines"]:
-            lines[pos_fin_timeseries:pos_fin_timeseries] = _inj["timeseries_lines"]
-            pos_fin_timeseries += len(_inj["timeseries_lines"])
-        if _inj["pattern_lines"]:
-            lines.append("[PATTERNS]")
-            lines.append(";;Name           Type       Multipliers")
-            lines.extend(_inj["pattern_lines"])
-            lines.append("")
-        if _inj["dwf_lines"]:
-            lines.append("[DWF]")
-            lines.append(";;Node           Parameter   Value        Pattern1   Pattern2   Pattern3   Pattern4")
-            lines.extend(_inj["dwf_lines"])
-            lines.append("")
-        if _inj["inflow_lines"]:
-            lines.append("[INFLOWS]")
-            lines.append(";;Node           Constituent  Time Series  Type     Mfactor  Sfactor  Baseline Pattern")
-            lines.extend(_inj["inflow_lines"])
-            lines.append("")
-        if apports_ignores:
-            logger.info("Apports DWF ignorés à l'injection : %s", apports_ignores)
+    _ecrire_apports_dwf({
+        "actual_outfall_name": actual_outfall_name,
+        "apports_dwf": apports_dwf,
+        "conduit_nodes": conduit_nodes,
+        "duree_sim": duree_sim,
+        "lines": lines,
+        "noeuds_traites": noeuds_traites,
+        "outfall_code": outfall_code,
+    })
 
-    lines.append("[COORDINATES]")
-    coords_traitees: Set[str] = set()
-    for idx, r in regards.iterrows():
-        nid = _clean_node_id(r.get("Code"), fallback=f"REG_{idx+1}")
-        if nid not in coords_traitees:
-            lines.append(f"{nid:<16} {r.geometry.x:<18.3f} {r.geometry.y:<18.3f}")
-            coords_traitees.add(nid)
-
-    if len(rejets) > 0:
-        for idx, rj in rejets.iterrows():
-            r_id = _clean_node_id(rj.get("Code") or rj.get("CODE") or rj.get("id") or rj.get("NOM"), fallback=f"REJ_{idx+1}")
-            if r_id and r_id not in coords_traitees:
-                lines.append(f"{r_id:<16} {rj.geometry.x:<18.3f} {rj.geometry.y:<18.3f}")
-                coords_traitees.add(r_id)
-
-    if outfall_code and outfall_code not in coords_traitees and target_ex_id and target_ex_id in exutoires_map:
-        ex_geom = exutoires_map[target_ex_id].get("geometry")
-        if ex_geom:
-            lines.append(f"{outfall_code:<16} {ex_geom.x:<18.3f} {ex_geom.y:<18.3f}")
-            coords_traitees.add(outfall_code)
-
-    if creer_exutoire_dedie and actual_outfall_name not in coords_traitees:
-        out_coord = None
-        noeuds_regards = { _clean_node_id(r.get("Code"), fallback=f"REG_{idx+1}"): r for idx, r in regards.iterrows() }
-        if outfall_code in noeuds_regards:
-            g = noeuds_regards[outfall_code].geometry
-            out_coord = (g.x + 5.0, g.y + 5.0)
-        elif target_ex_id and target_ex_id in exutoires_map:
-            eg = exutoires_map[target_ex_id].get("geometry")
-            if eg:
-                out_coord = (eg.x + 5.0, eg.y + 5.0)
-        if not out_coord and coords_traitees:
-            out_coord = (100.0, 100.0)
-        if out_coord:
-            lines.append(f"{actual_outfall_name:<16} {out_coord[0]:<18.3f} {out_coord[1]:<18.3f}")
-            coords_traitees.add(actual_outfall_name)
-
-    noeuds_regards = { _clean_node_id(r.get("Code"), fallback=f"REG_{idx+1}"): r for idx, r in regards.iterrows() }
-    for item in racc_orph_valides:
-        ro, out_orph_name, reg_id = item[0], item[1], item[2]
-        if out_orph_name not in coords_traitees:
-            pt_orph = None
-            coords_wgs = ro.get("ouvrage_coord_wgs84")
-            if coords_wgs and len(coords_wgs) == 2:
-                try:
-                    from src.domain.ouvrages_orphelins import _obtenir_reprojecteurs
-                    _, to_utm = _obtenir_reprojecteurs("EPSG:32631", "EPSG:4326")
-                    if to_utm:
-                        pt_orph = to_utm(coords_wgs[1], coords_wgs[0])
-                except Exception:
-                    pass
-            if not pt_orph and reg_id in noeuds_regards:
-                g = noeuds_regards[reg_id].geometry
-                pt_orph = (g.x + 10.0, g.y + 10.0)
-            if not pt_orph:
-                pt_orph = (100.0, 100.0)
-            lines.append(f"{out_orph_name:<16} {pt_orph[0]:<18.3f} {pt_orph[1]:<18.3f}")
-            coords_traitees.add(out_orph_name)
-
-    for _bnd in exutoires_frontiere_info:
-        _out_bnd = _bnd["outfall"]
-        if _out_bnd not in coords_traitees:
-            _pt = coord_noeuds.get(_bnd["node"])
-            if _pt is not None:
-                _pt = (float(_pt[0]) + 5.0, float(_pt[1]) + 5.0)
-            if _pt is None and _bnd["node"] in noeuds_regards:
-                _g = noeuds_regards[_bnd["node"]].geometry
-                _pt = (float(_g.x) + 5.0, float(_g.y) + 5.0)
-            if _pt is None and coords_traitees:
-                _pt = (100.0, 100.0)
-            if _pt is not None:
-                lines.append(f"{_out_bnd:<16} {float(_pt[0]):<18.3f} {float(_pt[1]):<18.3f}")
-                coords_traitees.add(_out_bnd)
-
-    # Complétude spatiale : garantir que chaque nœud présent dans le modèle a ses coordonnées dans [COORDINATES]
-    for nid, pt in coord_noeuds.items():
-        if nid not in coords_traitees:
-            lines.append(f"{nid:<16} {pt[0]:<18.3f} {pt[1]:<18.3f}")
-            coords_traitees.add(nid)
+    _ecrire_coordinates({
+        "actual_outfall_name": actual_outfall_name,
+        "coord_noeuds": coord_noeuds,
+        "creer_exutoire_dedie": creer_exutoire_dedie,
+        "exutoires_frontiere_info": exutoires_frontiere_info,
+        "exutoires_map": exutoires_map,
+        "lines": lines,
+        "outfall_code": outfall_code,
+        "racc_orph_valides": racc_orph_valides,
+        "regards": regards,
+        "rejets": rejets,
+        "target_ex_id": target_ex_id,
+    })
     lines.append("")
 
     lines.append("[POLYGONS]")
     lines.extend(swmm_sec["POLYGONS"])
     lines.append("")
 
-    try:
-        pts_x = []
-        pts_y = []
-        if not regards.empty:
-            pts_x.extend([g.x for g in regards.geometry if g and not g.is_empty])
-            pts_y.extend([g.y for g in regards.geometry if g and not g.is_empty])
-        if not canalisations.empty:
-            for g in canalisations.geometry:
-                if g and not g.is_empty:
-                    minx_c, miny_c, maxx_c, maxy_c = g.bounds
-                    pts_x.extend([minx_c, maxx_c])
-                    pts_y.extend([miny_c, maxy_c])
-
-        if pts_x and pts_y:
-            min_x = min(pts_x)
-            max_x = max(pts_x)
-            min_y = min(pts_y)
-            max_y = max(pts_y)
-            dx = max(max_x - min_x, 50.0) * 0.08
-            dy = max(max_y - min_y, 50.0) * 0.08
-            lines.append("[MAP]")
-            lines.append(f"DIMENSIONS {min_x - dx:<14.3f} {min_y - dy:<14.3f} {max_x + dx:<14.3f} {max_y + dy:<14.3f}")
-            lines.append("Units      Meters")
-            lines.append("")
-    except Exception as e_map:
-        logger.warning(f"Impossible de générer la section [MAP] SWMM: {e_map}")
-
-    lines.append("[REPORT]")
-    lines.append("INPUT      NO")
-    lines.append("CONTROLS   NO")
-    lines.append("SUBCATCHMENTS ALL")
-    lines.append("NODES ALL")
-    lines.append("LINKS ALL")
-    lines.append("")
+    _ecrire_polygones_et_report({
+        "canalisations": canalisations,
+        "lines": lines,
+        "regards": regards,
+    })
 
     bbox_wgs84 = None
-    try:
-        pipes_for_bounds = canalisations if not canalisations.empty else regards
-        if not pipes_for_bounds.empty:
-            pipes_wgs = pipes_for_bounds.to_crs("EPSG:4326") if pipes_for_bounds.crs and str(pipes_for_bounds.crs).lower() not in ("epsg:4326", "4326", "wgs84") else pipes_for_bounds
-            minx, miny, maxx, maxy = pipes_wgs.total_bounds
-            bbox_wgs84 = [round(float(miny), 6), round(float(minx), 6), round(float(maxy), 6), round(float(maxx), 6)]
-    except Exception as e_bbox:
-        logger.warning(f"Impossible de calculer la bbox WGS84: {e_bbox}")
-
-    meta = {
-        "scenario": scen["nom"],
-        "duree_heures": duree_sim,
-        "cluster_id": cluster_id,
-        "cluster_nom": bassin_nom,
+    meta = _construire_meta_inp({
+        "_conv": _conv,
+        "_etat_nominal": _etat_nominal,
+        "_etat_norm": _etat_norm,
+        "_nb_conduits_colmates": _nb_conduits_colmates,
+        "_nb_depots_sig": _nb_depots_sig,
+        "active_i_max": active_i_max,
+        "active_imperv": active_imperv,
+        "actual_outfall_name": actual_outfall_name,
+        "apports_ignores": apports_ignores,
+        "apports_meta": apports_meta,
         "bassin_nom": bassin_nom,
-        "subcatchments_count": len(sb_gdf),
-        "junctions_count": max(0, len(regards) - 1),
-        "outfalls_count": 1,
-        "conduits_count": len(canalisations),
-        "outfall_code": actual_outfall_name,
-        "junction_outfall_code": outfall_code,
-        "outfall_demande": outfall_demande,
-        "resolution_exutoire": resolution_exutoire,
-        "exutoires_frontiere": [b["node"] for b in exutoires_frontiere_info],
-        "total_area_ha": round(float(sb_gdf["area_ha"].sum()), 2) if not sb_gdf.empty else 0.0,
-        "surface_totale_ha": round(float(sb_gdf["area_ha"].sum()), 2) if not sb_gdf.empty else 0.0,
-        "surface_urbaine_ha": getattr(sb_gdf, 'attrs', {}).get("total_urbaine_ha", round(float(sb_gdf["area_ha"].sum()), 2) if not sb_gdf.empty else 0.0),
-        "convexe_globale_ha": getattr(sb_gdf, 'attrs', {}).get("convexe_globale_ha", 5430.0),
-        "ratio_drainage_pct": getattr(sb_gdf, 'attrs', {}).get("ratio_drainage_pct", 55.0),
-        "buffer_m": buf_actuel,
-        "source_altimetrique": source_alt,
-        "pente_moyenne_pct": pente_moyenne_pct,
-        "bbox": bbox_wgs84,
-        "simulated_nodes": list(clean_target_nodes),
+        "buf_actuel": buf_actuel,
+        "canalisations": canalisations,
+        "clean_target_nodes": clean_target_nodes,
+        "cluster_id": cluster_id,
         "conduit_endpoints": conduit_endpoints,
-        "conventions_decouvertes": _conv or None,
-        "typologie_sol": typologie_sol or "habitat_mixte",
-        "typologie_nom": typ_nom,
-        "imperv_pct": active_imperv,
-        "pluvio_station": scen.get("station", "Station ANRH Chlef Siège (010501)"),
-        "pluvio_station_id": st_id,
-        "pluvio_code_anrh": scen.get("code_anrh", "010501"),
-        "pluvio_wilaya": scen.get("wilaya", "Wilaya de Chlef"),
-        "pluvio_scenario_key": scenario_key,
-        "pluvio_scenario_nom": scen.get("nom"),
-        "pluvio_periode_retour": scen.get("periode_retour", "T = 10 ans"),
-        "pluvio_intensite_max_mmh": active_i_max,
-        "pluvio_montana": scen.get("formule_montana", ""),
-        "pluvio_hauteur_totale_mm": hauteur_totale_cumul_mm,
-        "pluvio_p24_mm": scen.get("hauteur_p24_mm", 56.0),
-        "pluvio_source": scen.get("source", ""),
-        "pluvio_description": scen.get("description", ""),
-        "bms_info": scen.get("bms_metadata"),
-        "apports_dwf": apports_meta,
-        "apports_dwf_ignores": apports_ignores,
-        "raccordements_orphelins": [item[0] for item in racc_orph_valides],
-        "refoulements_traites": refoulements_traites,
-        "raccordements_spatiaux": raccordements_spatiaux,
-        "sections_rectangulaires": sections_rectangulaires,
         "deversoirs_traites": deversoirs_traites,
-        "etat_reseau": {
-            **_etat_norm,
-            "est_nominal": _etat_nominal,
-            "nb_conduits_colmates": _nb_conduits_colmates,
-            "nb_depots_sig_appliques": _nb_depots_sig,
-        },
-    }
+        "duree_sim": duree_sim,
+        "exutoires_frontiere_info": exutoires_frontiere_info,
+        "hauteur_totale_cumul_mm": hauteur_totale_cumul_mm,
+        "outfall_code": outfall_code,
+        "outfall_demande": outfall_demande,
+        "pente_moyenne_pct": pente_moyenne_pct,
+        "racc_orph_valides": racc_orph_valides,
+        "raccordements_spatiaux": raccordements_spatiaux,
+        "refoulements_traites": refoulements_traites,
+        "regards": regards,
+        "resolution_exutoire": resolution_exutoire,
+        "sb_gdf": sb_gdf,
+        "scen": scen,
+        "scenario_key": scenario_key,
+        "sections_rectangulaires": sections_rectangulaires,
+        "source_alt": source_alt,
+        "st_id": st_id,
+        "typ_nom": typ_nom,
+        "typologie_sol": typologie_sol,
+    })
 
-    try:
-        from src.domain.moteur_swmm.audit_exclusions import generer_bilan_reconciliation
-        sections_presents = {l.strip()[1:-1] for l in lines if l.startswith("[") and l.endswith("]")}
-        _nb_conduits_synth = len([
-            l for l in conduit_lines
-            if l.split() and l.split()[0].startswith(("C_OUT_", "C_RACC_", "C_BND_"))
-        ])
-        inp_counts = {
-            "canalisations_gravitaires": len(conduit_lines) - len(refoulements_traites) - _nb_conduits_synth,
-            "canalisations_refoulement": len(refoulements_traites),
-            "regards": len([l for l in lines if l.startswith(";;") is False and len(l.split()) >= 6 and "[" not in l]),
-            "rejets": len([l for l in lines if "FREE" in l and "[" not in l]),
-            "stations_relevage": sum(1 for r in refoulements_traites if r.get("tete_refoulement")),
-            "deversoirs_orage": len(deversoirs_traites),
-        }
-        exclusions_audit = [
-            {
-                "id": e["cid"],
-                "type_objet": "canalisation",
-                "motif": "id_inconnu",
-                "description_motif": "Identifiant de nœud amont/aval non résolu dans le référentiel",
-                "detail": f"Nœud amont/aval non résolu (ID_AMONT={e['id_amont']!r}, ID_AVAL={e['id_aval']!r})",
-                "attributs": {
-                    "id_amont": e["id_amont"],
-                    "id_aval": e["id_aval"],
-                    "u_node": e["u_node"],
-                    "d_node": e["d_node"],
-                },
-            }
-            for e in exclusions_conduits
-        ]
-        meta["reconciliation"] = generer_bilan_reconciliation(
-            gpkg_counts=gpkg_counts or {},
-            inp_counts=inp_counts,
-            exclusions=exclusions_audit,
-            sections_inp_presents=sections_presents,
-            hypotheses=[
-                {"domaine": "pompes", "detail": "Une pompe par tête de chaîne de refoulement ; courbe Type 3 (débit/hauteur) estimée à partir du diamètre nominal ; marche/arrêt par calage 0.30/0.10 m (attributs de commande absents du SIG)"},
-                {"domaine": "rugosite", "detail": "Formulation Manning différenciée selon la colonne MATERIAU"},
-                {"domaine": "sections", "detail": f"{len(sections_rectangulaires)} sections rectangulaires prises en compte (FORMESECT, HAUTEUR, GDEBASE)"},
-                {"domaine": "deversoirs", "detail": f"{sum(1 for d in deversoirs_traites if d.get('h_seuil_defaut'))} DVO avec seuil par défaut 0.50 m (H_de_Seuil/loSeuil absents du SIG)"},
-                {"domaine": "raccordements_spatiaux", "detail": f"{len(raccordements_spatiaux)} tronçons raccordés par tolérance spatiale <= 0.50m"},
-            ]
-        )
-    except Exception as e_rec:
-        logger.warning(f"Bilan de réconciliation non calculé: {e_rec}")
+    _finaliser_meta_inp({
+        "conduit_lines": conduit_lines,
+        "deversoirs_traites": deversoirs_traites,
+        "exclusions_conduits": exclusions_conduits,
+        "gpkg_counts": gpkg_counts,
+        "lines": lines,
+        "meta": meta,
+        "raccordements_spatiaux": raccordements_spatiaux,
+        "refoulements_traites": refoulements_traites,
+        "sections_rectangulaires": sections_rectangulaires,
+    })
 
     return lines, meta
 
