@@ -74,7 +74,10 @@ def _ecrire_apports_dwf(ctx):
     lines = ctx["lines"]
     noeuds_traites = ctx["noeuds_traites"]
     outfall_code = ctx["outfall_code"]
+    pos_fin_timeseries = ctx["pos_fin_timeseries"]
 
+    apports_meta: List[Dict[str, Any]] = []
+    apports_ignores: List[Dict[str, Any]] = []
     if apports_dwf:
         from src.domain.moteur_swmm.dwf_injection import construire_injection_dwf
         from datetime import datetime as _dt, timedelta as _td
@@ -109,6 +112,8 @@ def _ecrire_apports_dwf(ctx):
             lines.append("")
         if apports_ignores:
             logger.info("Apports DWF ignorés à l'injection : %s", apports_ignores)
+
+    return apports_meta, apports_ignores
 
 
 

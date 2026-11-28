@@ -159,7 +159,15 @@ if (fetchCalls.length !== 1 || fetchCalls[0] !== expected) {
 def test_resultats_regard_normal_cliquable_en_mode_profil():
     """Vérifie qu'un regard simulé en écoulement normal (sans entrée détaillée
     dans node_results) conserve bien son interception de clic pour le profil."""
-    js_path = Path("static/js/app/resultats_affichage.js").resolve()
+    # resultats_affichage.js est découplé : le rendu des couches vit dans
+    # resultats_affichage_couches.js — les deux sources sont chargées ensemble.
+    _src_dir = Path("static/js/app").resolve()
+    js_path = Path(tempfile.NamedTemporaryFile(
+        "w", suffix=".js", delete=False, encoding="utf-8").name)
+    with open(js_path, "w", encoding="utf-8") as _jf:
+        _jf.write((_src_dir / "resultats_affichage_couches.js").read_text(encoding="utf-8"))
+        _jf.write("\n")
+        _jf.write((_src_dir / "resultats_affichage.js").read_text(encoding="utf-8"))
     harness = r'''
 const fs = require('fs');
 const vm = require('vm');

@@ -279,6 +279,8 @@ def _generer_lignes_conduits(ctx):
     refoulements_traites = ctx["refoulements_traites"]
     sections_rectangulaires = ctx["sections_rectangulaires"]
     xsec_lines = ctx["xsec_lines"]
+    _nb_conduits_colmates = ctx["_nb_conduits_colmates"]
+    _nb_depots_sig = ctx["_nb_depots_sig"]
 
     for cr in conduits_resolus:
         cid = cr["cid"]
@@ -426,3 +428,5 @@ def _generer_lignes_conduits(ctx):
                     "debit_nominal_m3s": None,
                     "tete_refoulement": False
                 })
+
+    return _nb_conduits_colmates, _nb_depots_sig

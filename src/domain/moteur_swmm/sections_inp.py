@@ -414,9 +414,11 @@ def generer_lignes_sections_inp(
         if ("refoul" in _f0 or "pompage" in _f0) and cr0["d_node"]:
             refoulement_aval.add(cr0["d_node"])
 
-    _generer_lignes_conduits({
+    _nb_conduits_colmates, _nb_depots_sig = _generer_lignes_conduits({
         "_etat_nominal": _etat_nominal,
         "_etat_norm": _etat_norm,
+        "_nb_conduits_colmates": _nb_conduits_colmates,
+        "_nb_depots_sig": _nb_depots_sig,
         "conduit_endpoints": conduit_endpoints,
         "conduit_lines": conduit_lines,
         "conduit_nodes": conduit_nodes,
@@ -486,9 +488,7 @@ def generer_lignes_sections_inp(
     # Sans apports actifs, aucune section n'est émise : le .inp produit
     # est strictement identique à l'historique.
     # ------------------------------------------------------------------
-    apports_meta: List[Dict[str, Any]] = []
-    apports_ignores: List[Dict[str, Any]] = []
-    _ecrire_apports_dwf({
+    apports_meta, apports_ignores = _ecrire_apports_dwf({
         "actual_outfall_name": actual_outfall_name,
         "apports_dwf": apports_dwf,
         "conduit_nodes": conduit_nodes,
@@ -496,6 +496,7 @@ def generer_lignes_sections_inp(
         "lines": lines,
         "noeuds_traites": noeuds_traites,
         "outfall_code": outfall_code,
+        "pos_fin_timeseries": pos_fin_timeseries,
     })
 
     _ecrire_coordinates({
