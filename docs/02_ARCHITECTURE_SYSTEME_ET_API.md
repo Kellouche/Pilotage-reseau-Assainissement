@@ -48,7 +48,7 @@
 - **Base de données** : PostgreSQL 16 + PostGIS en production ; **fallback automatique SQLite** (`swmm_platform.db`) en développement/tests si PostgreSQL est indisponible.
 - **Calculs lourds** : Celery + Redis (simulations SWMM, analyses MNT). L'API ne fait aucun calcul lourd — elle répond `202 Accepted` + `job_id`.
 - **Stockage d'artefacts** : `ArtifactStore` (`api/core/storage.py`) — `LocalStore` en dev, `S3Store` (S3/MinIO) en prod via variables `S3_*`.
-- **Frontend** : cockpit Leaflet HD (`templates/index.html` + `static/js/app/`), carte opérationnelle qualité (`/carte`), pages dédiées `/qualite`, `/tunnel`, centre d'aide `/aide`.
+- **Frontend** : cockpit Leaflet HD (`templates/index.html` + `static/js/app/`), cockpit qualité unifié (`/qualite`, intégré à `/map?tab=qualite` ; l'ancienne `/carte` redirige vers `/qualite`), pages dédiées `/tunnel`, centre d'aide `/aide`.
 - **Mobile** : application Flutter officielle sous `mobile/` (voir §5).
 - **Conteneurisation** : architecture cible multi-conteneurs Docker (voir ADR 0005 et Doc 4 §1 — le `docker-compose` de production est un livrable de la phase d'industrialisation).
 
@@ -58,8 +58,8 @@
 |---|---|---|
 | `/` | Cockpit cartographique + simulation SWMM | Connecté |
 | `/cockpit`, `/map` | Alias cockpit | Connecté |
-| `/carte` | Carte opérationnelle qualité (diagnostic, anomalies, orphelins) | Connecté |
-| `/qualite` | Visualisation qualité réseau | Connecté |
+| `/carte` | *(décommissionnée)* → redirection 301 vers `/qualite` | Connecté |
+| `/qualite` | Cockpit qualité réseau unifié (audit, anomalies, orphelins, corrections) | Connecté |
 | `/tunnel` | Tunnel de workflow 4 étapes | Connecté |
 | `/aide` | Centre d'aide : documentation Markdown rendue | Connecté |
 | `/aide/doc/{path}` | Fragment HTML d'un document normatif | Connecté |
@@ -184,7 +184,7 @@ CRUD regards/conduites/rejets sur le GPKG actif ; données servies en WGS84.
 | `POST` | `/api/v1/network/upload` | Import GeoPackage / `.inp` — param `crs` (code EPSG) **exigé** si le fichier ne déclare pas de projection ou si la détection `.inp` est incertaine ; la réponse expose `crs` + `crs_source` (`fichier`/`utilisateur`/heuristique) |
 | `GET` | `/api/v1/network/subcatchments` | Sous-bassins Voronoï en GeoJSON |
 | `GET` | `/api/v1/network/orphelins/geojson` | Regards orphelins persistés (GeoJSON) |
-| **`GET`** | **`/api/v1/network/orphelins`** | **Inventaire orphelins : nœuds isolés (degré 0) + tronçons hors graphe/sans exutoire, coords WGS84 + stats — alimente l'onglet Orphelins de `/carte`** |
+| **`GET`** | **`/api/v1/network/orphelins`** | **Inventaire orphelins : nœuds isolés (degré 0) + tronçons hors graphe/sans exutoire, coords WGS84 + stats — alimente la file qualité de `/qualite`** |
 | `GET` | `/api/v1/network/export/inp` | Export `.inp` du réseau courant |
 
 ### 4.3 Qualité — `/api/v1/qualite`

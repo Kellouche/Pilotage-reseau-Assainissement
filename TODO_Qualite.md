@@ -67,13 +67,17 @@ Fichiers cibles : `templates/qualite.html`, `static/js/qualite/qualite_etat_cart
 
 ---
 
-## Lot 4 — Décommissionnement qualité sur `/carte` & nettoyage legacy (~1 j/h)
+## Lot 4 — Décommissionnement qualité sur `/carte` & nettoyage legacy (~1 j/h) ✅ FAIT
 
 Fichiers cibles : `templates/carte.html`, `static/js/carte_anomalies.js`, `static/js/carte_core.js`, `static/js/map/map_quality.js`, `templates/map.html`
 
-- [ ] Retirer les onglets de diagnostic qualité redondants de `/carte` (ou conserver `/carte` en vue consultation réseau pure) et ajouter un accès direct vers `/map?tab=qualite`.
-- [ ] Supprimer le code mort `static/js/map/map_quality.js` et le bloc `#quality-score-container` inutilisé de `templates/map.html`.
-- [ ] Harmoniser la gestion de session/cookie dev (`127.0.0.1` vs `localhost`) pour éviter les `HTTP 401` croisés sur `/map?tab=qualite`.
+- [x] **`/carte` supprimée** : route → redirection 301 vers `/qualite` ; `templates/carte.html` + 8 modules `static/js/carte_*.js` + 2 CSS `carte_style*.css` supprimés ; spec e2e `phase0-auto-diagnostic.spec.ts` (spécifique `/carte`) supprimée. *Décision : suppression totale — la recherche d'ouvrage de `/carte` était du code mort (`#search-input` inexistant) et `/map` offre une vraie palette de recherche ; le modal de correction hybride (`/corrections/hybride/suggest` + canvas profil) n'est **pas** porté → voir ticket futur ci-dessous.*
+- [x] **Code mort supprimé** : `static/js/map/map_quality.js` (`window.initQuality` jamais appelé) + bloc `#quality-score-container` (`display:none`) retirés de `templates/map.html`.
+- [x] **Harmonisation session dev** : middleware `canonical_host_redirect_middleware` dans `api/main.py` — GET/HEAD sur `localhost`/`::1` → 301 vers l'hôte canonique `APP_CANONICAL_HOST` (défaut `127.0.0.1`), ce qui unifie cookies + localStorage et élimine les 401 croisés.
+
+### Ticket futur (hors périmètre Lot 4)
+
+- [ ] **Porter la suggestion hybride altimétrique** dans la fiche `/qualite` : l'endpoint `/api/v1/corrections/hybride/suggest` attend un `fid` DB alors que les anomalies référencent des `id_conduite` GPKG → nécessite d'abord un mapping GPKG↔DB. Code de référence dans l'historique git (`carte_ui_correction.js`, `carte_ui_modal.js`).
 
 ---
 

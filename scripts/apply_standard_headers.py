@@ -194,7 +194,6 @@ MODULE_OBJECTS = {
 
     # Templates HTML
     "templates/index.html": "Interface principale cartographique et SIG de modélisation hydraulique DrainPilot",
-    "templates/carte.html": "Composant cartographique Leaflet autonome pour visualisation de réseau",
     "templates/map.html": "Vue cartographique plein écran pour l'inspection interactive",
     "templates/qualite.html": "Tableau de bord interactif d'audit et de correction de qualité topologique",
     "templates/landing.html": "Page d'accueil et présentation des fonctionnalités DrainPilot 5.2",
@@ -204,9 +203,6 @@ MODULE_OBJECTS = {
 
     # Static JS
     "static/carte.js": "Contrôleur cartographique Leaflet principal et interaction utilisateur",
-    "static/js/carte_anomalies.js": "Gestion de l'affichage et du traitement cartographique des anomalies",
-    "static/js/carte_core.js": "Noyau d'initialisation cartographique, projections et tuiles",
-    "static/js/carte_ui.js": "Gestionnaire des éléments d'interface utilisateur, panneaux latéraux et menus",
     "static/js/map/map_cluster_detection.js": "Détection et affichage interactif des clusters topologiques",
     "static/js/map/map_core.js": "Couche de base et configuration du canevas cartographique",
     "static/js/map/map_edit_attributes.js": "Édition interactive des attributs des regards et conduites",
@@ -214,7 +210,6 @@ MODULE_OBJECTS = {
     "static/js/map/map_layers.js": "Gestion des calques vectoriels, GeoJSON et styles graphiques",
     "static/js/map/map_manual_basins.js": "Outils de dessin et sectorisation manuelle de bassins versants",
     "static/js/map/map_notifications.js": "Système de notifications visuelles et alertes d'ingénierie",
-    "static/js/map/map_quality.js": "Visualisation cartographique des anomalies et contrôles qualité",
     "static/js/map/map_state.js": "Gestion centralisée de l'état applicatif et des sélections du réseau"
 }
 

@@ -234,7 +234,7 @@ class ConstructeurGrapheReseau:
                     'detail': f"Nœud amont '{u_init}' ou aval '{v_init}' introuvable."
                 })
                 # Conduite exclue du graphe : consignée pour le listing des
-                # tronçons orphelins (audit /carte). Les extrémités qui ont
+                # tronçons orphelins (audit /qualite). Les extrémités qui ont
                 # tout de même été résolues (ID/alias/snap) sont conservées
                 # pour le diagnostic ; sinon la valeur brute est gardée.
                 manquantes = []

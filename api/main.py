@@ -139,6 +139,27 @@ async def anti_cache_static_middleware(request: Request, call_next):
     return response
 
 
+# Hôte canonique : `localhost` et `127.0.0.1` sont des origines distinctes
+# pour le navigateur (cookies et localStorage non partagés) → sessions
+# « 401 croisées » en dev. On redirige les alias locaux vers l'hôte
+# canonique (APP_CANONICAL_HOST, défaut 127.0.0.1) pour unifier la session.
+_CANONICAL_HOST = os.getenv("APP_CANONICAL_HOST", "127.0.0.1").strip() or "127.0.0.1"
+_LOCAL_HOST_ALIASES = {"localhost", "::1", "[::1]"}
+
+
+@app.middleware("http")
+async def canonical_host_redirect_middleware(request: Request, call_next):
+    """GET/HEAD sur un alias local (localhost, ::1) → 301 vers l'hôte canonique."""
+    if request.method in ("GET", "HEAD"):
+        host = (request.headers.get("host") or "").split(":")[0].strip("[]").lower()
+        if host in _LOCAL_HOST_ALIASES and host != _CANONICAL_HOST:
+            port = request.url.port
+            netloc = f"{_CANONICAL_HOST}:{port}" if port else _CANONICAL_HOST
+            target = request.url.replace(netloc=netloc)
+            return RedirectResponse(url=str(target), status_code=301)
+    return await call_next(request)
+
+
 # ============================================================
 # ROOT & HEALTH
 # ============================================================
@@ -314,7 +335,6 @@ def get_api_info():
             "sync": "/api/v1/sync",
             "visualisation": "/map",
             "qualite": "/qualite",
-            "carte": "/carte",
             "tunnel": "/tunnel"
         }
     }
@@ -366,19 +386,15 @@ async def page_qualite(request: Request, db=Depends(get_db)):
 
 @app.get("/carte", response_class=HTMLResponse)
 async def page_carte(request: Request, db=Depends(get_db)):
-    """Page de la carte opérationnelle pour visualiser et corriger les anomalies."""
+    """Ancienne carte de diagnostic qualité — décommissionnée (Lot 4 TODO_Qualite).
+
+    Redirection permanente vers le cockpit unifié /qualite pour préserver
+    les liens existants. L'ancienne page et ses modules JS ont été supprimés.
+    """
     user = _get_authenticated_user(request, db)
     if not user:
-        return RedirectResponse(url="/login?next=/carte", status_code=302)
-    try:
-        with open("templates/carte.html", "r", encoding="utf-8") as f:
-            return f.read()
-    except FileNotFoundError:
-        return HTMLResponse("""
-        <h1>Erreur</h1>
-        <p>La page de carte opérationnelle n'est pas disponible.</p>
-        <a href="/docs">Retour à la documentation API</a>
-        """, status_code=404)
+        return RedirectResponse(url="/login?next=/qualite", status_code=302)
+    return RedirectResponse(url="/qualite", status_code=301)
 
 @app.get("/tunnel", response_class=HTMLResponse)
 async def page_tunnel(request: Request, db=Depends(get_db)):

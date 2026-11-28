@@ -231,7 +231,7 @@ async function chargerDonneesQualite(forceRefresh = false) {
 }
 
 // 3bis. Orphelins réseau → pseudo-anomalies dans la file qualité
-// (même mapping que /carte : orphelins_regards / orphelins_troncons).
+// (mapping conservé de l'ancien /carte décommissionné : orphelins_regards / orphelins_troncons).
 // cle_anomalie préfixé « orphelin_ » → statut géré localement (ces
 // éléments n'appartiennent pas au moteur d'anomalies persisté).
 async function chargerEtFusionnerOrphelins(headers) {

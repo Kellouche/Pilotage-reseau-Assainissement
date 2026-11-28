@@ -286,15 +286,6 @@ Objet : Vue cartographique plein écran pour l'inspection interactive
             </div>
         </div>
 
-        <!-- Score qualité réseau -->
-        <div id="quality-score-container" style="margin: 16px 0; padding: 12px; background: rgba(255,255,255,0.1); border-radius: 8px; display: none;">
-            <div style="font-size: 14px; font-weight: bold; margin-bottom: 8px; color: #eee;">
-                <i class="fas fa-chart-line"></i> Diagnostic Qualité
-            </div>
-            <div id="quality-score" style="font-size: 28px; font-weight: bold; color: #3498db; text-align: center;"></div>
-            <div id="quality-breakdown" style="font-size: 11px; margin-top: 8px; color: #aab;"></div>
-        </div>
-
         <button class="cluster-button" id="detect-cluster-btn">Détecter les bassins urbains</button>
         <div id="cluster-status"></div>
 
@@ -356,7 +347,6 @@ Objet : Vue cartographique plein écran pour l'inspection interactive
     <script src="/static/js/map/map_manual_basins.js"></script>
     <script src="/static/js/map/map_layers.js"></script>
     <script src="/static/js/map/map_cluster_detection.js?v=20260910-3"></script>
-    <script src="/static/js/map/map_quality.js"></script>
     <script src="/static/js/map/map_edit_attributes.js"></script>
     <script src="/static/js/map/map_init.js"></script>
 </body>

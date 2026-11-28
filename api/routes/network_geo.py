@@ -214,7 +214,7 @@ def get_network_orphelins(
 ):
     """
     Inventaire des éléments orphelins du réseau actif, pour le listing
-    cliquable de la carte opérationnelle (/carte) :
+    cliquable du cockpit qualité (/qualite, ex-/carte) :
 
     - noeuds_orphelins : nœuds déclarés (regards, rejets, ouvrages…) sans
       aucune conduite connectée (degré 0 dans le graphe) ;
