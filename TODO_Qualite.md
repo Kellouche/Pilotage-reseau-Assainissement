@@ -36,18 +36,20 @@ Fichier cible : `api/routes/qualite.py` (`get_synthese_qualite`)
 
 ---
 
-## Lot 2 — Moteur de scoring V2.2 (~2 j/h)
+## Lot 2 — Moteur de scoring V2.2 (~2 j/h) ✅ FAIT
 
 Fichiers cibles : `src/analyse_qualite_gpkg.py`, `api/services/qualite_cache_service.py`
 
-- [ ] **Raccorder les 4 catégories orphelines** aux sous-scores de `scores_qualite` :
+- [x] **Raccorder les 4 catégories orphelines** aux sous-scores de `scores_qualite` :
   - `deconnexions_spatiales` → `topologie`
   - `incoherences_amont_aval` → `hydraulique`
-  - `discontinuites_pose` → `altimetrie` (ou `hydraulique` selon validation métier)
+  - `discontinuites_pose` → `hydraulique` *(choix : rupture de continuité de pose = doute d'écoulement ; `altimetrie` reste une métrique de couverture/évaluabilité, pas de comptage d'anomalies)*
   - `capacite_debit` → `hydraulique`
-- [ ] **Calculer des sous-scores dédupliqués par tronçon et pondérés par sévérité** (en appliquant `grille_poids`, avec `informatif = 0`) afin d'aligner le comportement des sous-scores sur le périmètre réel du réseau.
-- [ ] **Ajouter `score_criticite_troncon`** par `id_conduite` (somme pondérée des anomalies ouvertes + sévérité max) pour permettre le tri par priorité chantier.
-- [ ] **Invalider / versionner les caches** `*.qualite_cache.json` (passer `moteur` à `v2.2` ou clé de version cache) pour éviter de servir d'anciens rapports incohérents.
+- [x] **Calculer des sous-scores dédupliqués par tronçon et pondérés par sévérité** (grille `4/3/1/0` exposée dans `scores_qualite.grille_poids_appliquee` ; pénalité/tronçon = poids max / 4, dénominateur `nb_conduites`).
+- [x] **Ajouter `score_criticite_troncon`** : `scores_qualite.criticite_troncons[id_conduite] = {score (Σpoids + sev_max), nb_anomalies, severite_max}` — 463 tronçons sur `Assainissement_Ville`.
+- [x] **Invalider / versionner les caches** : `moteur` passé à `v2.2` ; `_charger_cache_disque` n'accepte que `v2.2` → régénération automatique.
+
+> **Validation live** : `topologie 99.5` (inclut désormais les 57 `deconnexions_spatiales`), `hydraulique 97.7` (pondéré, inclut `incoherences`/`capacite`/`discontinuites`), verdict `action_requise` (altimétrie 12.4 % prise en compte). Tests qualite : 22/22 verts.
 
 ---
 

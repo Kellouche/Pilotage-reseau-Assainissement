@@ -73,7 +73,7 @@ def test_v2_1_zero_faux_positif_profradi():
     rapport = analyser_qualite_gpkg(GPKG_VILLE, "Assainissement_Ville")
     anomalies = rapport["anomalies"]
 
-    assert rapport.get("moteur") == "v2.1"
+    assert rapport.get("moteur") == "v2.2"
     assert anomalies["pentes_suspectes"] == []
     # Aucune description historique « l'eau doit remonter »
     for cat, items in anomalies.items():

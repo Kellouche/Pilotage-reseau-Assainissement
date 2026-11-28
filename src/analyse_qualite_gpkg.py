@@ -458,32 +458,91 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif",
             }
         ]
 
+    # ------------------------------------------------------------------
+    # Scores V2.2 — sous-scores dédupliqués par tronçon et pondérés par
+    # sévérité (grille ci-dessous ; informatif = 0 : bruit de complétude,
+    # jamais pénalisant). Chaque dimension agrège ses catégories ; la
+    # pénalité d'un tronçon = poids max de ses anomalies dans la dimension.
+    # ------------------------------------------------------------------
+    _POIDS_SEV = {"critique": 4, "majeure": 3, "mineure": 1, "informatif": 0}
+    _POIDS_MAX = 4
+    _nb_elements_score = max(1, nb_pipes)
+
+    # Catégories rattachées à chaque dimension (V2.1 n'en couvrait que 5 ;
+    # les 4 orphelines sont désormais intégrées — discontinuites_pose est
+    # classée en hydraulique : rupture de continuité de pose = doute
+    # d'écoulement, pas un simple manque de mesure altimétrique).
+    _DIMENSIONS_SCORES = {
+        "completude": ["champs_manquants"],
+        "topologie": ["conduites_sans_regards", "troncons_orphelins",
+                      "deconnexions_spatiales"],
+        "geometrie": ["geometries_invalides"],
+        "hydraulique": ["pentes_suspectes", "inversions_sens_ecoulement",
+                        "incoherences_amont_aval", "capacite_debit",
+                        "discontinuites_pose"],
+    }
+
+    def _cle_element_anomalie(a: Dict[str, Any]) -> str:
+        return str(a.get("id_conduite") or a.get("id_regard")
+                   or a.get("id") or "")
+
+    def _score_dimension(cats: List[str]):
+        """Score = 100 × (1 − Σ pénalités / nb_conduites), pénalité par
+        tronçon = poids_sévérité_max / POIDS_MAX (dédupliqué)."""
+        penalties: Dict[str, int] = {}
+        nb_brutes = 0
+        for cat in cats:
+            for a in anomalies.get(cat, []):
+                if a.get("statut", "a_traiter") != "a_traiter":
+                    continue
+                eid = _cle_element_anomalie(a)
+                if not eid:
+                    continue
+                p = _POIDS_SEV.get(a.get("severite", "mineure"), 1)
+                penalties[eid] = max(penalties.get(eid, 0), p)
+                nb_brutes += 1
+        total_pen = sum(p / _POIDS_MAX for p in penalties.values())
+        score = round(max(0.0, 100.0 * (1.0 - total_pen / _nb_elements_score)), 1)
+        return {"score_qualite": score, "total_anomalies": nb_brutes,
+                "elements_penalises": len(penalties)}
+
+    # Criticité par tronçon : somme des poids des anomalies non
+    # informatives + bonus de la pire sévérité — pilote le tri de la
+    # file d'anomalies (priorisation chantier).
+    criticite_troncons: Dict[str, Dict[str, Any]] = {}
+    for cat, items in anomalies.items():
+        for a in items:
+            if a.get("severite") == "informatif":
+                continue
+            if a.get("statut", "a_traiter") != "a_traiter":
+                continue
+            eid = _cle_element_anomalie(a)
+            if not eid:
+                continue
+            p = _POIDS_SEV.get(a.get("severite", "mineure"), 1)
+            slot = criticite_troncons.setdefault(
+                eid, {"score": 0.0, "nb_anomalies": 0, "severite_max": 0})
+            slot["score"] += p
+            slot["nb_anomalies"] += 1
+            slot["severite_max"] = max(slot["severite_max"], p)
+    for slot in criticite_troncons.values():
+        slot["score"] = round(slot["score"] + slot["severite_max"], 1)
+
     scores_qualite = {
         "global": {
             "score_qualite": score_global,
             "total_elements": total_elements,
             "total_anomalies": total_anomalies_brutes,
             "total_anomalies_brutes": total_anomalies_brutes,
+            "total_anomalies_hors_informatif": sum(
+                1 for items in anomalies.values() for a in items
+                if a.get("severite") != "informatif"),
             "total_elements_uniques_affectes": nb_touches
         },
-        "completude": {
-            "score_qualite": round(max(0.0, 100.0 - (len(anomalies["champs_manquants"]) / max(1, nb_pipes) * 100.0)), 1),
-            "total_anomalies": len(anomalies["champs_manquants"])
-        },
-        "topologie": {
-            "score_qualite": round(max(0.0, 100.0 - ((len(anomalies["conduites_sans_regards"]) + len(anomalies["troncons_orphelins"])) / max(1, nb_pipes) * 100.0)), 1),
-            "total_anomalies": len(anomalies["conduites_sans_regards"]) + len(anomalies["troncons_orphelins"])
-        },
-        "geometrie": {
-            "score_qualite": round(max(0.0, 100.0 - (len(anomalies["geometries_invalides"]) / max(1, nb_pipes) * 100.0)), 1),
-            "total_anomalies": len(anomalies["geometries_invalides"])
-        },
-        "hydraulique": {
-            "score_qualite": round(max(0.0, 100.0 - ((len(anomalies["pentes_suspectes"]) + len(anomalies["inversions_sens_ecoulement"])) / max(1, nb_pipes) * 100.0)), 1),
-            "total_anomalies": len(anomalies["pentes_suspectes"]) + len(anomalies["inversions_sens_ecoulement"])
-        },
+        **{dim: _score_dimension(cats)
+           for dim, cats in _DIMENSIONS_SCORES.items()},
         "altimetrie": {
-            # V2.1 : complétude déclarée, jamais un score flatteur —
+            # V2.2 : complétude déclarée, jamais un score flatteur —
             # le dénominateur est le % de conduites évaluables.
             "score_qualite": round(100.0 * (
                 1.0 - len(anomalies["donnees_manquantes"]) / max(1, nb_pipes)
@@ -491,7 +550,9 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif",
             "total_anomalies": len(anomalies["donnees_manquantes"]),
             "couverture_pct": contexte_terrain.get("couverture_pct") if contexte_terrain else None,
         },
-        "par_commune": par_commune
+        "par_commune": par_commune,
+        "criticite_troncons": criticite_troncons,
+        "grille_poids_appliquee": _POIDS_SEV,
     }
 
     longueur_totale = round(float(pipes.geometry.length.sum()), 1) if not pipes.empty else 0.0
@@ -530,7 +591,7 @@ def analyser_qualite_gpkg(gpkg_path: Path, project_name: str = "Projet Actif",
     }
 
     rapport = {
-        "moteur": "v2.1",
+        "moteur": "v2.2",
         "date_analyse": datetime.now().isoformat(),
         "project_name": project_name,
         "statistiques_globales": statistiques_globales,

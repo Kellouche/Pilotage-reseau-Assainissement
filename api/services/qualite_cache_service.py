@@ -88,7 +88,7 @@ def _charger_cache_disque(gpkg_path: Path, empreinte_aux: str = "") -> Optional[
                     rapport = json.load(f)
                 # Invalider les rapports produits par un ancien moteur
                 # ou par d'autres versions des couches auxiliaires.
-                if (rapport.get("moteur") == "v2.1"
+                if (rapport.get("moteur") == "v2.2"
                         and rapport.get("_empreinte_aux", "") == empreinte_aux):
                     return rapport
     except Exception as e:
