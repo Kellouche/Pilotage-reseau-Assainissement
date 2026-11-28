@@ -460,21 +460,30 @@ async def get_synthese_qualite(
     par_severite = {"critique": 0, "majeure": 0, "mineure": 0, "informatif": 0}
     par_categorie = {}
     nb_a_traiter = 0
+    nb_informatif = 0
     for categorie, items in anomalies.items():
         par_categorie[categorie] = len(items)
         for a in items:
             sev = a.get("severite", "mineure")
             par_severite[sev] = par_severite.get(sev, 0) + 1
-            if a.get("statut", "a_traiter") == "a_traiter":
+            if sev == "informatif":
+                nb_informatif += 1
+            elif a.get("statut", "a_traiter") == "a_traiter":
                 nb_a_traiter += 1
 
     topologie = (scores.get("topologie") or {}).get("score_qualite")
     hydraulique = (scores.get("hydraulique") or {}).get("score_qualite")
+    completude = (scores.get("completude") or {}).get("score_qualite")
+    geometrie = (scores.get("geometrie") or {}).get("score_qualite")
     altimetrie = scores.get("altimetrie") or {}
+    score_alti = altimetrie.get("score_qualite")
     couverture_pct = altimetrie.get("couverture_pct")
 
-    # Verdict : le pire score déterministe pilote le verdict
-    scores_durs = [s for s in (topologie, hydraulique) if s is not None]
+    # Verdict : le pire score déterministe de TOUTES les dimensions
+    # disponibles pilote le verdict (altimétrie incluse quand le contexte
+    # terrain existe — score_qualite est alors un vrai pourcentage).
+    scores_durs = [s for s in (topologie, hydraulique, completude, geometrie, score_alti)
+                   if s is not None]
     score_pire = min(scores_durs) if scores_durs else None
     if score_pire is None:
         verdict = "indetermine"
@@ -484,6 +493,15 @@ async def get_synthese_qualite(
         verdict = "a_surveiller"
     else:
         verdict = "action_requise"
+
+    # Verrou « conforme » : anomalies critiques ou déconnexions spatiales
+    # (identifiants d'extrémités suspects → modèle non fiable) interdisent
+    # le verdict favorable même si les scores agrégés restent bons.
+    if verdict == "conforme" and (
+        par_severite.get("critique", 0) > 0
+        or par_categorie.get("deconnexions_spatiales", 0) > 0
+    ):
+        verdict = "a_surveiller"
 
     # Top 3 actions : catégories actives triées par impact (sévérité pondérée)
     poids_sev = {"critique": 4, "majeure": 3, "mineure": 1, "informatif": 0}
@@ -536,16 +554,18 @@ async def get_synthese_qualite(
             "global": (scores.get("global") or {}).get("score_qualite"),
             "topologie": topologie,
             "hydraulique": hydraulique,
-            "completude": (scores.get("completude") or {}).get("score_qualite"),
-            "geometrie": (scores.get("geometrie") or {}).get("score_qualite"),
+            "completude": completude,
+            "geometrie": geometrie,
         },
         "altimetrie": {
+            "score_qualite": score_alti,
             "couverture_pct": couverture_pct,
             "nb_donnees_manquantes": (altimetrie.get("total_anomalies") or 0),
         },
         "anomalies": {
             "total": sum(par_categorie.values()),
             "nb_a_traiter": nb_a_traiter,
+            "nb_informatif": nb_informatif,
             "par_severite": par_severite,
             "par_categorie": par_categorie,
         },

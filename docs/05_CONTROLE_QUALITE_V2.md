@@ -106,6 +106,21 @@ Affichage **disjoint** : `Qualité topologique : X %` et `Complétude altimétri
 | `POST` | `/api/v1/qualite/anomalies/{id}/statut` | `a_traiter` / `revu` / `corrige` |
 | `GET` | `/api/v1/qualite/synthese` | verdict + couverture + top 3 actions |
 
+### Contrat `/synthese` (v2.2 — durci)
+
+- `anomalies.nb_a_traiter` **exclut les sévérités `informatif`** (bruit de
+  complétude de données, ex. `donnees_manquantes`) ; elles sont exposées
+  séparément dans `anomalies.nb_informatif`.
+- `altimetrie.score_qualite` est exposé (pourcentage réel, ex. `12.4`),
+  distinct de `altimetrie.couverture_pct`.
+- `verdict` = seuils sur **toutes les dimensions déterministes
+  disponibles** (`topologie`, `hydraulique`, `completude`, `geometrie`,
+  `altimetrie` quand le contexte terrain existe) — plus seulement
+  `min(topologie, hydraulique)`.
+- Verrou « conforme » : `verdict` est au mieux `a_surveiller` si
+  `critique > 0` ou `deconnexions_spatiales > 0`, quelles que soient les
+  scores agrégés.
+
 ## 7. Interface (`/qualite` dans le cockpit)
 
 ```
