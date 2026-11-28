@@ -53,15 +53,17 @@ Fichiers cibles : `src/analyse_qualite_gpkg.py`, `api/services/qualite_cache_ser
 
 ---
 
-## Lot 3 — Correctifs & enrichissement Cockpit V2.1 `/qualite` (~2 j/h)
+## Lot 3 — Correctifs & enrichissement Cockpit V2.2 `/qualite` (~2 j/h) ✅ FAIT
 
 Fichiers cibles : `templates/qualite.html`, `static/js/qualite/qualite_etat_carte.js`, `static/js/qualite/qualite_file_fiche.js`, `static/js/qualite/qualite_table_modals.js`
 
-- [ ] **Corriger le bug `#kpi-score-alti`** dans `qualite_etat_carte.js` : afficher `altimetrie.score_qualite` (`12,4 %`) et non `scores.hydraulique` (`96,4 %`).
-- [ ] **Séparer visuellement le bruit `informatif`** : afficher un compteur `Anomalies actives` hors `informatif`, et conserver les lacunes altimétriques derrière un toggle opt-in (`Afficher les lacunes altimétriques`, désactivé par défaut).
-- [ ] **Trier la file d'anomalies** par `score_criticite_troncon` décroissant (en plus du tri par sévérité) et afficher le score/nb d'anomalies du tronçon dans la fiche.
-- [ ] **Intégrer les orphelins réseau** (`/api/v1/network/orphelins` : regards isolés + tronçons hors graphe) dans la file et les compteurs topologiques de `/qualite`.
-- [ ] **Volet pilotage MOA/MOE** : ajouter un export synthétique (CSV / fiche récapitulative par dimension et par commune/bassin) directement depuis l'en-tête de `/qualite`.
+- [x] **Corriger le bug `#kpi-score-alti`** : affiche désormais `altimetrie.score_qualite` (**12,4 %** vérifié en live, était `96,4 %` = `scores.hydraulique`).
+- [x] **Séparer visuellement le bruit `informatif`** : pastille `Total: 9 490 · À traiter: 472 · Info: 9 018` ; lacunes altimétriques déjà derrière le toggle opt-in `chk-toggle-n3` (« Afficher tronçons sans altimétrie », désactivé par défaut).
+- [x] **Trier la file d'anomalies** par `criticite_troncons` décroissant (exposé via `/synthese`, additif) puis sévérité ; la fiche affiche « Criticité tronçon (audit V2.2) : score — nb anomalie(s), sévérité max » (vérifié : C_159 en tête de file, score 9).
+- [x] **Intégrer les orphelins réseau** (`/api/v1/network/orphelins`) : 242 nœuds + 14 tronçons fusionnés en pseudo-anomalies `orphelins_regards`/`orphelins_troncons` (mapping identique à `/carte`), filtre dédié, KPI topo `Orphelins: 242 nœuds / 14 tronçons`, statut géré localement (pas de persistance moteur).
+- [x] **Volet pilotage MOA/MOE** : bouton « Exporter le rapport » → CSV (`qualite_<projet>_<date>.csv`) avec sections Synthèse / Réseau / Scores par dimension / Anomalies / Criticité top 20 tronçons / Orphelins. *Ventilation par commune/bassin non couverte : non disponible dans la synthèse (à prévoir si besoin MOA).*
+
+> **Validation live** : `/qualite` → verdict `ACTION REQUISE`, 0 erreur console, export CSV téléchargé. Tests qualite : 19/19 verts.
 
 ---
 

@@ -3,8 +3,8 @@
 Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
 Auteur : Dr Abdelhakim KELLOUCHE
 Date de création : 2026-11-24
-Date de modification : 2026-11-25 (légende sévérité simplifiée)
-Objet : Cockpit Contrôle Qualité Réseau V2.1 — audit, file d'anomalies,
+Date de modification : 2026-11-27 (moteur V2.2 : criticité tronçon, orphelins, export MOA/MOE)
+Objet : Cockpit Contrôle Qualité Réseau V2.2 — audit, file d'anomalies,
         fiche actionnable et couche volatile de contexte réseau
 ================================================================================
 -->
@@ -36,13 +36,16 @@ Objet : Cockpit Contrôle Qualité Réseau V2.1 — audit, file d'anomalies,
     <!-- En-tête Navigation -->
     <header class="header">
         <div class="header-title-box">
-            <h1><i class="fa-solid fa-clipboard-check" style="color:#38bdf8;"></i> Contrôle Qualité Réseau <span class="header-tag">V2.1</span></h1>
+            <h1><i class="fa-solid fa-clipboard-check" style="color:#38bdf8;"></i> Contrôle Qualité Réseau <span class="header-tag">V2.2</span></h1>
             <span id="header-projet-name" class="header-tag" style="background:#0284c7; color:white;">Chargement...</span>
             <span id="header-gpkg-version" class="header-tag">Version: ...</span>
         </div>
         <div class="header-actions">
             <button class="btn btn-outline" id="btn-force-refresh" title="Recalculer sans cache (force_refresh=true)">
                 <i class="fa-solid fa-arrows-rotate"></i> Recalculer l'audit
+            </button>
+            <button class="btn btn-outline" onclick="exporterRapportQualiteCSV()" title="Exporter la synthèse qualité (scores par dimension, anomalies, criticité tronçon) au format CSV">
+                <i class="fa-solid fa-file-csv"></i> Exporter le rapport
             </button>
             <button class="btn btn-primary" onclick="retournerCockpit(event)" title="Quitter la qualité et revenir à la cartographie DrainPilot">
                 <i class="fa-solid fa-arrow-left"></i> Cockpit Carto
@@ -134,7 +137,7 @@ Objet : Cockpit Contrôle Qualité Réseau V2.1 — audit, file d'anomalies,
             <!-- Overlay chargement -->
             <div id="loading-overlay" class="loading-overlay">
                 <div class="spinner"></div>
-                <div id="loading-text">Analyse qualité en cours (moteur V2.1)...</div>
+                <div id="loading-text">Analyse qualité en cours (moteur V2.2)...</div>
             </div>
         </div>
 
@@ -161,6 +164,8 @@ Objet : Cockpit Contrôle Qualité Réseau V2.1 — audit, file d'anomalies,
                     <option value="champs_manquants">Attributs indispensables manquants</option>
                     <option value="conduites_sans_regards">Conduites sans regards</option>
                     <option value="troncons_orphelins">Tronçons orphelins</option>
+                    <option value="orphelins_regards">Regards isolés (hors graphe)</option>
+                    <option value="orphelins_troncons">Tronçons hors graphe / sans exutoire</option>
                     <option value="donnees_manquantes">Altimétrie incomplète (cotes/MNT)</option>
                 </select>
 
@@ -228,9 +233,9 @@ Objet : Cockpit Contrôle Qualité Réseau V2.1 — audit, file d'anomalies,
     </div>
 
     <!-- Scripts Logique Métier & Interaction -->
-    <script src="/static/js/qualite/qualite_etat_carte.js?v=5.2.24"></script>
-    <script src="/static/js/qualite/qualite_file_fiche.js?v=5.2.24"></script>
-    <script src="/static/js/qualite/qualite_table_modals.js?v=5.2.24"></script>
+    <script src="/static/js/qualite/qualite_etat_carte.js?v=5.2.25"></script>
+    <script src="/static/js/qualite/qualite_file_fiche.js?v=5.2.25"></script>
+    <script src="/static/js/qualite/qualite_table_modals.js?v=5.2.25"></script>
     </script>
 
     <!-- Modale d'édition directe des attributs de conduite (Section & Matériau) -->

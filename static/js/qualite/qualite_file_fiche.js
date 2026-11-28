@@ -3,7 +3,7 @@
  * Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
  * Auteur : Dr Abdelhakim KELLOUCHE
  * Date de création : 2026-11-24
- * Date de modification : 2026-11-25 (KPI anomalies synchronisé avec la file filtrée)
+ * Date de modification : 2026-11-27 (V2.2 : criticité tronçon en fiche, orphelins, compteur informatif)
  * Objet : File de navigation, contexte réseau fin, fiche anomalie, zoom, changement de statut — extrait de templates/qualite.html (découpage 600 lignes)
  * ================================================================================
  */
@@ -38,7 +38,8 @@ function mettreAJourCompteurQueue() {
     if (kpiOuvertes) kpiOuvertes.textContent = currentQueueList.length;
     if (kpiTotal && currentSynthese) {
         const anom = currentSynthese.anomalies || {};
-        kpiTotal.textContent = `Total: ${anom.total ?? 0} · À traiter: ${anom.nb_a_traiter ?? 0}`;
+        const nbInfo = anom.nb_informatif ?? (anom.par_severite?.informatif || 0);
+        kpiTotal.textContent = `Total: ${anom.total ?? 0} · À traiter: ${anom.nb_a_traiter ?? 0} · Info: ${nbInfo}`;
     }
 }
 
@@ -150,9 +151,16 @@ function afficherFicheAnomalie(item, centrerCarte = false) {
     if (p.confiance) {
         metricsHtml += `<li><span>Fiabilité MNT altimétrique :</span> <strong style="color:var(--accent-purple);">${p.confiance.toUpperCase()}</strong></li>`;
     }
+    // Criticité tronçon V2.2 : score agrégé des anomalies du même tronçon
+    const critTroncon = (p.id_conduite && currentSynthese && currentSynthese.criticite_troncons)
+        ? currentSynthese.criticite_troncons[p.id_conduite] : null;
+    if (critTroncon) {
+        metricsHtml += `<li><span>Criticité tronçon (audit V2.2) :</span> <strong>${critTroncon.score} — ${critTroncon.nb_anomalies} anomalie(s), sévérité max ${critTroncon.severite_max}</strong></li>`;
+    }
 
     const isContrePente = (p.categorie === 'inversions_sens_ecoulement' || p.categorie === 'sens_ecoulement' || (p.id_amont && p.id_aval && p.pente_contre_pct !== undefined));
-    const isDeconnexion = (p.categorie === 'deconnexions_spatiales' || p.categorie === 'conduites_sans_regards' || p.categorie === 'troncons_orphelins');
+    const isDeconnexion = (p.categorie === 'deconnexions_spatiales' || p.categorie === 'conduites_sans_regards' || p.categorie === 'troncons_orphelins' || p.categorie === 'orphelins_troncons');
+    const isRegardOrphelin = (p.categorie === 'orphelins_regards');
     const isAttributsManquants = (p.categorie === 'champs_manquants');
     const isPenteOuAlti = (p.categorie === 'pentes_suspectes' || p.categorie === 'donnees_manquantes');
     const sevIcon = (p.severite === 'critique' || p.severite === 'majeure') ? 'fa-triangle-exclamation' : 'fa-circle-info';
@@ -161,7 +169,13 @@ function afficherFicheAnomalie(item, centrerCarte = false) {
     let actionsButtonsHtml = '';
     let derogationLabel = 'Dérogation terrain';
 
-    if (isDeconnexion) {
+    if (isRegardOrphelin) {
+        titreResolution = 'Nœud isolé du graphe hydraulique';
+        derogationLabel = 'Dérogation terrain (Ouvrage sans réseau raccordé)';
+        actionsButtonsHtml = `
+            <div class="action-help-text">Ce nœud n'est rattaché à aucune conduite amont ni aval. Vérifiez la collecte ou rattachez-le depuis l'édition du réseau — aucune correction automatique depuis cette fiche.</div>
+        `;
+    } else if (isDeconnexion) {
         titreResolution = 'Raccordement Topologique (Nœuds Extrémités)';
         derogationLabel = 'Dérogation terrain (Rejet libre / Antenne)';
         actionsButtonsHtml = `
@@ -353,27 +367,33 @@ function mettreEnSurbrillance(item) {
 async function changerStatutAnomalie(cleAnomalie, nouveauStatut) {
     if (!cleAnomalie) return;
 
+    // Orphelins réseau : pseudo-anomalies sans persistance côté moteur —
+    // le statut est appliqué localement à la session courante uniquement.
+    const estOrphelin = String(cleAnomalie).startsWith('orphelin_');
+
     const commentaire = document.getElementById('statut-comment')?.value || '';
     afficherLoading(true, 'Enregistrement du statut...');
 
     try {
-        const token = localStorage.getItem('swmm_access_token');
-        const headers = {
-            'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        };
+        if (!estOrphelin) {
+            const token = localStorage.getItem('swmm_access_token');
+            const headers = {
+                'Content-Type': 'application/json',
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            };
 
-        const resp = await fetch(`${API_BASE}/anomalies/${cleAnomalie}/statut`, {
-            method: 'POST',
-            headers: headers,
-            credentials: 'include',
-            body: JSON.stringify({
-                statut: nouveauStatut,
-                commentaire: commentaire
-            })
-        });
+            const resp = await fetch(`${API_BASE}/anomalies/${cleAnomalie}/statut`, {
+                method: 'POST',
+                headers: headers,
+                credentials: 'include',
+                body: JSON.stringify({
+                    statut: nouveauStatut,
+                    commentaire: commentaire
+                })
+            });
 
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        }
 
         // Mise à jour locale dans le GeoJSON en mémoire
         const item = currentQueueList.find(x => x.properties.cle_anomalie === cleAnomalie);

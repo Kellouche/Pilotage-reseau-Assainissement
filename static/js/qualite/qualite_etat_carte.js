@@ -3,7 +3,7 @@
  * Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
  * Auteur : Dr Abdelhakim KELLOUCHE
  * Date de création : 2026-11-24
- * Date de modification : 2026-11-25 (KPI anomalies : nb_a_traiter + contexte global)
+ * Date de modification : 2026-11-27 (V2.2 : fix KPI altimétrie, orphelins réseau, tri criticité tronçon)
  * Objet : État global, initialisation carte Leaflet, chargement données et synthèse — extrait de templates/qualite.html (découpage 600 lignes)
  * ================================================================================
  */
@@ -23,6 +23,7 @@ let selectedMarker = null;
 let highlightMarker = null;
 let globalBoundsReseau = null;
 let activeGeoJsonLayers = {};
+let _orphelinsStats = null;
 
 // Libellés métier explicites (adieu codes techniques N2/N3)
 function libelleCategorie(cat) {
@@ -33,6 +34,8 @@ function libelleCategorie(cat) {
         'champs_manquants': 'Attributs obligatoires manquants',
         'conduites_sans_regards': 'Conduite sans regard',
         'troncons_orphelins': 'Tronçon orphelin',
+        'orphelins_regards': 'Regard orphelin (isolé du graphe)',
+        'orphelins_troncons': 'Tronçon orphelin (hors graphe / sans exutoire)',
         'donnees_manquantes': 'Altimétrie incomplète (cotes/points topo)'
     };
     return mapLib[cat] || (cat || '').replace('_', ' ');
@@ -44,6 +47,8 @@ function libelleCategorie(cat) {
 const ACTION_PAR_CATEGORIE = {
     'conduites_sans_regards': 'Raccorder les conduites orphelines à un nœud',
     'troncons_orphelins': 'Vérifier l\'isolement des tronçons orphelins',
+    'orphelins_regards': 'Vérifier la collecte du nœud isolé (regard sans conduite rattachée)',
+    'orphelins_troncons': 'Rétablir l\'appartenance au graphe (extrémité non résolue ou sous-réseau sans exutoire)',
     'champs_manquants': 'Compléter les attributs manquants (diamètre, matériau, longueur)',
     'geometries_invalides': 'Réparer les géométries corrompues',
     'pentes_suspectes': 'Valider les pentes certifiées NGF sur le terrain',
@@ -197,6 +202,11 @@ async function chargerDonneesQualite(forceRefresh = false) {
         }
         currentAnomaliesGeoJSON = await respGeo.json();
 
+        // C. Orphelins réseau (regards isolés + tronçons hors graphe) —
+        // endpoint /api/v1/network/orphelins, fusionnés en pseudo-anomalies
+        // pour rejoindre la file et les compteurs topologiques.
+        await chargerEtFusionnerOrphelins(headers);
+
         // Filtrage et affichage initial
         filtrerEtMettreAJourCarte();
 
@@ -217,6 +227,75 @@ async function chargerDonneesQualite(forceRefresh = false) {
         }
     } finally {
         afficherLoading(false);
+    }
+}
+
+// 3bis. Orphelins réseau → pseudo-anomalies dans la file qualité
+// (même mapping que /carte : orphelins_regards / orphelins_troncons).
+// cle_anomalie préfixé « orphelin_ » → statut géré localement (ces
+// éléments n'appartiennent pas au moteur d'anomalies persisté).
+async function chargerEtFusionnerOrphelins(headers) {
+    _orphelinsStats = null;
+    try {
+        const resp = await fetch('/api/v1/network/orphelins', { headers, credentials: 'include' });
+        if (!resp.ok) return;
+        const orp = await resp.json();
+        _orphelinsStats = orp.stats || null;
+        // Compteur topologique : orphelins visibles dans le KPI dédié
+        const topoEl = document.getElementById('kpi-topo-detail');
+        if (topoEl && _orphelinsStats) {
+            const resolu = currentSynthese && currentSynthese.connectivite
+                ? `Résolu: ${currentSynthese.connectivite.taux_resolution_pct ?? 0}% · ` : '';
+            topoEl.textContent = `${resolu}Orphelins: ${_orphelinsStats.noeuds_orphelins ?? 0} nœuds / ${_orphelinsStats.troncons_orphelins ?? 0} tronçons`;
+        }
+        if (!currentAnomaliesGeoJSON || !Array.isArray(currentAnomaliesGeoJSON.features)) return;
+
+        const base = currentAnomaliesGeoJSON.features.length;
+        (orp.noeuds_orphelins || []).forEach((n, i) => {
+            if (n.lat == null || n.lng == null) return;
+            const details = [n.nom, n.nom_voie, n.commune].filter(v => v && String(v).trim() && String(v).trim().toLowerCase() !== 'nan');
+            currentAnomaliesGeoJSON.features.push({
+                type: 'Feature',
+                geometry: { type: 'Point', coordinates: [n.lng, n.lat] },
+                properties: {
+                    categorie: 'orphelins_regards',
+                    type: 'regard_orphelin',
+                    id_conduite: null,
+                    id_amont: null,
+                    id_aval: null,
+                    severite: 'majeure',
+                    statut: 'a_traiter',
+                    cle_anomalie: `orphelin_regard:${n.id || i}`,
+                    description: `Nœud ${String(n.type_noeud || 'noeud').toLowerCase()} « ${n.id} » isolé : aucune conduite ne s'y rattache${details.length ? ' — ' + details.join(' · ') : ''}`,
+                    _orphelin: { genre: 'regard', id: n.id, type_noeud: n.type_noeud }
+                }
+            });
+        });
+        (orp.troncons_orphelins || []).forEach((t, i) => {
+            if (t.lat == null || t.lng == null) return;
+            const horsGraphe = t.motif === 'hors_graphe';
+            currentAnomaliesGeoJSON.features.push({
+                type: 'Feature',
+                geometry: { type: 'Point', coordinates: [t.lng, t.lat] },
+                properties: {
+                    categorie: 'orphelins_troncons',
+                    type: 'troncon_orphelin',
+                    id_conduite: t.id,
+                    id_amont: t.amont,
+                    id_aval: t.aval,
+                    severite: horsGraphe ? 'majeure' : 'mineure',
+                    statut: 'a_traiter',
+                    cle_anomalie: `orphelin_troncon:${t.id || i}`,
+                    distance_m: t.longueur_m,
+                    description: `${t.detail || 'Tronçon orphelin'}${t.type_conduite ? ' · ' + t.type_conduite : ''}${t.longueur_m ? ' · ' + Math.round(t.longueur_m) + ' m' : ''}`,
+                    _orphelin: { genre: 'troncon', id: t.id, motif: t.motif }
+                }
+            });
+        });
+        currentAnomaliesGeoJSON.nb_features = currentAnomaliesGeoJSON.features.length;
+    } catch (e) {
+        // Couche complémentaire : un échec ne doit pas bloquer l'audit qualité
+        console.warn('[QUALITE] Orphelins réseau indisponibles:', e);
     }
 }
 
@@ -249,7 +328,7 @@ function afficherSynthese(syn) {
     }
 
     const alti = syn.altimetrie || {};
-    document.getElementById('kpi-score-alti').textContent = `${scores.hydraulique ?? '--'}%`;
+    document.getElementById('kpi-score-alti').textContent = `${alti.score_qualite ?? '--'}%`;
     document.getElementById('kpi-alti-detail').textContent = `À compléter: ${alti.nb_donnees_manquantes ?? 0}`;
 
     // Anomalies — nb_a_traiter (statut) est le vrai compteur « actives » ;
@@ -258,7 +337,9 @@ function afficherSynthese(syn) {
     const ouvertes = anom.nb_a_traiter ??
         ((anom.par_severite?.critique || 0) + (anom.par_severite?.majeure || 0) + (anom.par_severite?.mineure || 0));
     document.getElementById('kpi-anom-ouvertes').textContent = ouvertes;
-    document.getElementById('kpi-anom-total').textContent = `Total: ${anom.total ?? 0} · À traiter: ${anom.nb_a_traiter ?? 0}`;
+    const nbInfo = anom.nb_informatif ?? (anom.par_severite?.informatif || 0);
+    document.getElementById('kpi-anom-total').textContent =
+        `Total: ${anom.total ?? 0} · À traiter: ${anom.nb_a_traiter ?? 0} · Info: ${nbInfo}`;
 
     // Top action globale (secours quand aucune anomalie n'est affichée)
     const topActions = syn.top_actions || [];
@@ -348,6 +429,17 @@ function filtrerEtMettreAJourCarte() {
 
         markersToAdd.push(marker);
         currentQueueList.push({ feature: feat, marker: marker, properties: p });
+    });
+
+    // Tri de la file : criticité tronçon décroissante (moteur V2.2),
+    // puis sévérité — les orphelins (sans criticité) tombent en fin de file.
+    const criticite = (currentSynthese && currentSynthese.criticite_troncons) || {};
+    const _poidsSev = { critique: 4, majeure: 3, mineure: 1, informatif: 0 };
+    currentQueueList.sort((a, b) => {
+        const ca = (criticite[a.properties.id_conduite] || {}).score || 0;
+        const cb = (criticite[b.properties.id_conduite] || {}).score || 0;
+        if (cb !== ca) return cb - ca;
+        return (_poidsSev[b.properties.severite] || 0) - (_poidsSev[a.properties.severite] || 0);
     });
 
     // Ajout ultra-rapide par lots via addLayers

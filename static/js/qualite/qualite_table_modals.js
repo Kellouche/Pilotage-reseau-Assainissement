@@ -3,7 +3,7 @@
  * Projet : DrainPilot 5.2 - Plateforme d'Assainissement Urbain & Calcul SWMM
  * Auteur : Dr Abdelhakim KELLOUCHE
  * Date de création : 2026-11-24
- * Date de modification : 2026-11-24
+ * Date de modification : 2026-11-27 (V2.2 : export CSV synthèse MOA/MOE)
  * Objet : Tableau récapitulatif, bascule de vues, modales édition/raccordement/cotes — extrait de templates/qualite.html (découpage 600 lignes)
  * ================================================================================
  */
@@ -85,6 +85,83 @@ function afficherLoading(visible, texte = 'Chargement...') {
     const txt = document.getElementById('loading-text');
     if (el) el.style.display = visible ? 'flex' : 'none';
     if (txt) txt.textContent = texte;
+}
+
+// ============================================================
+// 10bis. Export synthétique MOA/MOE (CSV par dimension)
+// ============================================================
+function exporterRapportQualiteCSV() {
+    const syn = currentSynthese;
+    if (!syn) {
+        alert('Aucune synthèse chargée — lancez d\'abord l\'analyse qualité.');
+        return;
+    }
+
+    const lignes = [];
+    const _csv = (v) => {
+        const s = (v === null || v === undefined) ? '' : String(v);
+        return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const section = (titre) => lignes.push('', `## ${titre}`);
+    const kv = (k, v) => lignes.push(`${_csv(k)};${_csv(v)}`);
+
+    section('Synthese');
+    kv('Projet', syn.nom_projet || 'Projet actif');
+    kv('Date analyse', syn.date_analyse || '');
+    kv('Moteur', syn.moteur || '');
+    kv('Verdict', syn.verdict || '');
+
+    section('Reseau');
+    const r = syn.reseau || {};
+    kv('Regards', r.nb_regards);
+    kv('Conduites', r.nb_conduites);
+    kv('Rejets', r.nb_rejets);
+    kv('Longueur totale (m)', r.longueur_totale_m);
+
+    section('Scores par dimension (%)');
+    const s = syn.scores || {};
+    kv('Score global', s.global);
+    kv('Topologie', s.topologie);
+    kv('Hydraulique', s.hydraulique);
+    kv('Completude', s.completude);
+    kv('Geometrie', s.geometrie);
+    const alti = syn.altimetrie || {};
+    kv('Altimetrie (score qualite)', alti.score_qualite);
+    kv('Altimetrie (couverture %)', alti.couverture_pct);
+    kv('Altimetrie (donnees manquantes)', alti.nb_donnees_manquantes);
+
+    section('Anomalies');
+    const a = syn.anomalies || {};
+    kv('Total anomalies', a.total);
+    kv('A traiter', a.nb_a_traiter);
+    kv('Informatif (bruit complete)', a.nb_informatif);
+    Object.entries(a.par_severite || {}).forEach(([sev, n]) => kv(`Severite ${sev}`, n));
+    Object.entries(a.par_categorie || {}).forEach(([cat, n]) => kv(`Categorie ${libelleCategorie(cat)}`, n));
+
+    section('Criticite par troncon (top 20)');
+    lignes.push('id_conduite;score;nb_anomalies;severite_max');
+    const crit = Object.entries(syn.criticite_troncons || {})
+        .sort((x, y) => (y[1].score || 0) - (x[1].score || 0))
+        .slice(0, 20);
+    crit.forEach(([id, c]) => lignes.push(`${_csv(id)};${c.score ?? ''};${c.nb_anomalies ?? ''};${c.severite_max ?? ''}`));
+
+    if (_orphelinsStats) {
+        section('Orphelins reseau (graphe)');
+        kv('Noeuds orphelins', _orphelinsStats.noeuds_orphelins);
+        kv('Troncons orphelins', _orphelinsStats.troncons_orphelins);
+        kv('Aretes orphelines (composante sans exutoire)', _orphelinsStats.aretes_orphelines_composante);
+    }
+
+    const blob = new Blob(['﻿' + lignes.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const aEl = document.createElement('a');
+    const stamp = (syn.date_analyse || new Date().toISOString()).replace(/[:.]/g, '-').slice(0, 19);
+    aEl.href = url;
+    aEl.download = `qualite_${(syn.nom_projet || 'projet').replace(/\s+/g, '_')}_${stamp}.csv`;
+    document.body.appendChild(aEl);
+    aEl.click();
+    document.body.removeChild(aEl);
+    URL.revokeObjectURL(url);
 }
 
 // ============================================================

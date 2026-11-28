@@ -557,6 +557,7 @@ async def get_synthese_qualite(
             "completude": completude,
             "geometrie": geometrie,
         },
+        "criticite_troncons": scores.get("criticite_troncons") or {},
         "altimetrie": {
             "score_qualite": score_alti,
             "couverture_pct": couverture_pct,
